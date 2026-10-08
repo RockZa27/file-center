@@ -1,0 +1,14 @@
+# ย้ายเครื่อง: คัดลอกโฟลเดอร์โปรเจกต์ทั้งหมด (รวม ./data) ไปเครื่องใหม่ แล้วรัน  docker compose up -d --build
+services:
+  file-center:
+    build: .
+    container_name: file-center
+    restart: unless-stopped
+    ports:
+      - "${PORT:-3000}:3000"
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      # ./data/storage = ไฟล์ที่อัปโหลด, ./data/system = ผู้ใช้ ตั้งค่า ประวัติ ถังขยะ session
+      - ./data:/data

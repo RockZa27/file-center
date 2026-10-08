@@ -1,0 +1,9 @@
+node_modules
+web/dist
+data
+storage
+.git
+.env
+*.log
+tests
+README.md

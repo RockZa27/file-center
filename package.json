@@ -1,0 +1,33 @@
+{
+  "name": "file-center",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "concurrently -n api,web -c blue,green \"bun --watch src/index.ts\" \"vite --config web/vite.config.js\"",
+    "dev:api": "bun --watch src/index.ts",
+    "dev:web": "vite --config web/vite.config.js",
+    "build": "vite build --config web/vite.config.js",
+    "start": "bun src/index.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "elysia": "^1.4.30",
+    "fflate": "^0.8.2"
+  },
+  "devDependencies": {
+    "@fontsource/ibm-plex-sans-thai": "^5.2.0",
+    "@types/bun": "latest",
+    "@vicons/ionicons5": "^0.13.0",
+    "@vitejs/plugin-vue": "^6.0.0",
+    "concurrently": "^9.0.0",
+    "naive-ui": "^2.41.0",
+    "pinia": "^3.0.0",
+    "typescript": "^5.6.0",
+    "vite": "^7.0.0",
+    "vue": "^3.5.0",
+    "vue-i18n": "^11.0.0",
+    "vue-router": "^4.5.0"
+  }
+}
