@@ -1,9 +1,7 @@
-import { relative } from 'node:path'
 import { Elysia, t } from 'elysia'
 import { audit } from '../audit'
-import { config } from '../config'
 import { context, need } from '../context'
-import { bad, normRel } from '../fsx'
+import { bad, normRel, storagePath } from '../fsx'
 import { cancelUpload, completeUpload, initUpload, receivedChunks, saveChunk } from '../uploads'
 
 export const uploadRoutes = new Elysia({ prefix: '/api/upload' })
@@ -43,8 +41,7 @@ export const uploadRoutes = new Elysia({ prefix: '/api/upload' })
   .post('/:id/complete', async ({ user, ip, params }) => {
     const owner = user?.username ?? 'guest'
     const done = await completeUpload(params.id, owner)
-    const rel = '/' + relative(config.storageDir, done.path).split(/[\\/]/).join('/')
-    audit({ user: owner, ip, action: 'upload', target: rel, detail: String(done.size) })
+    audit({ user: owner, ip, action: 'upload', target: storagePath(done.path), detail: String(done.size) })
     return { ok: true, size: done.size }
   })
 

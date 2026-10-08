@@ -1,14 +1,15 @@
 import { randomBytes } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
-import { join, relative } from 'node:path'
+import { open } from 'node:fs/promises'
+import { join } from 'node:path'
 import { config, paths } from './config'
-import { bad, ensureDir, forbidden, HttpError, notFound, resolveIn, uniquePath, validName } from './fsx'
+import { bad, ensureDir, ensureSpace, forbidden, HttpError, notFound, resolveIn, uniquePath, validName } from './fsx'
 
 type Meta = {
   id: string
   owner: string
-  /** destination folder, relative to the storage root so the data folder can be moved to another machine */
-  destRel: string
+  /** absolute destination folder, already validated */
+  destDir: string
   name: string
   size: number
   chunkSize: number
@@ -16,7 +17,11 @@ type Meta = {
   createdAt: number
 }
 
+// Every chunk is written straight to its offset in one "data" file, and an empty file named after the chunk
+// index marks it as received. Completing is then just a rename: no second copy on disk, and it stays fast
+// for huge files (a proxy such as Cloudflare gives up on requests that take longer than ~100 s).
 const dirOf = (id: string) => join(paths.tmp, id)
+const dataOf = (id: string) => join(dirOf(id), 'data')
 
 function loadMeta(id: unknown, owner: string): Meta {
   if (typeof id !== 'string' || !/^[a-f0-9]{24}$/.test(id)) throw notFound('ไม่พบการอัปโหลดนี้')
@@ -45,8 +50,9 @@ export function initUpload(args: {
 }) {
   const name = validName(args.name)
   const size = Number(args.size)
-  if (!Number.isFinite(size) || size < 0) throw bad('ขนาดไฟล์ไม่ถูกต้อง')
+  if (!Number.isSafeInteger(size) || size < 0) throw bad('ขนาดไฟล์ไม่ถูกต้อง')
   if (size > config.uploadMaxSize) throw new HttpError(413, 'ไฟล์ใหญ่เกินกำหนด')
+  ensureSpace(paths.tmp, size)
 
   const segments = args.relativeDir.map(validName)
   const destDir = resolveIn(args.root, [args.dir, ...segments].join('/').replace(/\/+/g, '/'))
@@ -56,7 +62,8 @@ export function initUpload(args: {
   const chunkSize = config.uploadChunkSize
   const total = Math.max(1, Math.ceil(size / chunkSize))
   ensureDir(dirOf(id))
-  const meta: Meta = { id, owner: args.owner, destRel: relative(config.storageDir, destDir), name, size, chunkSize, total, createdAt: Date.now() }
+  const meta: Meta = { id, owner: args.owner, destDir, name, size, chunkSize, total, createdAt: Date.now() }
+  writeFileSync(dataOf(id), '')
   writeFileSync(join(dirOf(id), 'meta.json'), JSON.stringify(meta))
   return { id, chunkSize, total }
 }
@@ -72,9 +79,15 @@ export async function saveChunk(id: string, owner: string, index: number, data: 
   if (!Number.isInteger(index) || index < 0 || index >= meta.total) throw bad('ลำดับชิ้นส่วนไม่ถูกต้อง')
   const expected = index === meta.total - 1 ? meta.size - meta.chunkSize * (meta.total - 1) : meta.chunkSize
   if (data.byteLength !== expected) throw bad(`ขนาดชิ้นส่วนไม่ถูกต้อง (ต้องเป็น ${expected} ไบต์)`)
-  const part = join(dirOf(id), `${index}.part`)
-  await Bun.write(part, data)
-  renameSync(part, join(dirOf(id), String(index)))
+  ensureSpace(paths.tmp, data.byteLength)
+  const fh = await open(dataOf(id), 'r+')
+  try {
+    await fh.write(new Uint8Array(data), 0, data.byteLength, index * meta.chunkSize)
+  } finally {
+    await fh.close()
+  }
+  // the marker is written only after the bytes are in place
+  writeFileSync(join(dirOf(id), String(index)), '')
   touch(id)
 }
 
@@ -83,23 +96,18 @@ export async function completeUpload(id: string, owner: string) {
   for (let i = 0; i < meta.total; i++) {
     if (!existsSync(join(dirOf(id), String(i)))) throw bad(`ยังขาดชิ้นส่วนที่ ${i + 1}`)
   }
-  const assembled = join(dirOf(id), 'assembled')
-  const sink = Bun.file(assembled).writer()
-  for (let i = 0; i < meta.total; i++) {
-    sink.write(await Bun.file(join(dirOf(id), String(i))).arrayBuffer())
-    await sink.flush()
-  }
-  await sink.end()
-  if (statSync(assembled).size !== meta.size) throw bad('ขนาดไฟล์หลังรวมไม่ตรงกับที่แจ้งไว้')
+  const data = dataOf(id)
+  if (statSync(data).size !== meta.size) throw bad('ขนาดไฟล์หลังรวมไม่ตรงกับที่แจ้งไว้')
 
-  const destDir = resolveIn(config.storageDir, '/' + meta.destRel.split(/[\\/]/).join('/'))
-  ensureDir(destDir)
-  const finalPath = uniquePath(join(destDir, meta.name))
+  ensureDir(meta.destDir)
+  const finalPath = uniquePath(join(meta.destDir, meta.name))
   try {
-    renameSync(assembled, finalPath)
+    renameSync(data, finalPath)
   } catch (err: any) {
+    // storage and data folders on different disks: copy instead (slow for big files)
     if (err?.code !== 'EXDEV') throw err
-    await Bun.write(finalPath, Bun.file(assembled))
+    ensureSpace(meta.destDir, meta.size)
+    await Bun.write(finalPath, Bun.file(data))
   }
   rmSync(dirOf(id), { recursive: true, force: true })
   return { path: finalPath, size: meta.size }

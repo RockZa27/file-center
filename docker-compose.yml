@@ -1,14 +1,43 @@
-# ย้ายเครื่อง: คัดลอกโฟลเดอร์โปรเจกต์ทั้งหมด (รวม ./data) ไปเครื่องใหม่ แล้วรัน  docker compose up -d --build
+# ย้ายเครื่อง: คัดลอกโฟลเดอร์โปรเจกต์ทั้งหมด (รวม ./data และ .env) ไปเครื่องใหม่ แล้วรัน  docker compose up -d --build
+
+# log ของคอนเทนเนอร์เก็บไม่เกิน 3 ไฟล์ x 10 MB ต่อคอนเทนเนอร์ (ค่าเริ่มต้นของ Docker ไม่จำกัด)
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "3"
+
 services:
   file-center:
     build: .
     container_name: file-center
     restart: unless-stopped
+    logging: *logging
     ports:
-      - "${PORT:-3000}:3000"
+      # ค่าเริ่มต้นเปิดให้เข้าได้จากเครื่องนี้เท่านั้น ผู้ใช้ภายนอกเข้าผ่านโดเมน (Cloudflare Tunnel) โดยไม่ต้องเปิดพอร์ตที่เราเตอร์
+      # ตั้ง BIND_ADDRESS=0.0.0.0 ใน .env ถ้าต้องการให้เครื่องอื่นในวง LAN เข้าตรงได้
+      - "${BIND_ADDRESS:-127.0.0.1}:${PORT:-3000}:3000"
     env_file:
       - path: .env
         required: false
+    environment:
+      # PORT ใน .env คือพอร์ตฝั่งเครื่อง host ส่วนในคอนเทนเนอร์ใช้ 3000 เสมอ
+      PORT: "3000"
     volumes:
       # ./data/storage = ไฟล์ที่อัปโหลด, ./data/system = ผู้ใช้ ตั้งค่า ประวัติ ถังขยะ session
       - ./data:/data
+
+  # Cloudflare Tunnel พาผู้ใช้จากโดเมนเข้ามาที่ file-center โดยไม่ต้องเปิดพอร์ตหรือมี IP จริง
+  # ทำงานเมื่อ .env มี COMPOSE_PROFILES=tunnel และ TUNNEL_TOKEN (ดูหัวข้อ Cloudflare Tunnel ใน README)
+  cloudflared:
+    image: cloudflare/cloudflared:2026.10.0
+    container_name: file-center-tunnel
+    profiles: [tunnel]
+    restart: unless-stopped
+    logging: *logging
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${TUNNEL_TOKEN:-}
+    depends_on:
+      file-center:
+        condition: service_healthy

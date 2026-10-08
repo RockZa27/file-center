@@ -25,6 +25,8 @@ export const config = {
   uploadChunkSize: num('UPLOAD_CHUNK_SIZE', 8 * 1024 ** 2), // 8 MB
   uploadSimultaneous: num('UPLOAD_SIMULTANEOUS', 3),
   uploadStaleMs: num('UPLOAD_STALE_HOURS', 3) * 3600_000,
+  /** uploads are refused when they would leave less free disk space than this */
+  minFreeSpace: num('MIN_FREE_SPACE', 2 * 1024 ** 3), // 2 GB
   sessionTtlMs: num('SESSION_TTL_HOURS', 24 * 7) * 3600_000,
   trashRetentionDays: num('TRASH_RETENTION_DAYS', 30),
   loginMaxAttempts: num('LOGIN_MAX_ATTEMPTS', 5),
@@ -32,8 +34,15 @@ export const config = {
   auditMaxBytes: 10 * 1024 * 1024,
   auditMaxFiles: 10,
   unzipMaxBytes: num('UNZIP_MAX_BYTES', 20 * 1024 ** 3),
+  unzipMaxFiles: num('UNZIP_MAX_FILES', 50_000),
   /** set to "true" behind HTTPS so the session cookie is marked Secure */
   secureCookie: env('SECURE_COOKIE', 'false') === 'true',
+  /**
+   * where the visitor's IP comes from:
+   * "false" = the connection itself, "cloudflare" = CF-Connecting-IP (Cloudflare / Cloudflare Tunnel),
+   * "true" = the last X-Forwarded-For entry, the one written by your own reverse proxy (earlier entries come from the client)
+   */
+  trustProxy: env('TRUST_PROXY', 'false') as 'false' | 'true' | 'cloudflare',
   /** first-run admin password; random one is printed to the console when empty */
   adminPassword: env('ADMIN_PASSWORD', ''),
 }
@@ -49,6 +58,8 @@ export const paths = {
   branding: join(config.dataDir, 'branding'),
   backupStatus: join(config.dataDir, 'backup-status.json'),
   publicDir: join(config.storageDir, config.publicDirName),
+  /** parent of the default user folders (/users/<name>) */
+  usersDir: join(config.storageDir, 'users'),
 }
 
 export function ensureDirs() {

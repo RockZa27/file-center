@@ -28,7 +28,7 @@ const defaults = (): Settings => ({
   logo: null,
 })
 
-const store = new JsonStore<Settings>(paths.settings, defaults)
+const store = new JsonStore<Settings>(paths.settings, defaults, { onCorrupt: 'fail' })
 // make sure keys added in newer versions exist
 store.update(s => Object.assign(s, { ...defaults(), ...s }))
 

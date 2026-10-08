@@ -21,7 +21,7 @@ export type User = {
   lastLogin?: string
 }
 
-const userStore = new JsonStore<{ users: User[] }>(paths.users, () => ({ users: [] }))
+const userStore = new JsonStore<{ users: User[] }>(paths.users, () => ({ users: [] }), { onCorrupt: 'fail' })
 
 export const USERNAME_RE = /^[a-zA-Z0-9._-]{3,32}$/
 
@@ -92,6 +92,9 @@ export async function bootstrapAdmin() {
 
 export function cleanHomedir(input: unknown, username: string): string {
   const p = input === undefined || input === '' ? `/users/${username}` : normRel(input)
+  // inside the public folder the user would get full rights there through their own space
+  const pub = `/${config.publicDirName}`
+  if (p === pub || p.startsWith(`${pub}/`)) throw bad('โฟลเดอร์ของผู้ใช้ต้องไม่อยู่ในโฟลเดอร์สาธารณะ')
   return p
 }
 
@@ -167,7 +170,9 @@ export function purgeExpiredSessions() {
 
 // ───────────────────────────── login lockout ─────────────────────────────
 
-const attempts = new Map<string, { count: number; until: number }>()
+// per "ip|username": failures within the lockout window, and when the lockout ends
+const attempts = new Map<string, { count: number; until: number; last: number }>()
+const ATTEMPTS_MAX = 10_000
 
 export function lockedFor(key: string): number {
   const a = attempts.get(key)
@@ -175,14 +180,30 @@ export function lockedFor(key: string): number {
 }
 
 export function recordFailure(key: string) {
-  const a = attempts.get(key) ?? { count: 0, until: 0 }
-  if (a.until && a.until <= Date.now()) { a.count = 0; a.until = 0 }
+  if (attempts.size >= ATTEMPTS_MAX) pruneLoginAttempts()
+  const now = Date.now()
+  const a = attempts.get(key) ?? { count: 0, until: 0, last: now }
+  if (a.until && a.until <= now) { a.count = 0; a.until = 0 }
   a.count++
-  if (a.count >= config.loginMaxAttempts) a.until = Date.now() + config.loginLockoutMs
+  a.last = now
+  if (a.count >= config.loginMaxAttempts) a.until = now + config.loginLockoutMs
   attempts.set(key, a)
 }
 
 export const clearFailures = (key: string) => attempts.delete(key)
+
+/** forget lockouts that ended and failures older than the lockout window; returns how many were dropped */
+export function pruneLoginAttempts(): number {
+  const now = Date.now()
+  let n = 0
+  for (const [k, a] of attempts) {
+    if (a.until ? a.until <= now : now - a.last > config.loginLockoutMs) {
+      attempts.delete(k)
+      n++
+    }
+  }
+  return n
+}
 
 // ───────────────────────────── access ─────────────────────────────
 

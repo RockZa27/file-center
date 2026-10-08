@@ -13,6 +13,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@zip.js/zip.js": "^2.23.0",
     "elysia": "^1.4.30",
     "fflate": "^0.8.2"
   },

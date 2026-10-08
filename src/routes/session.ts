@@ -75,7 +75,7 @@ export const sessionRoutes = new Elysia({ prefix: '/api' })
     saveUsers()
     audit({ user: user.username, ip, action: 'login' })
     return snapshot(user, session)
-  }, { body: t.Object({ username: t.String(), password: t.String() }) })
+  }, { body: t.Object({ username: t.String({ maxLength: 64 }), password: t.String({ maxLength: 1000 }) }) })
 
   .post('/logout', ({ cookie, sid, user, ip }) => {
     if (user) audit({ user: user.username, ip, action: 'logout' })
@@ -98,6 +98,6 @@ export const sessionRoutes = new Elysia({ prefix: '/api' })
     destroyUserSessions(u.username, sid)
     audit({ user: u.username, ip, action: 'password-change' })
     return { ok: true }
-  }, { body: t.Object({ current: t.String(), next: t.String() }) })
+  }, { body: t.Object({ current: t.String({ maxLength: 1000 }), next: t.String({ maxLength: 1000 }) }) })
 
 export { findUser }

@@ -1,9 +1,9 @@
 import { randomBytes } from 'node:crypto'
 import { existsSync, lstatSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
-import { basename, dirname, join, relative } from 'node:path'
+import { basename, dirname, join } from 'node:path'
 import { config, paths } from './config'
 import {
-  conflict, ensureDir, moveSync, notFound, parentRel, resolveIn, treeStats, uniquePath,
+  conflict, ensureDir, moveSync, notFound, parentRel, resolveIn, storagePath, treeStats, uniquePath,
 } from './fsx'
 
 export type TrashMeta = {
@@ -33,7 +33,7 @@ export function moveToTrash(abs: string, deletedBy: string): TrashMeta {
     name: basename(abs),
     type: isDir ? 'dir' : 'file',
     size: isDir ? treeStats(abs, 200_000).size : st.size,
-    originalPath: '/' + relative(config.storageDir, abs).split(/[\\/]/).join('/'),
+    originalPath: storagePath(abs),
     deletedAt: new Date().toISOString(),
     deletedBy,
   }
@@ -70,8 +70,7 @@ export function restore(idRaw: unknown): { meta: TrashMeta; restoredTo: string }
   if (existsSync(finalPath)) throw conflict('มีรายการชื่อเดียวกันอยู่แล้ว')
   moveSync(join(dir, 'item'), finalPath)
   rmSync(dir, { recursive: true, force: true })
-  const rel = '/' + relative(config.storageDir, finalPath).split(/[\\/]/).join('/')
-  return { meta, restoredTo: rel }
+  return { meta, restoredTo: storagePath(finalPath) }
 }
 
 export function purge(idRaw?: unknown): number {

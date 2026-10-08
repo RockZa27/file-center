@@ -136,7 +136,8 @@ async function upload(it) {
             break
           } catch (e) {
             if (it.canceled) return
-            const retryable = e.status === 0 || e.status >= 500
+            // 507 = server disk full, retrying will not help
+            const retryable = e.status === 0 || (e.status >= 500 && e.status !== 507)
             if (!retryable || attempt >= 3) { failure = e; return }
             sent[idx] = 0
             sync()

@@ -11,7 +11,7 @@
       <audio v-else-if="kind === 'audio'" :src="inlineUrl" controls class="audio" />
       <iframe v-else-if="kind === 'pdf'" :src="inlineUrl" class="pdf" :title="item.name" />
       <template v-else-if="kind === 'text'">
-        <n-spin :show="loading">
+        <n-spin :show="loading" style="width: 100%">
           <n-alert v-if="loadError" type="warning">{{ loadError }}</n-alert>
           <textarea v-else v-model="text" class="editor mono" :readonly="!canEdit" spellcheck="false" />
         </n-spin>
@@ -79,6 +79,8 @@ async function loadText() {
 
 watch(() => [props.show, props.item], () => {
   if (!props.show || !props.item) return
+  // reopening the same file does not change `current`: load it again so discarded edits are gone
+  if (current.value === props.item && kind.value === 'text') loadText()
   current.value = props.item
 }, { immediate: true })
 
