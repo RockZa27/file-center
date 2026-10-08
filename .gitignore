@@ -4,6 +4,5 @@ data/
 storage/
 .env
 *.log
-bun.lock
 bun.lockb
 package-lock.json

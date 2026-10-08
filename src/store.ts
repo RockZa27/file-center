@@ -8,11 +8,21 @@ export class JsonStore<T> {
   private data: T
   private queue: Promise<void> = Promise.resolve()
 
-  constructor(private file: string, private fallback: () => T) {
+  /**
+   * onCorrupt: "reset" starts fresh (fine for data that can be rebuilt, like sessions),
+   * "fail" refuses to start so a broken users or settings file is never silently replaced
+   */
+  constructor(private file: string, private fallback: () => T, options: { onCorrupt?: 'reset' | 'fail' } = {}) {
     if (existsSync(file)) {
       try {
         this.data = JSON.parse(readFileSync(file, 'utf8')) as T
-      } catch {
+      } catch (err) {
+        if (options.onCorrupt === 'fail') {
+          throw new Error(
+            `อ่านไฟล์ข้อมูล ${file} ไม่ได้ (ไฟล์เสียหาย) ระบบหยุดเพื่อไม่ให้ข้อมูลถูกเขียนทับ ` +
+            `กรุณาแก้ไฟล์หรือกู้คืนจากข้อมูลสำรองแล้วเริ่มใหม่ (${(err as Error).message})`,
+          )
+        }
         // keep the broken file for inspection and start fresh
         try { renameSync(file, `${file}.broken-${Date.now()}`) } catch { /* ignore */ }
         this.data = fallback()

@@ -74,7 +74,7 @@
           <div v-for="it in gridItems" :key="it.path" class="card" :class="{ on: checked.includes(it.path) }" @contextmenu.prevent="openContext($event, it)">
             <button type="button" class="card-main" @click="open(it)">
               <div class="thumb">
-                <img v-if="it.type === 'file' && isImage(it.name) && can('download')" :src="api.downloadUrl(space, it.path, true)" loading="lazy" :alt="it.name">
+                <img v-if="hasThumb(it)" :src="api.downloadUrl(space, it.path, true)" loading="lazy" :alt="it.name">
                 <file-icon v-else :item="it" :size="44" />
               </div>
               <div class="card-name" :title="it.name">{{ it.name }}</div>
@@ -147,6 +147,9 @@ const router = useRouter()
 const fb = useFeedback()
 
 const can = p => app.can(props.space, p)
+// the grid shows the original picture as its thumbnail, so leave out the big ones
+const THUMB_MAX = 5 * 1024 * 1024
+const hasThumb = it => it.type === 'file' && isImage(it.name) && it.size <= THUMB_MAX && can('download')
 const location = computed(() => {
   const q = route.query.path
   return typeof q === 'string' && q.startsWith('/') ? q : '/'

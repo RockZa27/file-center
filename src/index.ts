@@ -1,7 +1,7 @@
 import { existsSync, statSync } from 'node:fs'
 import { extname, join, normalize } from 'node:path'
 import { Elysia } from 'elysia'
-import { bootstrapAdmin, purgeExpiredSessions } from './auth'
+import { bootstrapAdmin, pruneLoginAttempts, purgeExpiredSessions } from './auth'
 import { config, ensureDirs } from './config'
 import { context } from './context'
 import { within } from './fsx'
@@ -20,6 +20,7 @@ function housekeeping() {
     const trash = purgeExpired()
     const uploads = cleanStaleUploads()
     purgeExpiredSessions()
+    pruneLoginAttempts()
     if (trash || uploads) console.log(`[housekeeping] trash: ${trash}, stale uploads: ${uploads}`)
   } catch (err) {
     console.error('[housekeeping] failed', err)
@@ -51,12 +52,13 @@ function serveStatic(pathname: string): Response {
 }
 
 export const app = new Elysia({ serve: { maxRequestBodySize: config.uploadChunkSize * 2 + 1024 * 1024 } })
-  .use(context)
-  .onAfterHandle({ as: 'global' }, ({ set }) => {
-    set.headers['x-content-type-options'] ??= 'nosniff'
-    set.headers['x-frame-options'] ??= 'SAMEORIGIN'
-    set.headers['referrer-policy'] ??= 'same-origin'
+  // set before routing, so error responses (401, 404...) carry them too
+  .onRequest(({ set }) => {
+    set.headers['x-content-type-options'] = 'nosniff'
+    set.headers['x-frame-options'] = 'SAMEORIGIN'
+    set.headers['referrer-policy'] = 'same-origin'
   })
+  .use(context)
   .get('/api/health', () => ({ status: 'ok', version: config.version, time: new Date().toISOString() }))
   .use(sessionRoutes)
   .use(adminRoutes)

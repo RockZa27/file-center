@@ -1,7 +1,8 @@
 import {
-  cpSync, existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, renameSync, rmSync, statSync,
+  cpSync, existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, renameSync, rmSync, statfsSync, statSync,
 } from 'node:fs'
 import { basename, dirname, extname, join, relative, sep } from 'node:path'
+import { config } from './config'
 
 export class HttpError extends Error {
   constructor(public status: number, message: string, public code?: string) {
@@ -15,13 +16,70 @@ export const notFound = (m = 'ไม่พบรายการที่ระ�
 export const conflict = (m: string) => new HttpError(409, m)
 
 const BAD_NAME_CHARS = /[<>:"|?*\\/\u0000-\u001f]/
+// file systems count bytes, not letters: a Thai letter takes 3, so a Thai name fits about 85 of them
+const NAME_MAX = 255
+const bytes = (s: string) => Buffer.byteLength(s)
+
+/** cut `stem` by whole characters until `stem + tail` fits in NAME_MAX bytes */
+function fit(stem: string, tail: string): string {
+  const chars = Array.from(stem).slice(0, NAME_MAX)
+  while (chars.length && bytes(chars.join('') + tail) > NAME_MAX) chars.pop()
+  return chars.join('') + tail
+}
 
 export function validName(name: unknown): string {
   if (typeof name !== 'string') throw bad('ชื่อไม่ถูกต้อง')
   const n = name.trim()
-  if (!n || n === '.' || n === '..' || n.length > 255) throw bad('ชื่อไม่ถูกต้อง')
+  if (!n || n === '.' || n === '..') throw bad('ชื่อไม่ถูกต้อง')
+  if (bytes(n) > NAME_MAX) throw bad('ชื่อยาวเกินไป (ภาษาไทยได้ประมาณ 85 ตัวอักษร ภาษาอังกฤษ 255 ตัวอักษร)')
   if (BAD_NAME_CHARS.test(n)) throw bad('ชื่อห้ามมีอักขระ \\ / : * ? " < > |')
   return n
+}
+
+/** turn a name from outside (a zip entry) into one validName accepts: forbidden characters become "_", long ones are cut */
+export function cleanName(name: string): string {
+  let n = name.replace(new RegExp(BAD_NAME_CHARS.source, 'g'), '_').trim()
+  if (bytes(n) > NAME_MAX) {
+    const ext = extname(n)
+    n = (ext && bytes(ext) <= 32 ? fit(n.slice(0, -ext.length), ext) : fit(n, '')).trim()
+  }
+  return n === '' || n === '.' || n === '..' ? '_' : n
+}
+
+const FS_ERRORS: Record<string, [number, string]> = {
+  ENOENT: [404, 'ไม่พบรายการที่ระบุ'],
+  ENOTDIR: [404, 'ไม่พบโฟลเดอร์นี้'],
+  EISDIR: [400, 'รายการนี้เป็นโฟลเดอร์'],
+  EEXIST: [409, 'มีชื่อนี้อยู่แล้ว'],
+  ENOTEMPTY: [409, 'มีชื่อนี้อยู่แล้ว'],
+  ENAMETOOLONG: [400, 'ชื่อหรือพาธยาวเกินไป'],
+  ENOSPC: [507, 'พื้นที่จัดเก็บบนเซิร์ฟเวอร์เต็ม กรุณาติดต่อผู้ดูแลระบบ'],
+  EDQUOT: [507, 'พื้นที่จัดเก็บบนเซิร์ฟเวอร์เต็ม กรุณาติดต่อผู้ดูแลระบบ'],
+  EACCES: [403, 'เซิร์ฟเวอร์ไม่มีสิทธิ์เข้าถึงรายการนี้'],
+  EPERM: [403, 'เซิร์ฟเวอร์ไม่มีสิทธิ์เข้าถึงรายการนี้'],
+  EROFS: [403, 'พื้นที่จัดเก็บเป็นแบบอ่านอย่างเดียว'],
+  EBUSY: [409, 'รายการนี้กำลังถูกใช้งานอยู่'],
+}
+
+/** a clear HttpError for a file-system error (whose own message would show server paths), or null */
+export function fromFsError(err: unknown): HttpError | null {
+  if (err instanceof HttpError) return err
+  const known = FS_ERRORS[(err as any)?.code]
+  return known ? new HttpError(known[0], known[1], known[0] === 507 ? 'disk-full' : undefined) : null
+}
+
+/** "/users/bob/report.pdf": where an absolute path sits inside the storage, for logs and the trash */
+export const storagePath = (abs: string) => '/' + relative(config.storageDir, abs).split(/[\\/]/).filter(Boolean).join('/')
+
+/** true when both paths name the same file, e.g. "a.txt" and "A.txt" on a case-insensitive disk */
+export function sameFile(a: string, b: string) {
+  try {
+    const x = lstatSync(a)
+    const y = lstatSync(b)
+    return x.dev === y.dev && x.ino === y.ino
+  } catch {
+    return false
+  }
 }
 
 /** "/a//b/./c" -> "/a/b/c". Rejects ".." and NUL. */
@@ -104,7 +162,7 @@ export function uniquePath(abs: string): string {
   const ext = extname(abs)
   const stem = basename(abs, ext)
   for (let i = 1; i < 10_000; i++) {
-    const candidate = join(dir, `${stem} (${i})${ext}`)
+    const candidate = join(dir, fit(stem, ` (${i})${ext}`))
     if (!existsSync(candidate)) return candidate
   }
   throw conflict('ไม่สามารถตั้งชื่อใหม่ได้')
@@ -132,6 +190,24 @@ export function copySync(from: string, to: string) {
 
 export function ensureDir(abs: string) {
   mkdirSync(abs, { recursive: true })
+}
+
+/** bytes free for this process on the disk holding `abs`, or null when the platform can not tell */
+export function freeSpace(abs: string): number | null {
+  try {
+    const s = statfsSync(abs)
+    return Number(s.bavail) * Number(s.bsize)
+  } catch {
+    return null
+  }
+}
+
+/** refuse to write `size` more bytes when that would leave the disk below the configured reserve */
+export function ensureSpace(abs: string, size: number) {
+  const free = freeSpace(abs)
+  if (free !== null && free - size < config.minFreeSpace) {
+    throw new HttpError(507, 'พื้นที่จัดเก็บบนเซิร์ฟเวอร์ไม่พอ กรุณาติดต่อผู้ดูแลระบบ', 'disk-full')
+  }
 }
 
 /** total size and file count of a directory tree (symlinks skipped) */

@@ -24,7 +24,7 @@ bun start          # เปิดที่ http://localhost:3000
 
 ```bash
 bun run dev        # API ที่ :3000 + หน้าเว็บ (Vite, hot reload) ที่ :5173
-bun test           # ทดสอบ API 30 รายการ
+bun test           # ทดสอบ API 84 รายการ (SLOW_TESTS=1 bun test เพิ่มเทสต์ zip ขนาด 4.4 GB)
 bun run typecheck
 ```
 
@@ -45,11 +45,53 @@ docker compose logs file-center   # ดูรหัสผ่าน admin ที�
 ไม่ต้องแก้ค่าใดๆ ผู้ใช้ รหัสผ่าน ไฟล์ ถังขยะ และประวัติจะอยู่ครบ ผู้ที่ login อยู่ยัง login ต่อได้ ข้อมูลไม่มีพาธเครื่องเดิมฝังอยู่
 (ควร `down` ก่อนคัดลอกเพื่อให้ไฟล์ข้อมูลนิ่ง และเครื่องใหม่ต้องมี Docker กับ Docker Compose v2)
 
+ค่าเริ่มต้นของ `docker-compose.yml` เปิดพอร์ตให้เข้าได้จากเครื่อง server เท่านั้น (`127.0.0.1:3000`)
+ถ้าต้องการให้เครื่องอื่นในวง LAN เข้าตรงได้ ให้ตั้ง `BIND_ADDRESS=0.0.0.0` ใน `.env`
+
+## ใช้งานผ่านโดเมนด้วย Cloudflare Tunnel
+
+Cloudflare Tunnel ให้คนภายนอกเข้าผ่านโดเมน (เช่น `https://files.example.com`) ได้โดย **ไม่ต้องเปิดพอร์ตที่เราเตอร์และไม่ต้องมี IP จริง**
+เพราะคอนเทนเนอร์ `cloudflared` เป็นฝ่ายต่อออกไปหา Cloudflare เอง และ Cloudflare ทำ HTTPS ให้
+
+1. **นำโดเมนเข้า Cloudflare** ที่ [dash.cloudflare.com](https://dash.cloudflare.com) เพิ่มโดเมน แล้วเปลี่ยน nameserver ที่ผู้ให้บริการโดเมนเป็นของ Cloudflare
+   รอจนสถานะโดเมนเป็น Active (ไม่กี่นาทีถึงหลายชั่วโมง)
+2. **สร้าง tunnel** ที่ Zero Trust (one.dash.cloudflare.com) > Networks > Tunnels > Create a tunnel > เลือก Cloudflared > ตั้งชื่อ เช่น `file-center`
+   หน้าถัดไปเลือก Docker แล้วคัดลอก **โทเคน** (ข้อความยาวหลัง `--token`) ไม่ต้องรันคำสั่งที่หน้านั้นให้
+3. **ตั้งค่า `.env`** (คัดลอกจาก `.env.example` ถ้ายังไม่มี) ให้มีค่าเหล่านี้:
+   ```env
+   COMPOSE_PROFILES=tunnel
+   TUNNEL_TOKEN=โทเคนที่คัดลอกมา
+   SECURE_COOKIE=true
+   TRUST_PROXY=cloudflare
+   BIND_ADDRESS=127.0.0.1
+   ```
+4. **เริ่มระบบ** `docker compose up -d --build` แล้วดูว่า tunnel ในหน้า Zero Trust ขึ้นสถานะ Healthy
+5. **ผูกโดเมนกับระบบ** ในหน้า tunnel > Public Hostname (หรือ Published application routes) > Add
+   - Subdomain: `files` · Domain: โดเมนของคุณ
+   - Service Type: `HTTP` · URL: `file-center:3000` (ชื่อคอนเทนเนอร์ ไม่ใช่ localhost)
+
+   Cloudflare สร้าง DNS ให้อัตโนมัติ เปิด `https://files.โดเมนของคุณ` ได้ทันที
+6. **ตั้งค่าที่แนะนำใน Cloudflare** (หน้าโดเมน)
+   - SSL/TLS > Edge Certificates: เปิด Always Use HTTPS และตั้ง Minimum TLS Version เป็น 1.2
+   - **ห้ามสร้าง Cache Rule แบบ "Cache Everything"** กับโดเมนนี้ เพราะจะทำให้ไฟล์ส่วนตัวและ API ถูกเก็บไว้ที่ Cloudflare
+     (ระบบตั้ง `Cache-Control` ให้เองแล้ว: ไฟล์หน้าเว็บใน `/assets/` cache ได้ ส่วนไฟล์ที่ดาวน์โหลดและ API ไม่ถูก cache)
+   - ถ้าต้องการชั้นป้องกันเพิ่มสำหรับผู้ดูแล ใช้ Cloudflare Access ครอบพาธ `/admin` และ `/api/admin` ได้
+
+ข้อควรรู้เมื่อใช้ผ่าน Cloudflare
+- Cloudflare แพ็กเกจ Free/Pro รับคำขอได้ไม่เกิน 100 MB ต่อครั้ง ระบบอัปโหลดแบ่งส่งทีละ 8 MB จึงอัปโหลดไฟล์ใหญ่ได้ตามปกติ (อย่าตั้ง `UPLOAD_CHUNK_SIZE` เกิน 100 MB)
+- Cloudflare ตัดคำขอที่เซิร์ฟเวอร์ตอบช้ากว่าประมาณ 100 วินาที (หน้าเว็บจะได้ error 524) การบีบอัด/แตก zip ที่ใหญ่มากอาจเจอกรณีนี้
+  แต่งานยังทำต่อจนเสร็จที่เซิร์ฟเวอร์ รอสักครู่แล้วรีเฟรชหน้า
+- ข้อกำหนดของ Cloudflare จำกัดการใช้ CDN แบบไม่เสียเงินเพื่อเผยแพร่วิดีโอหรือไฟล์ขนาดใหญ่ในปริมาณมาก ถ้าจะใช้แจกไฟล์ใหญ่จำนวนมาก ควรอ่านข้อกำหนดก่อน
+- โทเคนใน `.env` คือกุญแจของ tunnel ใครได้ไปก็ต่อเข้าโดเมนนี้ได้ ห้ามแชร์ ถ้าหลุดให้ Refresh token ในหน้า tunnel
+- ถ้าเปิด `BIND_ADDRESS=0.0.0.0` คู่กับ `TRUST_PROXY=cloudflare` คนในวง LAN ที่เข้าตรงจะปลอม IP ของตัวเองได้ (ไม่กระทบสิทธิ์ แต่กระทบการล็อกและประวัติ)
+
 ## ตั้งค่า (ตัวแปรสภาพแวดล้อม)
 
 | ตัวแปร | ค่าเริ่มต้น | ความหมาย |
 |---|---|---|
-| `PORT` / `HOST` | `3000` / `0.0.0.0` | พอร์ตและที่อยู่ที่เปิดรับ |
+| `PORT` / `HOST` | `3000` / `0.0.0.0` | พอร์ตและที่อยู่ที่เปิดรับ (ใน Docker `PORT` คือพอร์ตฝั่งเครื่อง host) |
+| `BIND_ADDRESS` | `127.0.0.1` | (Docker) เปิดพอร์ตให้เครื่องไหนเข้าตรงได้ `0.0.0.0` = ทุกเครื่องในวง LAN |
+| `COMPOSE_PROFILES` / `TUNNEL_TOKEN` | ว่าง | (Docker) ตั้ง `tunnel` และโทเคนเพื่อเปิด Cloudflare Tunnel |
 | `STORAGE_DIR` | `./storage` (Docker: `/data/storage`) | ที่เก็บไฟล์ที่อัปโหลด |
 | `DATA_DIR` | `./data` (Docker: `/data/system`) | ผู้ใช้, ตั้งค่า, session, log, ถังขยะ, ไฟล์อัปโหลดที่ยังไม่เสร็จ |
 | `ADMIN_PASSWORD` | สุ่ม | รหัสผ่านของ admin ตอนสร้างบัญชีครั้งแรก |
@@ -57,11 +99,13 @@ docker compose logs file-center   # ดูรหัสผ่าน admin ที�
 | `UPLOAD_CHUNK_SIZE` | 8 MB | ขนาดชิ้นส่วนที่หน้าเว็บส่งทีละชิ้น |
 | `UPLOAD_SIMULTANEOUS` | 3 | จำนวนชิ้นที่ส่งพร้อมกัน |
 | `UPLOAD_STALE_HOURS` | 3 | ลบอัปโหลดที่ไม่เสร็จและไม่มีชิ้นใหม่เข้ามาเกินกี่ชั่วโมง |
+| `MIN_FREE_SPACE` | 2 GB | ปฏิเสธการอัปโหลด คัดลอก บีบอัด และแตก zip เมื่อดิสก์จะเหลือว่างน้อยกว่านี้ (ไบต์) |
+| `UNZIP_MAX_BYTES` / `UNZIP_MAX_FILES` | 20 GB / 50,000 | ขนาดรวมและจำนวนไฟล์สูงสุดที่แตกจาก zip หนึ่งไฟล์ได้ (กัน zip bomb) |
 | `TRASH_RETENTION_DAYS` | 30 | เก็บถังขยะกี่วัน |
 | `SESSION_TTL_HOURS` | 168 | อายุ session ของผู้ที่เข้าสู่ระบบ (ไม่ได้ใช้งานเกินนี้จะหมดอายุ) |
 | `LOGIN_MAX_ATTEMPTS` / `LOGIN_LOCKOUT_SECONDS` | 5 / 60 | ล็อกการเข้าสู่ระบบผิดซ้ำ (นับแยกตาม IP + ชื่อผู้ใช้) |
 | `SECURE_COOKIE` | `false` | ตั้งเป็น `true` เมื่อใช้ผ่าน HTTPS |
-| `TRUST_PROXY` | `false` | ตั้งเป็น `true` เมื่ออยู่หลัง reverse proxy เพื่ออ่าน IP จาก `X-Forwarded-For` |
+| `TRUST_PROXY` | `false` | ที่มาของ IP ผู้ใช้: `cloudflare` = หัว `CF-Connecting-IP` (Cloudflare Tunnel), `true` = ค่าสุดท้ายของ `X-Forwarded-For` (nginx/Caddy ของคุณเอง), `false` = ไม่มี proxy |
 
 ## สิทธิ์
 
@@ -83,7 +127,7 @@ src/
   auth.ts           ผู้ใช้, session, ล็อกการเข้าสู่ระบบ, การแปลงสิทธิ์เป็นพื้นที่ที่เข้าถึงได้
   context.ts        ตรวจ session/CSRF, รูปแบบ error เดียวกันทุก API
   fsx.ts            จัดการพาธอย่างปลอดภัย (กัน ../ และ symlink), คัดลอก/ย้าย
-  zip.ts            สร้าง zip แบบ stream และแตก zip (กัน zip-slip / zip bomb)
+  zip.ts            สร้าง zip แบบ stream (zip.js รองรับ ZIP64 ไฟล์เกิน 4 GB) และแตก zip (fflate กัน zip-slip / zip bomb)
   uploads.ts        อัปโหลดแบบแบ่งชิ้น กลับมาต่อได้
   trash.ts, audit.ts, settings.ts, store.ts
   routes/           session, files, upload, admin
@@ -128,8 +172,10 @@ tests/api.test.ts   ทดสอบ API
 
 ## ข้อจำกัดที่ควรรู้
 
-- พัฒนาและทดสอบบน Linux เท่านั้น ยังไม่ได้ลองบน Windows (พาธ, `statfs`, ชื่อไฟล์ต้องห้ามของ Windows) ให้ทดลองก่อนใช้งานจริง
-- `Dockerfile` และ `docker-compose.yml` ยังไม่ได้ทดสอบ build (ทดสอบได้เฉพาะส่วนข้อมูลย้ายเครื่อง โดยรันด้วย `STORAGE_DIR`/`DATA_DIR` แบบเดียวกับใน Docker)
+- ทดสอบบน Linux และด้วย Docker Desktop บน Windows แล้ว แต่การรันด้วย Bun บน Windows โดยตรง (ไม่ผ่าน Docker) ยังไม่ได้ทดสอบ (พาธ, `statfs`, ชื่อไฟล์ต้องห้ามของ Windows)
 - ชื่อไฟล์ที่ไม่ใช่ ASCII ส่งไปในหัว `Content-Disposition` ตามมาตรฐาน RFC 6266 (`filename*=UTF-8''...`) ควรลองดาวน์โหลดไฟล์ชื่อไทยในเบราว์เซอร์ที่ใช้จริงอีกครั้ง
-- ชื่อไฟล์/โฟลเดอร์ห้ามมีอักขระ `\ / : * ? " < > |` (เพื่อให้ย้ายข้ามระบบปฏิบัติการได้)
+- ชื่อไฟล์/โฟลเดอร์ห้ามมีอักขระ `\ / : * ? " < > |` (เพื่อให้ย้ายข้ามระบบปฏิบัติการได้) และยาวได้ไม่เกิน 255 ไบต์ ซึ่งเท่ากับภาษาไทยประมาณ 85 ตัวอักษร
+  (ชื่อที่ยาวเกินในไฟล์ zip จะถูกตัดให้สั้นลงโดยคงนามสกุลไว้)
+- ผู้ใช้ที่ได้รหัสผ่านเริ่มต้นจากระบบต้องเปลี่ยนรหัสผ่านก่อน จึงจะเรียก API อื่นได้ (server บังคับ ไม่ใช่แค่หน้าเว็บ)
+- โฟลเดอร์ระบบ `/public` และ `/users` คัดลอกได้ แต่ลบ ย้าย หรือเปลี่ยนชื่อไม่ได้
 - ค้นหาไฟล์ตามชื่อโดยเดินดูโฟลเดอร์ตอนค้นหา ไม่มีดัชนี จึงช้าลงถ้ามีไฟล์หลักแสนไฟล์ขึ้นไป (จำกัดที่ 50,000 รายการต่อการค้นหา)

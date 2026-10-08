@@ -106,27 +106,30 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     const admin = requireAdmin({ user, ip })
     const target = findUser(params.username)
     if (!target) throw notFound('ไม่พบผู้ใช้')
+    // check every field first: a refused request must not leave half of its changes behind
     if (body.role && body.role !== target.role && target.role === 'admin' && adminCount() <= 1) {
       throw bad('ต้องมีผู้ดูแลระบบอย่างน้อยหนึ่งคน')
     }
-    if (body.name !== undefined) {
-      const name = body.name.trim()
-      if (!name || name.length > 60) throw bad('ชื่อที่แสดงไม่ถูกต้อง')
-      target.name = name
-    }
-    if (body.role) target.role = body.role
-    if (target.role === 'admin') target.homedir = '/'
-    else if (body.homedir !== undefined || target.homedir === '/') {
-      const homedir = cleanHomedir(body.homedir, target.username)
+    const name = body.name?.trim()
+    if (name !== undefined && (!name || name.length > 60)) throw bad('ชื่อที่แสดงไม่ถูกต้อง')
+    const role = body.role ?? target.role
+    let homedir = role === 'admin' ? '/' : target.homedir
+    if (role !== 'admin' && (body.homedir !== undefined || target.homedir === '/')) {
+      homedir = cleanHomedir(body.homedir, target.username)
       if (homedir === '/') throw bad('ผู้ใช้ทั่วไปต้องมีโฟลเดอร์ของตัวเอง')
-      ensureDir(resolveIn(config.storageDir, homedir))
-      target.homedir = homedir
     }
+    const homeAbs = resolveIn(config.storageDir, homedir)
+    if (body.password) checkPasswordStrength(body.password)
+    const passwordHash = body.password ? await hashPassword(body.password) : null
+
+    ensureDir(homeAbs)
+    if (name !== undefined) target.name = name
+    target.role = role
+    target.homedir = homedir
     if (body.permissions) target.permissions = cleanPerms(body.permissions)
     if (body.publicPermissions) target.publicPermissions = cleanPerms(body.publicPermissions)
-    if (body.password) {
-      checkPasswordStrength(body.password)
-      target.passwordHash = await hashPassword(body.password)
+    if (passwordHash) {
+      target.passwordHash = passwordHash
       target.mustChangePassword = false
       destroyUserSessions(target.username)
     }

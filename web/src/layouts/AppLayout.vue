@@ -33,7 +33,7 @@
           </n-dropdown>
         </div>
       </header>
-      <main><router-view /></main>
+      <main><router-view :key="viewKey" /></main>
     </div>
     <profile-modal v-model:show="profileOpen" />
   </div>
@@ -118,6 +118,11 @@ async function checkSession() {
 }
 // whatever call noticed that the session is gone, leave the protected area at once
 watch(() => app.user, u => { if (!u) router.replace({ name: 'login' }) })
+// the server refuses everything until a handed-out password is changed: reload the page once it is
+const viewKey = ref(0)
+watch(() => app.user?.mustChangePassword, (now, before) => {
+  if (before && !now) { viewKey.value++; loadWarnings() }
+})
 const onVisible = () => document.visibilityState === 'visible' && checkSession()
 
 onMounted(() => {
