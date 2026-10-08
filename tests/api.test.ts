@@ -410,7 +410,12 @@ describe('regressions found in QA', () => {
       'bad:name?.txt': new Uint8Array([1]), 'ctl\u0001x.txt': new Uint8Array([2]), 'ok/fine.txt': new Uint8Array([3]),
     }))
     expect((await admin.json('POST', '/api/unzip', { space: 'home', path: '/names.zip' })).status).toBe(200)
-    expect(await names(admin, 'home', '/names')).toEqual(['bad_name_.txt', 'ctl_x.txt', 'ok'])
+    const got = await names(admin, 'home', '/names')
+    expect(got.length).toBe(3)
+    expect(got).toContain('bad_name_.txt')
+    expect(got).toContain('ok')
+    // a byte 0x01 in a name without the UTF-8 flag is read as CP437 ("☺"); no control character survives either way
+    expect(got.some((n: string) => /[\u0000-\u001f]/.test(n))).toBe(false)
     const keep = config.unzipMaxFiles
     config.unzipMaxFiles = 2
     try {
@@ -970,6 +975,58 @@ describe('full system: file operations', () => {
       config.minFreeSpace = keep
     }
     expect(await names('/ops')).toEqual(before)
+  })
+})
+
+describe('full system: zip archives', () => {
+  test('ZIP64 archives made by this system unzip again', async () => {
+    const { zipStream } = await import('../src/zip')
+    mkdirSync(storageAbs('z64src'))
+    writeFileSync(storageAbs('z64src', 'big.txt'), 'x'.repeat(100_000))
+    writeFileSync(storageAbs('z64src', 'clip.mp4'), randomBytes(5000))
+    // claim a size past the ZIP64 threshold so the small test files get the same records as a 5 GB one
+    const huge = 0xf000_0000
+    const items = [
+      { name: 'ใหญ่/', abs: storageAbs('z64src'), dir: true, mtime: Date.now(), size: 0 },
+      { name: 'ใหญ่/big.txt', abs: storageAbs('z64src', 'big.txt'), dir: false, mtime: Date.now(), size: huge },
+      { name: 'ใหญ่/clip.mp4', abs: storageAbs('z64src', 'clip.mp4'), dir: false, mtime: Date.now(), size: huge },
+    ]
+    await Bun.write(storageAbs('z64.zip'), new Response(zipStream(items)))
+    const u = await admin.json('POST', '/api/unzip', { space: 'home', path: '/z64.zip' })
+    expect(u.status).toBe(200)
+    expect(u.data.files).toBe(2)
+    expect(await Bun.file(storageAbs('z64', 'ใหญ่', 'big.txt')).text()).toBe('x'.repeat(100_000))
+    expect(Buffer.compare(new Uint8Array(await Bun.file(storageAbs('z64', 'ใหญ่', 'clip.mp4')).arrayBuffer()), new Uint8Array(await Bun.file(storageAbs('z64src', 'clip.mp4')).arrayBuffer()))).toBe(0)
+  })
+  test('UTF-8 names without the UTF-8 flag (macOS and older tools) keep their Thai letters', async () => {
+    const zip = zipSync({ 'รายงาน.txt': new TextEncoder().encode('ok') })
+    const dv = new DataView(zip.buffer, zip.byteOffset, zip.byteLength)
+    for (let i = 0; i < zip.length - 4; i++) {
+      const sig = dv.getUint32(i, true)
+      const at = sig === 0x04034b50 ? i + 6 : sig === 0x02014b50 ? i + 8 : -1
+      if (at >= 0) dv.setUint16(at, dv.getUint16(at, true) & ~0x800, true)
+    }
+    writeFileSync(storageAbs('noflag.zip'), zip)
+    expect((await admin.json('POST', '/api/unzip', { space: 'home', path: '/noflag.zip' })).status).toBe(200)
+    expect(existsSync(storageAbs('noflag', 'รายงาน.txt'))).toBe(true)
+  })
+  test('big files that do not shrink are stored, text is still compressed', async () => {
+    const { BlobReader, ZipReader } = await import('@zip.js/zip.js')
+    mkdirSync(storageAbs('mixed'))
+    writeFileSync(storageAbs('mixed', 'noise.bin'), randomBytes(3 * MB))
+    writeFileSync(storageAbs('mixed', 'log.txt'), 'GET /api/list 200 12ms\n'.repeat(150_000))
+    const b = await admin.json('POST', '/api/batch', { space: 'home', path: '/', items: ['mixed'] })
+    const zip = await (await admin.raw('GET', `/api/batch/${b.data.token}`)).blob()
+    const entries = Object.fromEntries((await new ZipReader(new BlobReader(zip)).getEntries()).map(e => [e.filename, e]))
+    expect(entries['mixed/noise.bin'].compressedSize).toBe(3 * MB)
+    expect(entries['mixed/log.txt'].compressedSize).toBeLessThan(entries['mixed/log.txt'].uncompressedSize / 10)
+  })
+  test('a damaged archive is refused and leaves nothing behind', async () => {
+    const zip = zipSync({ 'data.bin': new Uint8Array(4000).fill(7) }, { level: 0 })
+    zip[100] ^= 0xff // flip a byte of the stored file data: the CRC no longer matches
+    writeFileSync(storageAbs('damaged.zip'), zip)
+    expect((await admin.json('POST', '/api/unzip', { space: 'home', path: '/damaged.zip' })).status).toBe(400)
+    expect(existsSync(storageAbs('damaged'))).toBe(false)
   })
 })
 

@@ -1,7 +1,6 @@
-import { closeSync, lstatSync, mkdirSync, openSync, readdirSync, writeSync } from 'node:fs'
+import { closeSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, writeSync } from 'node:fs'
 import { dirname, extname, join } from 'node:path'
-import { configure, ZipWriter } from '@zip.js/zip.js'
-import { Unzip, UnzipInflate, UnzipPassThrough } from 'fflate'
+import { BlobReader, configure, ZipReader, ZipWriter } from '@zip.js/zip.js'
 import { bad, cleanName, uniquePath, within } from './fsx'
 
 configure({ useWebWorkers: false })
@@ -30,6 +29,25 @@ const STORE_ONLY = new Set(['.zip', '.jpg', '.jpeg', '.png', '.gif', '.webp', '.
 
 // entries this big get ZIP64 headers up front; deflate can grow incompressible data a little past its size
 const ZIP64_FROM = 0xf000_0000
+const SAMPLE = 256 * 1024
+
+/**
+ * Deflate runs on one core at roughly 40 MB/s, so a 5 GB video would take two minutes and save nothing.
+ * Files over 1 MB are compressed only when their first 256 KB shrink by at least 10%.
+ */
+function worthCompressing(item: ZipItem): boolean {
+  if (STORE_ONLY.has(extname(item.name).toLowerCase())) return false
+  if (item.size <= 1024 * 1024) return true
+  try {
+    const fd = openSync(item.abs, 'r')
+    const sample = new Uint8Array(SAMPLE)
+    let n = 0
+    try { n = readSync(fd, sample, 0, SAMPLE, 0) } finally { closeSync(fd) }
+    return Bun.deflateSync(sample.subarray(0, n), { level: 1 }).length < n * 0.9
+  } catch {
+    return true
+  }
+}
 
 /**
  * Streams a zip archive. Writes ZIP64 records when an entry or the archive passes 4 GB, and the writer
@@ -45,8 +63,7 @@ export function zipStream(items: ZipItem[]): ReadableStream<Uint8Array> {
         await zip.add(item.name, undefined, { directory: true, lastModDate })
         continue
       }
-      const stored = STORE_ONLY.has(extname(item.name).toLowerCase())
-      await zip.add(item.name, Bun.file(item.abs).stream(), { lastModDate, level: stored ? 0 : 3, zip64: item.size >= ZIP64_FROM })
+      await zip.add(item.name, Bun.file(item.abs).stream(), { lastModDate, level: worthCompressing(item) ? 3 : 0, zip64: item.size >= ZIP64_FROM })
     }
     await zip.close()
   })().catch(err => writable.abort(err).catch(() => {}))
@@ -54,65 +71,55 @@ export function zipStream(items: ZipItem[]): ReadableStream<Uint8Array> {
 }
 
 /**
- * Extract a zip archive into destDir. Protects against zip-slip and zip bombs, caps the number of files,
- * and turns names this system would refuse (":", "?", control characters...) into safe ones.
+ * Extract a zip archive into destDir. Reads the central directory, so ZIP64 archives over 4 GB work, and
+ * checks every file's CRC. Protects against zip-slip and zip bombs (the declared sizes are checked first,
+ * the bytes really written are counted too), caps the number of files, and turns names this system would
+ * refuse (":", "?", control characters...) into safe ones.
  */
 export async function unzipTo(zipAbs: string, destDir: string, limits: { maxBytes: number; maxFiles: number }): Promise<number> {
-  let total = 0
-  let count = 0
-  let failure: Error | null = null
-  const open = new Set<number>()
-  const close = (fd: number) => { if (open.delete(fd)) closeSync(fd) }
-  const unzip = new Unzip()
-  unzip.register(UnzipInflate)
-  unzip.register(UnzipPassThrough)
-
-  unzip.onfile = file => {
-    if (failure) return
-    const parts = file.name.replaceAll('\\', '/').split('/').filter(s => s && s !== '.')
-    if (parts.some(s => s === '..') || file.name.startsWith('/') || /^[a-zA-Z]:/.test(file.name)) {
-      failure = bad('ไฟล์ zip มีพาธที่ไม่ปลอดภัย')
-      return
-    }
-    if (!parts.length) return
-    const target = join(destDir, ...parts.map(cleanName))
-    if (!within(destDir, target)) {
-      failure = bad('ไฟล์ zip มีพาธที่ไม่ปลอดภัย')
-      return
-    }
-    if (file.name.endsWith('/')) {
-      mkdirSync(target, { recursive: true })
-      return
-    }
-    if (++count > limits.maxFiles) {
-      failure = bad(`ไฟล์ zip มีไฟล์มากกว่า ${limits.maxFiles.toLocaleString()} ไฟล์`)
-      return
-    }
-    mkdirSync(dirname(target), { recursive: true })
-    const fd = openSync(uniquePath(target), 'wx')
-    open.add(fd)
-    file.ondata = (err, chunk, final) => {
-      if (err) failure = err as Error
-      else if (!failure) {
-        total += chunk.length
-        if (total > limits.maxBytes) failure = bad('ไฟล์ที่แตกออกมามีขนาดใหญ่เกินกำหนด หรือพื้นที่จัดเก็บไม่พอ')
-        else if (chunk.length) writeSync(fd, chunk)
-      }
-      if (final || failure) close(fd)
-    }
-    file.start()
-  }
-
+  const tooBig = () => bad('ไฟล์ที่แตกออกมามีขนาดใหญ่เกินกำหนด หรือพื้นที่จัดเก็บไม่พอ')
+  const unsafe = () => bad('ไฟล์ zip มีพาธที่ไม่ปลอดภัย')
+  const reader = new ZipReader(new BlobReader(Bun.file(zipAbs)))
   try {
-    const stream = Bun.file(zipAbs).stream()
-    for await (const chunk of stream as unknown as AsyncIterable<Uint8Array>) {
-      unzip.push(chunk, false)
-      if (failure) throw failure
+    const entries = await reader.getEntries()
+    const files = entries.filter(e => !e.directory)
+    if (files.length > limits.maxFiles) throw bad(`ไฟล์ zip มีไฟล์มากกว่า ${limits.maxFiles.toLocaleString()} ไฟล์`)
+    if (files.reduce((sum, e) => sum + e.uncompressedSize, 0) > limits.maxBytes) throw tooBig()
+
+    let total = 0
+    let count = 0
+    for (const entry of entries) {
+      const name = entry.filename
+      const parts = name.replaceAll('\\', '/').split('/').filter(s => s && s !== '.')
+      if (parts.some(s => s === '..') || name.startsWith('/') || /^[a-zA-Z]:/.test(name)) throw unsafe()
+      if (!parts.length) continue
+      const target = join(destDir, ...parts.map(cleanName))
+      if (!within(destDir, target)) throw unsafe()
+      if (entry.directory) {
+        mkdirSync(target, { recursive: true })
+        continue
+      }
+      mkdirSync(dirname(target), { recursive: true })
+      const fd = openSync(uniquePath(target), 'wx')
+      let failure: Error | null = null
+      try {
+        await entry.getData(new WritableStream<Uint8Array>({
+          write(chunk) {
+            total += chunk.length
+            // the header may lie about the size: count what really comes out
+            if (total > limits.maxBytes) throw (failure = tooBig())
+            for (let at = 0; at < chunk.length;) at += writeSync(fd, chunk, at)
+          },
+        }), { checkSignature: true })
+      } catch (err) {
+        throw failure ?? err
+      } finally {
+        closeSync(fd)
+      }
+      count++
     }
-    unzip.push(new Uint8Array(0), true)
-    if (failure) throw failure
     return count
   } finally {
-    for (const fd of [...open]) close(fd)
+    await reader.close()
   }
 }

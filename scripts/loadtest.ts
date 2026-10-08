@@ -9,6 +9,7 @@
  *   range          random Range requests against src.bin
  *   batch          multi-file download (zip stream) of /load/big.bin + a small file, saved to WORK/batch.zip
  *   zip            server-side zip of /load/big.bin, then unzip that archive again
+ *   unzip          unzip /load/big-archive.zip (made by "zip") once more
  *   many           list and search a folder with FILES files (default 20,000) created through the API's disk (FCDATA)
  *   parallel       3 users upload 1 GB each at the same time
  *   restart-start  begin a 1 GB upload, send half of it, save the state in WORK/restart.json
@@ -171,6 +172,13 @@ const steps: Record<string, () => Promise<void>> = {
     const u = await c.req('POST', '/api/unzip', { space: 'home', path: `/load/${z.name}` })
     const unzipBody: any = await u.json()
     out('zip', { archive: z.name, zipSecs: zipSecs.toFixed(1), unzipStatus: u.status, unzip: unzipBody, unzipSecs: secs(t0).toFixed(1) })
+  },
+
+  async unzip() {
+    const c = await admin()
+    const t0 = performance.now()
+    const u = await c.req('POST', '/api/unzip', { space: 'home', path: '/load/big-archive.zip' })
+    out('unzip', { status: u.status, body: await u.json().catch(() => null), secs: secs(t0).toFixed(1) })
   },
 
   async many() {
