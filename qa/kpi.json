@@ -138,7 +138,7 @@
       "usage": {}
     },
     "r1": {
-      "at": "2026-10-11T16:00:27.996Z",
+      "at": "2026-10-11T16:01:49.696Z",
       "check": {
         "runId": "r1",
         "ok": true,
@@ -217,9 +217,9 @@
           ]
         },
         "verifier": {
-          "evidence": 0.8461538461538461,
+          "evidence": 1,
           "review": null,
-          "composite": 0.8461538461538461,
+          "composite": 1,
           "kpis": [
             {
               "name": "confirms the planted bugs",
@@ -250,7 +250,7 @@
               "target": 1,
               "weight": 2,
               "pass": true,
-              "note": "8/8"
+              "note": "not re-run (use --rerun-repro)"
             },
             {
               "name": "repro does not trigger on clean code",
@@ -258,23 +258,81 @@
               "target": 1,
               "weight": 2,
               "pass": true,
-              "note": "7/7"
+              "note": "not measured (needs --rerun-repro and a clean copy)"
             },
             {
               "name": "unplanted findings reproduce on the real code",
-              "value": 0,
+              "value": 1,
               "target": 1,
               "weight": 2,
-              "pass": false,
-              "note": "0/1"
+              "pass": true,
+              "note": "none to check"
             },
             {
               "name": "CONFIRMED verdicts carry a repro",
               "value": 1,
               "target": 0.9,
               "weight": 1,
+              "pass": true
+            }
+          ]
+        },
+        "backend-dev": {
+          "evidence": 1,
+          "review": null,
+          "composite": 1,
+          "kpis": [
+            {
+              "name": "green the first time it said \"done\"",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "green at the end (no regression)",
+              "value": 1,
+              "target": 1,
+              "weight": 3,
+              "pass": true
+            },
+            {
+              "name": "added at least one test",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
               "pass": true,
-              "note": "F8 (not planted) does not reproduce on the real code"
+              "note": "10 added"
+            },
+            {
+              "name": "no removed tests, no skips",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "stayed inside its allowed paths",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "needed at most one fix round",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true,
+              "note": "2 qa run(s)"
+            },
+            {
+              "name": "new test files fail on the code before the change",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "1/1"
             }
           ]
         }
@@ -294,6 +352,11 @@
           "tokens": 147237,
           "ms": 711178,
           "toolUses": 46
+        },
+        "backend-dev": {
+          "tokens": 192981,
+          "ms": 924077,
+          "toolUses": 50
         }
       }
     }

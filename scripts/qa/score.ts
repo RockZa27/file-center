@@ -165,7 +165,7 @@ for (const name of ['backend-dev', 'frontend-dev'] as const) {
   ]
   // a test that also passes without the feature tests nothing: run the branch's new test files on the base code
   if (flags.includes('--check-dev-tests') && name === 'backend-dev' && d.base) {
-    const changed = Bun.spawnSync(['git', 'diff', '--name-only', '--diff-filter=A', d.base, d.branch, '--', 'tests'], { cwd: root }).stdout.toString().split('\n').filter(Boolean)
+    const changed = Bun.spawnSync(['git', 'diff', '--name-only', '--diff-filter=A', d.base, d.branch, '--', 'tests'], { cwd: root }).stdout.toString().split('\n').filter(f => f.endsWith('.test.ts'))
     if (changed.length) {
       const tmp = mkdtempSync(join(tmpdir(), 'fc-devtests-'))
       sh(`git archive ${d.base} | tar -x -C ${tmp} && ln -s ${root}/node_modules ${tmp}/node_modules && ln -s ${root}/web/dist ${tmp}/web/dist`)

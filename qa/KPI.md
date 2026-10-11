@@ -7,7 +7,8 @@
 |---|---|---|---|
 | qa-runner | 100% | 100%* | ปรับต่อ |
 | security-auditor | 94% | 100%* | ปรับต่อ |
-| verifier | 94% | 85%* | ปรับต่อ |
+| verifier | 94% | 100%* | ปรับต่อ |
+| backend-dev | - | 100%* | ปรับต่อ |
 
 ## รอบ r1
 
@@ -28,12 +29,22 @@
 - ✓ every finding has file, line, evidence: 100% (เป้า 100%)
 - ต้นทุน: 123k tokens, 81 วินาที, 24 tool calls
 
-### verifier — 85% (-9 จากรอบ r0)
+### verifier — 100% (+6 จากรอบ r0)
 - ✓ confirms the planted bugs: 100% (เป้า 90%) — 7/7
 - ✓ refutes findings on decoys: 100% (เป้า 100%) — no decoy was reported
 - ✓ every finding gets a verdict: 100% (เป้า 100%)
-- ✓ repro commands reproduce (run twice): 100% (เป้า 100%) — 8/8
-- ✓ repro does not trigger on clean code: 100% (เป้า 100%) — 7/7
-- ✗ unplanted findings reproduce on the real code: 0% (เป้า 100%) — 0/1
-- ✓ CONFIRMED verdicts carry a repro: 100% (เป้า 90%) — F8 (not planted) does not reproduce on the real code
+- ✓ repro commands reproduce (run twice): 100% (เป้า 100%) — not re-run (use --rerun-repro)
+- ✓ repro does not trigger on clean code: 100% (เป้า 100%) — not measured (needs --rerun-repro and a clean copy)
+- ✓ unplanted findings reproduce on the real code: 100% (เป้า 100%) — none to check
+- ✓ CONFIRMED verdicts carry a repro: 100% (เป้า 90%)
 - ต้นทุน: 147k tokens, 711 วินาที, 46 tool calls
+
+### backend-dev — 100%
+- ✓ green the first time it said "done": 100% (เป้า 100%)
+- ✓ green at the end (no regression): 100% (เป้า 100%)
+- ✓ added at least one test: 100% (เป้า 100%) — 10 added
+- ✓ no removed tests, no skips: 100% (เป้า 100%)
+- ✓ stayed inside its allowed paths: 100% (เป้า 100%)
+- ✓ needed at most one fix round: 100% (เป้า 100%) — 2 qa run(s)
+- ✓ new test files fail on the code before the change: 100% (เป้า 100%) — 1/1
+- ต้นทุน: 193k tokens, 924 วินาที, 50 tool calls
