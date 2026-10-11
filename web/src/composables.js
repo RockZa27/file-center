@@ -1,7 +1,18 @@
+import { onBeforeUnmount, onMounted, ref } from 'vue'
 import { useDialog, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
 export const errorText = (e, fallback = '') => e?.message || fallback
+
+/** true while the screen is phone-wide: tables switch to one stacked card per row instead of scrolling sideways */
+export function useNarrow(query = '(max-width: 640px)') {
+  const mq = window.matchMedia(query)
+  const narrow = ref(mq.matches)
+  const onChange = e => { narrow.value = e.matches }
+  onMounted(() => { narrow.value = mq.matches; mq.addEventListener('change', onChange) })
+  onBeforeUnmount(() => mq.removeEventListener('change', onChange))
+  return narrow
+}
 
 /** message + confirm helpers shared by every screen */
 export function useFeedback() {
