@@ -83,6 +83,10 @@ export const api = {
   adminFolders: path => get('/api/admin/folders', { path }),
   status: () => get('/api/admin/status'),
   activity: params => get('/api/admin/activity', params),
+  /** the CSV of the activity log with the same filters as the page ({ user, action, q }) */
+  activityExportUrl: params => `/api/admin/activity/export?${qs({ format: 'csv', ...params })}`,
+  logs: params => get('/api/admin/logs', params),
+  logsDownloadUrl: () => '/api/admin/logs/download',
   trash: () => get('/api/admin/trash'),
   restore: id => post('/api/admin/trash/restore', { id }),
   purge: id => post('/api/admin/trash/purge', id ? { id } : {}),

@@ -10,7 +10,7 @@ const th = {
   },
   nav: {
     files: 'ไฟล์ของฉัน', dashboard: 'ภาพรวมระบบ', users: 'ผู้ใช้', activity: 'ประวัติการใช้งาน', trash: 'ถังขยะ',
-    settings: 'ตั้งค่า', update: 'อัปเดตระบบ', backup: 'สำรองข้อมูล', login: 'เข้าสู่ระบบ', logout: 'ออกจากระบบ', changePassword: 'เปลี่ยนรหัสผ่าน',
+    settings: 'ตั้งค่า', update: 'อัปเดตระบบ', backup: 'สำรองข้อมูล', logs: 'บันทึกระบบ', login: 'เข้าสู่ระบบ', logout: 'ออกจากระบบ', changePassword: 'เปลี่ยนรหัสผ่าน',
     language: 'ภาษา', theme: 'ธีม', themeLight: 'โหมดสว่าง', themeDark: 'โหมดมืด', themeAuto: 'ตามระบบ',
     publicPage: 'หน้าสาธารณะ', publicFolder: 'โฟลเดอร์สาธารณะ', admin: 'ผู้ดูแลระบบ',
   },
@@ -64,6 +64,7 @@ const th = {
     publicFiles: 'ไฟล์สาธารณะ', trash: 'ในถังขยะ', users: 'ผู้ใช้', uploading: 'กำลังอัปโหลด {n} รายการ',
     backup: 'การสำรองข้อมูล', backupOk: 'สำเร็จ', backupFailed: 'ล้มเหลว', noBackup: 'ยังไม่มีบันทึกการสำรองข้อมูล',
     system: 'ระบบ', uptime: 'เปิดมา {time}',
+    counting: 'กำลังนับ…', countedAt: 'นับล่าสุด {time}', viewLogs: 'ดูบันทึกระบบ',
   },
   users: {
     subtitle: 'จัดการบัญชีผู้ใช้ โฟลเดอร์ส่วนตัว และสิทธิ์', add: 'เพิ่มผู้ใช้', edit: 'แก้ไขผู้ใช้', delete: 'ลบผู้ใช้',
@@ -72,10 +73,12 @@ const th = {
     keepPassword: 'เว้นว่างไว้ถ้าไม่เปลี่ยน', ownPerms: 'สิทธิ์ในโฟลเดอร์ของตัวเอง', publicPerms: 'สิทธิ์ในโฟลเดอร์สาธารณะ',
     publicHint: 'ถ้าไม่เลือกอะไรเลย ผู้ใช้จะไม่เห็นเมนูโฟลเดอร์สาธารณะ', adminHint: 'ผู้ดูแลระบบเห็นและจัดการได้ทุกโฟลเดอร์',
     useThisFolder: 'ใช้โฟลเดอร์นี้',
+    guestReserved: 'ชื่อ "guest" สงวนไว้ให้ผู้เยี่ยมชมหน้าสาธารณะ ใช้เป็นชื่อผู้ใช้ไม่ได้ กรุณาเลือกชื่ออื่น',
   },
   activity: {
     subtitle: 'ใครเข้าสู่ระบบ อัปโหลด ดาวน์โหลด ลบ หรือแก้ไขอะไรบ้าง', search: 'ค้นหาชื่อไฟล์หรือรายละเอียด',
     user: 'ผู้ใช้', action: 'การกระทำ', time: 'เวลา', target: 'รายการ', none: 'ไม่พบประวัติ', more: 'แสดงเพิ่ม',
+    export: 'ส่งออก CSV', exportHint: 'ดาวน์โหลดประวัติตามตัวกรองที่ตั้งไว้ เป็นไฟล์ CSV เปิดด้วย Excel ได้',
   },
   action: {
     login: 'เข้าสู่ระบบ', 'login-failed': 'เข้าสู่ระบบไม่สำเร็จ', logout: 'ออกจากระบบ', upload: 'อัปโหลด', download: 'ดาวน์โหลด',
@@ -86,6 +89,13 @@ const th = {
     'update-stage': 'ตรวจแพ็กเกจอัปเดต', 'update-apply': 'อัปเดตระบบ', 'update-rollback': 'ย้อนเวอร์ชันระบบ', 'update-denied': 'ยืนยันอัปเดตไม่สำเร็จ',
     'backup-create': 'สำรองข้อมูล', 'backup-download': 'ดาวน์โหลดไฟล์สำรอง', 'backup-delete': 'ลบไฟล์สำรอง',
     'backup-restore': 'กู้คืนข้อมูลจากไฟล์สำรอง', 'backup-restore-denied': 'ยืนยันกู้คืนไม่สำเร็จ',
+    'logs-download': 'ดาวน์โหลดบันทึกระบบ', 'activity-export': 'ส่งออกประวัติการใช้งาน',
+  },
+  logs: {
+    subtitle: 'ข้อผิดพลาดและเหตุการณ์ของเซิร์ฟเวอร์ ดูได้จากที่นี่โดยไม่ต้องเข้าเครื่อง server', search: 'ค้นหาเหตุการณ์หรือรายละเอียด',
+    allLevels: 'ทุกระดับ', levelTitle: 'ระดับ', time: 'เวลา', event: 'เหตุการณ์', detail: 'รายละเอียด',
+    level: { info: 'ข้อมูล', warn: 'คำเตือน', error: 'ข้อผิดพลาด' },
+    none: 'ไม่พบบันทึก', more: 'แสดงเพิ่ม', download: 'ดาวน์โหลด log ทั้งหมด (.zip)', stack: 'ลำดับการเรียก (stack trace)',
   },
   trash: {
     subtitle: 'รายการที่ถูกลบจะอยู่ที่นี่ {days} วันก่อนถูกลบถาวร กู้คืนกลับตำแหน่งเดิมได้', empty: 'ล้างถังขยะ',
@@ -114,6 +124,7 @@ const th = {
     installing: 'กำลังรีสตาร์ตระบบ…', waiting: 'รอระบบกลับมา อย่าปิดหน้านี้', done: 'อัปเดตเป็นเวอร์ชัน {v} แล้ว กำลังโหลดหน้าใหม่…',
     rolledBack: 'เวอร์ชันใหม่เปิดไม่ขึ้น ระบบย้อนกลับเป็นเวอร์ชัน {v} แล้ว', timeout: 'รอนานเกินไป กรุณารีเฟรชหน้าเว็บแล้วตรวจสอบสถานะ',
     pending: 'เวอร์ชัน {v} เพิ่งติดตั้ง กำลังเฝ้าดูว่าทำงานปกติ หากมีปัญหาจะย้อนกลับเอง',
+    refused: 'ใช้แพ็กเกจ {name} ไม่ได้',
     lastOk: 'ติดตั้งเวอร์ชัน {v} สำเร็จ', lastFail: 'ติดตั้งเวอร์ชัน {v} ไม่สำเร็จและย้อนกลับแล้ว: {msg}',
     versions: 'เวอร์ชันที่ย้อนกลับได้', none: 'ยังไม่มีเวอร์ชันเก่าให้ย้อนกลับ (ระบบเก็บไว้ 2 เวอร์ชันล่าสุด)',
     builtin: 'เวอร์ชันที่มากับระบบ', rollback: 'ย้อนกลับ', rollbackTitle: 'ย้อนกลับเป็นเวอร์ชัน {v}?',
@@ -161,7 +172,7 @@ const en = {
   },
   nav: {
     files: 'My files', dashboard: 'Dashboard', users: 'Users', activity: 'Activity', trash: 'Trash',
-    settings: 'Settings', update: 'System update', backup: 'Backup', login: 'Sign in', logout: 'Sign out', changePassword: 'Change password',
+    settings: 'Settings', update: 'System update', backup: 'Backup', logs: 'System log', login: 'Sign in', logout: 'Sign out', changePassword: 'Change password',
     language: 'Language', theme: 'Theme', themeLight: 'Light', themeDark: 'Dark', themeAuto: 'System',
     publicPage: 'Public page', publicFolder: 'Public folder', admin: 'Administrator',
   },
@@ -215,6 +226,7 @@ const en = {
     publicFiles: 'Public files', trash: 'In trash', users: 'Users', uploading: '{n} upload(s) in progress',
     backup: 'Backup', backupOk: 'OK', backupFailed: 'Failed', noBackup: 'No backup recorded yet',
     system: 'System', uptime: 'up {time}',
+    counting: 'Counting…', countedAt: 'Last counted {time}', viewLogs: 'View system log',
   },
   users: {
     subtitle: 'Manage accounts, personal folders and permissions', add: 'Add user', edit: 'Edit user', delete: 'Delete user',
@@ -223,10 +235,12 @@ const en = {
     keepPassword: 'Leave empty to keep the current one', ownPerms: 'Permissions in their own folder', publicPerms: 'Permissions in the public folder',
     publicHint: 'With nothing selected the user will not see the public folder', adminHint: 'Administrators can see and manage every folder.',
     useThisFolder: 'Use this folder',
+    guestReserved: 'The name "guest" is reserved for visitors of the public page and can not be a username. Please choose another one.',
   },
   activity: {
     subtitle: 'Who signed in, uploaded, downloaded, deleted or changed what', search: 'Search file names or details',
     user: 'User', action: 'Action', time: 'Time', target: 'Item', none: 'No activity found', more: 'Show more',
+    export: 'Export CSV', exportHint: 'Download the activity matching the current filters as a CSV file for Excel',
   },
   action: {
     login: 'Sign in', 'login-failed': 'Failed sign-in', logout: 'Sign out', upload: 'Upload', download: 'Download',
@@ -237,6 +251,13 @@ const en = {
     'update-stage': 'Check update package', 'update-apply': 'Update system', 'update-rollback': 'Roll back system', 'update-denied': 'Update confirmation failed',
     'backup-create': 'Back up', 'backup-download': 'Download backup', 'backup-delete': 'Delete backup',
     'backup-restore': 'Restore from backup', 'backup-restore-denied': 'Restore confirmation failed',
+    'logs-download': 'Download system logs', 'activity-export': 'Export activity',
+  },
+  logs: {
+    subtitle: 'Errors and events of the server, readable here without logging into the server', search: 'Search events or details',
+    allLevels: 'All levels', levelTitle: 'Level', time: 'Time', event: 'Event', detail: 'Detail',
+    level: { info: 'Info', warn: 'Warning', error: 'Error' },
+    none: 'No log entries found', more: 'Show more', download: 'Download all logs (.zip)', stack: 'Stack trace',
   },
   trash: {
     subtitle: 'Deleted items stay here for {days} days before they are removed for good. You can restore them to their original place.',
@@ -265,6 +286,7 @@ const en = {
     installing: 'Restarting…', waiting: 'Waiting for the system to come back. Keep this page open.', done: 'Updated to version {v}. Reloading…',
     rolledBack: 'The new version did not start, so the system went back to version {v}', timeout: 'Waited too long. Refresh the page and check the status.',
     pending: 'Version {v} was just installed and is being watched. It rolls back by itself if it misbehaves.',
+    refused: 'Package {name} was not accepted',
     lastOk: 'Version {v} installed', lastFail: 'Version {v} failed and was rolled back: {msg}',
     versions: 'Versions you can go back to', none: 'No older version to go back to yet (the last 2 are kept)',
     builtin: 'Shipped with the system', rollback: 'Roll back', rollbackTitle: 'Go back to version {v}?',

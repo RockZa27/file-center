@@ -13,14 +13,17 @@
             </div>
           </n-form-item>
           <n-form-item :label="t('settings.logo')">
-            <div class="logo-row">
+            <!-- the form item lays its content out in a row: one column keeps the hint under the buttons -->
+            <div class="logo-field">
               <img v-if="app.config.logo" :src="`/api/branding/logo?v=${encodeURIComponent(app.config.logo)}`" class="logo-prev" alt="">
-              <n-upload :show-file-list="false" accept="image/png,image/jpeg,image/webp,image/svg+xml" :custom-request="() => {}" :on-before-upload="onLogo">
-                <n-button secondary><template #icon><n-icon :component="ImageOutline" /></template>{{ t('settings.uploadLogo') }}</n-button>
-              </n-upload>
-              <n-button v-if="app.config.logo" quaternary type="error" @click="removeLogo">{{ t('common.remove') }}</n-button>
+              <div class="logo-row">
+                <n-upload class="logo-upload" :show-file-list="false" accept="image/png,image/jpeg,image/webp,image/svg+xml" :custom-request="() => {}" :on-before-upload="onLogo">
+                  <n-button secondary><template #icon><n-icon :component="ImageOutline" /></template>{{ t('settings.uploadLogo') }}</n-button>
+                </n-upload>
+                <n-button v-if="app.config.logo" secondary type="error" @click="removeLogo">{{ t('common.remove') }}</n-button>
+              </div>
+              <div class="muted hint">{{ t('settings.logoHint') }}</div>
             </div>
-            <div class="muted hint">{{ t('settings.logoHint') }}</div>
           </n-form-item>
         </n-form>
       </div>
@@ -107,9 +110,12 @@ onMounted(load)
 .colors { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .swatch { width: 28px; height: 28px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; outline: 1px solid var(--border); }
 .swatch.on { border-color: var(--surface); outline: 2px solid var(--text); }
-.logo-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
-.logo-prev { max-height: 40px; max-width: 160px; object-fit: contain; padding: 4px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
-.hint { font-size: 12.5px; width: 100%; margin-top: 4px; }
+.logo-field { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; width: 100%; min-width: 0; }
+.logo-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+/* n-upload is as wide as its parent by default, which pushed "remove" onto a line of its own */
+.logo-upload { width: auto; }
+.logo-prev { max-height: 48px; max-width: 180px; min-width: 48px; min-height: 32px; object-fit: contain; padding: 4px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
+.hint { font-size: 12.5px; }
 .perms { display: flex; flex-wrap: wrap; gap: 8px 18px; }
 .actions { display: flex; justify-content: flex-end; margin-bottom: 20px; }
 .kv { display: flex; justify-content: space-between; padding: 8px 0; border-top: 1px solid var(--border); font-size: 14px; }
