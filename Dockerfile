@@ -19,4 +19,5 @@ VOLUME ["/data"]
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --start-interval=2s --retries=3 \
   CMD bun -e "fetch('http://localhost:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-CMD ["bun", "src/index.ts"]
+# the launcher runs the app and restarts it onto a new version after an update from the web (and goes back if that fails)
+CMD ["bun", "src/launcher.ts"]

@@ -23,6 +23,8 @@ services:
     environment:
       # PORT ใน .env คือพอร์ตฝั่งเครื่อง host ส่วนในคอนเทนเนอร์ใช้ 3000 เสมอ
       PORT: "3000"
+      # the tunnel token in .env belongs to cloudflared only; the app (and any update installed from the web) must never see it
+      TUNNEL_TOKEN: ""
     volumes:
       # ./data/storage = ไฟล์ที่อัปโหลด, ./data/system = ผู้ใช้ ตั้งค่า ประวัติ ถังขยะ session
       - ./data:/data

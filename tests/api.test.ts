@@ -639,12 +639,18 @@ describe('full system: permission matrix', () => {
       ['PUT', '/api/admin/settings', { publicEnabled: false }],
       ['PUT', '/api/admin/logo', png],
       ['DELETE', '/api/admin/logo'],
+      ['GET', '/api/admin/update/'],
+      ['POST', '/api/admin/update/upload', { size: 1 }],
+      ['POST', '/api/admin/update/stage', { id: 'x' }],
+      ['DELETE', '/api/admin/update/staged/:id'],
+      ['POST', '/api/admin/update/apply', { id: 'x', password: 'x' }],
+      ['POST', '/api/admin/update/rollback', { dir: 'builtin', password: 'x' }],
     ]
     const routes = app.routes.filter((r: any) => r.path.startsWith('/api/admin')).map((r: any) => `${r.method} ${r.path}`)
     expect(routes.filter((r: string) => !adminCalls.some(([m, p]) => `${m} ${p}` === r))).toEqual([])
     const u = await userWith('not-admin', PERMS, PERMS)
     for (const [method, pattern, body] of adminCalls) {
-      const path = pattern.replace(':username', 'not-admin')
+      const path = pattern.replace(':username', 'not-admin').replace(':id', 'x')
       const call = (c: Client) => (body instanceof Uint8Array ? c.raw(method, path, body, { 'content-type': 'image/png' }) : c.raw(method, path, body))
       expect(`${method} ${path} ${(await call(u)).status}`).toBe(`${method} ${path} 403`)
       expect(`${method} ${path} ${(await call(guest)).status}`).toBe(`${method} ${path} 401`)
@@ -671,6 +677,11 @@ describe('full system: CSRF', () => {
       ['PUT', '/api/admin/settings', { appName: 'pwned' }],
       ['PUT', '/api/admin/logo', png],
       ['DELETE', '/api/admin/logo'],
+      ['POST', '/api/admin/update/upload', { size: 1 }],
+      ['POST', '/api/admin/update/stage', { id: 'x' }],
+      ['DELETE', '/api/admin/update/staged/:id'],
+      ['POST', '/api/admin/update/apply', { id: 'x', password: 'x' }],
+      ['POST', '/api/admin/update/rollback', { dir: 'builtin', password: 'x' }],
       ['POST', '/api/mkdir', { ...files, path: '/', name: 'csrf-dir' }],
       ['POST', '/api/newfile', { ...files, path: '/', name: 'csrf.txt' }],
       ['PUT', '/api/content', { ...files, path: '/matrix.txt', content: 'pwned' }],

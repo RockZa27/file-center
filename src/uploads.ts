@@ -35,6 +35,11 @@ function loadMeta(id: unknown, owner: string): Meta {
   }
 }
 
+/** throws unless `owner` has this upload; lets a route refuse before it reads the request body */
+export function checkUpload(id: string, owner: string) {
+  loadMeta(id, owner)
+}
+
 const touch = (id: string) => {
   const now = new Date()
   try { utimesSync(join(dirOf(id), 'meta.json'), now, now) } catch { /* ignore */ }

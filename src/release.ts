@@ -1,0 +1,101 @@
+/**
+ * Installed web updates ("releases"), shared by the launcher (which runs the app) and the app itself.
+ *
+ * The launcher is baked into the Docker image and is never updated from the web, so the format of
+ * state.json is a contract with every update ever installed: only ever ADD optional fields.
+ *
+ *   <DATA_DIR>/app/state.json            which release runs, which ones can be rolled back to
+ *   <DATA_DIR>/app/releases/<name>/      server.js + web/ + manifest.json of one installed update
+ *   <DATA_DIR>/app/staging/<id>/         an uploaded package that is checked but not installed yet
+ */
+import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+
+export const SERVER_FILE = 'server.js'
+/** the app exits with this code to ask the launcher for a restart (sysexits EX_TEMPFAIL) */
+export const EXIT_RESTART = 75
+
+export type Manifest = {
+  name: 'file-center'
+  version: string
+  builtAt: string
+  notes?: string
+  /** every file of the package except manifest.json, by path relative to the package root */
+  files: Record<string, { sha256: string; size: number }>
+}
+
+export type ReleaseState = {
+  schema: 1
+  /** release that runs; null = the app built into the image */
+  current: string | null
+  /** releases that were active before, newest first, so an admin can go back */
+  history: string[]
+  /** an update that has not proven itself yet; if it fails to start the launcher goes back to `previous` */
+  pending: { dir: string; previous: string | null; at: string } | null
+  /** what happened to the last switch, for the update page */
+  last: { dir: string | null; version: string; ok: boolean; message: string; at: string } | null
+}
+
+export const RELEASE_NAME = /^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$/
+const VERSION = /^(\d{1,6})\.(\d{1,6})\.(\d{1,6})$/
+
+export const isVersion = (v: unknown): v is string => typeof v === 'string' && VERSION.test(v)
+
+/** negative when a < b. Both must pass isVersion. */
+export function compareVersions(a: string, b: string): number {
+  const x = VERSION.exec(a)!.slice(1).map(Number)
+  const y = VERSION.exec(b)!.slice(1).map(Number)
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]
+  return 0
+}
+
+export const appDir = (dataDir: string) => join(dataDir, 'app')
+export const releasesDir = (dataDir: string) => join(appDir(dataDir), 'releases')
+export const stagingDir = (dataDir: string) => join(appDir(dataDir), 'staging')
+export const releasePath = (dataDir: string, name: string) => join(releasesDir(dataDir), name)
+const stateFile = (dataDir: string) => join(appDir(dataDir), 'state.json')
+
+const emptyState = (): ReleaseState => ({ schema: 1, current: null, history: [], pending: null, last: null })
+
+export function readState(dataDir: string): ReleaseState {
+  try {
+    const s = JSON.parse(readFileSync(stateFile(dataDir), 'utf8')) as Partial<ReleaseState>
+    const name = (v: unknown): v is string => typeof v === 'string' && RELEASE_NAME.test(v)
+    return {
+      ...emptyState(),
+      ...s,
+      schema: 1,
+      current: name(s.current) ? s.current : null,
+      history: Array.isArray(s.history) ? s.history.filter(name) : [],
+    }
+  } catch {
+    return emptyState()
+  }
+}
+
+/** atomic: a crash half way never leaves a broken state.json */
+export function writeState(dataDir: string, state: ReleaseState) {
+  mkdirSync(appDir(dataDir), { recursive: true })
+  const tmp = `${stateFile(dataDir)}.tmp`
+  writeFileSync(tmp, JSON.stringify(state, null, 2))
+  renameSync(tmp, stateFile(dataDir))
+}
+
+export function readManifest(dir: string): Manifest | null {
+  try {
+    const m = JSON.parse(readFileSync(join(dir, 'manifest.json'), 'utf8'))
+    return m?.name === 'file-center' && isVersion(m.version) ? m : null
+  } catch {
+    return null
+  }
+}
+
+/** a release folder that can be started */
+export function releaseUsable(dataDir: string, name: string): boolean {
+  const dir = releasePath(dataDir, name)
+  try {
+    return statSync(join(dir, SERVER_FILE)).isFile() && existsSync(join(dir, 'web', 'index.html')) && !!readManifest(dir)
+  } catch {
+    return false
+  }
+}
