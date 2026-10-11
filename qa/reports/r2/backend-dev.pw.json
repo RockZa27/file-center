@@ -1,0 +1,1 @@
+{"agent":"backend-dev","branch":"fix/password-guest","base":"d35a0c1","runIdFirst":"r2-pw-1","runIdFinal":"r2-pw-final","iterations":2,"notes":"116 long common passwords + isRunOrRepeat; 'guest' reserved; test fixture password123 replaced"}
