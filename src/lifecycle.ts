@@ -1,5 +1,6 @@
 import { JsonStore } from './store'
 import { EXIT_RESTART } from './release'
+import { log } from './logger'
 
 /** true when the launcher started this process, so exiting with EXIT_RESTART brings the app back */
 export const supervised = () => process.env.FC_SUPERVISED === '1'
@@ -16,7 +17,7 @@ export function onStop(fn: () => Promise<unknown>) {
 export async function shutdown(code: number, graceMs = 8000) {
   if (stopping) return
   stopping = true
-  console.log(`[lifecycle] กำลังหยุดระบบ (code ${code})`)
+  log.info('shutdown', `กำลังหยุดระบบ (code ${code})`)
   setTimeout(() => process.exit(code), graceMs).unref()
   try { await stopServer() } catch { /* exit anyway */ }
   try { await JsonStore.flushAll() } catch { /* exit anyway */ }

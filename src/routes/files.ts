@@ -9,6 +9,7 @@ import {
   bad, conflict, copySync, ensureSpace, forbidden, freeSpace, fromFsError, HttpError, isDir, joinRel, listDir, moveSync,
   normRel, notFound, resolveIn, sameFile, statEntry, storagePath, treeStats, uniquePath, validName, within,
 } from '../fsx'
+import { log } from '../logger'
 import { moveToTrash } from '../trash'
 import { collectZipItems, unzipTo, zipStream } from '../zip'
 
@@ -311,7 +312,7 @@ function lstatExists(abs: string) {
 /** what to tell the user about one failed item of a batch, never a raw error with server paths */
 function itemError(e: unknown, fallback: string) {
   const known = fromFsError(e)
-  if (!known) console.error('[files]', e)
+  if (!known) log.error('file-item-failed', e)
   return known?.message ?? fallback
 }
 

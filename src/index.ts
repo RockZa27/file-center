@@ -8,9 +8,11 @@ import { config, ensureDirs } from './config'
 import { context } from './context'
 import { within } from './fsx'
 import { onStop, shutdown } from './lifecycle'
+import { accessLine, log } from './logger'
 import { adminRoutes } from './routes/admin'
 import { backupRoutes } from './routes/backup'
 import { fileRoutes } from './routes/files'
+import { logRoutes } from './routes/logs'
 import { sessionRoutes } from './routes/session'
 import { updateRoutes } from './routes/update'
 import { uploadRoutes } from './routes/upload'
@@ -23,7 +25,7 @@ await bootstrapAdmin()
 
 // a bad key must not stop the app (the admin could not reach the update page to see why); packages are refused instead
 const keyError = signingKey().error
-if (keyError) console.error(`[update] UPDATE_PUBLIC_KEY ไม่ถูกต้อง: ${keyError} ระบบจะไม่รับแพ็กเกจอัปเดตใด ๆ จนกว่าจะแก้ค่านี้`)
+if (keyError) log.error('update-key-invalid', `UPDATE_PUBLIC_KEY ไม่ถูกต้อง: ${keyError} ระบบจะไม่รับแพ็กเกจอัปเดตใด ๆ จนกว่าจะแก้ค่านี้`)
 
 function housekeeping() {
   try {
@@ -32,16 +34,16 @@ function housekeeping() {
     purgeExpiredSessions()
     cleanStaging()
     pruneLoginAttempts()
-    if (trash || uploads) console.log(`[housekeeping] trash: ${trash}, stale uploads: ${uploads}`)
+    if (trash || uploads) log.info('housekeeping', { trash, staleUploads: uploads })
     // runs in the background; the result goes to backup-status.json, which the dashboard shows
     if (backupDue() && !backupRunning()) {
       runBackup().then(
         b => audit({ user: 'system', ip: '-', action: 'backup-create', target: b.name, detail: 'อัตโนมัติ' }),
-        err => console.error('[backup] failed', (err as Error).message),
+        () => { /* writeBackup logged it */ },
       )
     }
   } catch (err) {
-    console.error('[housekeeping] failed', err)
+    log.error('housekeeping-failed', err)
   }
 }
 housekeeping()
@@ -88,9 +90,13 @@ const FORWARDED = ['x-forwarded-for', 'cf-connecting-ip', 'forwarded', 'x-real-i
 const fromThisMachine = (request: Request, socketIp: string | undefined) =>
   LOOPBACK.has(socketIp ?? '') && !FORWARDED.some(h => request.headers.has(h))
 
+// when each request came in, for the access log (ACCESS_LOG=true)
+const requestStart = new WeakMap<Request, number>()
+
 export const app = new Elysia({ serve: { maxRequestBodySize: config.uploadChunkSize * 2 + 1024 * 1024 } })
   // set before routing, so error responses (401, 404...) carry them too
-  .onRequest(({ set }) => {
+  .onRequest(({ request, set }) => {
+    if (config.accessLog) requestStart.set(request, performance.now())
     set.headers['x-content-type-options'] = 'nosniff'
     set.headers['x-frame-options'] = 'SAMEORIGIN'
     set.headers['referrer-policy'] = 'same-origin'
@@ -98,6 +104,12 @@ export const app = new Elysia({ serve: { maxRequestBodySize: config.uploadChunkS
     if (config.secureCookie) set.headers['strict-transport-security'] = 'max-age=31536000'
   })
   .use(context)
+  .onAfterResponse({ as: 'global' }, ({ request, set, responseValue, ip, user }) => {
+    const start = requestStart.get(request)
+    if (start === undefined) return
+    const status = responseValue instanceof Response ? responseValue.status : typeof set.status === 'number' ? set.status : 200
+    accessLine({ method: request.method, url: request.url, status, ms: performance.now() - start, ip: ip ?? '-', user: user?.username ?? null })
+  })
   // `release` and `boot` let the launcher and the update page tell which process answered. The version tells an
   // attacker which known holes to try, so only the launcher (this machine) and admins (update page) get it.
   .get('/api/health', ({ request, server, user }) => {
@@ -108,6 +120,7 @@ export const app = new Elysia({ serve: { maxRequestBodySize: config.uploadChunkS
   .use(adminRoutes)
   .use(updateRoutes)
   .use(backupRoutes)
+  .use(logRoutes)
   .use(fileRoutes)
   .use(uploadRoutes)
   .get('/*', ({ request, set }) => {
@@ -120,12 +133,19 @@ export const app = new Elysia({ serve: { maxRequestBodySize: config.uploadChunkS
   })
 
 if (import.meta.main) {
+  // errors nobody caught go where the admin can see them. A rejected promise costs only its own request; after an
+  // exception the process is in an unknown state, so it exits as Bun would and the launcher starts it again
+  process.on('unhandledRejection', reason => log.error('unhandled-rejection', reason))
+  process.on('uncaughtException', err => {
+    log.error('uncaught-exception', err)
+    process.exit(1)
+  })
   onStop(() => app.stop())
   // docker stop, Ctrl+C and updates: finish writing users, sessions and settings before leaving
   process.on('SIGTERM', () => void shutdown(0))
   process.on('SIGINT', () => void shutdown(0))
   app.listen({ port: config.port, hostname: config.host }, ({ hostname, port }) => {
-    console.log(`File Center v${config.version} พร้อมใช้งานที่ http://${hostname === '0.0.0.0' ? 'localhost' : hostname}:${port}`)
+    log.info('start', `File Center v${config.version} พร้อมใช้งานที่ http://${hostname === '0.0.0.0' ? 'localhost' : hostname}:${port}`)
     console.log(`  ไฟล์เก็บที่  ${config.storageDir}`)
     console.log(`  ข้อมูลระบบที่ ${config.dataDir}`)
   })

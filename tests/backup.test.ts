@@ -332,6 +332,9 @@ describe('restore (end to end)', () => {
     expect(r.data.restarting).toBe(true)
     expect(r.data.safety).toMatch(NAME_RE)
     await until(async () => { const h = await health(); return h && h.boot !== before ? h : null }, 30_000, 'restart')
+    // the launcher wrote both starts and the restart in between to its own log
+    const launcherLog = readFileSync(join(e2e.data, 'logs', 'launcher.log'), 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l))
+    expect(launcherLog.map(e => e.event)).toEqual(['start', 'restart', 'start'])
 
     expect((await api('GET', '/api/session')).data.user.username).toBe('admin')
     expect((await api('GET', '/api/admin/users')).data.users.map((u: any) => u.username)).toContain('carol')

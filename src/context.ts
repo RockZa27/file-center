@@ -2,6 +2,7 @@ import { Elysia } from 'elysia'
 import { accessFor, getSession, type Access, type Session, type User, findUser } from './auth'
 import { config } from './config'
 import { forbidden, fromFsError, HttpError } from './fsx'
+import { log, safePath } from './logger'
 import type { Perm } from './settings'
 
 export const SESSION_COOKIE = 'fc_sid'
@@ -16,11 +17,11 @@ function clientIp(request: Request, socketIp: string): string {
 /** Per-request context: who is calling, their session, and uniform JSON errors. */
 export const context = new Elysia({ name: 'context' })
   .error({ HTTP_ERROR: HttpError })
-  .onError({ as: 'global' }, ({ error, code, set }) => {
+  .onError({ as: 'global' }, ({ error, code, set, request }) => {
     // file-system errors (disk full, name too long...) get a clear message instead of a 500 with server paths
     const known = fromFsError(error)
     if (known) {
-      if (!(error instanceof HttpError)) console.warn(`[fs] ${(error as Error).message.slice(0, 300)}`)
+      if (!(error instanceof HttpError)) log.warn('fs-error', { method: request.method, path: safePath(request.url), error: (error as Error).message.slice(0, 300) })
       set.status = known.status
       return { error: known.message, code: known.code }
     }
@@ -36,7 +37,7 @@ export const context = new Elysia({ name: 'context' })
       set.status = 400
       return { error: 'อ่านข้อมูลที่ส่งมาไม่ได้' }
     }
-    console.error('[error]', error)
+    log.error('request-failed', { method: request.method, path: safePath(request.url), error })
     set.status = 500
     return { error: 'เกิดข้อผิดพลาดภายในระบบ' }
   })

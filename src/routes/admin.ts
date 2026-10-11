@@ -9,6 +9,7 @@ import {
 import { config, paths } from '../config'
 import { context, requireAdmin } from '../context'
 import { bad, conflict, ensureDir, forbidden, HttpError, isDir, listDir, normRel, notFound, resolveIn, treeStats } from '../fsx'
+import { errorsSince } from '../logger'
 import { settings } from '../settings'
 import { listTrash, purge, restore, trashSummary } from '../trash'
 import { uploadsInProgress } from '../uploads'
@@ -187,6 +188,8 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     if (allUsers().some(u => u.mustChangePassword)) {
       warnings.push({ level: 'warning', code: 'password', message: 'ยังมีบัญชีที่ใช้รหัสผ่านเริ่มต้น กรุณาเปลี่ยนรหัสผ่าน' })
     }
+    const errors = errorsSince(Date.now() - 24 * 3600_000)
+    if (errors) warnings.push({ level: 'warning', code: 'errors', message: `มี error ${errors} รายการใน 24 ชั่วโมงที่ผ่านมา` })
     return {
       version: config.version,
       uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),
