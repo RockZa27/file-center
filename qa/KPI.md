@@ -40,11 +40,18 @@
 - ต้นทุน: 147k tokens, 711 วินาที, 46 tool calls
 
 ### backend-dev — 100%
+- ✓ [f8] green the first time it said "done": 100% (เป้า 100%)
+- ✓ [f8] green at the end (no regression): 100% (เป้า 100%)
+- ✓ [f8] added at least one test: 100% (เป้า 100%) — 1 added
+- ✓ [f8] no removed tests, no skips: 100% (เป้า 100%)
+- ✓ [f8] stayed inside its allowed paths: 100% (เป้า 100%)
+- ✓ [f8] needed at most one fix round: 100% (เป้า 100%) — 2 qa run(s)
+- ✓ [f8] changed test files fail on the code before the change: 100% (เป้า 100%) — 1/1
 - ✓ green the first time it said "done": 100% (เป้า 100%)
 - ✓ green at the end (no regression): 100% (เป้า 100%)
 - ✓ added at least one test: 100% (เป้า 100%) — 10 added
 - ✓ no removed tests, no skips: 100% (เป้า 100%)
 - ✓ stayed inside its allowed paths: 100% (เป้า 100%)
 - ✓ needed at most one fix round: 100% (เป้า 100%) — 2 qa run(s)
-- ✓ new test files fail on the code before the change: 100% (เป้า 100%) — 1/1
-- ต้นทุน: 193k tokens, 924 วินาที, 50 tool calls
+- ✓ changed test files fail on the code before the change: 100% (เป้า 100%) — 2/2
+- ต้นทุน: 270k tokens, 1137 วินาที, 69 tool calls

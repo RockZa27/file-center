@@ -13,7 +13,7 @@
  * repro commands re-run twice on the seeded copy AND once on a clean copy (where they must not trigger).
  * An agent is "stable" after 3 rounds in a row at or above 0.8.
  */
-import { cpSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import {
@@ -148,37 +148,47 @@ const finish = (name: string, kpis: Kpi[]): Score => {
   }
 }
 
-// ── developers: judged by what run-checks says about their branch
+// ── developers: judged by what run-checks says about their branch. One agent may do several tasks in a round:
+// <agent>.json, <agent>.<task>.json ... each is scored, and the agent's evidence is the mean over all of them.
 for (const name of ['backend-dev', 'frontend-dev'] as const) {
-  const d = agent<DevReport>(name)
-  if (!d) continue
-  const first = result(d.runIdFirst), final = result(d.runIdFinal)
-  if (!first || !final) { scores[name] = missing('run ids in the report have no result file'); continue }
-  const g = final.guards
-  const ks = [
-    kpi('green the first time it said "done"', first.ok ? 1 : 0, 1, 2),
-    kpi('green at the end (no regression)', final.ok ? 1 : 0, 1, 3),
-    kpi('added at least one test', (g?.addedTests.length ?? 0) >= 1 ? 1 : 0, 1, 1, g ? `${g.addedTests.length} added` : 'run-checks had no --base'),
-    kpi('no removed tests, no skips', g && g.removedTests.length + g.skipAdded.length === 0 ? 1 : 0, 1, 2),
-    kpi('stayed inside its allowed paths', g && g.outOfScope.length === 0 ? 1 : 0, 1, 2, g?.outOfScope.join(', ') || undefined),
-    kpi('needed at most one fix round', d.iterations <= 2 ? 1 : 1 / d.iterations, 1, 1, `${d.iterations} qa run(s)`),
-  ]
-  // a test that also passes without the feature tests nothing: run the branch's new test files on the base code
-  if (flags.includes('--check-dev-tests') && name === 'backend-dev' && d.base) {
-    const changed = Bun.spawnSync(['git', 'diff', '--name-only', '--diff-filter=A', d.base, d.branch, '--', 'tests'], { cwd: root }).stdout.toString().split('\n').filter(f => f.endsWith('.test.ts'))
-    if (changed.length) {
-      const tmp = mkdtempSync(join(tmpdir(), 'fc-devtests-'))
-      sh(`git archive ${d.base} | tar -x -C ${tmp} && ln -s ${root}/node_modules ${tmp}/node_modules && ln -s ${root}/web/dist ${tmp}/web/dist`)
-      let failWithout = 0
-      for (const f of changed) {
-        sh(`git show ${d.branch}:${f} > ${join(tmp, f)}`)
-        if (sh(`bun test ${f}`, tmp) !== 0) failWithout++
+  const files = readdirSync(dir).filter(f => f === `${name}.json` || (f.startsWith(`${name}.`) && f.endsWith('.json')))
+  if (!files.length) continue
+  const all: Kpi[] = []
+  const problems: string[] = []
+  for (const file of files) {
+    const task = file === `${name}.json` ? '' : `[${file.slice(name.length + 1, -5)}] `
+    const d = read<DevReport>(join(dir, file))
+    const first = result(d?.runIdFirst), final = result(d?.runIdFinal)
+    if (!d || !first || !final) { problems.push(`${file}: run ids have no result file`); continue }
+    const g = final.guards
+    const ks = [
+      kpi(`${task}green the first time it said "done"`, first.ok ? 1 : 0, 1, 2),
+      kpi(`${task}green at the end (no regression)`, final.ok ? 1 : 0, 1, 3),
+      kpi(`${task}added at least one test`, (g?.addedTests.length ?? 0) >= 1 ? 1 : 0, 1, 1, g ? `${g.addedTests.length} added` : 'run-checks had no --base'),
+      kpi(`${task}no removed tests, no skips`, g && g.removedTests.length + g.skipAdded.length === 0 ? 1 : 0, 1, 2),
+      kpi(`${task}stayed inside its allowed paths`, g && g.outOfScope.length === 0 ? 1 : 0, 1, 2, g?.outOfScope.join(', ') || undefined),
+      kpi(`${task}needed at most one fix round`, d.iterations <= 2 ? 1 : 1 / d.iterations, 1, 1, `${d.iterations} qa run(s)`),
+    ]
+    // a test that also passes without the feature tests nothing: run the branch's new tests on the base code
+    if (flags.includes('--check-dev-tests') && name === 'backend-dev' && d.base) {
+      const out = Bun.spawnSync(['git', 'diff', '--name-only', d.base, d.branch, '--', 'tests'], { cwd: root }).stdout.toString()
+      const changed = out.split('\n').filter(f => f.endsWith('.test.ts'))
+      if (changed.length) {
+        const tmp = mkdtempSync(join(tmpdir(), 'fc-devtests-'))
+        sh(`git archive ${d.base} | tar -x -C ${tmp} && ln -s ${root}/node_modules ${tmp}/node_modules && ln -s ${root}/web/dist ${tmp}/web/dist`)
+        // the branch's test files (new or changed), run against the code from before the change
+        let failWithout = 0
+        for (const f of changed) {
+          sh(`git show ${d.branch}:${f} > ${join(tmp, f)}`)
+          if (sh(`bun test ${f}`, tmp) !== 0) failWithout++
+        }
+        rmSync(tmp, { recursive: true, force: true })
+        ks.push(kpi(`${task}changed test files fail on the code before the change`, frac(failWithout, changed.length), 1, 2, `${failWithout}/${changed.length}`))
       }
-      rmSync(tmp, { recursive: true, force: true })
-      ks.push(kpi('new test files fail on the code before the change', frac(failWithout, changed.length), 1, 2, `${failWithout}/${changed.length}`))
     }
+    all.push(...ks)
   }
-  scores[name] = finish(name, ks)
+  scores[name] = all.length ? finish(name, all) : missing(problems.join('; '))
 }
 
 // ── ux-tester
