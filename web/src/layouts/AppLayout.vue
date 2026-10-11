@@ -45,7 +45,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { NAvatar, NBadge, NButton, NDropdown, NIcon } from 'naive-ui'
 import {
-  ArchiveOutline, CloudUploadOutline, FolderOutline, GlobeOutline, KeyOutline, LogOutOutline, MenuOutline, PeopleOutline, SettingsOutline,
+  ArchiveOutline, CloudUploadOutline, DocumentTextOutline, FolderOutline, GlobeOutline, KeyOutline, LogOutOutline, MenuOutline, PeopleOutline, SettingsOutline,
   SpeedometerOutline, TimeOutline, TrashOutline,
 } from '@vicons/ionicons5'
 import { api } from '../api'
@@ -75,6 +75,7 @@ const navItems = computed(() => {
       { name: 'dashboard', label: t('nav.dashboard'), icon: SpeedometerOutline, badge: alertCount.value, badgeType: critical.value ? 'error' : 'warning' },
       { name: 'users', label: t('nav.users'), icon: PeopleOutline },
       { name: 'activity', label: t('nav.activity'), icon: TimeOutline },
+      { name: 'logs', label: t('nav.logs'), icon: DocumentTextOutline },
       { name: 'trash', label: t('nav.trash'), icon: TrashOutline },
       { name: 'update', label: t('nav.update'), icon: CloudUploadOutline },
       { name: 'backup', label: t('nav.backup'), icon: ArchiveOutline },

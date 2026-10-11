@@ -64,6 +64,8 @@
 
         <!-- drop zone -->
         <div v-else class="surface block">
+          <!-- stays until the next package is dropped: a toast is gone before a long message is read -->
+          <n-alert v-if="refused" type="error" :title="t('update.refused', { name: refused.name })" closable class="gap refused" @close="refused = null">{{ refused.message }}</n-alert>
           <n-upload :show-file-list="false" accept=".zip,application/zip" :disabled="!canUpdate || phase !== 'idle'" :custom-request="() => {}" :on-before-upload="onFile">
             <n-upload-dragger>
               <div class="drop">
@@ -122,7 +124,7 @@ import { useI18n } from 'vue-i18n'
 import { NAlert, NButton, NForm, NFormItem, NIcon, NInput, NModal, NProgress, NSpin, NTag, NUpload, NUploadDragger } from 'naive-ui'
 import { ArrowUndoOutline, CloudUploadOutline, RefreshOutline, ShieldCheckmarkOutline, ShieldOutline, WarningOutline } from '@vicons/ionicons5'
 import { api, ApiError, putChunk } from '../api'
-import { useFeedback } from '../composables'
+import { errorText, useFeedback } from '../composables'
 import { bootId, sleep, waitForRestart } from '../restart'
 import { formatBytes, formatDate } from '../utils'
 
@@ -135,6 +137,8 @@ const working = ref(false)
 const phase = ref('idle')
 const progress = ref(0)
 const staged = ref(null)
+// why the last dropped package was refused ({ name, message }), until the next one
+const refused = ref(null)
 const password = ref('')
 const rollbackOpen = ref(false)
 const rollbackTarget = ref(null)
@@ -180,6 +184,7 @@ async function sendPackage(file) {
 async function onFile({ file }) {
   if (!file.file || busy.value) return false
   progress.value = 0
+  refused.value = null
   phase.value = 'uploading'
   try {
     const id = await sendPackage(file.file)
@@ -191,7 +196,7 @@ async function onFile({ file }) {
     phase.value = 'ready'
   } catch (e) {
     phase.value = 'idle'
-    fb.fail(e)
+    refused.value = { name: file.name, message: errorText(e, t('common.unknownError')) }
   }
   return false
 }
@@ -256,6 +261,7 @@ onBeforeUnmount(() => clearInterval(poll))
 .block h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; }
 .gap { margin-bottom: 12px; }
 .gap.top { margin-top: 14px; }
+.refused { overflow-wrap: anywhere; }
 .kv { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 9px 0; border-top: 1px solid var(--border); font-size: 14px; }
 .kv:first-of-type { border-top: 0; }
 .strong { font-weight: 600; }

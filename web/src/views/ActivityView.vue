@@ -6,6 +6,7 @@
       <n-input v-model:value="f.user" clearable :placeholder="t('activity.user')" class="f-u" @keyup.enter="apply" @clear="apply" />
       <n-select v-model:value="f.action" clearable :options="actionOptions" :placeholder="t('activity.action')" class="f-a" @update:value="apply" />
       <n-button @click="apply"><template #icon><n-icon :component="RefreshOutline" /></template>{{ t('common.refresh') }}</n-button>
+      <n-button tag="a" :href="exportUrl" download secondary :title="t('activity.exportHint')" @click="apply"><template #icon><n-icon :component="DownloadOutline" /></template>{{ t('activity.export') }}</n-button>
     </div>
     <div class="surface">
       <n-data-table :columns="columns" :data="rows" :loading="loading" :bordered="false" :single-line="false" :scroll-x="760" :row-key="(r, i) => r.ts + i">
@@ -20,7 +21,7 @@
 import { computed, h, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NButton, NDataTable, NEmpty, NIcon, NInput, NSelect, NTag } from 'naive-ui'
-import { RefreshOutline, SearchOutline } from '@vicons/ionicons5'
+import { DownloadOutline, RefreshOutline, SearchOutline } from '@vicons/ionicons5'
 import { api } from '../api'
 import { useFeedback } from '../composables'
 import { formatBytes, formatDate } from '../utils'
@@ -33,7 +34,9 @@ const hasMore = ref(false)
 const page = ref(1)
 const f = reactive({ q: '', user: '', action: null })
 
-const ACTIONS = ['login', 'login-failed', 'logout', 'upload', 'download', 'download-zip', 'delete', 'restore', 'purge', 'mkdir', 'create', 'edit', 'rename', 'copy', 'move', 'zip', 'unzip', 'password-change', 'user-create', 'user-update', 'user-delete', 'settings-update', 'logo-update', 'logo-remove', 'update-stage', 'update-apply', 'update-rollback', 'update-denied', 'backup-create', 'backup-download', 'backup-delete', 'backup-restore', 'backup-restore-denied']
+const ACTIONS = ['login', 'login-failed', 'logout', 'upload', 'download', 'download-zip', 'delete', 'restore', 'purge', 'mkdir', 'create', 'edit', 'rename', 'copy', 'move', 'zip', 'unzip', 'password-change', 'user-create', 'user-update', 'user-delete', 'settings-update', 'logo-update', 'logo-remove', 'update-stage', 'update-apply', 'update-rollback', 'update-denied', 'backup-create', 'backup-download', 'backup-delete', 'backup-restore', 'backup-restore-denied', 'logs-download', 'activity-export']
+// the file holds what the filter boxes show; the click also applies them, so the table matches the file
+const exportUrl = computed(() => api.activityExportUrl({ q: f.q, user: f.user, action: f.action || '' }))
 const actionOptions = computed(() => ACTIONS.map(a => ({ value: a, label: t(`action.${a}`) })))
 const tone = a => (a.includes('failed') || a === 'delete' || a === 'purge' || a === 'user-delete' || a === 'update-denied' || a === 'backup-delete' || a === 'backup-restore-denied' ? 'error' : a.startsWith('login') || a === 'logout' ? 'info' : a === 'upload' || a === 'restore' || a === 'backup-create' || a === 'backup-restore' ? 'success' : 'default')
 

@@ -2,9 +2,10 @@
   <n-modal :show="show" preset="card" :title="isEdit ? t('users.edit') : t('users.add')" style="width: min(560px, 95vw)" @update:show="v => emit('update:show', v)">
     <n-form label-placement="top" :show-feedback="false" class="form" @submit.prevent="save">
       <div class="two">
-        <n-form-item :label="t('login.username')"><n-input v-model:value="f.username" :disabled="isEdit" :input-props="{ autocomplete: 'off' }" /></n-form-item>
+        <n-form-item :label="t('login.username')"><n-input v-model:value="f.username" :disabled="isEdit" :status="reserved ? 'error' : undefined" :input-props="{ autocomplete: 'off' }" /></n-form-item>
         <n-form-item :label="t('users.name')"><n-input v-model:value="f.name" /></n-form-item>
       </div>
+      <n-alert v-if="reserved" type="error" :show-icon="true">{{ t('users.guestReserved') }}</n-alert>
       <n-form-item :label="isEdit ? t('users.newPassword') : t('login.password')">
         <div class="field">
           <n-input v-model:value="f.password" type="password" show-password-on="click" :placeholder="isEdit ? t('users.keepPassword') : ''" :input-props="{ autocomplete: 'new-password' }" />
@@ -70,8 +71,10 @@ const busy = ref(false)
 const picker = ref(false)
 const f = reactive({ username: '', name: '', password: '', role: 'user', homedir: '', permissions: [], publicPermissions: [] })
 const isEdit = computed(() => !!props.user)
+// visitors' uploads and activity go under the name 'guest' (any case), so the server refuses it: say so before saving
+const reserved = computed(() => !isEdit.value && f.username.trim().toLowerCase() === 'guest')
 // the password rules are hinted live; the server judges them (its common-password list too)
-const ready = computed(() => f.username.trim().length >= 3 && f.name.trim() && (isEdit.value || f.password))
+const ready = computed(() => f.username.trim().length >= 3 && !reserved.value && f.name.trim() && (isEdit.value || f.password))
 const parentOf = p => (p ? parentPath(p) : '/')
 
 watch(() => props.show, v => {
