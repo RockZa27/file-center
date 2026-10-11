@@ -9,3 +9,4 @@ package-lock.json
 dist-update/
 qa/results/
 qa/reports/*/screenshots/
+.claude/worktrees/
