@@ -24,7 +24,7 @@ function safeId(id: unknown): string {
   return id
 }
 
-export function moveToTrash(abs: string, deletedBy: string): TrashMeta {
+export async function moveToTrash(abs: string, deletedBy: string): Promise<TrashMeta> {
   const st = lstatSync(abs)
   const isDir = st.isDirectory() && !st.isSymbolicLink()
   const id = `${Date.now()}_${randomBytes(4).toString('hex')}`
@@ -32,13 +32,20 @@ export function moveToTrash(abs: string, deletedBy: string): TrashMeta {
     id,
     name: basename(abs),
     type: isDir ? 'dir' : 'file',
-    size: isDir ? treeStats(abs, 200_000).size : st.size,
+    // a big folder takes a while to count: other requests are answered meanwhile
+    size: isDir ? (await treeStats(abs, 200_000)).size : st.size,
     originalPath: storagePath(abs),
     deletedAt: new Date().toISOString(),
     deletedBy,
   }
   ensureDir(itemDir(id))
-  moveSync(abs, join(itemDir(id), 'item'))
+  try {
+    moveSync(abs, join(itemDir(id), 'item'))
+  } catch (err) {
+    // e.g. another request moved or deleted it while we counted: leave no empty trash entry behind
+    rmSync(itemDir(id), { recursive: true, force: true })
+    throw err
+  }
   writeFileSync(join(itemDir(id), 'meta.json'), JSON.stringify(meta))
   return meta
 }

@@ -1483,7 +1483,12 @@ describe('hardening: visitors\' daily upload allowance', () => {
 
 describe('admin', () => {
   test('status, activity, settings, logo', async () => {
-    const st = await admin.json('GET', '/api/admin/status')
+    let st = await admin.json('GET', '/api/admin/status')
+    // files are counted in the background: the first call answers before the count is done
+    for (let i = 0; i < 250 && st.data.stale; i++) {
+      await Bun.sleep(20)
+      st = await admin.json('GET', '/api/admin/status')
+    }
     expect(st.status).toBe(200)
     expect(st.data.storage.files).toBeGreaterThan(0)
     const act = await admin.json('GET', '/api/admin/activity?action=upload')

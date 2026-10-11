@@ -190,7 +190,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     body: t.Object({ space: t.String(), items: t.Array(t.String()), dest: t.String() }),
   })
 
-  .post('/delete', ({ user, ip, body }) => {
+  .post('/delete', async ({ user, ip, body }) => {
     const a = need({ user, ip }, body.space, 'write')
     const failed: { path: string; error: string }[] = []
     let done = 0
@@ -199,7 +199,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
         const abs = resolveIn(a.root, rel)
         if (!existsSync(abs) && !lstatExists(abs)) throw notFound()
         guardSystemFolder(abs)
-        moveToTrash(abs, user?.username ?? 'guest')
+        await moveToTrash(abs, user?.username ?? 'guest')
         done++
         audit({ user: user?.username ?? 'guest', ip, action: 'delete', target: storagePath(abs) })
       } catch (e) {
@@ -315,7 +315,7 @@ function itemError(e: unknown, fallback: string) {
   return known?.message ?? fallback
 }
 
-function transfer(kind: 'copy' | 'move', user: any, ip: string, body: { space: string; items: string[]; dest: string }) {
+async function transfer(kind: 'copy' | 'move', user: any, ip: string, body: { space: string; items: string[]; dest: string }) {
   const a = need({ user, ip }, body.space, 'write')
   const destRel = normRel(body.dest)
   const destAbs = resolveIn(a.root, destRel)
@@ -334,7 +334,8 @@ function transfer(kind: 'copy' | 'move', user: any, ip: string, body: { space: s
         if (existsSync(to)) throw conflict('มีชื่อเดียวกันอยู่ในปลายทางแล้ว')
         moveSync(from, to)
       } else {
-        ensureSpace(destAbs, isDir(from) ? treeStats(from).size : lstatSync(from).size)
+        // counting a big folder takes a while: other requests are answered meanwhile
+        ensureSpace(destAbs, isDir(from) ? (await treeStats(from)).size : lstatSync(from).size)
         copySync(from, uniquePath(to))
       }
       done++
