@@ -152,6 +152,17 @@ suite('update from the web', () => {
     expect((await api('POST', '/api/admin/update/apply', { id: 'x', password: 'bob-password-1' }, false, bob)).status).toBe(403)
   })
 
+  test('staging runs none of the package\'s code; that waits for the password', async () => {
+    const marker = join(base, 'stage-ran-code')
+    const server = `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ran')`
+    const staged = await sendPackage(makePackage('marker.zip', { version: '9.3.0', server }))
+    expect(staged.status).toBe(200)
+    expect(staged.data).toMatchObject({ version: '9.3.0', runningVersion: BUILTIN, tested: false })
+    await Bun.sleep(1000)
+    expect(existsSync(marker)).toBe(false)
+    expect((await api('DELETE', `/api/admin/update/staged/${staged.data.id}`)).status).toBe(200)
+  })
+
   describe('rejects bad packages', () => {
     test('not a zip', async () => {
       const f = join(dirs.pkgs, 'junk.zip')
@@ -184,11 +195,23 @@ suite('update from the web', () => {
       expect(r.data.error).toContain('ไม่ใหม่กว่า')
     })
     test('a server that does not start is caught before installing', async () => {
-      const r = await sendPackage(makePackage('broken.zip', { version: '9.2.0', server: 'throw new Error("boom from the new version")' }))
+      const staged = await sendPackage(makePackage('broken.zip', { version: '9.2.0', server: 'throw new Error("boom from the new version")' }))
+      expect(staged.status).toBe(200)
+      expect(staged.data.tested).toBe(false)
+      const before = (await health()).boot
+      // the test run happens on install, after the password
+      const r = await api('POST', '/api/admin/update/apply', { id: staged.data.id, password: PASSWORD })
       expect(r.status).toBe(400)
       expect(r.data.error).toContain('เริ่มทำงานไม่สำเร็จ')
       expect(r.data.error).toContain('boom')
-      expect((await health()).version).toBe(BUILTIN)
+      const h = await health()
+      expect(h.version).toBe(BUILTIN)
+      expect(h.boot).toBe(before)
+      const s = (await api('GET', '/api/admin/update')).data
+      expect(s).toMatchObject({ runningVersion: BUILTIN, pending: null, history: [] })
+      expect(existsSync(join(dirs.data, 'app', 'releases'))).toBe(false)
+      // and it is gone: it can not be tried again
+      expect((await api('POST', '/api/admin/update/apply', { id: staged.data.id, password: PASSWORD })).status).toBe(404)
     }, 40_000)
   })
 

@@ -1,11 +1,12 @@
 /**
  * Installing an update from the web.
  *
- * 1. stagePackage: unzip the uploaded package into staging/, accept only the files its manifest lists
- *    (checked by size and SHA-256), then start the new server for a few seconds against throw-away data
- *    to prove it boots on this machine.
- * 2. applyStaged: move it to releases/, record it in state.json and ask for a restart. The launcher
- *    starts the new code and goes back to the old one if it does not come up.
+ * 1. stagePackage: unzip the uploaded package into staging/ and accept only the files its manifest lists
+ *    (checked by size and SHA-256). Static checks only: no code from the package runs here, because an
+ *    admin session alone (a stolen cookie, say) must not be enough to run code on the server.
+ * 2. applyStaged (after the password step-up): start the new server for a few seconds against throw-away
+ *    data to prove it boots on this machine, then move it to releases/, record it in state.json and ask
+ *    for a restart. The launcher starts the new code and goes back to the old one if it does not come up.
  */
 import { randomBytes } from 'node:crypto'
 import {
@@ -35,6 +36,8 @@ export type StagedInfo = {
   bytes: number
   serverSha256: string
   runningVersion: string
+  /** the new server has not been started yet; that happens on install, after the password */
+  tested: false
 }
 
 export const staging = () => stagingDir(config.dataDir)
@@ -182,7 +185,6 @@ export function stagePackage(zipAbs: string, bytes: number): Promise<StagedInfo>
       if (compareVersions(manifest.version, runningVersion()) <= 0) {
         throw bad(`แพ็กเกจเป็นเวอร์ชัน ${manifest.version} ซึ่งไม่ใหม่กว่าเวอร์ชันที่ใช้อยู่ (${runningVersion()}) ต้องเพิ่มเลขเวอร์ชันก่อนสร้างแพ็กเกจ`)
       }
-      await smokeTest(dir, manifest)
       writeFileSync(join(dir, VERIFIED), manifest.files[SERVER_FILE].sha256)
       return {
         id,
@@ -193,6 +195,7 @@ export function stagePackage(zipAbs: string, bytes: number): Promise<StagedInfo>
         bytes: Object.values(manifest.files).reduce((s, f) => s + f.size, 0),
         serverSha256: manifest.files[SERVER_FILE].sha256,
         runningVersion: runningVersion(),
+        tested: false,
       }
     } catch (e) {
       rmSync(dir, { recursive: true, force: true })
@@ -218,14 +221,21 @@ function pruneReleases() {
   } catch { /* none installed */ }
 }
 
-/** install a staged package. The caller restarts the app afterwards. */
+/** test-run and install a staged package. Call only after the password step-up; the caller restarts the app afterwards. */
 export function applyStaged(id: string): Promise<{ version: string; dir: string }> {
-  return exclusive(() => {
+  return exclusive(async () => {
     if (!STAGED_ID.test(id)) throw notFound('ไม่พบแพ็กเกจที่เตรียมไว้ กรุณาอัปโหลดใหม่')
     const dir = join(staging(), id)
     if (!existsSync(join(dir, VERIFIED))) throw notFound('ไม่พบแพ็กเกจที่เตรียมไว้ กรุณาอัปโหลดใหม่')
     const manifest = verifyTree(dir) // nothing changed since the check
     if (compareVersions(manifest.version, runningVersion()) <= 0) throw bad('แพ็กเกจไม่ใหม่กว่าเวอร์ชันที่ใช้อยู่')
+    try {
+      await smokeTest(dir, manifest)
+    } catch (e) {
+      // a package that does not start is useless: drop it so it can not be retried
+      rmSync(dir, { recursive: true, force: true })
+      throw e
+    }
     const name = `${manifest.version}-${manifest.files[SERVER_FILE].sha256.slice(0, 8)}`
     rmSync(join(dir, VERIFIED))
     mkdirSync(releases(), { recursive: true })

@@ -58,6 +58,7 @@ export const updateRoutes = new Elysia({ prefix: '/api/admin/update' })
     const admin = requireAdmin({ user, ip })
     enabled()
     await confirmPassword(admin, ip, body.password, 'update-denied')
+    // the package's own code runs for the first time in here (its test run), so only after the password
     const r = await applyStaged(body.id)
     audit({ user: admin.username, ip, action: 'update-apply', detail: r.version })
     restartSoon()
