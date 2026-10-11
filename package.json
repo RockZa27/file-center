@@ -1,6 +1,6 @@
 {
   "name": "file-center",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -8,9 +8,10 @@
     "dev:api": "bun --watch src/index.ts",
     "dev:web": "vite --config web/vite.config.js",
     "build": "vite build --config web/vite.config.js",
-    "start": "bun src/index.ts",
+    "start": "bun src/launcher.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
-    "test": "bun test"
+    "test": "bun test",
+    "package": "bun scripts/package.ts"
   },
   "dependencies": {
     "@zip.js/zip.js": "^2.23.0",

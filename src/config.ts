@@ -1,5 +1,6 @@
 import { mkdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import pkg from '../package.json'
 
 const root = resolve(import.meta.dir, '..')
 const env = (k: string, d: string) => process.env[k] ?? d
@@ -9,7 +10,8 @@ const num = (k: string, d: number) => {
 }
 
 export const config = {
-  version: '1.0.0',
+  /** a web update runs with FC_VERSION set to the version in its manifest; otherwise the version of package.json */
+  version: process.env.FC_VERSION || pkg.version,
   root,
   port: num('PORT', 3000),
   host: env('HOST', '0.0.0.0'),
@@ -45,6 +47,10 @@ export const config = {
   trustProxy: env('TRUST_PROXY', 'false') as 'false' | 'true' | 'cloudflare',
   /** first-run admin password; random one is printed to the console when empty */
   adminPassword: env('ADMIN_PASSWORD', ''),
+  /** "false" turns the update-from-the-web feature off completely */
+  webUpdate: env('WEB_UPDATE', 'true') !== 'false',
+  /** biggest update package an admin may upload */
+  updateMaxSize: num('UPDATE_MAX_SIZE', 200 * 1024 ** 2),
 }
 
 export const paths = {
@@ -56,6 +62,8 @@ export const paths = {
   trash: join(config.dataDir, 'trash'),
   tmp: join(config.dataDir, 'tmp'),
   branding: join(config.dataDir, 'branding'),
+  /** installed web updates: state.json, releases/, staging/ (see release.ts) */
+  app: join(config.dataDir, 'app'),
   backupStatus: join(config.dataDir, 'backup-status.json'),
   publicDir: join(config.storageDir, config.publicDirName),
   /** parent of the default user folders (/users/<name>) */
@@ -63,7 +71,7 @@ export const paths = {
 }
 
 export function ensureDirs() {
-  for (const p of [config.storageDir, config.dataDir, paths.logs, paths.trash, paths.tmp, paths.branding, paths.publicDir]) {
+  for (const p of [config.storageDir, config.dataDir, paths.logs, paths.trash, paths.tmp, paths.branding, paths.app, paths.publicDir]) {
     mkdirSync(p, { recursive: true })
   }
 }

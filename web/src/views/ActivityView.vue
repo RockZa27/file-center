@@ -33,9 +33,9 @@ const hasMore = ref(false)
 const page = ref(1)
 const f = reactive({ q: '', user: '', action: null })
 
-const ACTIONS = ['login', 'login-failed', 'logout', 'upload', 'download', 'download-zip', 'delete', 'restore', 'purge', 'mkdir', 'create', 'edit', 'rename', 'copy', 'move', 'zip', 'unzip', 'password-change', 'user-create', 'user-update', 'user-delete', 'settings-update', 'logo-update', 'logo-remove']
+const ACTIONS = ['login', 'login-failed', 'logout', 'upload', 'download', 'download-zip', 'delete', 'restore', 'purge', 'mkdir', 'create', 'edit', 'rename', 'copy', 'move', 'zip', 'unzip', 'password-change', 'user-create', 'user-update', 'user-delete', 'settings-update', 'logo-update', 'logo-remove', 'update-stage', 'update-apply', 'update-rollback', 'update-denied']
 const actionOptions = computed(() => ACTIONS.map(a => ({ value: a, label: t(`action.${a}`) })))
-const tone = a => (a.includes('failed') || a === 'delete' || a === 'purge' || a === 'user-delete' ? 'error' : a.startsWith('login') || a === 'logout' ? 'info' : a === 'upload' || a === 'restore' ? 'success' : 'default')
+const tone = a => (a.includes('failed') || a === 'delete' || a === 'purge' || a === 'user-delete' || a === 'update-denied' ? 'error' : a.startsWith('login') || a === 'logout' ? 'info' : a === 'upload' || a === 'restore' ? 'success' : 'default')
 
 async function fetchPage(p) {
   loading.value = true

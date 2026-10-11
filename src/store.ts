@@ -5,6 +5,13 @@ import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
  * so concurrent requests cannot corrupt the file.
  */
 export class JsonStore<T> {
+  private static all = new Set<JsonStore<any>>()
+
+  /** wait until every store has written what it was asked to (before the process exits) */
+  static async flushAll(): Promise<void> {
+    await Promise.all([...JsonStore.all].map(s => s.idle()))
+  }
+
   private data: T
   private queue: Promise<void> = Promise.resolve()
 
@@ -13,6 +20,7 @@ export class JsonStore<T> {
    * "fail" refuses to start so a broken users or settings file is never silently replaced
    */
   constructor(private file: string, private fallback: () => T, options: { onCorrupt?: 'reset' | 'fail' } = {}) {
+    JsonStore.all.add(this)
     if (existsSync(file)) {
       try {
         this.data = JSON.parse(readFileSync(file, 'utf8')) as T

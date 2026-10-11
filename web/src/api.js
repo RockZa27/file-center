@@ -90,6 +90,13 @@ export const api = {
   saveSettings: s => call('PUT', '/api/admin/settings', s),
   uploadLogo: file => call('PUT', '/api/admin/logo', file, { 'content-type': file.type }),
   removeLogo: () => call('DELETE', '/api/admin/logo'),
+
+  updateStatus: () => get('/api/admin/update'),
+  updateInit: size => post('/api/admin/update/upload', { size }),
+  updateStage: id => post('/api/admin/update/stage', { id }),
+  updateDiscard: id => call('DELETE', `/api/admin/update/staged/${id}`),
+  updateApply: (id, password) => post('/api/admin/update/apply', { id, password }),
+  updateRollback: (dir, password) => post('/api/admin/update/rollback', { dir, password }),
 }
 
 /** PUT one chunk with progress; resolves when the server has stored it */

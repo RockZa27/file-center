@@ -2,7 +2,7 @@ import { Elysia, t } from 'elysia'
 import { audit } from '../audit'
 import { context, need } from '../context'
 import { bad, normRel, storagePath } from '../fsx'
-import { cancelUpload, completeUpload, initUpload, receivedChunks, saveChunk } from '../uploads'
+import { cancelUpload, checkUpload, completeUpload, initUpload, receivedChunks, saveChunk } from '../uploads'
 
 export const uploadRoutes = new Elysia({ prefix: '/api/upload' })
   .use(context)
@@ -33,8 +33,11 @@ export const uploadRoutes = new Elysia({ prefix: '/api/upload' })
   .get('/:id', ({ user, params }) => receivedChunks(params.id, user?.username ?? 'guest'))
 
   .put('/:id/:index', async ({ user, params, request }) => {
+    const owner = user?.username ?? 'guest'
+    // before buffering a whole chunk in memory: a stranger without a valid upload id costs nothing
+    checkUpload(params.id, owner)
     const data = await request.arrayBuffer()
-    await saveChunk(params.id, user?.username ?? 'guest', Number(params.index), data)
+    await saveChunk(params.id, owner, Number(params.index), data)
     return { ok: true }
   }, { parse: 'none' })
 

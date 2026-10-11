@@ -5,12 +5,15 @@ import { bootstrapAdmin, pruneLoginAttempts, purgeExpiredSessions } from './auth
 import { config, ensureDirs } from './config'
 import { context } from './context'
 import { within } from './fsx'
+import { onStop, shutdown } from './lifecycle'
 import { adminRoutes } from './routes/admin'
 import { fileRoutes } from './routes/files'
 import { sessionRoutes } from './routes/session'
+import { updateRoutes } from './routes/update'
 import { uploadRoutes } from './routes/upload'
 import { purgeExpired } from './trash'
 import { cleanStaleUploads } from './uploads'
+import { cleanStaging } from './updater'
 
 ensureDirs()
 await bootstrapAdmin()
@@ -20,6 +23,7 @@ function housekeeping() {
     const trash = purgeExpired()
     const uploads = cleanStaleUploads()
     purgeExpiredSessions()
+    cleanStaging()
     pruneLoginAttempts()
     if (trash || uploads) console.log(`[housekeeping] trash: ${trash}, stale uploads: ${uploads}`)
   } catch (err) {
@@ -29,6 +33,7 @@ function housekeeping() {
 housekeeping()
 setInterval(housekeeping, 60 * 60 * 1000).unref()
 
+const bootedAt = Date.now()
 const indexHtml = join(config.webDir, 'index.html')
 
 function serveStatic(pathname: string): Response {
@@ -59,9 +64,11 @@ export const app = new Elysia({ serve: { maxRequestBodySize: config.uploadChunkS
     set.headers['referrer-policy'] = 'same-origin'
   })
   .use(context)
-  .get('/api/health', () => ({ status: 'ok', version: config.version, time: new Date().toISOString() }))
+  // `release` and `boot` let the launcher and the update page tell which process answered
+  .get('/api/health', () => ({ status: 'ok', version: config.version, release: process.env.FC_RELEASE || null, boot: bootedAt, time: new Date().toISOString() }))
   .use(sessionRoutes)
   .use(adminRoutes)
+  .use(updateRoutes)
   .use(fileRoutes)
   .use(uploadRoutes)
   .get('/*', ({ request, set }) => {
@@ -74,6 +81,10 @@ export const app = new Elysia({ serve: { maxRequestBodySize: config.uploadChunkS
   })
 
 if (import.meta.main) {
+  onStop(() => app.stop())
+  // docker stop, Ctrl+C and updates: finish writing users, sessions and settings before leaving
+  process.on('SIGTERM', () => void shutdown(0))
+  process.on('SIGINT', () => void shutdown(0))
   app.listen({ port: config.port, hostname: config.host }, ({ hostname, port }) => {
     console.log(`File Center v${config.version} พร้อมใช้งานที่ http://${hostname === '0.0.0.0' ? 'localhost' : hostname}:${port}`)
     console.log(`  ไฟล์เก็บที่  ${config.storageDir}`)

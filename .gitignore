@@ -6,3 +6,4 @@ storage/
 *.log
 bun.lockb
 package-lock.json
+dist-update/
