@@ -1,0 +1,86 @@
+{
+  "dir": "/tmp/fc-audit-r2",
+  "bugs": {
+    "lockout-off": [
+      {
+        "file": "src/auth.ts",
+        "line": 180
+      }
+    ],
+    "public-disabled": [
+      {
+        "file": "src/auth.ts",
+        "line": 240
+      }
+    ],
+    "upload-owner": [
+      {
+        "file": "src/uploads.ts",
+        "line": 30
+      }
+    ],
+    "inline-html": [
+      {
+        "file": "src/routes/files.ts",
+        "line": 25
+      }
+    ],
+    "update-version-gate": [
+      {
+        "file": "src/updater.ts",
+        "line": 185
+      }
+    ],
+    "must-change-scope": [
+      {
+        "file": "src/context.ts",
+        "line": 61
+      }
+    ],
+    "homedir-in-public": [
+      {
+        "file": "src/auth.ts",
+        "line": 98
+      }
+    ],
+    "backup-name-traversal": [
+      {
+        "file": "src/backup.ts",
+        "line": 22
+      }
+    ],
+    "restore-no-step-up": [
+      {
+        "file": "src/routes/backup.ts",
+        "line": 54
+      }
+    ]
+  },
+  "decoys": {
+    "decoy-todo-download": [
+      {
+        "file": "src/routes/files.ts",
+        "line": 260
+      }
+    ],
+    "decoy-legacy-join": [
+      {
+        "file": "src/fsx.ts",
+        "line": 191
+      }
+    ],
+    "decoy-csrf-note": [
+      {
+        "file": "src/context.ts",
+        "line": 51
+      }
+    ],
+    "decoy-backup-name": [
+      {
+        "file": "src/backup.ts",
+        "line": 51
+      }
+    ]
+  },
+  "cleanDir": "/tmp/fc-clean-r2"
+}
