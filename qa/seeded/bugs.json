@@ -299,5 +299,50 @@
         "replace": "void body.password"
       }
     ]
+  },
+  {
+    "id": "logs-download-no-admin",
+    "difficulty": "subtle",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/api.test.ts",
+    "description": "anyone, even a visitor, can download every log (audit trail with usernames and IPs, system errors)",
+    "patches": [
+      {
+        "file": "src/routes/logs.ts",
+        "find": "    const admin = requireAdmin({ user, ip })\n    const name = `file-center-logs-${stamp()}.zip`",
+        "replace": "    const admin = { username: user?.username ?? 'guest' }\n    const name = `file-center-logs-${stamp()}.zip`"
+      }
+    ]
+  },
+  {
+    "id": "csv-formula",
+    "difficulty": "subtle",
+    "category": "injection",
+    "severity": "low",
+    "tests": "tests/logs.test.ts",
+    "description": "the CSV export only defuses cells starting with '=': a file name like +cmd|... or @SUM(...) becomes a formula in Excel",
+    "patches": [
+      {
+        "file": "src/routes/logs.ts",
+        "find": "if (/^[=+\\-@\\t\\r]/.test(s)) s = `'${s}`",
+        "replace": "if (/^[=]/.test(s)) s = `'${s}`"
+      }
+    ]
+  },
+  {
+    "id": "batch-token-in-log",
+    "difficulty": "subtle",
+    "category": "secrets",
+    "severity": "medium",
+    "tests": "tests/logs.test.ts",
+    "description": "download tokens in /api/batch/<token> are written to the logs (access log, errors), so whoever reads the logs can download the files",
+    "patches": [
+      {
+        "file": "src/logger.ts",
+        "find": ".replace(/(\\/api\\/batch\\/)[^/\\s?#\"'`]+/g, `$1${HIDDEN}`)",
+        "replace": ".replace(/(\\/api\\/batch\\/)(?!)/g, `$1${HIDDEN}`)"
+      }
+    ]
   }
 ]

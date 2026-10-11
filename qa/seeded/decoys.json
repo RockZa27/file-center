@@ -26,5 +26,12 @@
     "find": "export function backupPath(name: unknown): string {",
     "replace": "// NOTE: the name comes straight from the URL\nexport function backupPath(name: unknown): string {",
     "why": "the next lines check it against BACKUP_NAME_RE before any file is touched"
+  },
+  {
+    "id": "decoy-access-url",
+    "file": "src/logger.ts",
+    "find": "export function accessLine(",
+    "replace": "// NOTE: one line per request, written from the request URL\nexport function accessLine(",
+    "why": "the URL goes through safePath(), which drops the query and hides tokens"
   }
 ]
