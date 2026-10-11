@@ -6,7 +6,7 @@
  *
  *   bun scripts/qa/seed.ts check [--ids a,b] [--run-id id]
  *   bun scripts/qa/seed.ts prepare <dir> <ids|all> [--blind]   (prints where each bug is)
- *       --blind: a plain copy for an auditor: no .git (so no diff shows the bugs), no qa/, no .claude/
+ *       --blind: a plain copy for an auditor: no .git (so no diff shows the bugs), no qa/, no .claude/, no tests/ (failing tests would point at the bugs)
  *   bun scripts/qa/seed.ts clean <dir>
  * Works on committed code (git worktree of HEAD): commit before running. The real tree is never modified.
  */
@@ -35,7 +35,7 @@ async function prepare(dir: string, ids: string[], blind = false) {
     mkdirSync(dir, { recursive: true })
     const r = await run(['bash', '-c', `git archive HEAD | tar -x -C ${JSON.stringify(dir)}`])
     if (r.code !== 0) throw new Error(r.err)
-    for (const hidden of ['qa', '.claude', 'scripts/qa']) rmSync(join(dir, hidden), { recursive: true, force: true })
+    for (const hidden of ['qa', '.claude', 'scripts/qa', 'tests']) rmSync(join(dir, hidden), { recursive: true, force: true })
   } else {
     const r = await run(['git', 'worktree', 'add', '--detach', dir, 'HEAD'])
     if (r.code !== 0) throw new Error(r.err)
