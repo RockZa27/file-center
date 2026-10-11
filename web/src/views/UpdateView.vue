@@ -10,6 +10,12 @@
         <div class="surface block">
           <div class="kv"><span class="muted">{{ t('update.current') }}</span><span class="strong">v{{ st.runningVersion }}</span></div>
           <div class="kv"><span class="muted">{{ t('update.source') }}</span><span>{{ st.runningRelease ? t('update.sourceUpdate') : t('update.sourceBuiltin') }}</span></div>
+          <div class="kv">
+            <span class="muted label">{{ t('update.signing') }}</span>
+            <span class="badge" :class="{ on: st.signatureRequired }">
+              <n-icon :component="st.signatureRequired ? ShieldCheckmarkOutline : ShieldOutline" /><span>{{ st.signatureRequired ? t('update.signingRequired') : t('update.signingOptional') }}</span>
+            </span>
+          </div>
         </div>
 
         <n-alert v-if="st.pending" type="info" class="gap">{{ t('update.pending', { v: pendingVersion }) }}</n-alert>
@@ -33,7 +39,16 @@
           <div class="kv"><span class="muted">{{ t('update.files') }}</span><span>{{ staged.files }} · {{ formatBytes(staged.bytes) }}</span></div>
           <div v-if="staged.notes" class="kv"><span class="muted">{{ t('update.notes') }}</span><span class="notes">{{ staged.notes }}</span></div>
           <div class="kv"><span class="muted">SHA-256</span><span class="mono small">{{ staged.serverSha256.slice(0, 16) }}…</span></div>
-          <n-alert type="success" class="gap top">{{ t('update.checked') }}</n-alert>
+          <div class="kv">
+            <span class="muted">{{ t('update.signature') }}</span>
+            <n-tag v-if="staged.signed" :type="staged.signatureVerified ? 'success' : 'info'" :bordered="false" class="sig">
+              <template #icon><n-icon :component="staged.signatureVerified ? ShieldCheckmarkOutline : ShieldOutline" /></template>
+              {{ staged.signatureVerified ? t('update.signedVerified') : t('update.signedUnchecked') }}
+            </n-tag>
+            <n-tag v-else type="warning" :bordered="false" class="sig"><template #icon><n-icon :component="WarningOutline" /></template>{{ t('update.unsigned') }}</n-tag>
+          </div>
+          <n-alert v-if="!staged.signed" type="warning" class="gap top">{{ t('update.unsignedBody') }}</n-alert>
+          <n-alert type="success" class="gap" :class="{ top: staged.signed }">{{ t('update.checked') }}</n-alert>
           <n-alert type="info" class="gap">{{ t('update.restartNote') }}</n-alert>
           <n-alert v-if="st.uploadsInProgress" type="warning" class="gap">{{ t('update.uploadsWarn', { n: st.uploadsInProgress }) }}</n-alert>
           <n-form label-placement="top" @submit.prevent="install">
@@ -104,8 +119,8 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NAlert, NButton, NForm, NFormItem, NIcon, NInput, NModal, NProgress, NSpin, NUpload, NUploadDragger } from 'naive-ui'
-import { ArrowUndoOutline, CloudUploadOutline, RefreshOutline } from '@vicons/ionicons5'
+import { NAlert, NButton, NForm, NFormItem, NIcon, NInput, NModal, NProgress, NSpin, NTag, NUpload, NUploadDragger } from 'naive-ui'
+import { ArrowUndoOutline, CloudUploadOutline, RefreshOutline, ShieldCheckmarkOutline, ShieldOutline, WarningOutline } from '@vicons/ionicons5'
 import { api, ApiError, putChunk } from '../api'
 import { useFeedback } from '../composables'
 import { bootId, sleep, waitForRestart } from '../restart'
@@ -250,6 +265,12 @@ onBeforeUnmount(() => clearInterval(poll))
 .center h2 { margin-top: 18px; }
 .drop { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 18px 8px; text-align: center; }
 .drop-title { font-size: 15px; font-weight: 500; }
-.howto { margin-top: 14px; font-size: 13px; }
+.howto { margin-top: 14px; font-size: 13px; overflow-wrap: anywhere; }
 .actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+.label { flex: none; }
+.badge { display: inline-flex; align-items: flex-start; gap: 6px; text-align: right; }
+.badge .n-icon { flex: none; font-size: 16px; margin-top: 2px; }
+.badge.on { color: var(--primary); font-weight: 500; }
+/* a tag stays on one line by default: let long labels wrap at 375 px */
+.sig { height: auto; min-height: 24px; padding-top: 2px; padding-bottom: 2px; white-space: normal; text-align: left; }
 </style>
