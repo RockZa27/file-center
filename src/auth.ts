@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { audit } from './audit'
-import { COMMON_PASSWORDS } from './common-passwords'
+import { COMMON_PASSWORDS, isRunOrRepeat } from './common-passwords'
 import { config, paths } from './config'
 import { bad, ensureDir, HttpError, normRel, resolveIn } from './fsx'
 import { cleanPerms, PERMISSIONS, settings, type Perm } from './settings'
@@ -26,6 +26,8 @@ export type User = {
 const userStore = new JsonStore<{ users: User[] }>(paths.users, () => ({ users: [] }), { onCorrupt: 'fail' })
 
 export const USERNAME_RE = /^[a-zA-Z0-9._-]{3,32}$/
+/** visitors' uploads and audit entries go under the owner name 'guest': an account by that name would share them */
+export const isReservedUsername = (username: string) => username.toLowerCase() === 'guest'
 
 export const allUsers = () => userStore.value.users
 export const findUser = (username: string) =>
@@ -54,6 +56,7 @@ export function checkPasswordStrength(pw: unknown, username: string): string {
   const lower = pw.toLowerCase()
   if (lower.includes(username.toLowerCase())) throw bad('รหัสผ่านต้องไม่มีชื่อผู้ใช้อยู่ในนั้น')
   if (COMMON_PASSWORDS.has(lower)) throw bad('รหัสผ่านนี้ถูกใช้บ่อยเกินไปและเดาได้ง่าย กรุณาตั้งรหัสอื่น')
+  if (isRunOrRepeat(lower)) throw bad('รหัสผ่านต้องไม่เป็นตัวอักษรเดียวซ้ำกัน หรือเรียงตามแป้นพิมพ์/ตัวเลข/ตัวอักษร กรุณาตั้งรหัสอื่น')
   return pw
 }
 
