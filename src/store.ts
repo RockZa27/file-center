@@ -1,4 +1,5 @@
 import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
+import { log } from './logger'
 
 /**
  * A tiny JSON-file store. Writes are atomic (temp file + rename) and serialised
@@ -72,7 +73,7 @@ export class JsonStore<T> {
       const tmp = `${this.file}.tmp`
       await Bun.write(tmp, snapshot)
       renameSync(tmp, this.file)
-    }).catch(err => console.error('[store] write failed', this.file, err))
+    }).catch(err => log.error('store-write-failed', { file: this.file, error: err }))
   }
 
   flushSync(): void {

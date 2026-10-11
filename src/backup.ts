@@ -2,10 +2,10 @@
  * Backups of the system data: accounts and passwords, settings, logo and the activity log. Without them a dead
  * disk loses every account. One backup is one zip in config.backupDir:
  *
- *   users.json  settings.json  branding/  logs/audit.log  backup.json  [storage/ with BACKUP_INCLUDE_FILES=true]
+ *   users.json  settings.json  branding/  logs/audit.log  logs/system.log  backup.json  [storage/ with BACKUP_INCLUDE_FILES=true]
  *
- * Not in it: tmp/ and trash/ (temporary), app/ (installed updates), sessions.json (logins), rotated logs and
- * the backup folder itself. Restoring puts back users.json, settings.json and branding/ only, never storage/.
+ * Not in it: tmp/ and trash/ (temporary), app/ (installed updates), sessions.json (logins), rotated logs,
+ * access.log and launcher.log, and the backup folder itself. Restoring puts back users.json, settings.json and branding/ only, never storage/.
  */
 import {
   closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync,
@@ -14,8 +14,9 @@ import {
 import { dirname, join } from 'node:path'
 import { BlobReader, ZipReader } from '@zip.js/zip.js'
 import { config, paths } from './config'
-import { bad, cleanName, conflict, ensureSpace, fromFsError, notFound, within } from './fsx'
+import { bad, cleanName, conflict, ensureSpace, fromFsError, HttpError, notFound, within } from './fsx'
 import { restartSoon } from './lifecycle'
+import { log } from './logger'
 import { JsonStore } from './store'
 import { collectZipItems, zipStream, type ZipItem } from './zip'
 
@@ -33,7 +34,8 @@ export type BackupStatus = {
 
 // top-level names in DATA_DIR that never go into a backup
 const SKIP = new Set(['tmp', 'trash', 'app', 'sessions.json', 'backup-status.json'])
-const ROTATED_LOG = /^logs\/audit\.log\.\d+$/
+// of the logs only the current activity and system log go in: rotated ones, access.log and launcher.log stay out
+const LOGS_KEPT = new Set(['logs/', 'logs/audit.log', 'logs/system.log'])
 // users, settings and a logo are small: anything bigger in a backup is not ours
 const RESTORE_MAX_BYTES = 64 * 1024 * 1024
 
@@ -75,7 +77,7 @@ function writeStatus(s: BackupStatus) {
     writeFileSync(`${paths.backupStatus}.tmp`, JSON.stringify(s, null, 2))
     renameSync(`${paths.backupStatus}.tmp`, paths.backupStatus)
   } catch (err) {
-    console.error('[backup] could not write the status', err)
+    log.error('backup-status-write-failed', err)
   }
 }
 
@@ -119,7 +121,8 @@ async function exclusive<T>(fn: () => Promise<T>): Promise<T> {
 function collectItems(): ZipItem[] {
   const names = readdirSync(config.dataDir).filter(n => !SKIP.has(n) && !n.endsWith('.tmp'))
   // the storage may sit inside the data folder: its files only go in with BACKUP_INCLUDE_FILES, under storage/
-  const items = collectZipItems(config.dataDir, names).filter(i => !ROTATED_LOG.test(i.name) && !within(config.storageDir, i.abs))
+  const items = collectZipItems(config.dataDir, names)
+    .filter(i => (!i.name.startsWith('logs/') || LOGS_KEPT.has(i.name)) && !within(config.storageDir, i.abs))
   if (config.backupIncludeFiles) {
     items.push({ name: 'storage/', abs: config.storageDir, dir: true, mtime: statSync(config.storageDir).mtimeMs, size: 0 })
     for (const i of collectZipItems(config.storageDir, readdirSync(config.storageDir))) {
@@ -169,6 +172,7 @@ async function writeBackup(protect?: string): Promise<BackupItem> {
     return { name, size, createdAt: createdAtOf(name) }
   } catch (err) {
     const why = fromFsError(err)?.message ?? (err as Error).message
+    log.error('backup-failed', err instanceof HttpError ? why : err)
     writeStatus({ status: 'failed', lastSuccess: readStatus()?.lastSuccess ?? null, lastAttempt: attempt, message: `สำรองข้อมูลไม่สำเร็จ: ${why}`, file: null, size: null })
     throw err
   }
@@ -248,6 +252,10 @@ export function restoreBackup(name: string): Promise<{ safety: BackupItem }> {
         restartSoon()
         throw err
       }
+    } catch (err) {
+      // the admin sees the message once; the log keeps it for whoever looks into it later
+      ;(err instanceof HttpError ? log.warn : log.error)('backup-restore-failed', { name, error: err })
+      throw err
     } finally {
       rmSync(work, { recursive: true, force: true })
     }

@@ -44,6 +44,11 @@ export const config = {
   loginLockoutMs: num('LOGIN_LOCKOUT_SECONDS', 60) * 1000,
   auditMaxBytes: 10 * 1024 * 1024,
   auditMaxFiles: 10,
+  /** logs/system.log (and access.log) is rotated past this size; LOG_MAX_FILES counts the current file too */
+  logMaxBytes: num('LOG_MAX_BYTES', 10 * 1024 ** 2), // 10 MB
+  logMaxFiles: Math.max(2, Math.floor(num('LOG_MAX_FILES', 5))),
+  /** "true" writes one line per request to logs/access.log (method, path without tokens or query, status, ms, ip, user) */
+  accessLog: env('ACCESS_LOG', 'false') === 'true',
   unzipMaxBytes: num('UNZIP_MAX_BYTES', 20 * 1024 ** 3),
   unzipMaxFiles: num('UNZIP_MAX_FILES', 50_000),
   /** set to "true" behind HTTPS so the session cookie is marked Secure */
@@ -81,6 +86,11 @@ export const paths = {
   sessions: join(config.dataDir, 'sessions.json'),
   logs: join(config.dataDir, 'logs'),
   audit: join(config.dataDir, 'logs', 'audit.log'),
+  /** errors and events of the app (logger.ts), shown on the admin logs page */
+  systemLog: join(config.dataDir, 'logs', 'system.log'),
+  /** written by launcher.ts: starts, restarts, rollbacks, crashes */
+  launcherLog: join(config.dataDir, 'logs', 'launcher.log'),
+  accessLog: join(config.dataDir, 'logs', 'access.log'),
   trash: join(config.dataDir, 'trash'),
   tmp: join(config.dataDir, 'tmp'),
   branding: join(config.dataDir, 'branding'),

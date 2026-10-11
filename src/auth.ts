@@ -3,6 +3,7 @@ import { audit } from './audit'
 import { COMMON_PASSWORDS, isRunOrRepeat } from './common-passwords'
 import { config, paths } from './config'
 import { bad, ensureDir, HttpError, normRel, resolveIn } from './fsx'
+import { log } from './logger'
 import { cleanPerms, PERMISSIONS, settings, type Perm } from './settings'
 import { JsonStore } from './store'
 
@@ -93,6 +94,8 @@ export async function bootstrapAdmin() {
   })
   userStore.value.users[0].passwordHash = await hashPassword(password)
   userStore.save()
+  log.info('admin-created', 'สร้างบัญชีผู้ดูแลระบบครั้งแรกแล้ว (ชื่อผู้ใช้ admin)')
+  // the password is shown on stdout only (docker compose logs), never written to logs/system.log
   console.log('')
   console.log('  ── สร้างบัญชีผู้ดูแลระบบครั้งแรกแล้ว ──')
   console.log('  ชื่อผู้ใช้: admin')

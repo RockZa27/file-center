@@ -160,6 +160,8 @@ Cloudflare Tunnel ให้คนภายนอกเข้าผ่านโ�
 | `BACKUP_HOUR` | 3 | สำรองอัตโนมัติทุกวันชั่วโมงไหน (0-23 ตามเวลาเครื่อง) `off` = ปิดการสำรองอัตโนมัติ |
 | `BACKUP_INCLUDE_FILES` | `false` | `true` = รวมไฟล์ที่อัปโหลด (`storage`) ไว้ในไฟล์สำรองด้วย (อาจใหญ่มาก) |
 | `SECURE_COOKIE` | `false` | ตั้งเป็น `true` เมื่อใช้ผ่าน HTTPS (เปิด cookie แบบ Secure และหัว `Strict-Transport-Security`) |
+| `LOG_MAX_BYTES` / `LOG_MAX_FILES` | 10 MB / 5 | หมุนไฟล์ `logs/system.log` (และ `access.log`, `launcher.log`) เมื่อใหญ่ถึงขนาดนี้ เก็บไว้กี่ไฟล์ (นับรวมไฟล์ปัจจุบัน) |
+| `ACCESS_LOG` | `false` | `true` = บันทึกทุกคำขอลง `logs/access.log` บรรทัดละคำขอ (method, path ที่ตัด query และโทเคนออกแล้ว, status, เวลาที่ใช้ ms, IP, ผู้ใช้) |
 | `TRUST_PROXY` | `false` | ที่มาของ IP ผู้ใช้: `cloudflare` = หัว `CF-Connecting-IP` (Cloudflare Tunnel), `true` = ค่าสุดท้ายของ `X-Forwarded-For` (nginx/Caddy ของคุณเอง), `false` = ไม่มี proxy |
 
 ## ความปลอดภัยเพิ่มเติม
@@ -174,6 +176,20 @@ Cloudflare Tunnel ให้คนภายนอกเข้าผ่านโ�
 - **อัปโหลดของผู้เยี่ยมชม:** ถ้าเปิดสิทธิ์ `upload` ให้ผู้เยี่ยมชม ผู้เยี่ยมชมทุกคนใช้โควตารวมกันวันละ `GUEST_UPLOAD_DAILY_BYTES` (ค่าเริ่มต้น 1 GB, `0` = ห้ามอัปโหลด)
   ระบบนับขนาดไฟล์ตั้งแต่ตอนเริ่มอัปโหลด (อัปโหลดพร้อมกันหลายไฟล์จึงเกินโควตาไม่ได้) และคืนให้เมื่อยกเลิกหรือไม่อัปโหลดจนเสร็จ (ถูกลบตาม `UPLOAD_STALE_HOURS`)
   เกินโควตาจะได้ 429 ยอดที่ใช้เก็บใน `guest-uploads.json` ใน `DATA_DIR` จึงไม่หายเมื่อรีสตาร์ต และเริ่มนับใหม่ทุกวัน (ตามเวลาเครื่อง) ผู้ที่เข้าสู่ระบบไม่ถูกจำกัด
+
+## Log ของระบบ
+
+error และเหตุการณ์สำคัญของระบบเขียนลงไฟล์ ไม่หายไปพร้อมคอนเทนเนอร์ ผู้ดูแลดูได้จากหน้าเว็บโดยไม่ต้องเข้าเครื่อง server
+
+- `logs/system.log` ใน `DATA_DIR` บรรทัดละหนึ่งรายการแบบ JSON `{ ts, level, event, detail }` (`level` = `info` / `warn` / `error`) และยังพิมพ์ออก stdout (`docker compose logs`) เหมือนเดิม
+  มี error ที่ไม่มีใครดักไว้ (`unhandledRejection` บันทึกแล้วทำงานต่อ, `uncaughtException` บันทึกแล้วปิดโปรเซสให้ launcher เริ่มใหม่) และ error ระหว่างตอบคำขอ (500), สำรอง/กู้คืนข้อมูลล้มเหลว, เขียนไฟล์ข้อมูลไม่ได้ ฯลฯ
+- `logs/launcher.log` เขียนโดย launcher: เริ่มระบบ, รีสตาร์ต, ย้อนกลับเวอร์ชัน, ระบบหยุดทำงาน (crash)
+- `logs/access.log` เฉพาะเมื่อตั้ง `ACCESS_LOG=true` (ปิดไว้โดยค่าเริ่มต้น)
+- ทุกไฟล์หมุนเมื่อใหญ่ถึง `LOG_MAX_BYTES` (`system.log` → `system.log.1` → ...) เก็บไว้ `LOG_MAX_FILES` ไฟล์ ส่วนประวัติการใช้งาน `audit.log` หมุนแบบเดียวกันที่ 10 MB × 10 ไฟล์
+- **ไม่มีความลับใน log:** ไม่บันทึกรหัสผ่าน, cookie, CSRF token, โทเคนใน `/api/batch/:token`, รหัสการอัปโหลด และ query string ของ URL (ตัดออกก่อนเขียน ทั้งในไฟล์และ stdout)
+  ข้อยกเว้นเดียวคือรหัสผ่าน admin ที่สุ่มให้ตอนเริ่มครั้งแรก ซึ่งแสดงบน stdout เท่านั้น ไม่ลงไฟล์
+- หน้าภาพรวม (`GET /api/admin/status`) เตือน "มี error N รายการใน 24 ชั่วโมงที่ผ่านมา" เมื่อมี error
+- `system.log` ปัจจุบันรวมอยู่ในไฟล์สำรองข้อมูลด้วย
 
 ## สิทธิ์
 
@@ -201,11 +217,13 @@ src/
   fsx.ts            จัดการพาธอย่างปลอดภัย (กัน ../ และ symlink), คัดลอก/ย้าย
   zip.ts            สร้างและแตก zip ด้วย zip.js (ZIP64 ไฟล์เกิน 4 GB, ตรวจ CRC, กัน zip-slip / zip bomb)
   uploads.ts        อัปโหลดแบบแบ่งชิ้น กลับมาต่อได้
+  logger.ts         log ของระบบ (logs/system.log), หมุนไฟล์ log, ตัดความลับออกก่อนเขียน
   trash.ts, audit.ts, settings.ts, store.ts, common-passwords.ts
-  routes/           session, files, upload, admin, update, backup
+  routes/           session, files, upload, admin, update, backup, logs
 scripts/package.ts  สร้างแพ็กเกจอัปเดต (bun run package)
 web/                Vue 3 + Naive UI (build ไปที่ web/dist)
 tests/api.test.ts   ทดสอบ API
+tests/logs.test.ts  ทดสอบ log ของระบบ การหมุนไฟล์ การส่งออก และว่าไม่มีความลับหลุดลง log
 tests/update.test.ts, tests/backup.test.ts   ทดสอบอัปเดตและกู้คืนข้อมูลกับ launcher จริง
 ```
 
@@ -215,8 +233,8 @@ tests/update.test.ts, tests/backup.test.ts   ทดสอบอัปเดต�
 
 ถ้าดิสก์เสีย บัญชีผู้ใช้ รหัสผ่าน และการตั้งค่าจะหายทั้งหมด ระบบจึงสำรองข้อมูลระบบให้เองทุกวัน
 
-- **สำรองอะไรบ้าง:** หนึ่งครั้ง = ไฟล์เดียว `file-center-backup-YYYYMMDD-HHMMSS.zip` (เวลาของเครื่อง server) มี `users.json` (ผู้ใช้และรหัสผ่านที่เข้ารหัสแล้ว), `settings.json`, `branding/` (โลโก้), `logs/audit.log` และ `backup.json` (`{ version, createdAt, includesFiles }`)
-  ไม่รวม session, ถังขยะ, ไฟล์อัปโหลดที่ยังไม่เสร็จ, เวอร์ชันที่อัปเดตผ่านเว็บ และ log เก่าที่หมุนไฟล์แล้ว (`audit.log.N`)
+- **สำรองอะไรบ้าง:** หนึ่งครั้ง = ไฟล์เดียว `file-center-backup-YYYYMMDD-HHMMSS.zip` (เวลาของเครื่อง server) มี `users.json` (ผู้ใช้และรหัสผ่านที่เข้ารหัสแล้ว), `settings.json`, `branding/` (โลโก้), `logs/audit.log`, `logs/system.log` และ `backup.json` (`{ version, createdAt, includesFiles }`)
+  ไม่รวม session, ถังขยะ, ไฟล์อัปโหลดที่ยังไม่เสร็จ, เวอร์ชันที่อัปเดตผ่านเว็บ log เก่าที่หมุนไฟล์แล้ว (`audit.log.N`, `system.log.N`), `access.log` และ `launcher.log`
   ไฟล์ที่ผู้ใช้อัปโหลด (`storage`) ไม่รวมโดยค่าเริ่มต้นเพราะอาจใหญ่มาก ตั้ง `BACKUP_INCLUDE_FILES=true` เพื่อรวมไว้ในโฟลเดอร์ `storage/` ของ zip (ระบบตรวจพื้นที่ว่างก่อนตาม `MIN_FREE_SPACE`)
 - **เมื่อไหร่:** ทุกวันในชั่วโมง `BACKUP_HOUR` (ค่าเริ่มต้นตี 3) และทันทีที่ครั้งล่าสุดที่สำเร็จเก่ากว่า 2 วัน (เช่น เปิดระบบครั้งแรก หรือเครื่องปิดอยู่ตอนตี 3) ตั้ง `BACKUP_HOUR=off` เพื่อปิดการสำรองอัตโนมัติ
   สำเร็จแล้วจะลบไฟล์ที่เก่าที่สุดให้เหลือ `BACKUP_KEEP` ไฟล์ (ค่าเริ่มต้น 7) ระหว่างเขียนไฟล์ชื่อจะลงท้าย `.partial` จึงไม่มีไฟล์ที่เขียนไม่ครบปนอยู่ในรายการ
@@ -248,6 +266,9 @@ tests/update.test.ts, tests/backup.test.ts   ทดสอบอัปเดต�
 | `POST /api/upload` → `PUT /api/upload/:id/:n` → `POST /api/upload/:id/complete` | อัปโหลดแบบแบ่งชิ้น |
 | `/api/admin/*` | ผู้ใช้, ภาพรวม, ประวัติ, ถังขยะ, ตั้งค่า, โลโก้ (เฉพาะ admin) |
 | `GET/POST /api/admin/backups` · `GET /api/admin/backups/:name/download` · `DELETE /api/admin/backups/:name` · `POST /api/admin/backups/restore` | สำรองข้อมูลระบบ: รายการ, สำรองทันที, ดาวน์โหลด, ลบ, กู้คืน (ต้องใส่รหัสผ่าน `{ name, password }`) (เฉพาะ admin) |
+| `GET /api/admin/logs` (`level=info\|warn\|error`, `q`, `page`, `pageSize`) | log ของระบบ ใหม่สุดก่อน อ่านต่อไปยังไฟล์ที่หมุนแล้ว ตอบ `{ items, hasMore }` (เฉพาะ admin) |
+| `GET /api/admin/logs/download` | zip ของ `system.log`, `launcher.log`, `audit.log` (รวมไฟล์ที่หมุนแล้ว) (เฉพาะ admin) |
+| `GET /api/admin/activity/export?format=csv` | ส่งออกประวัติการใช้งานเป็น CSV ตามตัวกรองเดียวกับหน้าประวัติ (`user`, `action`, `q`) เป็น UTF-8 มี BOM ให้ Excel แสดงภาษาไทยได้ ช่องที่ขึ้นต้นด้วย `=` `+` `-` `@` tab หรือ CR จะมี `'` นำหน้ากันสูตร Excel (เฉพาะ admin) |
 | `/api/admin/update/*` | อัปเดตระบบ: อัปโหลดแพ็กเกจ (ส่งชิ้นส่วนด้วย `PUT /api/upload/:id/:n`), ตรวจ, ติดตั้ง, ย้อนกลับ (เฉพาะ admin) |
 | `GET /api/health` | ตรวจสุขภาพ (ใช้กับ Docker healthcheck) ผู้เยี่ยมชมได้แค่ `status` เครื่อง server เองและ admin ได้เวอร์ชันด้วย |
 

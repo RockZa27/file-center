@@ -8,7 +8,8 @@
  */
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { config } from './config'
+import { config, paths } from './config'
+import { appendLine } from './logger'
 import {
   EXIT_RESTART, readManifest, readState, releasePath, releaseUsable, SERVER_FILE, writeState, compareVersions,
   type ReleaseState,
@@ -17,7 +18,11 @@ import {
 const HEALTH_TIMEOUT_MS = Number(process.env.FC_HEALTH_TIMEOUT_MS) || 40_000
 /** an update must stay up this long after its first healthy answer to count as installed */
 const STABLE_MS = Number(process.env.FC_STABLE_MS) || 8_000
-const log = (m: string) => console.log(`[launcher] ${m}`)
+/** stdout, and logs/launcher.log so the admin can download it from the web: the container's stdout is gone after a recreate */
+function log(event: string, m: string, level: 'info' | 'warn' | 'error' = 'info') {
+  console.log(`[launcher] ${m}`)
+  appendLine(paths.launcherLog, JSON.stringify({ ts: new Date().toISOString(), level, event, detail: m }))
+}
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 
 type Target = { name: string | null; version: string; cmd: string[]; env: Record<string, string> }
@@ -31,7 +36,7 @@ function chooseTarget(): Target {
   const manifest = releaseUsable(config.dataDir, state.current) ? readManifest(releasePath(config.dataDir, state.current)) : null
   // a newer image (docker compose up --build) wins over an older installed update
   if (!manifest || compareVersions(manifest.version, config.version) <= 0) {
-    log(`ข้ามอัปเดต ${state.current}: ${manifest ? 'ระบบในอิมเมจใหม่กว่าหรือเท่ากัน' : 'ไฟล์ไม่ครบ'} ใช้เวอร์ชัน ${config.version} ที่มากับระบบ`)
+    log('skip-update', `ข้ามอัปเดต ${state.current}: ${manifest ? 'ระบบในอิมเมจใหม่กว่าหรือเท่ากัน' : 'ไฟล์ไม่ครบ'} ใช้เวอร์ชัน ${config.version} ที่มากับระบบ`)
     writeState(config.dataDir, { ...state, current: null, pending: null })
     return builtin
   }
@@ -67,7 +72,7 @@ function rollBack(state: ReleaseState, name: string, why: string) {
     last: { dir: name, version, ok: false, message: why, at: new Date().toISOString() },
   })
   rmSync(releasePath(config.dataDir, name), { recursive: true, force: true })
-  log(`อัปเดต ${version} ใช้งานไม่ได้ (${why}) ย้อนกลับแล้ว`)
+  log('rollback', `อัปเดต ${version} ใช้งานไม่ได้ (${why}) ย้อนกลับแล้ว`, 'error')
 }
 
 let child: ReturnType<typeof Bun.spawn> | null = null
@@ -77,7 +82,7 @@ async function main() {
   let crashes = 0
   while (!stopping) {
     const target = chooseTarget()
-    log(`เริ่มระบบ v${target.version} (${target.name ? `อัปเดต ${target.name}` : 'เวอร์ชันที่มากับระบบ'})`)
+    log('start', `เริ่มระบบ v${target.version} (${target.name ? `อัปเดต ${target.name}` : 'เวอร์ชันที่มากับระบบ'})`)
     const startedAt = Date.now()
     child = Bun.spawn(target.cmd, {
       stdio: ['inherit', 'inherit', 'inherit'],
@@ -94,14 +99,14 @@ async function main() {
           if (state.pending?.dir === target.name) {
             const version = readManifest(releasePath(config.dataDir, target.name))?.version ?? target.version
             writeState(config.dataDir, { ...state, pending: null, last: { dir: target.name, version, ok: true, message: 'ติดตั้งสำเร็จ', at: new Date().toISOString() } })
-            log(`อัปเดต ${version} ทำงานปกติแล้ว`)
+            log('update-ok', `อัปเดต ${version} ทำงานปกติแล้ว`)
           }
           return
         }
         await sleep(500)
       }
       if (!exited) {
-        log('ระบบไม่ตอบสนองภายในเวลาที่กำหนด หยุดโปรเซส')
+        log('unresponsive', 'ระบบไม่ตอบสนองภายในเวลาที่กำหนด หยุดโปรเซส', 'error')
         child?.kill()
       }
     })()
@@ -113,7 +118,11 @@ async function main() {
 
     const state = readState(config.dataDir)
     const pendingNow = target.name !== null && state.pending?.dir === target.name
-    if (code === EXIT_RESTART) { crashes = 0; continue }
+    if (code === EXIT_RESTART) {
+      log('restart', 'ระบบขอรีสตาร์ต (อัปเดต กู้คืนข้อมูล หรือย้อนเวอร์ชัน)')
+      crashes = 0
+      continue
+    }
     if (pendingNow) {
       // never answered, or fell over before it was confirmed
       rollBack(state, target.name!, `โปรเซสหยุดทำงาน (code ${code}) ก่อนยืนยันการติดตั้ง`)
@@ -122,7 +131,7 @@ async function main() {
     // a running version that crashes later is restarted as it is: rolling back could hide a mistake in .env or the disk
     crashes = Date.now() - startedAt > 60_000 ? 0 : crashes + 1
     const wait = Math.min(30_000, 1000 * 2 ** Math.min(crashes, 5))
-    log(`ระบบหยุดทำงาน (code ${code}) เริ่มใหม่ใน ${wait / 1000} วินาที`)
+    log('crash', `ระบบหยุดทำงาน (code ${code}) เริ่มใหม่ใน ${wait / 1000} วินาที`, 'error')
     await sleep(wait)
   }
   return 0
