@@ -1,5 +1,5 @@
 import { mkdirSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import pkg from '../package.json'
 
 const root = resolve(import.meta.dir, '..')
@@ -8,6 +8,13 @@ const num = (k: string, d: number) => {
   const v = Number(process.env[k])
   return Number.isFinite(v) && process.env[k] !== undefined && process.env[k] !== '' ? v : d
 }
+function backupHour(v: string): number | null {
+  if (v.trim().toLowerCase() === 'off') return null
+  const h = Number(v)
+  return Number.isInteger(h) && h >= 0 && h <= 23 && v.trim() !== '' ? h : 3
+}
+
+const dataDir = resolve(env('DATA_DIR', join(root, 'data')))
 
 export const config = {
   /** a web update runs with FC_VERSION set to the version in its manifest; otherwise the version of package.json */
@@ -18,7 +25,7 @@ export const config = {
   /** uploaded files live here */
   storageDir: resolve(env('STORAGE_DIR', join(root, 'storage'))),
   /** users, settings, logs, trash, sessions, temp uploads */
-  dataDir: resolve(env('DATA_DIR', join(root, 'data'))),
+  dataDir,
   /** compiled frontend */
   webDir: resolve(env('WEB_DIR', join(root, 'web', 'dist'))),
   /** folder (inside storage) shown to visitors who are not logged in */
@@ -51,6 +58,14 @@ export const config = {
   webUpdate: env('WEB_UPDATE', 'true') !== 'false',
   /** biggest update package an admin may upload */
   updateMaxSize: num('UPDATE_MAX_SIZE', 200 * 1024 ** 2),
+  /** where backups are written; best on another disk, a dead disk takes the backups on it along */
+  backupDir: resolve(env('BACKUP_DIR', join(dirname(dataDir), 'backups'))),
+  /** after a successful backup the oldest beyond this many are deleted */
+  backupKeep: Math.max(1, Math.floor(num('BACKUP_KEEP', 7))),
+  /** local hour (0-23) of the daily backup, null = "off" (no schedule; backups still run from the web page) */
+  backupHour: backupHour(env('BACKUP_HOUR', '3')),
+  /** "true" also puts the uploaded files (storage) in every backup; off by default because it can be huge */
+  backupIncludeFiles: env('BACKUP_INCLUDE_FILES', 'false') === 'true',
 }
 
 export const paths = {
