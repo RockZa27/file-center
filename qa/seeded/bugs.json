@@ -268,5 +268,35 @@
         "replace": "need({ user, ip }, query.space, 'read')"
       }
     ]
+  },
+  {
+    "id": "backup-name-traversal",
+    "difficulty": "subtle",
+    "category": "path-traversal",
+    "severity": "medium",
+    "tests": "tests/backup.test.ts",
+    "description": "backup names only need the prefix and .zip, so an encoded ../ in the name reaches files outside the backup folder (download / delete / restore)",
+    "patches": [
+      {
+        "file": "src/backup.ts",
+        "find": "export const BACKUP_NAME_RE = /^file-center-backup-\\d{8}-\\d{6}\\.zip$/",
+        "replace": "export const BACKUP_NAME_RE = /^file-center-backup-.+\\.zip$/"
+      }
+    ]
+  },
+  {
+    "id": "restore-no-step-up",
+    "difficulty": "easy",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/backup.test.ts",
+    "description": "restoring a backup does not ask for the password again: a stolen admin cookie can replace every account",
+    "patches": [
+      {
+        "file": "src/routes/backup.ts",
+        "find": "await confirmPassword(admin, ip, body.password, 'backup-restore-denied')",
+        "replace": "void body.password"
+      }
+    ]
   }
 ]

@@ -19,5 +19,12 @@
     "find": "    // CSRF: every state-changing call must carry the token issued with the session",
     "replace": "    // CSRF: every state-changing call must carry the token issued with the session\n    // NOTE: GET, HEAD and OPTIONS are not checked (by design?)",
     "why": "no GET route changes state; skipping safe methods is the standard design"
+  },
+  {
+    "id": "decoy-backup-name",
+    "file": "src/backup.ts",
+    "find": "export function backupPath(name: unknown): string {",
+    "replace": "// NOTE: the name comes straight from the URL\nexport function backupPath(name: unknown): string {",
+    "why": "the next lines check it against BACKUP_NAME_RE before any file is touched"
   }
 ]
