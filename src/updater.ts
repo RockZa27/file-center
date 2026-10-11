@@ -4,11 +4,13 @@
  * 1. stagePackage: unzip the uploaded package into staging/ and accept only the files its manifest lists
  *    (checked by size and SHA-256). Static checks only: no code from the package runs here, because an
  *    admin session alone (a stolen cookie, say) must not be enough to run code on the server.
+ *    With UPDATE_PUBLIC_KEY set, manifest.json must also carry a valid Ed25519 signature (manifest.sig) by the
+ *    holder of the private key, so even a taken-over admin account (session + password) can not install its own code.
  * 2. applyStaged (after the password step-up): start the new server for a few seconds against throw-away
  *    data to prove it boots on this machine, then move it to releases/, record it in state.json and ask
  *    for a restart. The launcher starts the new code and goes back to the old one if it does not come up.
  */
-import { randomBytes } from 'node:crypto'
+import { createPublicKey, randomBytes, verify, type KeyObject } from 'node:crypto'
 import {
   existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync,
 } from 'node:fs'
@@ -26,6 +28,9 @@ const MAX_UNPACKED = 400 * 1024 ** 2
 const SAFE_PATH = /^[A-Za-z0-9._@~+-]+(\/[A-Za-z0-9._@~+-]+)*$/
 const STAGED_ID = /^[a-f0-9]{16}$/
 const VERIFIED = '.verified'
+/** base64 Ed25519 signature of the exact bytes of manifest.json, written by "bun run package --sign" */
+const SIGNATURE_FILE = 'manifest.sig'
+const MAX_MANIFEST = 2 * 1024 * 1024
 
 export type StagedInfo = {
   id: string
@@ -38,6 +43,10 @@ export type StagedInfo = {
   runningVersion: string
   /** the new server has not been started yet; that happens on install, after the password */
   tested: false
+  /** the package carries manifest.sig */
+  signed: boolean
+  /** the signature was checked against UPDATE_PUBLIC_KEY (false when no key is set: then nothing can check it) */
+  signatureVerified: boolean
 }
 
 export const staging = () => stagingDir(config.dataDir)
@@ -49,6 +58,47 @@ export async function exclusive<T>(fn: () => Promise<T> | T): Promise<T> {
   if (busy) throw conflict('กำลังมีการอัปเดตอีกรายการหนึ่งอยู่ กรุณารอสักครู่')
   busy = true
   try { return await fn() } finally { busy = false }
+}
+
+let parsedKey: { value: string; key: KeyObject | null; error: string | null } | undefined
+
+/** the key in UPDATE_PUBLIC_KEY, parsed once per value; `error` says why it is unusable */
+export function signingKey(): { key: KeyObject | null; error: string | null } {
+  const value = config.updatePublicKey
+  if (parsedKey?.value !== value) {
+    parsedKey = { value, key: null, error: null }
+    if (value) {
+      try {
+        const key = createPublicKey({ key: Buffer.from(value, 'base64'), format: 'der', type: 'spki' })
+        if (key.asymmetricKeyType !== 'ed25519') parsedKey.error = `ต้องเป็นกุญแจ Ed25519 (ได้ ${key.asymmetricKeyType})`
+        else parsedKey.key = key
+      } catch {
+        parsedKey.error = 'อ่านกุญแจไม่ได้ ต้องเป็น public key บรรทัดเดียวที่ได้จาก "bun run package --gen-key"'
+      }
+    }
+  }
+  return { key: parsedKey.key, error: parsedKey.error }
+}
+
+/** a key is set (valid or not): every package must be signed */
+export const signatureRequired = () => config.updatePublicKey !== ''
+
+/** check manifest.sig against the manifest bytes when a key is set; a missing or wrong signature rejects the package */
+function checkSignature(dir: string, manifestBytes: Buffer): { signed: boolean; signatureVerified: boolean } {
+  const sigFile = join(dir, SIGNATURE_FILE)
+  const signed = existsSync(sigFile)
+  if (!signatureRequired()) return { signed, signatureVerified: false }
+  const { key, error } = signingKey()
+  if (!key) throw bad(`ค่า UPDATE_PUBLIC_KEY ไม่ถูกต้อง (${error}) ระบบจึงไม่รับแพ็กเกจใด ๆ จนกว่าจะแก้ค่านี้แล้วรีสตาร์ตระบบ`)
+  if (!signed) {
+    throw bad('แพ็กเกจนี้ไม่มีลายเซ็น (manifest.sig) ระบบนี้รับเฉพาะแพ็กเกจที่เซ็นด้วยกุญแจของผู้ดูแล ให้สร้างด้วย "bun run package --sign <ไฟล์กุญแจ>"')
+  }
+  let ok = false
+  try {
+    if (statSync(sigFile).size <= 1024) ok = verify(null, manifestBytes, key, Buffer.from(readFileSync(sigFile, 'utf8').trim(), 'base64'))
+  } catch { /* unreadable signature = wrong signature */ }
+  if (!ok) throw bad('ลายเซ็นของแพ็กเกจไม่ถูกต้อง: แพ็กเกจไม่ได้เซ็นด้วยกุญแจที่ตรงกับ UPDATE_PUBLIC_KEY หรือถูกแก้ไขหลังจากเซ็น')
+  return { signed: true, signatureVerified: true }
 }
 
 const sha256 = (file: string) => new Bun.CryptoHasher('sha256').update(readFileSync(file)).digest('hex')
@@ -71,13 +121,22 @@ function listFiles(root: string): string[] {
   return out
 }
 
-/** the manifest of an unpacked package, after checking that its files are exactly the ones the manifest lists */
-function verifyTree(dir: string): Manifest {
+/**
+ * The manifest of an unpacked package, after checking its signature (when a key is set) and that its files are
+ * exactly the ones the manifest lists. The signature is checked on the same bytes that are parsed.
+ */
+function verifyTree(dir: string): { manifest: Manifest; signed: boolean; signatureVerified: boolean } {
+  let raw: Buffer
+  try {
+    raw = readFileSync(join(dir, 'manifest.json'))
+    if (raw.length > MAX_MANIFEST) throw new Error('too big')
+  } catch {
+    throw bad('ไม่พบ manifest.json ในแพ็กเกจ หรืออ่านไม่ได้ (ต้องเป็นไฟล์ที่สร้างจาก "bun run package")')
+  }
+  const signature = checkSignature(dir, raw)
   let manifest: Manifest
   try {
-    const raw = readFileSync(join(dir, 'manifest.json'), 'utf8')
-    if (raw.length > 2 * 1024 * 1024) throw new Error('too big')
-    manifest = JSON.parse(raw)
+    manifest = JSON.parse(raw.toString('utf8'))
   } catch {
     throw bad('ไม่พบ manifest.json ในแพ็กเกจ หรืออ่านไม่ได้ (ต้องเป็นไฟล์ที่สร้างจาก "bun run package")')
   }
@@ -87,7 +146,7 @@ function verifyTree(dir: string): Manifest {
   const listed = Object.keys(manifest.files)
   if (!listed.includes(SERVER_FILE) || !listed.includes('web/index.html')) throw bad('แพ็กเกจต้องมี server.js และ web/index.html')
 
-  const actual = listFiles(dir).filter(f => f !== 'manifest.json' && f !== VERIFIED).sort()
+  const actual = listFiles(dir).filter(f => f !== 'manifest.json' && f !== SIGNATURE_FILE && f !== VERIFIED).sort()
   if (actual.join('\n') !== [...listed].sort().join('\n')) throw bad('ไฟล์ในแพ็กเกจไม่ตรงกับ manifest (มีไฟล์เกินหรือขาด)')
   for (const rel of listed) {
     if (!SAFE_PATH.test(rel) || (rel !== SERVER_FILE && !rel.startsWith('web/'))) throw bad(`ชื่อไฟล์ในแพ็กเกจไม่อนุญาต: ${rel}`)
@@ -95,7 +154,7 @@ function verifyTree(dir: string): Manifest {
     const abs = join(dir, rel)
     if (statSync(abs).size !== want?.size || sha256(abs) !== want.sha256) throw bad(`ไฟล์ ${rel} ในแพ็กเกจเสียหายหรือไม่ตรงกับ manifest`)
   }
-  return manifest
+  return { manifest, ...signature }
 }
 
 async function freePort(): Promise<number> {
@@ -181,7 +240,7 @@ export function stagePackage(zipAbs: string, bytes: number): Promise<StagedInfo>
       } catch (e) {
         throw e instanceof HttpError ? e : bad('เปิดไฟล์ zip ไม่ได้ ไฟล์อาจเสียหาย')
       }
-      const manifest = verifyTree(dir)
+      const { manifest, signed, signatureVerified } = verifyTree(dir)
       if (compareVersions(manifest.version, runningVersion()) <= 0) {
         throw bad(`แพ็กเกจเป็นเวอร์ชัน ${manifest.version} ซึ่งไม่ใหม่กว่าเวอร์ชันที่ใช้อยู่ (${runningVersion()}) ต้องเพิ่มเลขเวอร์ชันก่อนสร้างแพ็กเกจ`)
       }
@@ -196,6 +255,8 @@ export function stagePackage(zipAbs: string, bytes: number): Promise<StagedInfo>
         serverSha256: manifest.files[SERVER_FILE].sha256,
         runningVersion: runningVersion(),
         tested: false,
+        signed,
+        signatureVerified,
       }
     } catch (e) {
       rmSync(dir, { recursive: true, force: true })
@@ -227,7 +288,7 @@ export function applyStaged(id: string): Promise<{ version: string; dir: string 
     if (!STAGED_ID.test(id)) throw notFound('ไม่พบแพ็กเกจที่เตรียมไว้ กรุณาอัปโหลดใหม่')
     const dir = join(staging(), id)
     if (!existsSync(join(dir, VERIFIED))) throw notFound('ไม่พบแพ็กเกจที่เตรียมไว้ กรุณาอัปโหลดใหม่')
-    const manifest = verifyTree(dir) // nothing changed since the check
+    const { manifest } = verifyTree(dir) // nothing changed since the check, signature included
     if (compareVersions(manifest.version, runningVersion()) <= 0) throw bad('แพ็กเกจไม่ใหม่กว่าเวอร์ชันที่ใช้อยู่')
     try {
       await smokeTest(dir, manifest)
@@ -293,5 +354,6 @@ export function updateStatus() {
     last: state.last,
     history: state.history.map(describe).filter(Boolean),
     maxPackageSize: config.updateMaxSize,
+    signatureRequired: signatureRequired(),
   }
 }
