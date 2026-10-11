@@ -62,6 +62,8 @@ export type SeededBug = {
   /** test file that should fail when the bug is present */
   tests: string
   description: string
+  /** another guard limits the damage: the auditor should still find it, but a verifier may rightly REFUTE it */
+  mitigated?: string
 }
 /** safe code that looks suspicious: a finding on it is a false positive by construction */
 export type Decoy = Patch & { id: string; why: string }

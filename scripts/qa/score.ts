@@ -105,7 +105,12 @@ const finish = (name: string, kpis: Kpi[]): Score => {
 
     if (v) {
       const onPlanted = a.findings.filter(f => bugOf(f) && !onDecoy(f))
-      const rightPlanted = onPlanted.filter(f => verdicts.get(f.id)?.verdict === 'CONFIRMED')
+      // a planted bug that another guard defuses may be refuted (with the guard named) or confirmed as low
+      const rightPlanted = onPlanted.filter(f => {
+        const v = verdicts.get(f.id)
+        const bug = bugs.find(b => b.id === bugOf(f))
+        return v?.verdict === 'CONFIRMED' || (!!bug?.mitigated && v?.verdict === 'REFUTED')
+      })
       const rightDecoy = decoyHits.filter(f => verdicts.get(f.id)?.verdict === 'REFUTED')
       const withRepro = v.verdicts.filter(x => x.repro)
       let reproduces = withRepro.length, discriminates = 0, discriminateTotal = 0, standalone = 0, standaloneTotal = 0
