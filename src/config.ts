@@ -34,6 +34,8 @@ export const config = {
   uploadChunkSize: num('UPLOAD_CHUNK_SIZE', 8 * 1024 ** 2), // 8 MB
   uploadSimultaneous: num('UPLOAD_SIMULTANEOUS', 3),
   uploadStaleMs: num('UPLOAD_STALE_HOURS', 3) * 3600_000,
+  /** bytes all visitors (not signed in) may upload together per day; 0 = visitors can not upload */
+  guestUploadDailyBytes: num('GUEST_UPLOAD_DAILY_BYTES', 1024 ** 3), // 1 GB
   /** uploads are refused when they would leave less free disk space than this */
   minFreeSpace: num('MIN_FREE_SPACE', 2 * 1024 ** 3), // 2 GB
   sessionTtlMs: num('SESSION_TTL_HOURS', 24 * 7) * 3600_000,
@@ -85,6 +87,8 @@ export const paths = {
   /** installed web updates: state.json, releases/, staging/ (see release.ts) */
   app: join(config.dataDir, 'app'),
   backupStatus: join(config.dataDir, 'backup-status.json'),
+  /** what visitors uploaded today, so a restart does not hand out a fresh daily allowance */
+  guestUploads: join(config.dataDir, 'guest-uploads.json'),
   publicDir: join(config.storageDir, config.publicDirName),
   /** parent of the default user folders (/users/<name>) */
   usersDir: join(config.storageDir, 'users'),

@@ -1219,6 +1219,225 @@ describe('full system: sessions & links', () => {
   })
 })
 
+describe('hardening: security headers', () => {
+  const PAGE_CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; " +
+    "media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; " +
+    "form-action 'self'; frame-ancestors 'self'"
+
+  test('the page, its scripts and its styles carry the CSP and Permissions-Policy', async () => {
+    const { config } = await import('../src/config')
+    const keep = config.webDir
+    const web = join(base, 'web-csp')
+    mkdirSync(join(web, 'assets'), { recursive: true })
+    writeFileSync(join(web, 'assets', 'app.js'), 'console.log(1)')
+    writeFileSync(join(web, 'assets', 'app.css'), 'body{}')
+    config.webDir = web
+    try {
+      for (const path of ['/', '/files/some/route', '/assets/app.js', '/assets/app.css', '/assets/missing.js']) {
+        const r = await guest.raw('GET', path)
+        expect(`${path} ${r.headers.get('content-security-policy')}`).toBe(`${path} ${PAGE_CSP}`)
+        expect(`${path} ${r.headers.get('permissions-policy')}`).toBe(`${path} camera=(), microphone=(), geolocation=()`)
+      }
+    } finally {
+      config.webDir = keep
+    }
+  })
+  test('downloads and the logo keep their own stricter CSP, untouched', async () => {
+    writeFileSync(storageAbs('csp.txt'), 'x')
+    const dl = await admin.raw('GET', '/api/download?space=home&path=/csp.txt')
+    expect(dl.headers.get('content-security-policy')).toBe("default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; sandbox")
+    // the PDF viewer gets no policy at all, so the page's one must not slip in either
+    writeFileSync(storageAbs('csp.pdf'), '%PDF-1.4')
+    const pdf = await admin.raw('GET', '/api/download?space=home&path=/csp.pdf&inline=1')
+    expect(pdf.headers.get('content-disposition')).toStartWith('inline')
+    expect(pdf.headers.get('content-security-policy')).toBeNull()
+    const logo = await guest.raw('GET', '/api/branding/logo')
+    expect(logo.status).toBe(200)
+    expect(logo.headers.get('content-security-policy')).toBe("default-src 'none'; style-src 'unsafe-inline'; sandbox")
+  })
+  test('HSTS only when the site runs on HTTPS, then on every response', async () => {
+    const { config } = await import('../src/config')
+    const paths = ['/', '/api/health', '/api/nope', '/api/download?space=home&path=/csp.txt', '/api/branding/logo']
+    for (const path of paths) expect((await admin.raw('GET', path)).headers.get('strict-transport-security')).toBeNull()
+    config.secureCookie = true
+    try {
+      for (const path of paths) {
+        expect(`${path} ${(await admin.raw('GET', path)).headers.get('strict-transport-security')}`).toBe(`${path} max-age=31536000`)
+      }
+    } finally {
+      config.secureCookie = false
+    }
+  })
+})
+
+describe('hardening: version only for those who need it', () => {
+  test('visitors and users get only the status, admins the full answer', async () => {
+    expect((await guest.json('GET', '/api/health')).data).toEqual({ status: 'ok' })
+    const u = new Client()
+    await u.start()
+    expect((await u.login('somchai', 'new-password-456')).status).toBe(200)
+    expect((await u.json('GET', '/api/health')).data).toEqual({ status: 'ok' })
+    const h = (await admin.json('GET', '/api/health')).data
+    const { config } = await import('../src/config')
+    expect(h).toMatchObject({ status: 'ok', version: config.version })
+    expect(Object.keys(h).sort()).toEqual(['boot', 'release', 'status', 'time', 'version'])
+  })
+  test('a faked forwarding header does not pass for this machine', async () => {
+    const { config } = await import('../src/config')
+    for (const [proxy, header] of [['true', 'x-forwarded-for'], ['cloudflare', 'cf-connecting-ip'], ['false', 'x-forwarded-for']] as const) {
+      config.trustProxy = proxy
+      try {
+        for (const ip of ['127.0.0.1', '::1', '::ffff:127.0.0.1']) {
+          const r = await guest.raw('GET', '/api/health', undefined, { [header]: ip })
+          expect(`${proxy} ${ip} ${JSON.stringify(await r.json())}`).toBe(`${proxy} ${ip} {"status":"ok"}`)
+        }
+      } finally {
+        config.trustProxy = 'false'
+      }
+    }
+  })
+  test('a request from this machine itself gets the version (the launcher depends on it)', async () => {
+    const { config } = await import('../src/config')
+    app.listen({ port: 0, hostname: '127.0.0.1' })
+    try {
+      const at = `http://127.0.0.1:${app.server.port}/api/health`
+      expect(await (await fetch(at)).json()).toMatchObject({ status: 'ok', version: config.version })
+      // a proxy on this machine connects from loopback too: what it forwards is not this machine
+      expect(await (await fetch(at, { headers: { 'cf-connecting-ip': '203.0.113.9' } })).json()).toEqual({ status: 'ok' })
+      expect(await (await fetch(at, { headers: { 'x-forwarded-for': '203.0.113.9' } })).json()).toEqual({ status: 'ok' })
+    } finally {
+      await app.stop()
+    }
+  })
+  test('the session tells the version to signed-in people only, and the password rule to everyone', async () => {
+    const { config } = await import('../src/config')
+    const visitor = (await new Client().json('GET', '/api/session')).data.config
+    expect(visitor.version).toBeUndefined()
+    expect(visitor.passwordMinLength).toBe(10)
+    expect((await admin.json('GET', '/api/session')).data.config.version).toBe(config.version)
+  })
+})
+
+describe('hardening: password policy', () => {
+  const make = (username: string, password: string) =>
+    admin.json('POST', '/api/admin/users', { username, name: username, password, role: 'user', permissions: ['read'], publicPermissions: [] })
+
+  test('new users need 10 characters, no username inside and no common password', async () => {
+    for (const [username, password] of [
+      ['policy-a', 'Nine-chr9'], // 9 characters
+      ['policy-username', 'Policy-Username'], // the username itself, other case
+      ['policy-c', 'my-POLICY-C-pass'], // contains it, other case
+      ['policy-d', 'QwertyUiop'], // common, other case
+      ['policy-e', '1234567890'],
+    ]) {
+      const r = await make(username, password)
+      expect(`${username} ${r.status}`).toBe(`${username} 400`)
+      expect(r.data.error).toMatch(/[฀-๿]/)
+    }
+    expect((await make('policy-ok', 'Tenchars10')).status).toBe(200)
+  })
+  test('admin-set passwords and password changes follow the same rule', async () => {
+    for (const password of ['short-pw1', 'xxPolicy-OKxx', 'qwertyuiop']) {
+      expect(`${password} ${(await admin.json('PUT', '/api/admin/users/policy-ok', { password })).status}`).toBe(`${password} 400`)
+    }
+    const c = new Client()
+    await c.start()
+    expect((await c.login('policy-ok', 'Tenchars10')).status).toBe(200)
+    for (const next of ['short-pw1', 'new-policy-ok-1', '1234567890']) {
+      expect(`${next} ${(await c.json('POST', '/api/password', { current: 'Tenchars10', next })).status}`).toBe(`${next} 400`)
+    }
+    expect((await c.json('POST', '/api/password', { current: 'Tenchars10', next: 'quiet-harbor-7' })).status).toBe(200)
+  })
+  test('passwords set before the rule keep working', async () => {
+    const { findUser, hashPassword } = await import('../src/auth')
+    findUser('policy-ok')!.passwordHash = await hashPassword('policy') // short, the username's start and common-ish
+    const c = new Client()
+    await c.start()
+    expect((await c.login('policy-ok', 'policy')).status).toBe(200)
+    // test-admin-pass contains "admin"; the admin still logs in with it
+    const a = new Client()
+    await a.start()
+    expect((await a.login('admin', 'test-admin-pass')).status).toBe(200)
+  })
+})
+
+describe('hardening: visitors\' daily upload allowance', () => {
+  const announce = (c: Client, size: number, name = 'guest.bin') => c.json('POST', '/api/upload', { space: 'public', path: '/', name, size })
+
+  test('shared by all visitors, counted on announce, given back when cancelled or left unfinished', async () => {
+    const { config, paths } = await import('../src/config')
+    const { cleanStaleUploads, guestUploadUsage } = await import('../src/uploads')
+    const { JsonStore } = await import('../src/store')
+    const { utimesSync, readFileSync } = await import('node:fs')
+    const keep = config.guestUploadDailyBytes
+    await admin.json('PUT', '/api/admin/settings', { guestPermissions: ['read', 'download', 'batchdownload', 'upload'] })
+    const v1 = new Client()
+    const v2 = new Client()
+    await v1.start()
+    await v2.start()
+    config.guestUploadDailyBytes = guestUploadUsage().used + 100
+    try {
+      // announced at the same time, they still can not go past the allowance together
+      const all = await Promise.all([v1, v2, v1, v2, v1].map(c => announce(c, 40)))
+      expect(all.map(r => r.status).sort()).toEqual([200, 200, 429, 429, 429])
+      expect(all.find(r => r.status === 429)!.data.error).toMatch(/[฀-๿]/)
+      // signed-in people do not count and are not limited
+      const signedIn = await admin.json('POST', '/api/upload', { space: 'public', path: '/', name: 'admin.bin', size: 1000 })
+      expect(signedIn.status).toBe(200)
+      expect((await announce(v1, 40)).status).toBe(429)
+
+      const [a, b] = all.filter(r => r.status === 200).map(r => r.data.id as string)
+      const ownerOf = (id: string) => all.indexOf(all.find(r => r.data?.id === id)!) % 2 ? v2 : v1
+      // cancelled: given back
+      expect((await ownerOf(a).json('DELETE', `/api/upload/${a}`)).status).toBe(200)
+      const d = await announce(v1, 40)
+      expect(d.status).toBe(200)
+      expect((await announce(v2, 40)).status).toBe(429)
+      // completed: stays counted
+      expect((await putChunk(ownerOf(b), b, 0, new Uint8Array(40))).status).toBe(200)
+      expect((await ownerOf(b).json('POST', `/api/upload/${b}/complete`)).status).toBe(200)
+      expect((await announce(v2, 40)).status).toBe(429)
+      // never completed: given back when the stale upload is cleaned up
+      const old = new Date(Date.now() - config.uploadStaleMs - 60_000)
+      utimesSync(join(paths.tmp, d.data.id, 'meta.json'), old, old)
+      cleanStaleUploads()
+      expect((await announce(v2, 40)).status).toBe(200)
+      // the count is kept in DATA_DIR
+      await JsonStore.flushAll()
+      const stored = JSON.parse(readFileSync(paths.guestUploads, 'utf8'))
+      expect(stored).toEqual({ day: guestUploadUsage().day, bytes: guestUploadUsage().used })
+      expect(guestUploadUsage().used).toBe(config.guestUploadDailyBytes - 20)
+
+      // 0 = visitors can not upload at all
+      config.guestUploadDailyBytes = 0
+      expect((await announce(v1, 0)).status).toBe(429)
+      expect((await admin.json('POST', '/api/upload', { space: 'public', path: '/', name: 'admin.bin', size: 1 })).status).toBe(200)
+    } finally {
+      config.guestUploadDailyBytes = keep
+      await admin.json('PUT', '/api/admin/settings', { guestPermissions: ['read', 'download', 'batchdownload'] })
+    }
+  })
+  test('the count survives a restart and starts again the next day', () => {
+    const dir = join(base, 'guest-quota-restart')
+    mkdirSync(dir, { recursive: true })
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const dayOf = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+    const usageAfterStart = (stored: unknown) => {
+      writeFileSync(join(dir, 'guest-uploads.json'), JSON.stringify(stored))
+      const code = `const { guestUploadUsage } = await import(${JSON.stringify(join(import.meta.dir, '..', 'src', 'uploads.ts'))}); console.log(JSON.stringify(guestUploadUsage()))`
+      const r = Bun.spawnSync([process.execPath, '-e', code], {
+        env: { ...process.env, DATA_DIR: dir, STORAGE_DIR: join(dir, 'storage'), GUEST_UPLOAD_DAILY_BYTES: '500' },
+      })
+      expect(r.exitCode).toBe(0)
+      return JSON.parse(r.stdout.toString().trim().split('\n').at(-1)!)
+    }
+    const today = new Date()
+    expect(usageAfterStart({ day: dayOf(today), bytes: 300 })).toEqual({ day: dayOf(today), used: 300, limit: 500 })
+    const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 12)
+    expect(usageAfterStart({ day: dayOf(yesterday), bytes: 300 }).used).toBe(0)
+  })
+})
+
 describe('admin', () => {
   test('status, activity, settings, logo', async () => {
     const st = await admin.json('GET', '/api/admin/status')

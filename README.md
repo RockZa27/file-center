@@ -146,6 +146,7 @@ Cloudflare Tunnel ให้คนภายนอกเข้าผ่านโ�
 | `UPLOAD_CHUNK_SIZE` | 8 MB | ขนาดชิ้นส่วนที่หน้าเว็บส่งทีละชิ้น |
 | `UPLOAD_SIMULTANEOUS` | 3 | จำนวนชิ้นที่ส่งพร้อมกัน |
 | `UPLOAD_STALE_HOURS` | 3 | ลบอัปโหลดที่ไม่เสร็จและไม่มีชิ้นใหม่เข้ามาเกินกี่ชั่วโมง |
+| `GUEST_UPLOAD_DAILY_BYTES` | 1 GB | ขนาดรวมที่ผู้เยี่ยมชม (ไม่ได้เข้าสู่ระบบ) ทุกคนอัปโหลดได้รวมกันต่อวัน (ไบต์) `0` = ผู้เยี่ยมชมอัปโหลดไม่ได้เลย |
 | `MIN_FREE_SPACE` | 2 GB | ปฏิเสธการอัปโหลด คัดลอก บีบอัด และแตก zip เมื่อดิสก์จะเหลือว่างน้อยกว่านี้ (ไบต์) |
 | `UNZIP_MAX_BYTES` / `UNZIP_MAX_FILES` | 20 GB / 50,000 | ขนาดรวมและจำนวนไฟล์สูงสุดที่แตกจาก zip หนึ่งไฟล์ได้ (กัน zip bomb) |
 | `TRASH_RETENTION_DAYS` | 30 | เก็บถังขยะกี่วัน |
@@ -158,8 +159,20 @@ Cloudflare Tunnel ให้คนภายนอกเข้าผ่านโ�
 | `BACKUP_KEEP` | 7 | เก็บไฟล์สำรองล่าสุดกี่ไฟล์ |
 | `BACKUP_HOUR` | 3 | สำรองอัตโนมัติทุกวันชั่วโมงไหน (0-23 ตามเวลาเครื่อง) `off` = ปิดการสำรองอัตโนมัติ |
 | `BACKUP_INCLUDE_FILES` | `false` | `true` = รวมไฟล์ที่อัปโหลด (`storage`) ไว้ในไฟล์สำรองด้วย (อาจใหญ่มาก) |
-| `SECURE_COOKIE` | `false` | ตั้งเป็น `true` เมื่อใช้ผ่าน HTTPS |
+| `SECURE_COOKIE` | `false` | ตั้งเป็น `true` เมื่อใช้ผ่าน HTTPS (เปิด cookie แบบ Secure และหัว `Strict-Transport-Security`) |
 | `TRUST_PROXY` | `false` | ที่มาของ IP ผู้ใช้: `cloudflare` = หัว `CF-Connecting-IP` (Cloudflare Tunnel), `true` = ค่าสุดท้ายของ `X-Forwarded-For` (nginx/Caddy ของคุณเอง), `false` = ไม่มี proxy |
+
+## ความปลอดภัยเพิ่มเติม
+
+- **หัว HTTP:** หน้าเว็บและไฟล์ JS/CSS ของหน้าเว็บส่ง `Content-Security-Policy` (โหลดสคริปต์ได้เฉพาะจากเว็บนี้เอง) และ `Permissions-Policy` (ปิดกล้อง ไมโครโฟน ตำแหน่ง)
+  ไฟล์ที่ดาวน์โหลดและโลโก้ใช้ policy ของตัวเองที่เข้มกว่า (`sandbox`) ไม่ถูกแทนที่ เมื่อ `SECURE_COOKIE=true` ทุกคำตอบมี `Strict-Transport-Security: max-age=31536000` ด้วย
+- **เลขเวอร์ชัน:** `GET /api/health` ตอบแค่ `{ "status": "ok" }` เว้นแต่คำขอมาจากเครื่อง server เอง (ที่อยู่ของการเชื่อมต่อเป็น loopback และไม่มีหัว `X-Forwarded-For` / `CF-Connecting-IP` ที่ proxy ใส่มา) หรือจาก admin ที่เข้าสู่ระบบ
+  ซึ่งได้ `version`, `release`, `boot`, `time` ตามเดิม (launcher และหน้าอัปเดต/กู้คืนใช้ค่าเหล่านี้) ส่วน `GET /api/session` ส่ง `config.version` ให้เฉพาะผู้ที่เข้าสู่ระบบ
+- **รหัสผ่าน:** รหัสผ่านใหม่ (สร้างผู้ใช้, admin ตั้งให้, เปลี่ยนเอง) ต้องยาวอย่างน้อย 10 ตัวอักษร ห้ามมีชื่อผู้ใช้อยู่ในรหัส (ไม่สนตัวพิมพ์เล็ก/ใหญ่) และห้ามเป็นรหัสที่ใช้กันบ่อย 100 อันดับแรก (`src/common-passwords.ts`)
+  รหัสผ่านเดิมที่ตั้งไว้ก่อนหน้ายังเข้าสู่ระบบได้ตามปกติ `GET /api/session` บอกความยาวขั้นต่ำใน `config.passwordMinLength`
+- **อัปโหลดของผู้เยี่ยมชม:** ถ้าเปิดสิทธิ์ `upload` ให้ผู้เยี่ยมชม ผู้เยี่ยมชมทุกคนใช้โควตารวมกันวันละ `GUEST_UPLOAD_DAILY_BYTES` (ค่าเริ่มต้น 1 GB, `0` = ห้ามอัปโหลด)
+  ระบบนับขนาดไฟล์ตั้งแต่ตอนเริ่มอัปโหลด (อัปโหลดพร้อมกันหลายไฟล์จึงเกินโควตาไม่ได้) และคืนให้เมื่อยกเลิกหรือไม่อัปโหลดจนเสร็จ (ถูกลบตาม `UPLOAD_STALE_HOURS`)
+  เกินโควตาจะได้ 429 ยอดที่ใช้เก็บใน `guest-uploads.json` ใน `DATA_DIR` จึงไม่หายเมื่อรีสตาร์ต และเริ่มนับใหม่ทุกวัน (ตามเวลาเครื่อง) ผู้ที่เข้าสู่ระบบไม่ถูกจำกัด
 
 ## สิทธิ์
 
@@ -186,7 +199,7 @@ src/
   fsx.ts            จัดการพาธอย่างปลอดภัย (กัน ../ และ symlink), คัดลอก/ย้าย
   zip.ts            สร้างและแตก zip ด้วย zip.js (ZIP64 ไฟล์เกิน 4 GB, ตรวจ CRC, กัน zip-slip / zip bomb)
   uploads.ts        อัปโหลดแบบแบ่งชิ้น กลับมาต่อได้
-  trash.ts, audit.ts, settings.ts, store.ts
+  trash.ts, audit.ts, settings.ts, store.ts, common-passwords.ts
   routes/           session, files, upload, admin, update, backup
 scripts/package.ts  สร้างแพ็กเกจอัปเดต (bun run package)
 web/                Vue 3 + Naive UI (build ไปที่ web/dist)
@@ -234,7 +247,7 @@ tests/update.test.ts, tests/backup.test.ts   ทดสอบอัปเดต�
 | `/api/admin/*` | ผู้ใช้, ภาพรวม, ประวัติ, ถังขยะ, ตั้งค่า, โลโก้ (เฉพาะ admin) |
 | `GET/POST /api/admin/backups` · `GET /api/admin/backups/:name/download` · `DELETE /api/admin/backups/:name` · `POST /api/admin/backups/restore` | สำรองข้อมูลระบบ: รายการ, สำรองทันที, ดาวน์โหลด, ลบ, กู้คืน (ต้องใส่รหัสผ่าน `{ name, password }`) (เฉพาะ admin) |
 | `/api/admin/update/*` | อัปเดตระบบ: อัปโหลดแพ็กเกจ (ส่งชิ้นส่วนด้วย `PUT /api/upload/:id/:n`), ตรวจ, ติดตั้ง, ย้อนกลับ (เฉพาะ admin) |
-| `GET /api/health` | ตรวจสุขภาพ (ใช้กับ Docker healthcheck) |
+| `GET /api/health` | ตรวจสุขภาพ (ใช้กับ Docker healthcheck) ผู้เยี่ยมชมได้แค่ `status` เครื่อง server เองและ admin ได้เวอร์ชันด้วย |
 
 ## ต่างจาก FileGator ต้นแบบอย่างไร
 
