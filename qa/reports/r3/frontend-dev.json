@@ -1,0 +1,1 @@
+{"agent":"frontend-dev","branch":"feature/logs-ui","base":"fa8333c","runIdFirst":"r3-frontend-1","runIdFinal":"r3-frontend-final","iterations":2,"notes":"LogsView.vue (stacked rows on phones), CSV export, dashboard errors/stale/null, guest hint, persistent refused alert, settings logo layout; stale/null states tested by mocking the API response"}
