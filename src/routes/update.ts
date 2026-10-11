@@ -1,7 +1,7 @@
 import { rmSync } from 'node:fs'
 import { Elysia, t } from 'elysia'
 import { audit } from '../audit'
-import { clearFailures, lockedFor, recordFailure } from '../auth'
+import { confirmPassword } from '../auth'
 import { config, paths } from '../config'
 import { context, requireAdmin } from '../context'
 import { ensureDir, forbidden, HttpError } from '../fsx'
@@ -16,22 +16,6 @@ function enabled() {
   if (!supervised()) {
     throw new HttpError(409, 'ระบบนี้ไม่ได้เริ่มผ่านตัวควบคุม (launcher) จึงรีสตาร์ตเองไม่ได้ ให้เริ่มด้วย "bun start" หรือ Docker', 'not-supervised')
   }
-}
-
-/**
- * Installing code is the most powerful thing an admin can do, so a stolen session cookie is not enough:
- * the password is asked again, and wrong guesses are rate limited like a login.
- */
-async function confirmPassword(user: ReturnType<typeof requireAdmin>, ip: string, password: string) {
-  const key = `update|${ip}|${user.username.toLowerCase()}`
-  const wait = lockedFor(key)
-  if (wait) throw new HttpError(429, `ใส่รหัสผ่านผิดหลายครั้ง กรุณารอ ${wait} วินาทีแล้วลองใหม่`)
-  if (!(await Bun.password.verify(password, user.passwordHash).catch(() => false))) {
-    recordFailure(key)
-    audit({ user: user.username, ip, action: 'update-denied' })
-    throw new HttpError(403, 'รหัสผ่านไม่ถูกต้อง')
-  }
-  clearFailures(key)
 }
 
 export const updateRoutes = new Elysia({ prefix: '/api/admin/update' })
@@ -73,7 +57,7 @@ export const updateRoutes = new Elysia({ prefix: '/api/admin/update' })
   .post('/apply', async ({ user, ip, body }) => {
     const admin = requireAdmin({ user, ip })
     enabled()
-    await confirmPassword(admin, ip, body.password)
+    await confirmPassword(admin, ip, body.password, 'update-denied')
     const r = await applyStaged(body.id)
     audit({ user: admin.username, ip, action: 'update-apply', detail: r.version })
     restartSoon()
@@ -83,7 +67,7 @@ export const updateRoutes = new Elysia({ prefix: '/api/admin/update' })
   .post('/rollback', async ({ user, ip, body }) => {
     const admin = requireAdmin({ user, ip })
     enabled()
-    await confirmPassword(admin, ip, body.password)
+    await confirmPassword(admin, ip, body.password, 'update-denied')
     // "builtin" = the version that came with the image
     const r = await rollbackTo(body.dir === 'builtin' ? null : body.dir)
     audit({ user: admin.username, ip, action: 'update-rollback', detail: r.version })

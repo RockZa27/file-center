@@ -12,6 +12,15 @@ export class JsonStore<T> {
     await Promise.all([...JsonStore.all].map(s => s.idle()))
   }
 
+  /**
+   * After a restore the files on disk are the truth: from here until the restart nothing in memory may
+   * overwrite them (a login would otherwise write the old users back)
+   */
+  static frozen = false
+  static freeze() {
+    JsonStore.frozen = true
+  }
+
   private data: T
   private queue: Promise<void> = Promise.resolve()
 
@@ -57,6 +66,7 @@ export class JsonStore<T> {
   }
 
   save(): void {
+    if (JsonStore.frozen) return
     const snapshot = JSON.stringify(this.data, null, 2)
     this.queue = this.queue.then(async () => {
       const tmp = `${this.file}.tmp`
@@ -66,6 +76,7 @@ export class JsonStore<T> {
   }
 
   flushSync(): void {
+    if (JsonStore.frozen) return
     const tmp = `${this.file}.tmp`
     writeFileSync(tmp, JSON.stringify(this.data, null, 2))
     renameSync(tmp, this.file)

@@ -128,6 +128,10 @@ Cloudflare Tunnel ให้คนภายนอกเข้าผ่านโ�
 | `LOGIN_MAX_ATTEMPTS` / `LOGIN_LOCKOUT_SECONDS` | 5 / 60 | ล็อกการเข้าสู่ระบบผิดซ้ำ (นับแยกตาม IP + ชื่อผู้ใช้) |
 | `WEB_UPDATE` | `true` | `false` = ปิดการอัปเดตจากหน้าเว็บ |
 | `UPDATE_MAX_SIZE` | 200 MB | ขนาดสูงสุดของแพ็กเกจอัปเดต (ไบต์) |
+| `BACKUP_DIR` | โฟลเดอร์ `backups` ข้าง `DATA_DIR` (Docker: `/data/backups`) | ที่เก็บไฟล์สำรองข้อมูลระบบ ควรอยู่คนละดิสก์กับข้อมูล |
+| `BACKUP_KEEP` | 7 | เก็บไฟล์สำรองล่าสุดกี่ไฟล์ |
+| `BACKUP_HOUR` | 3 | สำรองอัตโนมัติทุกวันชั่วโมงไหน (0-23 ตามเวลาเครื่อง) `off` = ปิดการสำรองอัตโนมัติ |
+| `BACKUP_INCLUDE_FILES` | `false` | `true` = รวมไฟล์ที่อัปโหลด (`storage`) ไว้ในไฟล์สำรองด้วย (อาจใหญ่มาก) |
 | `SECURE_COOKIE` | `false` | ตั้งเป็น `true` เมื่อใช้ผ่าน HTTPS |
 | `TRUST_PROXY` | `false` | ที่มาของ IP ผู้ใช้: `cloudflare` = หัว `CF-Connecting-IP` (Cloudflare Tunnel), `true` = ค่าสุดท้ายของ `X-Forwarded-For` (nginx/Caddy ของคุณเอง), `false` = ไม่มี proxy |
 
@@ -149,6 +153,7 @@ src/
   index.ts          ประกอบแอป, เสิร์ฟหน้าเว็บ, งานเบื้องหลังรายชั่วโมง
   launcher.ts       ตัวรันแอป: รีสตาร์ตหลังอัปเดต และย้อนกลับเวอร์ชันเองถ้าเวอร์ชันใหม่เปิดไม่ขึ้น
   updater.ts, release.ts, routes/update.ts   ตรวจ/ติดตั้ง/ย้อนกลับแพ็กเกจอัปเดตจากหน้าเว็บ
+  backup.ts, routes/backup.ts               สำรองข้อมูลระบบอัตโนมัติ และกู้คืน
   config.ts         ค่าตั้งต้นและตำแหน่งโฟลเดอร์
   auth.ts           ผู้ใช้, session, ล็อกการเข้าสู่ระบบ, การแปลงสิทธิ์เป็นพื้นที่ที่เข้าถึงได้
   context.ts        ตรวจ session/CSRF, รูปแบบ error เดียวกันทุก API
@@ -156,23 +161,37 @@ src/
   zip.ts            สร้างและแตก zip ด้วย zip.js (ZIP64 ไฟล์เกิน 4 GB, ตรวจ CRC, กัน zip-slip / zip bomb)
   uploads.ts        อัปโหลดแบบแบ่งชิ้น กลับมาต่อได้
   trash.ts, audit.ts, settings.ts, store.ts
-  routes/           session, files, upload, admin
+  routes/           session, files, upload, admin, update, backup
 scripts/package.ts  สร้างแพ็กเกจอัปเดต (bun run package)
 web/                Vue 3 + Naive UI (build ไปที่ web/dist)
 tests/api.test.ts   ทดสอบ API
+tests/update.test.ts, tests/backup.test.ts   ทดสอบอัปเดตและกู้คืนข้อมูลกับ launcher จริง
 ```
 
-ข้อมูลทั้งหมดเป็นไฟล์ธรรมดา (ไม่ต้องมีฐานข้อมูล) สำรองข้อมูลได้โดยคัดลอกโฟลเดอร์ `data/` (ถ้ารัน Docker) หรือ `storage/` กับ `data/` (ถ้ารันด้วย bun โดยตรง)
+ข้อมูลทั้งหมดเป็นไฟล์ธรรมดา (ไม่ต้องมีฐานข้อมูล) ระบบสำรองข้อมูลระบบให้เองทุกวัน (ดูหัวข้อถัดไป) ส่วนไฟล์ที่อัปโหลดสำรองได้โดยคัดลอกโฟลเดอร์ `data/storage/` (ถ้ารัน Docker) หรือ `storage/` (ถ้ารันด้วย bun โดยตรง)
 
-## การสำรองข้อมูลที่แสดงในหน้าภาพรวม
+## สำรองและกู้คืนข้อมูลระบบ
 
-ระบบไม่ได้สำรองเอง ถ้าสคริปต์สำรองของคุณเขียนไฟล์ `data/backup-status.json` หน้าภาพรวมจะแสดงผลและเตือนเมื่อล้มเหลวหรือเก่าเกิน 2 วัน:
+ถ้าดิสก์เสีย บัญชีผู้ใช้ รหัสผ่าน และการตั้งค่าจะหายทั้งหมด ระบบจึงสำรองข้อมูลระบบให้เองทุกวัน
 
-```json
-{ "status": "ok", "lastSuccess": "2026-10-08T02:00:00Z" }
-```
-
-(`status` เป็น `"ok"` หรือ `"failed"`)
+- **สำรองอะไรบ้าง:** หนึ่งครั้ง = ไฟล์เดียว `file-center-backup-YYYYMMDD-HHMMSS.zip` (เวลาของเครื่อง server) มี `users.json` (ผู้ใช้และรหัสผ่านที่เข้ารหัสแล้ว), `settings.json`, `branding/` (โลโก้), `logs/audit.log` และ `backup.json` (`{ version, createdAt, includesFiles }`)
+  ไม่รวม session, ถังขยะ, ไฟล์อัปโหลดที่ยังไม่เสร็จ, เวอร์ชันที่อัปเดตผ่านเว็บ และ log เก่าที่หมุนไฟล์แล้ว (`audit.log.N`)
+  ไฟล์ที่ผู้ใช้อัปโหลด (`storage`) ไม่รวมโดยค่าเริ่มต้นเพราะอาจใหญ่มาก ตั้ง `BACKUP_INCLUDE_FILES=true` เพื่อรวมไว้ในโฟลเดอร์ `storage/` ของ zip (ระบบตรวจพื้นที่ว่างก่อนตาม `MIN_FREE_SPACE`)
+- **เมื่อไหร่:** ทุกวันในชั่วโมง `BACKUP_HOUR` (ค่าเริ่มต้นตี 3) และทันทีที่ครั้งล่าสุดที่สำเร็จเก่ากว่า 2 วัน (เช่น เปิดระบบครั้งแรก หรือเครื่องปิดอยู่ตอนตี 3) ตั้ง `BACKUP_HOUR=off` เพื่อปิดการสำรองอัตโนมัติ
+  สำเร็จแล้วจะลบไฟล์ที่เก่าที่สุดให้เหลือ `BACKUP_KEEP` ไฟล์ (ค่าเริ่มต้น 7) ระหว่างเขียนไฟล์ชื่อจะลงท้าย `.partial` จึงไม่มีไฟล์ที่เขียนไม่ครบปนอยู่ในรายการ
+- **เก็บที่ไหน:** `BACKUP_DIR` ค่าเริ่มต้นคือโฟลเดอร์ `backups` ข้าง `DATA_DIR` (Docker: `./data/backups`) ซึ่งอยู่บนดิสก์เดียวกับข้อมูล
+  **ถ้าดิสก์นั้นเสีย ไฟล์สำรองก็หายไปด้วย** ควรชี้ไปดิสก์อื่น เช่น ใน Docker เพิ่ม volume `- /mnt/backup-disk/file-center:/backups` ใน `docker-compose.yml` แล้วตั้ง `BACKUP_DIR=/backups` ใน `.env`
+  หรือดาวน์โหลดไฟล์สำรองเก็บไว้นอกเครื่องเป็นระยะ (หน้ารายการสำรองข้อมูลจะเตือนเมื่อยังอยู่ดิสก์เดียวกัน)
+- **ผลการสำรอง** เขียนลง `data/backup-status.json` ทุกครั้ง หน้าภาพรวมแสดงผลและเตือนเมื่อล้มเหลวหรือเก่าเกิน 2 วัน:
+  ```json
+  { "status": "ok", "lastSuccess": "2026-10-08T20:00:00.000Z", "lastAttempt": "2026-10-08T20:00:00.000Z", "message": "สำรองข้อมูลสำเร็จ", "file": "file-center-backup-20261009-030000.zip", "size": 48213 }
+  ```
+  (`status` เป็น `"ok"` หรือ `"failed"`; เมื่อล้มเหลว `lastSuccess` ยังเป็นเวลาที่สำเร็จครั้งล่าสุด)
+- **กู้คืน** (`POST /api/admin/backups/restore`) เฉพาะ admin และต้องใส่รหัสผ่านซ้ำเหมือนการติดตั้งอัปเดต (ใส่ผิดซ้ำจะถูกล็อก) ระบบจะ
+  1) สำรองสถานะปัจจุบันไว้ก่อนหนึ่งไฟล์ (ถ้ากู้ผิดไฟล์ก็กู้กลับจากไฟล์นี้ได้) 2) ตรวจว่า `users.json` ในไฟล์สำรองอ่านได้และมีผู้ดูแลระบบอย่างน้อยหนึ่งคน
+  3) แทนที่ `users.json`, `settings.json` และ `branding/` แล้ว 4) รีสตาร์ตแอปผ่าน launcher (ต้องเริ่มด้วย `bun start` หรือ Docker) ผู้ที่ login อยู่ยัง login ต่อได้ถ้าบัญชีมีอยู่ในไฟล์สำรอง
+  ไฟล์ใน `storage` **ไม่ถูกกู้คืนจากหน้าเว็บ** แม้ไฟล์สำรองจะรวมไว้ ให้แตก `storage/` จาก zip ด้วยมือเมื่อต้องการ
+- **ดิสก์เสียทั้งลูก:** ติดตั้งระบบใหม่ เริ่มระบบหนึ่งครั้งแล้วหยุด จากนั้นแตก `users.json`, `settings.json` และ `branding/` จากไฟล์สำรองลงใน `DATA_DIR` (Docker: `data/system/`) แล้วเริ่มระบบอีกครั้ง
 
 ## API โดยสรุป
 
@@ -187,6 +206,7 @@ tests/api.test.ts   ทดสอบ API
 | `GET /api/download` (รองรับ `Range`) · `POST /api/batch` + `GET /api/batch/:token` | ดาวน์โหลด |
 | `POST /api/upload` → `PUT /api/upload/:id/:n` → `POST /api/upload/:id/complete` | อัปโหลดแบบแบ่งชิ้น |
 | `/api/admin/*` | ผู้ใช้, ภาพรวม, ประวัติ, ถังขยะ, ตั้งค่า, โลโก้ (เฉพาะ admin) |
+| `GET/POST /api/admin/backups` · `GET /api/admin/backups/:name/download` · `DELETE /api/admin/backups/:name` · `POST /api/admin/backups/restore` | สำรองข้อมูลระบบ: รายการ, สำรองทันที, ดาวน์โหลด, ลบ, กู้คืน (ต้องใส่รหัสผ่าน `{ name, password }`) (เฉพาะ admin) |
 | `/api/admin/update/*` | อัปเดตระบบ: อัปโหลดแพ็กเกจ (ส่งชิ้นส่วนด้วย `PUT /api/upload/:id/:n`), ตรวจ, ติดตั้ง, ย้อนกลับ (เฉพาะ admin) |
 | `GET /api/health` | ตรวจสุขภาพ (ใช้กับ Docker healthcheck) |
 

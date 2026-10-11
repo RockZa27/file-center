@@ -1,16 +1,10 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
-import { existsSync, mkdtempSync, mkdirSync, rmSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { existsSync, mkdirSync, rmSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createHash, randomBytes } from 'node:crypto'
 import { unzipSync, zipSync } from 'fflate'
-
-const base = mkdtempSync(join(tmpdir(), 'fc-test-'))
-process.env.STORAGE_DIR = join(base, 'storage')
-process.env.DATA_DIR = join(base, 'data')
-process.env.ADMIN_PASSWORD = 'test-admin-pass'
-process.env.UPLOAD_CHUNK_SIZE = String(1024 * 1024) // 1 MB chunks keep the test fast
-process.env.LOGIN_MAX_ATTEMPTS = '3'
+// sets STORAGE_DIR, DATA_DIR, ADMIN_PASSWORD (test-admin-pass), 1 MB upload chunks and LOGIN_MAX_ATTEMPTS=3
+import { base } from './in-process-env'
 
 let app: any
 class Client {
@@ -675,6 +669,11 @@ describe('full system: permission matrix', () => {
       ['DELETE', '/api/admin/update/staged/:id'],
       ['POST', '/api/admin/update/apply', { id: 'x', password: 'x' }],
       ['POST', '/api/admin/update/rollback', { dir: 'builtin', password: 'x' }],
+      ['GET', '/api/admin/backups'],
+      ['POST', '/api/admin/backups'],
+      ['GET', '/api/admin/backups/:name/download'],
+      ['DELETE', '/api/admin/backups/:name'],
+      ['POST', '/api/admin/backups/restore', { name: 'file-center-backup-20000101-000000.zip', password: 'x' }],
     ]
     const routes = app.routes.filter((r: any) => r.path.startsWith('/api/admin')).map((r: any) => `${r.method} ${r.path}`)
     expect(routes.filter((r: string) => !adminCalls.some(([m, p]) => `${m} ${p}` === r))).toEqual([])
@@ -712,6 +711,9 @@ describe('full system: CSRF', () => {
       ['DELETE', '/api/admin/update/staged/:id'],
       ['POST', '/api/admin/update/apply', { id: 'x', password: 'x' }],
       ['POST', '/api/admin/update/rollback', { dir: 'builtin', password: 'x' }],
+      ['POST', '/api/admin/backups'],
+      ['DELETE', '/api/admin/backups/:name'],
+      ['POST', '/api/admin/backups/restore', { name: 'file-center-backup-20000101-000000.zip', password: 'test-admin-pass' }],
       ['POST', '/api/mkdir', { ...files, path: '/', name: 'csrf-dir' }],
       ['POST', '/api/newfile', { ...files, path: '/', name: 'csrf.txt' }],
       ['PUT', '/api/content', { ...files, path: '/matrix.txt', content: 'pwned' }],

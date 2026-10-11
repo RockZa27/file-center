@@ -1,6 +1,7 @@
 import { createHash, randomBytes } from 'node:crypto'
+import { audit } from './audit'
 import { config, paths } from './config'
-import { bad, ensureDir, normRel, resolveIn } from './fsx'
+import { bad, ensureDir, HttpError, normRel, resolveIn } from './fsx'
 import { cleanPerms, PERMISSIONS, settings, type Perm } from './settings'
 import { JsonStore } from './store'
 
@@ -203,6 +204,23 @@ export function pruneLoginAttempts(): number {
     }
   }
   return n
+}
+
+/**
+ * Installing code or restoring a backup are the most powerful things an admin can do, so a stolen session
+ * cookie is not enough: the password is asked again, and wrong guesses are rate limited like a login.
+ * Every step-up shares one counter, so guesses can not be spread over several actions.
+ */
+export async function confirmPassword(user: User, ip: string, password: string, deniedAction: string) {
+  const key = `step-up|${ip}|${user.username.toLowerCase()}`
+  const wait = lockedFor(key)
+  if (wait) throw new HttpError(429, `ใส่รหัสผ่านผิดหลายครั้ง กรุณารอ ${wait} วินาทีแล้วลองใหม่`)
+  if (!(await Bun.password.verify(password, user.passwordHash).catch(() => false))) {
+    recordFailure(key)
+    audit({ user: user.username, ip, action: deniedAction })
+    throw new HttpError(403, 'รหัสผ่านไม่ถูกต้อง')
+  }
+  clearFailures(key)
 }
 
 // ───────────────────────────── access ─────────────────────────────

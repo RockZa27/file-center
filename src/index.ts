@@ -1,12 +1,15 @@
 import { existsSync, statSync } from 'node:fs'
 import { extname, join, normalize } from 'node:path'
 import { Elysia } from 'elysia'
+import { audit } from './audit'
 import { bootstrapAdmin, pruneLoginAttempts, purgeExpiredSessions } from './auth'
+import { backupDue, backupRunning, runBackup } from './backup'
 import { config, ensureDirs } from './config'
 import { context } from './context'
 import { within } from './fsx'
 import { onStop, shutdown } from './lifecycle'
 import { adminRoutes } from './routes/admin'
+import { backupRoutes } from './routes/backup'
 import { fileRoutes } from './routes/files'
 import { sessionRoutes } from './routes/session'
 import { updateRoutes } from './routes/update'
@@ -26,6 +29,13 @@ function housekeeping() {
     cleanStaging()
     pruneLoginAttempts()
     if (trash || uploads) console.log(`[housekeeping] trash: ${trash}, stale uploads: ${uploads}`)
+    // runs in the background; the result goes to backup-status.json, which the dashboard shows
+    if (backupDue() && !backupRunning()) {
+      runBackup().then(
+        b => audit({ user: 'system', ip: '-', action: 'backup-create', target: b.name, detail: 'อัตโนมัติ' }),
+        err => console.error('[backup] failed', (err as Error).message),
+      )
+    }
   } catch (err) {
     console.error('[housekeeping] failed', err)
   }
@@ -69,6 +79,7 @@ export const app = new Elysia({ serve: { maxRequestBodySize: config.uploadChunkS
   .use(sessionRoutes)
   .use(adminRoutes)
   .use(updateRoutes)
+  .use(backupRoutes)
   .use(fileRoutes)
   .use(uploadRoutes)
   .get('/*', ({ request, set }) => {
