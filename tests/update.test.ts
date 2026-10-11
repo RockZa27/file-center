@@ -285,7 +285,8 @@ suite('update from the web', () => {
     writeFileSync(join(dirs.data, 'app', 'state.json'), JSON.stringify({ ...state, current: '9.9.8-deadbeef', pending: { dir: '9.9.8-deadbeef', previous: null, at: new Date().toISOString() }, last: null }))
 
     // crash the app: the launcher restarts it, picks up the new state, and 9.9.8 must be rejected
-    const pid = (await Bun.$`pgrep -f ${join(root, 'src', 'index.ts')}`.nothrow().text()).trim().split('\n')[0]
+    // the launcher's own child only: matching by command line could hit another app run from this folder
+    const pid = (await Bun.$`pgrep -P ${launcher!.pid}`.nothrow().text()).trim().split('\n')[0]
     expect(pid).toBeTruthy()
     process.kill(Number(pid), 'SIGKILL')
 

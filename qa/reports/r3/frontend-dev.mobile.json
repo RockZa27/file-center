@@ -1,0 +1,1 @@
+{"agent":"frontend-dev","branch":"fix/activity-mobile","base":"2bee944","runIdFirst":"r3-activity-1","runIdFinal":"r3-activity-final","iterations":2,"notes":"cards at <=640px for activity, trash, users; fixed duplicate row keys; first qa run failed because tests/update.test.ts killed its running app via pgrep -f (test fixed by orchestrator)"}
