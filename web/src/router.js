@@ -18,6 +18,7 @@ export const router = createRouter({
         { path: 'admin/activity', name: 'activity', component: () => import('./views/ActivityView.vue'), meta: { admin: true } },
         { path: 'admin/trash', name: 'trash', component: () => import('./views/TrashView.vue'), meta: { admin: true } },
         { path: 'admin/update', name: 'update', component: () => import('./views/UpdateView.vue'), meta: { admin: true } },
+        { path: 'admin/backup', name: 'backup', component: () => import('./views/BackupView.vue'), meta: { admin: true } },
         { path: 'admin/settings', name: 'settings', component: () => import('./views/SettingsView.vue'), meta: { admin: true } },
       ],
     },

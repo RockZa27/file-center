@@ -108,6 +108,7 @@ import { NAlert, NButton, NForm, NFormItem, NIcon, NInput, NModal, NProgress, NS
 import { ArrowUndoOutline, CloudUploadOutline, RefreshOutline } from '@vicons/ionicons5'
 import { api, ApiError, putChunk } from '../api'
 import { useFeedback } from '../composables'
+import { bootId, sleep, waitForRestart } from '../restart'
 import { formatBytes, formatDate } from '../utils'
 
 const { t } = useI18n()
@@ -138,8 +139,6 @@ async function load() {
   loading.value = true
   try { st.value = await api.updateStatus() } catch (e) { fb.fail(e) } finally { loading.value = false }
 }
-
-const sleep = ms => new Promise(r => setTimeout(r, ms))
 
 async function sendPackage(file) {
   const init = await api.updateInit(file.size)
@@ -190,42 +189,22 @@ async function discard() {
   if (id) { try { await api.updateDiscard(id) } catch { /* it is cleaned up later anyway */ } }
 }
 
-/** the process id of the running server changes with every restart, so a changed `boot` means it came back */
-async function bootId() {
-  try {
-    const r = await fetch('/api/health', { cache: 'no-store' })
-    return r.ok ? (await r.json()).boot : null
-  } catch { return null }
-}
-
-async function waitForRestart(before, expectedVersion) {
+async function afterRestart(before, expectedVersion) {
   phase.value = 'installing'
-  const deadline = Date.now() + 150_000
-  await sleep(1500)
-  while (Date.now() < deadline) {
-    try {
-      const r = await fetch('/api/health', { cache: 'no-store' })
-      if (r.ok) {
-        const h = await r.json()
-        if (h.boot !== before) {
-          if (h.version === expectedVersion) {
-            fb.ok(t('update.done', { v: h.version }))
-            await sleep(800)
-            location.reload()
-          } else {
-            phase.value = 'idle'
-            staged.value = null
-            await load()
-            fb.warn(t('update.rolledBack', { v: h.version }))
-          }
-          return
-        }
-      }
-    } catch { /* the server is restarting */ }
-    await sleep(1000)
+  const h = await waitForRestart(before)
+  if (!h) {
+    phase.value = 'idle'
+    fb.warn(t('update.timeout'))
+  } else if (h.version === expectedVersion) {
+    fb.ok(t('update.done', { v: h.version }))
+    await sleep(800)
+    location.reload()
+  } else {
+    phase.value = 'idle'
+    staged.value = null
+    await load()
+    fb.warn(t('update.rolledBack', { v: h.version }))
   }
-  phase.value = 'idle'
-  fb.warn(t('update.timeout'))
 }
 
 async function run(call, version) {
@@ -236,7 +215,7 @@ async function run(call, version) {
     password.value = ''
     rollbackOpen.value = false
     working.value = false
-    await waitForRestart(before, version)
+    await afterRestart(before, version)
   } catch (e) {
     fb.fail(e)
     if (e instanceof ApiError && e.status === 404) { staged.value = null; phase.value = 'idle' }

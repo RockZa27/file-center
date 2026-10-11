@@ -97,6 +97,12 @@ export const api = {
   updateDiscard: id => call('DELETE', `/api/admin/update/staged/${id}`),
   updateApply: (id, password) => post('/api/admin/update/apply', { id, password }),
   updateRollback: (dir, password) => post('/api/admin/update/rollback', { dir, password }),
+
+  backups: () => get('/api/admin/backups'),
+  backupNow: () => post('/api/admin/backups'),
+  backupDelete: name => call('DELETE', `/api/admin/backups/${encodeURIComponent(name)}`),
+  backupRestore: (name, password) => post('/api/admin/backups/restore', { name, password }),
+  backupUrl: name => `/api/admin/backups/${encodeURIComponent(name)}/download`,
 }
 
 /** PUT one chunk with progress; resolves when the server has stored it */
