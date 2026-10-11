@@ -2,11 +2,16 @@
   <n-modal :show="show" preset="card" :title="t('nav.changePassword')" style="width: min(440px, 94vw)" :mask-closable="!app.user?.mustChangePassword" :closable="!app.user?.mustChangePassword" @update:show="v => emit('update:show', v)">
     <n-alert v-if="app.user?.mustChangePassword" type="warning" class="gap">{{ t('profile.mustChange') }}</n-alert>
     <n-form label-placement="top" @submit.prevent="save">
+      <!-- tells password managers which account the new password belongs to -->
+      <input type="text" name="username" autocomplete="username" :value="app.user?.username || ''" readonly hidden>
       <n-form-item :label="t('profile.current')">
         <n-input v-model:value="form.current" type="password" show-password-on="click" :input-props="{ autocomplete: 'current-password' }" />
       </n-form-item>
-      <n-form-item :label="t('profile.new')" :feedback="t('profile.hint')">
-        <n-input v-model:value="form.next" type="password" show-password-on="click" :input-props="{ autocomplete: 'new-password' }" />
+      <n-form-item :label="t('profile.new')" :show-feedback="false" class="gap">
+        <div class="field">
+          <n-input v-model:value="form.next" type="password" show-password-on="click" :input-props="{ autocomplete: 'new-password' }" />
+          <password-rules :password="form.next" :username="app.user?.username || ''" />
+        </div>
       </n-form-item>
       <n-form-item :label="t('profile.confirm')" :validation-status="mismatch ? 'error' : undefined" :feedback="mismatch ? t('profile.mismatch') : undefined">
         <n-input v-model:value="form.again" type="password" show-password-on="click" :input-props="{ autocomplete: 'new-password' }" @keyup.enter="save" />
@@ -28,6 +33,7 @@ import { NAlert, NButton, NForm, NFormItem, NInput, NModal } from 'naive-ui'
 import { api } from '../api'
 import { useFeedback } from '../composables'
 import { useAppStore } from '../store'
+import PasswordRules from './PasswordRules.vue'
 
 const props = defineProps({ show: Boolean })
 const emit = defineEmits(['update:show'])
@@ -38,7 +44,8 @@ const form = reactive({ current: '', next: '', again: '' })
 const busy = ref(false)
 
 const mismatch = computed(() => form.again && form.again !== form.next)
-const valid = computed(() => form.current && form.next.length >= 8 && form.next === form.again)
+// the length and username hints are shown live, but the server judges the password (its common-password list too)
+const valid = computed(() => form.current && form.next && form.next === form.again)
 
 watch(() => props.show, v => { if (v) Object.assign(form, { current: '', next: '', again: '' }) })
 
@@ -60,5 +67,6 @@ async function save() {
 
 <style scoped>
 .gap { margin-bottom: 16px; }
+.field { width: 100%; min-width: 0; }
 .foot { display: flex; justify-content: flex-end; gap: 8px; }
 </style>

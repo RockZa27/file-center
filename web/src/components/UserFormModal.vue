@@ -6,7 +6,10 @@
         <n-form-item :label="t('users.name')"><n-input v-model:value="f.name" /></n-form-item>
       </div>
       <n-form-item :label="isEdit ? t('users.newPassword') : t('login.password')">
-        <n-input v-model:value="f.password" type="password" show-password-on="click" :placeholder="isEdit ? t('users.keepPassword') : t('profile.hint')" :input-props="{ autocomplete: 'new-password' }" />
+        <div class="field">
+          <n-input v-model:value="f.password" type="password" show-password-on="click" :placeholder="isEdit ? t('users.keepPassword') : ''" :input-props="{ autocomplete: 'new-password' }" />
+          <password-rules :password="f.password" :username="f.username" />
+        </div>
       </n-form-item>
       <n-form-item :label="t('users.role')">
         <n-radio-group v-model:value="f.role" :disabled="isEdit && user.username === app.user.username">
@@ -44,6 +47,7 @@ import { useFeedback } from '../composables'
 import { useAppStore } from '../store'
 import { parentPath } from '../utils'
 import FolderPicker from './FolderPicker.vue'
+import PasswordRules from './PasswordRules.vue'
 
 const PERMS = ['read', 'download', 'batchdownload', 'upload', 'write', 'zip']
 
@@ -66,7 +70,8 @@ const busy = ref(false)
 const picker = ref(false)
 const f = reactive({ username: '', name: '', password: '', role: 'user', homedir: '', permissions: [], publicPermissions: [] })
 const isEdit = computed(() => !!props.user)
-const ready = computed(() => f.username.trim().length >= 3 && f.name.trim() && (isEdit.value || f.password.length >= 8))
+// the password rules are hinted live; the server judges them (its common-password list too)
+const ready = computed(() => f.username.trim().length >= 3 && f.name.trim() && (isEdit.value || f.password))
 const parentOf = p => (p ? parentPath(p) : '/')
 
 watch(() => props.show, v => {
@@ -100,6 +105,7 @@ async function save() {
 .form { display: flex; flex-direction: column; gap: 14px; }
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .home { display: flex; gap: 8px; width: 100%; }
+.field { width: 100%; min-width: 0; }
 .hint { font-size: 12.5px; margin-top: -4px; }
 .foot { display: flex; justify-content: flex-end; gap: 8px; }
 @media (max-width: 520px) { .two { grid-template-columns: 1fr; } }

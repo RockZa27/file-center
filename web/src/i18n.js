@@ -19,9 +19,14 @@ const th = {
     submit: 'เข้าสู่ระบบ', failed: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', backToPublic: 'กลับไปหน้าดาวน์โหลด',
   },
   profile: {
-    current: 'รหัสผ่านปัจจุบัน', new: 'รหัสผ่านใหม่', confirm: 'ยืนยันรหัสผ่านใหม่', hint: 'อย่างน้อย 8 ตัวอักษร',
+    current: 'รหัสผ่านปัจจุบัน', new: 'รหัสผ่านใหม่', confirm: 'ยืนยันรหัสผ่านใหม่',
     mismatch: 'รหัสผ่านไม่ตรงกัน', done: 'เปลี่ยนรหัสผ่านแล้ว',
     mustChange: 'บัญชีนี้ยังใช้รหัสผ่านเริ่มต้นที่ระบบสร้างให้ กรุณาตั้งรหัสผ่านใหม่ก่อนใช้งานต่อ',
+  },
+  password: {
+    rule: 'อย่างน้อย {n} ตัวอักษร ไม่ซ้ำกับชื่อผู้ใช้ และไม่ใช่รหัสผ่านที่ใช้กันทั่วไป',
+    lengthOk: 'ยาว {len} ตัวอักษร', tooShort: 'ยาว {len} ตัวอักษร ต้องมีอย่างน้อย {n}',
+    noUsername: 'ไม่มีชื่อผู้ใช้อยู่ในรหัสผ่าน', hasUsername: 'มีชื่อผู้ใช้อยู่ในรหัสผ่าน',
   },
   files: {
     emptyTitle: 'โฟลเดอร์นี้ยังว่างอยู่', emptyText: 'ลากไฟล์มาวางที่นี่ หรือกดปุ่มอัปโหลดเพื่อเพิ่มไฟล์',
@@ -91,6 +96,11 @@ const th = {
   update: {
     subtitle: 'อัปเดตระบบโดยโยนไฟล์แพ็กเกจ (.zip) ลงในหน้านี้ ไม่ต้อง FTP และไม่ต้องเข้าเครื่อง server',
     current: 'เวอร์ชันที่ใช้อยู่', source: 'ที่มา', sourceBuiltin: 'เวอร์ชันที่มากับระบบ', sourceUpdate: 'อัปเดตผ่านเว็บ',
+    signing: 'ลายเซ็นแพ็กเกจ', signingRequired: 'บังคับ: รับเฉพาะแพ็กเกจที่ลงนามด้วยกุญแจของคุณ',
+    signingOptional: 'ไม่บังคับ (ยังไม่ได้ตั้ง UPDATE_PUBLIC_KEY)',
+    signature: 'ลายเซ็น', signedVerified: 'ลงนามแล้ว ตรวจลายเซ็นผ่าน', signedUnchecked: 'ลงนามแล้ว (ระบบยังไม่ได้ตั้งกุญแจตรวจ)',
+    unsigned: 'แพ็กเกจไม่ได้ลงนาม',
+    unsignedBody: 'ระบบตรวจไม่ได้ว่าใครสร้างแพ็กเกจนี้ ติดตั้งเฉพาะเมื่อคุณสร้างเองหรือมั่นใจในที่มา ตั้ง UPDATE_PUBLIC_KEY เพื่อรับเฉพาะแพ็กเกจที่ลงนามแล้ว',
     notSupervised: 'ระบบนี้ไม่ได้เริ่มผ่านตัวควบคุม จึงรีสตาร์ตตัวเองไม่ได้ ให้เริ่มด้วย "bun start" หรือ Docker (docker compose up -d --build) แล้วกลับมาที่หน้านี้',
     disabled: 'ปิดการอัปเดตผ่านหน้าเว็บอยู่ (ตั้งค่า WEB_UPDATE=false)',
     dropTitle: 'ลากไฟล์แพ็กเกจ .zip มาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์',
@@ -108,7 +118,7 @@ const th = {
     versions: 'เวอร์ชันที่ย้อนกลับได้', none: 'ยังไม่มีเวอร์ชันเก่าให้ย้อนกลับ (ระบบเก็บไว้ 2 เวอร์ชันล่าสุด)',
     builtin: 'เวอร์ชันที่มากับระบบ', rollback: 'ย้อนกลับ', rollbackTitle: 'ย้อนกลับเป็นเวอร์ชัน {v}?',
     rollbackBody: 'ระบบจะรีสตาร์ตเป็นเวอร์ชัน {v} ข้อมูลและไฟล์ไม่ถูกแตะต้อง',
-    how: 'วิธีสร้างแพ็กเกจ', howBody: 'บนเครื่องที่มีโค้ด: เพิ่มเลข "version" ใน package.json แล้วรัน bun run package จะได้ไฟล์ใน dist-update/',
+    how: 'วิธีสร้างแพ็กเกจ', howBody: 'บนเครื่องที่มีโค้ด: เพิ่มเลข "version" ใน package.json แล้วรัน bun run package --sign ~/file-center-keys/update-signing.key จะได้ไฟล์ที่ลงนามแล้วใน dist-update/ (ไม่ใส่ --sign จะได้แพ็กเกจที่ไม่ได้ลงนาม ซึ่งระบบรับเฉพาะเมื่อไม่ได้ตั้ง UPDATE_PUBLIC_KEY)',
   },
   backup: {
     subtitle: 'สำรองบัญชีผู้ใช้ รหัสผ่าน การตั้งค่า โลโก้ และประวัติการใช้งาน ไว้กู้คืนเมื่อข้อมูลเสียหายหรือตั้งค่าผิด',
@@ -160,9 +170,14 @@ const en = {
     submit: 'Sign in', failed: 'Wrong username or password', backToPublic: 'Back to downloads',
   },
   profile: {
-    current: 'Current password', new: 'New password', confirm: 'Confirm new password', hint: 'At least 8 characters',
+    current: 'Current password', new: 'New password', confirm: 'Confirm new password',
     mismatch: 'Passwords do not match', done: 'Password changed',
     mustChange: 'This account still uses the generated first-run password. Please choose a new one to continue.',
+  },
+  password: {
+    rule: 'At least {n} characters, not the same as the username, and not a commonly used password',
+    lengthOk: '{len} characters long', tooShort: '{len} characters long, needs at least {n}',
+    noUsername: 'Does not contain the username', hasUsername: 'Contains the username',
   },
   files: {
     emptyTitle: 'This folder is empty', emptyText: 'Drop files here or press upload to add some',
@@ -232,6 +247,11 @@ const en = {
   update: {
     subtitle: 'Update the system by dropping a package (.zip) on this page: no FTP, no access to the server',
     current: 'Running version', source: 'Source', sourceBuiltin: 'Shipped with the system', sourceUpdate: 'Web update',
+    signing: 'Package signatures', signingRequired: 'Required: only packages signed with your key are accepted',
+    signingOptional: 'Not required (UPDATE_PUBLIC_KEY is not set)',
+    signature: 'Signature', signedVerified: 'Signed, signature verified', signedUnchecked: 'Signed (no verification key is set on this system)',
+    unsigned: 'The package is not signed',
+    unsignedBody: 'The system can not tell who built this package. Install it only if you built it yourself or trust where it came from. Set UPDATE_PUBLIC_KEY to accept signed packages only.',
     notSupervised: 'This instance was not started by the launcher, so it can not restart itself. Start it with "bun start" or Docker (docker compose up -d --build), then come back.',
     disabled: 'Updating from the web is turned off (WEB_UPDATE=false)',
     dropTitle: 'Drop the package .zip here, or click to choose a file',
@@ -249,7 +269,7 @@ const en = {
     versions: 'Versions you can go back to', none: 'No older version to go back to yet (the last 2 are kept)',
     builtin: 'Shipped with the system', rollback: 'Roll back', rollbackTitle: 'Go back to version {v}?',
     rollbackBody: 'The system restarts as version {v}. Data and files are not touched.',
-    how: 'Building a package', howBody: 'On a machine with the code: raise "version" in package.json and run bun run package. The file appears in dist-update/',
+    how: 'Building a package', howBody: 'On a machine with the code: raise "version" in package.json and run bun run package --sign ~/file-center-keys/update-signing.key. The signed file appears in dist-update/ (without --sign the package is unsigned, which is accepted only when UPDATE_PUBLIC_KEY is not set)',
   },
   backup: {
     subtitle: 'Back up accounts, passwords, settings, the logo and the activity log, to restore after damage or a wrong change',
