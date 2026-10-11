@@ -1,0 +1,10 @@
+{"agent":"ux-tester","flows":[
+{"name":"logs-page","passed":true,"consoleErrors":0,"expectedHttpErrors":2,"screenshot":"qa/reports/r3/screenshots/logs-page.png","notes":"broken-zip restore logged as warn; failed backup logged as error and found with filter+search; logs zip 1619 bytes with audit/launcher/system logs"},
+{"name":"no-secrets-in-logs","passed":true,"consoleErrors":0,"expectedHttpErrors":0,"screenshot":"qa/reports/r3/screenshots/no-secrets-in-logs.png","notes":"no typed password, fc_sid value or batch token in the logs zip, access.log or the data folder; access.log shows /api/batch/***"},
+{"name":"activity-csv","passed":true,"consoleErrors":0,"expectedHttpErrors":0,"screenshot":"qa/reports/r3/screenshots/activity-csv.png","notes":"UTF-8 BOM, Thai readable, 28 rows = 28 audit lines, '=1+1.txt quoted"},
+{"name":"dashboard-errors","passed":true,"consoleErrors":0,"expectedHttpErrors":0,"screenshot":"qa/reports/r3/screenshots/dashboard-errors.png","notes":"warning + link opens /admin/logs?level=error"},
+{"name":"stats","passed":true,"consoleErrors":0,"expectedHttpErrors":0,"screenshot":"qa/reports/r3/screenshots/stats.png","notes":"30,003 files counted, dashboard 0.2 s, status API < 5 ms"},
+{"name":"guest-hint","passed":true,"consoleErrors":0,"expectedHttpErrors":0,"screenshot":"qa/reports/r3/screenshots/guest-hint.png","notes":"warning before saving, save disabled"},
+{"name":"update-refused-alert","passed":true,"consoleErrors":0,"expectedHttpErrors":2,"screenshot":"qa/reports/r3/screenshots/update-refused-alert.png","notes":"alert still visible after 12 s; used click-to-choose (scripted drops do not reach the dragger)"},
+{"name":"mobile","passed":false,"consoleErrors":0,"expectedHttpErrors":0,"screenshot":"qa/reports/r3/screenshots/mobile.png","notes":"logs page fine; activity table 913 px in a 341 px box (fixed :scroll-x=760, no narrow layout): action, target and IP columns off screen"}
+]}
