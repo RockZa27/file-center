@@ -22,7 +22,8 @@ export async function waitForRestart(before, timeout = 150_000) {
       const r = await fetch('/api/health', { cache: 'no-store' })
       if (r.ok) {
         const h = await r.json()
-        if (h.boot !== before) return h
+        // an answer without `boot` (the session ended, so the full health answer is withheld) proves nothing
+        if (typeof h.boot === 'number' && h.boot !== before) return h
       }
     } catch { /* the server is restarting */ }
     await sleep(1000)
