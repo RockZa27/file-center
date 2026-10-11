@@ -92,4 +92,7 @@ onMounted(load)
 :deep(.stacked) { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 :deep(.stacked-meta) { display: flex; align-items: center; gap: 4px 12px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); padding-left: 30px; }
 :deep(.stacked .row-actions) { justify-content: flex-start; padding-left: 30px; }
+/* a phone can not hover for the title tooltip: show the whole name and path, wrapped */
+:deep(.stacked .name-cell) { align-items: flex-start; }
+:deep(.stacked .name-cell .truncate) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
 </style>
