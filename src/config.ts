@@ -58,6 +58,11 @@ export const config = {
   webUpdate: env('WEB_UPDATE', 'true') !== 'false',
   /** biggest update package an admin may upload */
   updateMaxSize: num('UPDATE_MAX_SIZE', 200 * 1024 ** 2),
+  /**
+   * Ed25519 public key (base64 SPKI DER, from "bun run package --gen-key") that update packages must be signed with.
+   * Empty = packages are not signed-checked. Parsed in updater.ts, so a bad value refuses packages instead of crashing the app.
+   */
+  updatePublicKey: env('UPDATE_PUBLIC_KEY', '').trim(),
   /** where backups are written; best on another disk, a dead disk takes the backups on it along */
   backupDir: resolve(env('BACKUP_DIR', join(dirname(dataDir), 'backups'))),
   /** after a successful backup the oldest beyond this many are deleted */

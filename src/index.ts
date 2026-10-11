@@ -16,10 +16,14 @@ import { updateRoutes } from './routes/update'
 import { uploadRoutes } from './routes/upload'
 import { purgeExpired } from './trash'
 import { cleanStaleUploads } from './uploads'
-import { cleanStaging } from './updater'
+import { cleanStaging, signingKey } from './updater'
 
 ensureDirs()
 await bootstrapAdmin()
+
+// a bad key must not stop the app (the admin could not reach the update page to see why); packages are refused instead
+const keyError = signingKey().error
+if (keyError) console.error(`[update] UPDATE_PUBLIC_KEY ไม่ถูกต้อง: ${keyError} ระบบจะไม่รับแพ็กเกจอัปเดตใด ๆ จนกว่าจะแก้ค่านี้`)
 
 function housekeeping() {
   try {
