@@ -113,13 +113,16 @@ if (base) {
     for (const n of testNames(await git('show', `${base}:${f}`))) before.add(n)
   }
   for (const f of readdirSync(join(root, 'tests'))) for (const n of testNames(readFileSync(join(root, 'tests', f), 'utf8'))) after.add(n)
-  const diff = await git('diff', base, '--', 'tests')
-  const skipAdded = diff.split('\n').filter(l => l.startsWith('+') && !l.startsWith('+++') && /\.(skip|only|todo)\b|\b(xit|xdescribe)\(/.test(l))
+  // git diff does not show files that are not committed or added yet: read those whole, every line counts as added
+  const untracked = (await git('ls-files', '--others', '--exclude-standard')).split('\n').filter(Boolean)
+  const diff = (await git('diff', base, '--', 'tests')).split('\n').filter(l => l.startsWith('+') && !l.startsWith('+++'))
+  for (const f of untracked.filter(f => f.startsWith('tests/'))) diff.push(...readFileSync(join(root, f), 'utf8').split('\n').map(l => `+${l}`))
+  const skipAdded = diff.filter(l => /\.(skip|only|todo)\b|\b(xit|xdescribe)\(/.test(l))
   let outOfScope: string[] = []
   const allow = opt('allow')
   if (allow) {
     const globs = allow.split(',').map(g => new Bun.Glob(g.trim()))
-    const changed = (await git('diff', '--name-only', base)).split('\n').filter(Boolean)
+    const changed = [...(await git('diff', '--name-only', base)).split('\n').filter(Boolean), ...untracked]
     outOfScope = changed.filter(f => !globs.some(g => g.match(f)))
   }
   guards = {
