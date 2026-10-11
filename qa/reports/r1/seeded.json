@@ -1,0 +1,68 @@
+{
+  "dir": "/tmp/fc-audit-r1",
+  "bugs": {
+    "update-sha-skip": [
+      {
+        "file": "src/updater.ts",
+        "line": 93
+      }
+    ],
+    "rename-read-perm": [
+      {
+        "file": "src/routes/files.ts",
+        "line": 170
+      }
+    ],
+    "session-never-expires": [
+      {
+        "file": "src/auth.ts",
+        "line": 134
+      }
+    ],
+    "xff-first-entry": [
+      {
+        "file": "src/context.ts",
+        "line": 12
+      }
+    ],
+    "lockout-case": [
+      {
+        "file": "src/routes/session.ts",
+        "line": 61
+      }
+    ],
+    "download-read-perm": [
+      {
+        "file": "src/routes/files.ts",
+        "line": 262
+      }
+    ],
+    "guest-all-perms": [
+      {
+        "file": "src/auth.ts",
+        "line": 223
+      }
+    ]
+  },
+  "decoys": {
+    "decoy-todo-download": [
+      {
+        "file": "src/routes/files.ts",
+        "line": 260
+      }
+    ],
+    "decoy-legacy-join": [
+      {
+        "file": "src/fsx.ts",
+        "line": 191
+      }
+    ],
+    "decoy-csrf-note": [
+      {
+        "file": "src/context.ts",
+        "line": 51
+      }
+    ]
+  },
+  "cleanDir": "/tmp/fc-clean-r1"
+}

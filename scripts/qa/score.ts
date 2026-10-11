@@ -84,7 +84,8 @@ const finish = (name: string, kpis: Kpi[]): Score => {
     const verdicts = new Map((v?.verdicts ?? []).map(x => [x.findingId, x]))
     const planted = Object.keys(seed.bugs)
     const bugOf = (f: AuditorReport['findings'][number]) => planted.find(id => near(f, seed.bugs[id]))
-    const onDecoy = (f: AuditorReport['findings'][number]) => Object.values(seed.decoys).some(locs => near(f, locs, 3))
+    // a finding on a planted bug never counts as a decoy hit, even when a decoy sits a line away
+    const onDecoy = (f: AuditorReport['findings'][number]) => !bugOf(f) && Object.values(seed.decoys).some(locs => near(f, locs, 3))
     const caught = planted.filter(id => a.findings.some(f => bugOf(f) === id))
     const decoyHits = a.findings.filter(onDecoy)
     // real = on a planted bug, or confirmed by the verifier on code that is not a decoy
