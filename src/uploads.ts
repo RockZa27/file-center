@@ -4,6 +4,7 @@ import { open } from 'node:fs/promises'
 import { join } from 'node:path'
 import { config, paths } from './config'
 import { bad, ensureDir, ensureSpace, forbidden, HttpError, notFound, resolveIn, uniquePath, validName } from './fsx'
+import { JsonStore } from './store'
 
 type Meta = {
   id: string
@@ -15,6 +16,8 @@ type Meta = {
   chunkSize: number
   total: number
   createdAt: number
+  /** set for a visitor's upload: the day its size was counted against the visitors' allowance */
+  guestDay?: string
 }
 
 // Every chunk is written straight to its offset in one "data" file, and an empty file named after the chunk
@@ -40,6 +43,37 @@ export function checkUpload(id: string, owner: string) {
   loadMeta(id, owner)
 }
 
+// ───────────── visitors' daily allowance ─────────────
+
+// All visitors share one allowance per day (machine time). An upload takes its whole size when it is announced,
+// so uploads sent in parallel can not together go past it, and gives it back when it is cancelled or never completes.
+const guestStore = new JsonStore<{ day: string; bytes: number }>(paths.guestUploads, () => ({ day: '', bytes: 0 }))
+const pad = (n: number) => String(n).padStart(2, '0')
+const today = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+export function guestUploadUsage(): { day: string; used: number; limit: number } {
+  const day = today()
+  const s = guestStore.value
+  return { day, used: s.day === day && Number.isFinite(s.bytes) ? s.bytes : 0, limit: config.guestUploadDailyBytes }
+}
+
+function reserveGuest(size: number): string {
+  const { day, used, limit } = guestUploadUsage()
+  if (limit <= 0) throw new HttpError(429, 'ผู้เยี่ยมชมอัปโหลดไฟล์ไม่ได้ กรุณาเข้าสู่ระบบก่อน')
+  if (used + size > limit) throw new HttpError(429, 'ผู้เยี่ยมชมอัปโหลดครบปริมาณของวันนี้แล้ว กรุณาลองใหม่พรุ่งนี้หรือเข้าสู่ระบบ')
+  guestStore.replace({ day, bytes: used + size })
+  return day
+}
+
+function releaseGuest(meta: Meta) {
+  // bytes counted on an earlier day are not taken off today's count: that one started from zero
+  if (!meta.guestDay || guestStore.value.day !== meta.guestDay) return
+  guestStore.update(d => { d.bytes = Math.max(0, d.bytes - meta.size) })
+}
+
 const touch = (id: string) => {
   const now = new Date()
   try { utimesSync(join(dirOf(id), 'meta.json'), now, now) } catch { /* ignore */ }
@@ -47,6 +81,8 @@ const touch = (id: string) => {
 
 export function initUpload(args: {
   owner: string
+  /** a visitor who is not signed in: counted against the visitors' daily allowance */
+  guest?: boolean
   root: string
   dir: string
   relativeDir: string[]
@@ -66,10 +102,18 @@ export function initUpload(args: {
   const id = randomBytes(12).toString('hex')
   const chunkSize = config.uploadChunkSize
   const total = Math.max(1, Math.ceil(size / chunkSize))
-  ensureDir(dirOf(id))
   const meta: Meta = { id, owner: args.owner, destDir, name, size, chunkSize, total, createdAt: Date.now() }
-  writeFileSync(dataOf(id), '')
-  writeFileSync(join(dirOf(id), 'meta.json'), JSON.stringify(meta))
+  // counted before anything is written and in the same tick as the check: nothing can slip in between
+  if (args.guest) meta.guestDay = reserveGuest(size)
+  try {
+    ensureDir(dirOf(id))
+    writeFileSync(dataOf(id), '')
+    writeFileSync(join(dirOf(id), 'meta.json'), JSON.stringify(meta))
+  } catch (err) {
+    releaseGuest(meta)
+    rmSync(dirOf(id), { recursive: true, force: true })
+    throw err
+  }
   return { id, chunkSize, total }
 }
 
@@ -119,8 +163,9 @@ export async function completeUpload(id: string, owner: string) {
 }
 
 export function cancelUpload(id: string, owner: string) {
-  loadMeta(id, owner)
+  const meta = loadMeta(id, owner)
   rmSync(dirOf(id), { recursive: true, force: true })
+  releaseGuest(meta)
 }
 
 /** remove uploads that did not receive anything new for a few hours */
@@ -131,7 +176,10 @@ export function cleanStaleUploads(): number {
     try {
       const stamp = statSync(join(paths.tmp, id, 'meta.json')).mtimeMs
       if (Date.now() - stamp > config.uploadStaleMs) {
+        let meta: Meta | null = null
+        try { meta = JSON.parse(readFileSync(join(paths.tmp, id, 'meta.json'), 'utf8')) as Meta } catch { /* unreadable: nothing to give back */ }
         rmSync(join(paths.tmp, id), { recursive: true, force: true })
+        if (meta) releaseGuest(meta)
         n++
       }
     } catch {

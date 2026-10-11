@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { audit } from './audit'
+import { COMMON_PASSWORDS } from './common-passwords'
 import { config, paths } from './config'
 import { bad, ensureDir, HttpError, normRel, resolveIn } from './fsx'
 import { cleanPerms, PERMISSIONS, settings, type Perm } from './settings'
@@ -44,9 +45,15 @@ export const publicUser = (u: User) => ({
 
 export const hashPassword = (pw: string) => Bun.password.hash(pw)
 
-export function checkPasswordStrength(pw: unknown): string {
-  if (typeof pw !== 'string' || pw.length < 8) throw bad('รหัสผ่านต้องยาวอย่างน้อย 8 ตัวอักษร')
+export const PASSWORD_MIN_LENGTH = 10
+
+/** for new passwords only: passwords set before these rules keep working at login */
+export function checkPasswordStrength(pw: unknown, username: string): string {
+  if (typeof pw !== 'string' || pw.length < PASSWORD_MIN_LENGTH) throw bad(`รหัสผ่านต้องยาวอย่างน้อย ${PASSWORD_MIN_LENGTH} ตัวอักษร`)
   if (pw.length > 200) throw bad('รหัสผ่านยาวเกินไป')
+  const lower = pw.toLowerCase()
+  if (lower.includes(username.toLowerCase())) throw bad('รหัสผ่านต้องไม่มีชื่อผู้ใช้อยู่ในนั้น')
+  if (COMMON_PASSWORDS.has(lower)) throw bad('รหัสผ่านนี้ถูกใช้บ่อยเกินไปและเดาได้ง่าย กรุณาตั้งรหัสอื่น')
   return pw
 }
 

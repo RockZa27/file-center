@@ -79,7 +79,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     const username = body.username.trim()
     if (!USERNAME_RE.test(username)) throw bad('ชื่อผู้ใช้ใช้ได้เฉพาะ a-z 0-9 . _ - ยาว 3-32 ตัว')
     if (findUser(username)) throw conflict('มีชื่อผู้ใช้นี้อยู่แล้ว')
-    checkPasswordStrength(body.password)
+    checkPasswordStrength(body.password, username)
     const name = body.name.trim()
     if (!name || name.length > 60) throw bad('กรุณากรอกชื่อที่แสดง (ไม่เกิน 60 ตัวอักษร)')
     const homedir = body.role === 'admin' ? '/' : cleanHomedir(body.homedir, username)
@@ -119,7 +119,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
       if (homedir === '/') throw bad('ผู้ใช้ทั่วไปต้องมีโฟลเดอร์ของตัวเอง')
     }
     const homeAbs = resolveIn(config.storageDir, homedir)
-    if (body.password) checkPasswordStrength(body.password)
+    if (body.password) checkPasswordStrength(body.password, target.username)
     const passwordHash = body.password ? await hashPassword(body.password) : null
 
     ensureDir(homeAbs)

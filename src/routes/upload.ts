@@ -14,6 +14,7 @@ export const uploadRoutes = new Elysia({ prefix: '/api/upload' })
     if (relDir.length > 30) throw bad('โฟลเดอร์ซ้อนลึกเกินไป')
     return initUpload({
       owner: user?.username ?? 'guest',
+      guest: !user,
       root: a.root,
       dir: normRel(body.path),
       relativeDir: relDir,

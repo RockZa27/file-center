@@ -46,25 +46,43 @@ setInterval(housekeeping, 60 * 60 * 1000).unref()
 const bootedAt = Date.now()
 const indexHtml = join(config.webDir, 'index.html')
 
+// The page loads only its own files. Naive UI writes its styles into <style> tags (hence 'unsafe-inline' for
+// styles only); previews use blob: URLs and frames of our own downloads. Downloads and the logo send their own,
+// stricter policy: it is set on those responses only, never here.
+const WEB_HEADERS = {
+  'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; " +
+    "media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; " +
+    "form-action 'self'; frame-ancestors 'self'",
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+}
+
 function serveStatic(pathname: string): Response {
   let decoded: string
-  try { decoded = decodeURIComponent(pathname) } catch { return new Response('Bad request', { status: 400 }) }
+  try { decoded = decodeURIComponent(pathname) } catch { return new Response('Bad request', { status: 400, headers: WEB_HEADERS }) }
   const abs = normalize(join(config.webDir, decoded))
   if (within(config.webDir, abs) && existsSync(abs) && statSync(abs).isFile()) {
     const immutable = decoded.startsWith('/assets/')
     return new Response(Bun.file(abs), {
-      headers: { 'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache' },
+      headers: { ...WEB_HEADERS, 'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache' },
     })
   }
   // a missing asset must stay a 404, any other path is a client-side route
-  if (extname(decoded) && decoded !== '/') return new Response('Not found', { status: 404 })
+  if (extname(decoded) && decoded !== '/') return new Response('Not found', { status: 404, headers: WEB_HEADERS })
   if (!existsSync(indexHtml)) {
     return new Response('ยังไม่ได้ build หน้าเว็บ — รัน "bun run build" ก่อน หรือใช้ "bun run dev" ระหว่างพัฒนา', {
-      status: 503, headers: { 'Content-Type': 'text/plain; charset=utf-8' },
+      status: 503, headers: { ...WEB_HEADERS, 'Content-Type': 'text/plain; charset=utf-8' },
     })
   }
-  return new Response(Bun.file(indexHtml), { headers: { 'Cache-Control': 'no-cache', 'Content-Type': 'text/html; charset=utf-8' } })
+  return new Response(Bun.file(indexHtml), { headers: { ...WEB_HEADERS, 'Cache-Control': 'no-cache', 'Content-Type': 'text/html; charset=utf-8' } })
 }
+
+// Only the socket address counts: X-Forwarded-For and CF-Connecting-IP are written by the client as much as by a
+// proxy. A proxy on this machine (cloudflared, nginx) connects from loopback too, so a request that carries such a
+// header came from somewhere else: the headers can only take the local answer away, never grant it.
+const LOOPBACK = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1'])
+const FORWARDED = ['x-forwarded-for', 'cf-connecting-ip', 'forwarded', 'x-real-ip']
+const fromThisMachine = (request: Request, socketIp: string | undefined) =>
+  LOOPBACK.has(socketIp ?? '') && !FORWARDED.some(h => request.headers.has(h))
 
 export const app = new Elysia({ serve: { maxRequestBodySize: config.uploadChunkSize * 2 + 1024 * 1024 } })
   // set before routing, so error responses (401, 404...) carry them too
@@ -72,10 +90,16 @@ export const app = new Elysia({ serve: { maxRequestBodySize: config.uploadChunkS
     set.headers['x-content-type-options'] = 'nosniff'
     set.headers['x-frame-options'] = 'SAMEORIGIN'
     set.headers['referrer-policy'] = 'same-origin'
+    // only behind HTTPS: over plain HTTP the header would be ignored anyway, and a wrong one locks browsers out for a year
+    if (config.secureCookie) set.headers['strict-transport-security'] = 'max-age=31536000'
   })
   .use(context)
-  // `release` and `boot` let the launcher and the update page tell which process answered
-  .get('/api/health', () => ({ status: 'ok', version: config.version, release: process.env.FC_RELEASE || null, boot: bootedAt, time: new Date().toISOString() }))
+  // `release` and `boot` let the launcher and the update page tell which process answered. The version tells an
+  // attacker which known holes to try, so only the launcher (this machine) and admins (update page) get it.
+  .get('/api/health', ({ request, server, user }) => {
+    if (user?.role !== 'admin' && !fromThisMachine(request, server?.requestIP(request)?.address)) return { status: 'ok' }
+    return { status: 'ok', version: config.version, release: process.env.FC_RELEASE || null, boot: bootedAt, time: new Date().toISOString() }
+  })
   .use(sessionRoutes)
   .use(adminRoutes)
   .use(updateRoutes)

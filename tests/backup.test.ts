@@ -315,7 +315,7 @@ describe('restore (end to end)', () => {
   })
 
   test('back up, delete a user, restore: the user is back and the admin is still logged in', async () => {
-    expect((await api('POST', '/api/admin/users', { username: 'carol', name: 'Carol', password: 'carol-password-1', role: 'user', permissions: ['read'], publicPermissions: [] })).status).toBe(200)
+    expect((await api('POST', '/api/admin/users', { username: 'carol', name: 'Carol', password: 'red-kite-flies-1', role: 'user', permissions: ['read'], publicPermissions: [] })).status).toBe(200)
     expect((await api('PUT', '/api/admin/settings', { appName: 'ก่อนกู้คืน' })).status).toBe(200)
     const made = await api('POST', '/api/admin/backups')
     expect(made.status).toBe(200)
@@ -344,7 +344,7 @@ describe('restore (end to end)', () => {
     const carol = await fetch(url('/api/session'))
     const cookie = carol.headers.get('set-cookie')!.split(';')[0]
     const csrf = ((await carol.json()) as any).csrf
-    const login = await fetch(url('/api/login'), { method: 'POST', headers: { cookie, 'x-csrf-token': csrf, 'content-type': 'application/json' }, body: JSON.stringify({ username: 'carol', password: 'carol-password-1' }) })
+    const login = await fetch(url('/api/login'), { method: 'POST', headers: { cookie, 'x-csrf-token': csrf, 'content-type': 'application/json' }, body: JSON.stringify({ username: 'carol', password: 'red-kite-flies-1' }) })
     expect(login.status).toBe(200)
   }, 60_000)
 })

@@ -2,7 +2,7 @@ import { Elysia, t } from 'elysia'
 import { audit } from '../audit'
 import {
   accessFor, checkPasswordStrength, clearFailures, createSession, destroySession, destroyUserSessions,
-  findUser, hashPassword, lockedFor, publicUser, recordFailure, saveUsers, verifyLogin, type Session, type User,
+  findUser, hashPassword, lockedFor, PASSWORD_MIN_LENGTH, publicUser, recordFailure, saveUsers, verifyLogin, type Session, type User,
 } from '../auth'
 import { config } from '../config'
 import { context, requireUser, SESSION_COOKIE } from '../context'
@@ -12,10 +12,11 @@ import { settings } from '../settings'
 /** cookies take whole seconds: SESSION_TTL_HOURS=0.0001 must not break every response */
 const cookieMaxAge = () => Math.max(1, Math.floor(config.sessionTtlMs / 1000))
 
-function appConfig() {
+function appConfig(user: User | null) {
   const s = settings.get()
   return {
-    version: config.version,
+    // visitors do not need to know which version (and so which known holes) is running
+    ...(user ? { version: config.version } : {}),
     appName: s.appName,
     primaryColor: s.primaryColor,
     welcomeTitle: s.welcomeTitle,
@@ -27,6 +28,7 @@ function appConfig() {
     uploadChunkSize: config.uploadChunkSize,
     uploadSimultaneous: config.uploadSimultaneous,
     trashRetentionDays: config.trashRetentionDays,
+    passwordMinLength: PASSWORD_MIN_LENGTH,
   }
 }
 
@@ -36,7 +38,7 @@ function snapshot(user: User | null, session: Session) {
     const a = accessFor(user, space)
     if (a) spaces[space] = [...a.perms]
   }
-  return { csrf: session.csrf, user: user ? publicUser(user) : null, spaces, config: appConfig() }
+  return { csrf: session.csrf, user: user ? publicUser(user) : null, spaces, config: appConfig(user) }
 }
 
 export const sessionRoutes = new Elysia({ prefix: '/api' })
@@ -94,7 +96,7 @@ export const sessionRoutes = new Elysia({ prefix: '/api' })
   .post('/password', async ({ user, ip, sid, body }) => {
     const u = requireUser({ user, ip })
     if (!(await Bun.password.verify(body.current, u.passwordHash))) throw new HttpError(400, 'รหัสผ่านปัจจุบันไม่ถูกต้อง')
-    checkPasswordStrength(body.next)
+    checkPasswordStrength(body.next, u.username)
     u.passwordHash = await hashPassword(body.next)
     u.mustChangePassword = false
     saveUsers()

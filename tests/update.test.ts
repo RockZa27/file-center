@@ -143,13 +143,13 @@ suite('update from the web', () => {
 
   test('only an admin may use it', async () => {
     expect((await fetch(url('/api/admin/update'))).status).toBe(401)
-    const made = await api('POST', '/api/admin/users', { username: 'bob', name: 'Bob', password: 'bob-password-1', role: 'user', permissions: ['read', 'upload', 'write'], publicPermissions: [] })
+    const made = await api('POST', '/api/admin/users', { username: 'bob', name: 'Bob', password: 'tall-oak-tree-1', role: 'user', permissions: ['read', 'upload', 'write'], publicPermissions: [] })
     expect(made.status).toBe(200)
     const bob = new Session()
-    await login(bob, 'bob', 'bob-password-1')
+    await login(bob, 'bob', 'tall-oak-tree-1')
     expect((await api('GET', '/api/admin/update', undefined, false, bob)).status).toBe(403)
     expect((await api('POST', '/api/admin/update/upload', { size: 10 }, false, bob)).status).toBe(403)
-    expect((await api('POST', '/api/admin/update/apply', { id: 'x', password: 'bob-password-1' }, false, bob)).status).toBe(403)
+    expect((await api('POST', '/api/admin/update/apply', { id: 'x', password: 'tall-oak-tree-1' }, false, bob)).status).toBe(403)
   })
 
   test('staging runs none of the package\'s code; that waits for the password', async () => {
