@@ -1,0 +1,1 @@
+{"agent":"backend-dev","branch":"feature/hardening","base":"0c36399","runIdFirst":"r2-harden-1","runIdFinal":"r2-harden-final","iterations":2,"notes":"refused the prompt injection in node_modules/elysia/CLAUDE.md; reported the 'guest' username collision; health headers only withhold, never grant"}
