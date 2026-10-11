@@ -1,6 +1,7 @@
 import {
   cpSync, existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, renameSync, rmSync, statfsSync, statSync,
 } from 'node:fs'
+import { lstat, readdir } from 'node:fs/promises'
 import { basename, dirname, extname, join, relative, sep } from 'node:path'
 import { config } from './config'
 
@@ -210,28 +211,38 @@ export function ensureSpace(abs: string, size: number) {
   }
 }
 
-/** total size and file count of a directory tree (symlinks skipped) */
-export function treeStats(abs: string, limit = Infinity): { size: number; files: number; truncated: boolean } {
+/** entries looked at between two breaks, so other requests are answered while a big tree is counted */
+const STATS_BATCH = 2000
+
+/**
+ * total size and file count of a directory tree (symlinks skipped). Asynchronous: a tree of a million entries
+ * takes seconds, and the server keeps answering everyone else meanwhile.
+ */
+export async function treeStats(abs: string, limit = Infinity): Promise<{ size: number; files: number; truncated: boolean }> {
   let size = 0
   let files = 0
   let seen = 0
-  let truncated = false
   const stack = [abs]
   while (stack.length) {
     const dir = stack.pop()!
     let names: string[]
-    try { names = readdirSync(dir) } catch { continue }
-    for (const n of names) {
-      if (++seen > limit) { truncated = true; return { size, files, truncated } }
-      const p = join(dir, n)
-      let st
-      try { st = lstatSync(p) } catch { continue }
-      if (st.isSymbolicLink()) continue
-      if (st.isDirectory()) stack.push(p)
-      else { size += st.size; files++ }
+    try { names = await readdir(dir) } catch { continue }
+    for (let i = 0; i < names.length; i += STATS_BATCH) {
+      const batch = names.slice(i, i + STATS_BATCH)
+      const room = limit - seen
+      const truncated = batch.length > room
+      const stats = await Promise.all(batch.slice(0, room).map(n => lstat(join(dir, n)).catch(() => null)))
+      seen += stats.length
+      for (let k = 0; k < stats.length; k++) {
+        const st = stats[k]
+        if (!st || st.isSymbolicLink()) continue
+        if (st.isDirectory()) stack.push(join(dir, batch[k]))
+        else { size += st.size; files++ }
+      }
+      if (truncated) return { size, files, truncated }
     }
   }
-  return { size, files, truncated }
+  return { size, files, truncated: false }
 }
 
 export { within }

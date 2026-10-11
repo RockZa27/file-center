@@ -8,24 +8,16 @@ import {
 } from '../auth'
 import { config, paths } from '../config'
 import { context, requireAdmin } from '../context'
-import { bad, conflict, ensureDir, forbidden, HttpError, isDir, listDir, normRel, notFound, resolveIn, treeStats } from '../fsx'
+import { bad, conflict, ensureDir, forbidden, HttpError, isDir, listDir, normRel, notFound, resolveIn } from '../fsx'
 import { errorsSince } from '../logger'
 import { settings } from '../settings'
+import { storageStats } from '../stats'
 import { listTrash, purge, restore, trashSummary } from '../trash'
 import { uploadsInProgress } from '../uploads'
 
 const startedAt = Date.now()
 const roleT = t.Union([t.Literal('admin'), t.Literal('user')])
 const permsT = t.Array(t.String())
-
-let statsCache: { at: number; value: any } | null = null
-function storageStats() {
-  if (statsCache && Date.now() - statsCache.at < 60_000) return statsCache.value
-  const all = treeStats(config.storageDir, 1_000_000)
-  const pub = treeStats(paths.publicDir, 1_000_000)
-  statsCache = { at: Date.now(), value: { size: all.size, files: all.files, truncated: all.truncated || pub.truncated, public: { size: pub.size, files: pub.files } } }
-  return statsCache.value
-}
 
 function diskInfo() {
   try {
@@ -194,7 +186,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
       version: config.version,
       uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),
       disk,
-      storage: storageStats(),
+      ...storageStats(), // { storage, stale }: last numbers at once (null before the first count), recounted in the background
       trash,
       uploadsInProgress: uploadsInProgress(),
       users: allUsers().length,
