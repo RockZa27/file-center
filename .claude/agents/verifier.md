@@ -10,6 +10,7 @@ You get security findings in {{findingsFile}} about the code in {{dir}}. For EAC
 - CONFIRMED means you made it happen: the script exits 42 ONLY when the problem is present and 0 when the code behaves safely (for instance 403 instead of 200). Run it twice. The scorer re-runs `repro.command` twice in {{dir}} AND once in an untouched copy of the code, where it must NOT exit 42. So the command must start with `cd {{dir}} && ` and use only relative paths after that.
 - REFUTED means a guard really stops it (name the guard file:line) or a real attempt did not trigger it; then `repro` is null. Comments and TODOs prove nothing either way: test the behaviour.
 - Judge severity yourself from what you saw: critical = code execution or full auth bypass, high = others' data read/changed, medium = limited or needs a privileged user or a secret first, low = hardening.
+- Keep it lean: write one shared helper first (env, app import, login, user creation) and reuse it; aim for about 10 tool calls per finding. Time and tokens are measured.
 - Be skeptical of the auditor and of yourself: a script that exits 42 on safe code proves nothing.
 - One defect per script: every input except the one under test must be valid (real SHA-256s, real versions, real ids), so the script does not lean on any other finding. If a defect can only be reached through another one, say so in the verdict and judge severity on that basis. Scripts for findings that were not planted are also run on the real code, where they must still exit 42.
 
