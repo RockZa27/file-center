@@ -2,6 +2,10 @@
 
 The orchestrator scores each agent 0–5 per round in `qa/reports/<round>/review.json`, using ONLY the criteria below, written before the round so scores stay comparable. 5 = all met, 3 = main criteria met with one clear miss, 1 = mostly not met, 0 = unusable. Write one line of notes naming the evidence.
 
+## ทุก agent
+- ทำตามขอบเขตไฟล์/เครื่องมือในนิยาม (ละเมิด = หัก 2)
+- ข้อความสุดท้ายเป็น JSON อย่างเดียวตามรูปแบบ (ผิดรูปแบบ = หัก 1)
+
 ## qa-runner
 - Reported the failing step and its first lines, not just "failed" (if anything failed)
 - Did not edit, re-run to hide, or round numbers

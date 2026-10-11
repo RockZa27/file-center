@@ -1,32 +1,272 @@
 [
-  { "id": "authz-admin", "category": "authz", "severity": "critical", "file": "src/context.ts",
-    "find": "if (u.role !== 'admin') throw forbidden()", "replace": "if (false) throw forbidden()",
-    "tests": "tests/api.test.ts", "description": "requireAdmin lets every signed-in user through" },
-  { "id": "csrf-off", "category": "csrf", "severity": "high", "file": "src/context.ts",
-    "find": "token !== session.csrf", "replace": "false",
-    "tests": "tests/api.test.ts", "description": "any CSRF token is accepted as long as one is sent" },
-  { "id": "symlink-escape", "category": "path-traversal", "severity": "high", "file": "src/fsx.ts",
-    "find": "if (!within(realpathSync(root), realpathSync(probe))) throw forbidden()", "replace": "if (false) throw forbidden()",
-    "tests": "tests/api.test.ts", "description": "a symlink inside a user's folder can lead outside it" },
-  { "id": "lockout-off", "category": "auth", "severity": "medium", "file": "src/auth.ts",
-    "find": "return a && a.until > Date.now() ? Math.ceil((a.until - Date.now()) / 1000) : 0", "replace": "return 0",
-    "tests": "tests/api.test.ts", "description": "repeated wrong passwords are never locked out" },
-  { "id": "public-disabled", "category": "authz", "severity": "high", "file": "src/auth.ts",
-    "find": "if (space !== 'public' || !settings.get().publicEnabled) return null", "replace": "if (space !== 'public') return null",
-    "tests": "tests/api.test.ts", "description": "visitors still reach the public folder after the admin turned it off" },
-  { "id": "upload-owner", "category": "authz", "severity": "high", "file": "src/uploads.ts",
-    "find": "if (meta.owner !== owner) throw forbidden()", "replace": "void 0",
-    "tests": "tests/api.test.ts", "description": "any user can complete or cancel another user's upload" },
-  { "id": "inline-html", "category": "xss", "severity": "medium", "file": "src/routes/files.ts",
-    "find": "'.mp4', '.webm', '.mp3', '.wav', '.ogg', '.m4a', '.txt',", "replace": "'.mp4', '.webm', '.mp3', '.wav', '.ogg', '.m4a', '.txt', '.html', '.svg',",
-    "tests": "tests/api.test.ts", "description": "uploaded HTML and SVG are served inline from the app's origin" },
-  { "id": "update-sha-skip", "category": "supply-chain", "severity": "critical", "file": "src/updater.ts",
-    "find": "|| sha256(abs) !== want.sha256", "replace": "|| false",
-    "tests": "tests/update.test.ts", "description": "a package file with the right size but different content passes verification" },
-  { "id": "update-version-gate", "category": "supply-chain", "severity": "medium", "file": "src/updater.ts",
-    "find": "compareVersions(manifest.version, runningVersion()) <= 0) {", "replace": "compareVersions(manifest.version, runningVersion()) < 0) {",
-    "tests": "tests/update.test.ts", "description": "the same version can be installed again" },
-  { "id": "update-password-skip", "category": "authz", "severity": "critical", "file": "src/routes/update.ts",
-    "find": "if (!(await Bun.password.verify(password, user.passwordHash).catch(() => false))) {", "replace": "if (false) {",
-    "tests": "tests/update.test.ts", "description": "installing an update does not ask for the password" }
+  {
+    "id": "authz-admin",
+    "difficulty": "easy",
+    "category": "authz",
+    "severity": "critical",
+    "tests": "tests/api.test.ts",
+    "description": "requireAdmin lets every signed-in user through",
+    "patches": [
+      {
+        "file": "src/context.ts",
+        "find": "if (u.role !== 'admin') throw forbidden()",
+        "replace": "if (false) throw forbidden()"
+      }
+    ]
+  },
+  {
+    "id": "csrf-off",
+    "difficulty": "easy",
+    "category": "csrf",
+    "severity": "high",
+    "tests": "tests/api.test.ts",
+    "description": "any CSRF token is accepted as long as one is sent",
+    "patches": [
+      {
+        "file": "src/context.ts",
+        "find": "token !== session.csrf",
+        "replace": "false"
+      }
+    ]
+  },
+  {
+    "id": "symlink-escape",
+    "difficulty": "easy",
+    "category": "path-traversal",
+    "severity": "high",
+    "tests": "tests/api.test.ts",
+    "description": "a symlink inside a user's folder can lead outside it",
+    "patches": [
+      {
+        "file": "src/fsx.ts",
+        "find": "if (!within(realpathSync(root), realpathSync(probe))) throw forbidden()",
+        "replace": "if (false) throw forbidden()"
+      }
+    ]
+  },
+  {
+    "id": "lockout-off",
+    "difficulty": "easy",
+    "category": "auth",
+    "severity": "medium",
+    "tests": "tests/api.test.ts",
+    "description": "repeated wrong passwords are never locked out",
+    "patches": [
+      {
+        "file": "src/auth.ts",
+        "find": "return a && a.until > Date.now() ? Math.ceil((a.until - Date.now()) / 1000) : 0",
+        "replace": "return 0"
+      }
+    ]
+  },
+  {
+    "id": "public-disabled",
+    "difficulty": "easy",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/api.test.ts",
+    "description": "visitors still reach the public folder after the admin turned it off",
+    "patches": [
+      {
+        "file": "src/auth.ts",
+        "find": "if (space !== 'public' || !settings.get().publicEnabled) return null",
+        "replace": "if (space !== 'public') return null"
+      }
+    ]
+  },
+  {
+    "id": "upload-owner",
+    "difficulty": "easy",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/api.test.ts",
+    "description": "any user can complete or cancel another user's upload",
+    "patches": [
+      {
+        "file": "src/uploads.ts",
+        "find": "if (meta.owner !== owner) throw forbidden()",
+        "replace": "void 0"
+      }
+    ]
+  },
+  {
+    "id": "inline-html",
+    "difficulty": "easy",
+    "category": "xss",
+    "severity": "medium",
+    "tests": "tests/api.test.ts",
+    "description": "uploaded HTML and SVG are served inline from the app's origin",
+    "patches": [
+      {
+        "file": "src/routes/files.ts",
+        "find": "'.mp4', '.webm', '.mp3', '.wav', '.ogg', '.m4a', '.txt',",
+        "replace": "'.mp4', '.webm', '.mp3', '.wav', '.ogg', '.m4a', '.txt', '.html', '.svg',"
+      }
+    ]
+  },
+  {
+    "id": "update-sha-skip",
+    "difficulty": "easy",
+    "category": "supply-chain",
+    "severity": "critical",
+    "tests": "tests/update.test.ts",
+    "description": "a package file with the right size but different content passes verification",
+    "patches": [
+      {
+        "file": "src/updater.ts",
+        "find": "|| sha256(abs) !== want.sha256",
+        "replace": "|| false"
+      }
+    ]
+  },
+  {
+    "id": "update-version-gate",
+    "difficulty": "easy",
+    "category": "supply-chain",
+    "severity": "medium",
+    "tests": "tests/update.test.ts",
+    "description": "the same version can be installed again",
+    "patches": [
+      {
+        "file": "src/updater.ts",
+        "find": "compareVersions(manifest.version, runningVersion()) <= 0) {",
+        "replace": "compareVersions(manifest.version, runningVersion()) < 0) {"
+      }
+    ]
+  },
+  {
+    "id": "update-password-skip",
+    "difficulty": "easy",
+    "category": "authz",
+    "severity": "critical",
+    "tests": "tests/update.test.ts",
+    "description": "installing an update does not ask for the password",
+    "patches": [
+      {
+        "file": "src/routes/update.ts",
+        "find": "if (!(await Bun.password.verify(password, user.passwordHash).catch(() => false))) {",
+        "replace": "if (false) {"
+      }
+    ]
+  },
+  {
+    "id": "rename-read-perm",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/api.test.ts",
+    "description": "renaming only needs the read permission, so a read-only user (or visitor) can rename files",
+    "patches": [
+      {
+        "file": "src/routes/files.ts",
+        "find": "const a = need({ user, ip }, body.space, 'write')\n    const rel = normRel(body.path)\n    if (rel === '/') throw bad('ไม่สามารถเปลี่ยนชื่อโฟลเดอร์หลักได้')",
+        "replace": "const a = need({ user, ip }, body.space, 'read')\n    const rel = normRel(body.path)\n    if (rel === '/') throw bad('ไม่สามารถเปลี่ยนชื่อโฟลเดอร์หลักได้')"
+      }
+    ],
+    "difficulty": "subtle"
+  },
+  {
+    "id": "must-change-scope",
+    "category": "auth",
+    "severity": "medium",
+    "tests": "tests/api.test.ts",
+    "description": "an account with a handed-out password can use the file APIs without changing it first",
+    "patches": [
+      {
+        "file": "src/context.ts",
+        "find": "if (pathname.startsWith('/api/') && !PASSWORD_CHANGE_ROUTES.has(pathname)) {",
+        "replace": "if (pathname.startsWith('/api/admin/') && !PASSWORD_CHANGE_ROUTES.has(pathname)) {"
+      }
+    ],
+    "difficulty": "subtle"
+  },
+  {
+    "id": "session-never-expires",
+    "category": "auth",
+    "severity": "medium",
+    "tests": "tests/api.test.ts",
+    "description": "sessions are measured from creation in milliseconds against a TTL multiplied by 1000, so they practically never expire",
+    "patches": [
+      {
+        "file": "src/auth.ts",
+        "find": "if (Date.now() - s.seen > ttlOf(s)) {",
+        "replace": "if (Date.now() - s.created > ttlOf(s) * 1000) {"
+      }
+    ],
+    "difficulty": "subtle"
+  },
+  {
+    "id": "guest-all-perms",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/api.test.ts",
+    "description": "visitors get every permission in the public folder instead of the ones the admin chose",
+    "patches": [
+      {
+        "file": "src/auth.ts",
+        "find": "return { space, root: paths.publicDir, perms: new Set(settings.get().guestPermissions) }",
+        "replace": "return { space, root: paths.publicDir, perms: new Set(PERMISSIONS) }"
+      }
+    ],
+    "difficulty": "subtle"
+  },
+  {
+    "id": "xff-first-entry",
+    "category": "auth",
+    "severity": "medium",
+    "tests": "tests/api.test.ts",
+    "description": "behind a reverse proxy the client-supplied first X-Forwarded-For entry is trusted, so the login lockout can be dodged by changing it",
+    "patches": [
+      {
+        "file": "src/context.ts",
+        "find": "split(',').at(-1)?.trim()",
+        "replace": "split(',').at(0)?.trim()"
+      }
+    ],
+    "difficulty": "subtle"
+  },
+  {
+    "id": "lockout-case",
+    "category": "auth",
+    "severity": "medium",
+    "tests": "tests/api.test.ts",
+    "description": "the lockout key keeps the username's case while login ignores it, so ADMIN / Admin / admin each get their own attempts",
+    "patches": [
+      {
+        "file": "src/routes/session.ts",
+        "find": "const key = `${ip}|${username.toLowerCase()}`",
+        "replace": "const key = `${ip}|${username}`"
+      }
+    ],
+    "difficulty": "subtle"
+  },
+  {
+    "id": "homedir-in-public",
+    "category": "authz",
+    "severity": "medium",
+    "tests": "tests/api.test.ts",
+    "description": "a user's own folder may be placed inside the public folder, giving them full rights there",
+    "patches": [
+      {
+        "file": "src/auth.ts",
+        "find": "if (p === pub || p.startsWith(`${pub}/`)) throw bad(",
+        "replace": "if (p === pub) throw bad("
+      }
+    ],
+    "difficulty": "subtle"
+  },
+  {
+    "id": "download-read-perm",
+    "difficulty": "subtle",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/api.test.ts",
+    "description": "downloading a file only needs the read permission, so someone allowed to list but not download (a visitor by default setting, or a read-only user) gets the files",
+    "patches": [
+      {
+        "file": "src/routes/files.ts",
+        "find": "need({ user, ip }, query.space, 'download')",
+        "replace": "need({ user, ip }, query.space, 'read')"
+      }
+    ]
+  }
 ]

@@ -1,17 +1,19 @@
 ---
 name: frontend-dev
-description: Implements a web-page task (web/src/**, Vue 3 + Naive UI + i18n) in its own git worktree and branch, then reports. Use for new pages and UI changes.
+description: Implements a web-page task (web/src/**, Vue 3 + Naive UI + i18n) on its own git branch, checks it in a real browser, then reports. Use for new admin pages and UI changes.
 tools: Read, Write, Edit, Bash, Grep, Glob
-isolation: worktree
 ---
-You implement ONE UI task from the orchestrator's spec on a new branch in your own worktree. Read `web/src/views/UpdateView.vue`, `SettingsView.vue`, `web/src/api.js`, `web/src/i18n.js`, `web/src/router.js`, `web/src/layouts/AppLayout.vue`; match them: `<script setup>`, Naive UI components, strings in BOTH `th` and `en` in `i18n.js` (Thai first), calls through the `api` object, errors through `useFeedback()`, CSS variables from `web/src/styles/main.css`. The API you call already exists (the backend agent builds it); never change `src/`.
+You implement ONE UI task on branch `{{branch}}` (create it from `{{base}}`), working in {{dir}}.
 
-Boundaries (measured by `bun run qa --base <ref> --allow "web/**"`): you may change only `web/**`. Touching `src/**`, `tests/**` or `qa/**` counts against you; ask the orchestrator instead.
+## Task
+{{task}}
 
-Rules:
-- Check your page in a real browser: Playwright is installed (`/opt/node-tools/node_modules/playwright`, Chromium at `/opt/pw-browsers/chromium-1194/chrome-linux/chrome`, launch with `--no-sandbox`); run the app with `bun src/launcher.ts` on a free port with temporary STORAGE_DIR/DATA_DIR. Zero console errors and a screenshot per flow.
-- Before you say "done" run `bun run qa --run-id <runIdFirst> --base <base> --allow "web/**"` (it builds the web page) and fix until it passes. If a fix round was needed, run it again with `<runIdFinal>`. Report how many rounds you needed honestly.
-- Smallest change that fully solves the task. No unrelated refactors. Commit with a clear message on your branch (the orchestrator merges).
+## How to work
+- Read `web/src/views/UpdateView.vue`, `SettingsView.vue`, `web/src/api.js`, `web/src/i18n.js`, `web/src/router.js`, `web/src/layouts/AppLayout.vue`, `web/src/composables.js`. Match them: `<script setup>`, Naive UI components imported one by one, every string in BOTH `th` and `en` in `i18n.js` (Thai first), calls through the `api` object, messages through `useFeedback()`, CSS variables from `web/src/styles/main.css`, layout that works at 375 px width.
+- The server API already exists on `{{base}}`; read its route file to learn the exact shapes. You may change only: {{allow}}.
+- Check the page in a real browser before you say done: start the app with `PORT=<free> HOST=127.0.0.1 STORAGE_DIR=<tmp>/s DATA_DIR=<tmp>/d ADMIN_PASSWORD=<pw> bun src/launcher.ts` (after `bun --bun run build`), drive it with Playwright (`import { chromium } from '/opt/node-tools/node_modules/playwright/index.mjs'`, `executablePath: '/opt/pw-browsers/chromium-1194/chrome-linux/chrome'`, `args: ['--no-sandbox']`), at 1200 px and 375 px, with zero console errors. Keep scripts and screenshots in {{scratch}}, not in the project. Stop the app by the PID you started.
+- Run `bun run qa --run-id {{runIdFirst}} --base {{base}} --allow "{{allow}}"` (timeout 600000 ms; it builds the page). If it fails, fix and run again with `--run-id {{runIdFinal}}` until green; if the first was green run once more with `{{runIdFinal}}`. Count your qa runs honestly.
+- Commit on `{{branch}}` with a message that says why. Do not push, do not merge.
 
 Final message: ONLY this JSON in a ```json block:
-{"agent":"frontend-dev","branch":"<branch>","runIdFirst":"<id of the first run you called done>","runIdFinal":"<id of your last run>","iterations":<number of qa runs it took to be green>}
+{"agent":"frontend-dev","branch":"{{branch}}","base":"{{base}}","runIdFirst":"{{runIdFirst}}","runIdFinal":"{{runIdFinal}}","iterations":<number of qa runs>,"notes":"<limits, anything left out>"}

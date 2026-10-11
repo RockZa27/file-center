@@ -223,6 +223,14 @@ describe('zip', () => {
     const u = await admin.json('POST', '/api/unzip', { space: 'home', path: '/evil.zip' })
     expect(u.status).toBe(400)
   })
+  test('zip-slip into a sibling folder whose name starts like the destination is rejected', async () => {
+    // extracting slip2.zip goes to /slip2; "/slip2-evil" passes a plain startsWith("/slip2") check
+    const evil = zipSync({ '../slip2-evil/x.txt': new Uint8Array([1]) })
+    writeFileSync(join(process.env.STORAGE_DIR!, 'slip2.zip'), evil)
+    const u = await admin.json('POST', '/api/unzip', { space: 'home', path: '/slip2.zip' })
+    expect(u.status).toBe(400)
+    expect(existsSync(join(process.env.STORAGE_DIR!, 'slip2-evil'))).toBe(false)
+  })
 })
 
 describe('users & permissions', () => {
@@ -455,6 +463,28 @@ describe('regressions found in QA', () => {
     expect((await c.json('POST', '/api/login', { username: 'x'.repeat(5000), password: 'y' })).status).toBe(422)
     const act = await admin.json('GET', '/api/admin/activity?action=login-failed&pageSize=100')
     expect(act.data.items.every((i: any) => i.user.length <= 64)).toBe(true)
+  })
+  test('the lockout counts a username however it is capitalised', async () => {
+    const failLogin = (c: Client, username: string) => c.raw('POST', '/api/login', { username, password: 'nope' }).then(r => r.status)
+    const c = new Client()
+    await c.start()
+    // login ignores case, so the lockout must too: otherwise every spelling gets its own attempts
+    for (const name of ['LockCase', 'lockcase', 'LOCKCASE']) expect(await failLogin(c, name)).toBe(401)
+    expect(await failLogin(c, 'lOcKcAsE')).toBe(429)
+  })
+  test('a signed-in session ends after the idle time', async () => {
+    const { config } = await import('../src/config')
+    const c = new Client()
+    await c.start()
+    expect((await c.login('admin', 'test-admin-pass')).status).toBe(200)
+    const keep = config.sessionTtlMs
+    config.sessionTtlMs = 50
+    try {
+      await Bun.sleep(120)
+      expect((await c.json('GET', '/api/session')).data.user).toBeNull()
+    } finally {
+      config.sessionTtlMs = keep
+    }
   })
   test('expired login attempts are forgotten', async () => {
     const auth = await import('../src/auth')

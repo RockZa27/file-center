@@ -9,6 +9,9 @@ import { context, requireUser, SESSION_COOKIE } from '../context'
 import { HttpError } from '../fsx'
 import { settings } from '../settings'
 
+/** cookies take whole seconds: SESSION_TTL_HOURS=0.0001 must not break every response */
+const cookieMaxAge = () => Math.max(1, Math.floor(config.sessionTtlMs / 1000))
+
 function appConfig() {
   const s = settings.get()
   return {
@@ -47,7 +50,7 @@ export const sessionRoutes = new Elysia({ prefix: '/api' })
       s = created.session
       cookie[SESSION_COOKIE].set({
         value: created.sid, httpOnly: true, sameSite: 'lax', path: '/',
-        secure: config.secureCookie, maxAge: config.sessionTtlMs / 1000,
+        secure: config.secureCookie, maxAge: cookieMaxAge(),
       })
     }
     return snapshot(user, s)
@@ -69,7 +72,7 @@ export const sessionRoutes = new Elysia({ prefix: '/api' })
     const { sid: newSid, session } = createSession(user.username)
     cookie[SESSION_COOKIE].set({
       value: newSid, httpOnly: true, sameSite: 'lax', path: '/',
-      secure: config.secureCookie, maxAge: config.sessionTtlMs / 1000,
+      secure: config.secureCookie, maxAge: cookieMaxAge(),
     })
     user.lastLogin = new Date().toISOString()
     saveUsers()
@@ -83,7 +86,7 @@ export const sessionRoutes = new Elysia({ prefix: '/api' })
     const { sid: newSid, session } = createSession(null)
     cookie[SESSION_COOKIE].set({
       value: newSid, httpOnly: true, sameSite: 'lax', path: '/',
-      secure: config.secureCookie, maxAge: config.sessionTtlMs / 1000,
+      secure: config.secureCookie, maxAge: cookieMaxAge(),
     })
     return snapshot(null, session)
   })

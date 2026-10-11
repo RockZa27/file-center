@@ -1,11 +1,12 @@
 /**
  * The one command that decides "is the code good": bun run qa
  *
- *   bun scripts/qa/run-checks.ts [--run-id id] [--skip-build] [--base <git ref>] [--allow "src/**,tests/**"]
+ *   bun scripts/qa/run-checks.ts [--run-id id] [--skip-build] [--base <git ref>] [--allow "src/**,tests/**"] [--compare <earlier run id>]
  *
  * Builds the web page, type-checks, runs every test with coverage, re-runs failures once to spot flaky tests,
  * checks that every mutating route is named in a test, and (with --base) guards against an agent making the
- * numbers look better by deleting tests, adding .skip, or touching files outside its allowed paths.
+ * numbers look better by deleting tests, adding .skip, or touching files outside its allowed paths. Budgets in
+ * qa/thresholds.json (coverage floor and drop vs --compare run, page size, test time) are checked too.
  * Writes qa/results/<runId>.json and exits 1 when anything is wrong.
  */
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
@@ -130,6 +131,20 @@ if (base) {
   }
   const bad = guards.removedTests.length + guards.skipAdded.length + guards.outOfScope.length
   step('guards (no removed tests, no skips, in scope)', bad === 0, 0, JSON.stringify({ removed: guards.removedTests, skip: guards.skipAdded, outOfScope: guards.outOfScope }))
+}
+
+// ── budgets (qa/thresholds.json): coverage must not fall, the page must not bloat, the suite must stay quick
+{
+  const th = JSON.parse(readFileSync(join(root, 'qa', 'thresholds.json'), 'utf8')) as { minCoverageLines: number; maxCoverageDrop: number; maxWebBytes: number; maxTestSeconds: number }
+  const problems: string[] = []
+  if (coverage.lines !== null && coverage.lines < th.minCoverageLines) problems.push(`line coverage ${coverage.lines}% < ${th.minCoverageLines}%`)
+  const compare = opt('compare')
+  const prevCov = compare ? (JSON.parse(readFileSync(join(root, 'qa', 'results', `${compare}.json`), 'utf8')) as CheckResult).coverage.lines : null
+  if (prevCov !== null && coverage.lines !== null && prevCov - coverage.lines > th.maxCoverageDrop) problems.push(`line coverage fell ${prevCov}% → ${coverage.lines}% (run ${compare})`)
+  if (build && build.webBytes > th.maxWebBytes) problems.push(`web page ${(build.webBytes / 1048576).toFixed(1)} MB > ${(th.maxWebBytes / 1048576).toFixed(1)} MB`)
+  const testMs = steps.find(s => s.name === 'tests')?.ms ?? 0
+  if (testMs > th.maxTestSeconds * 1000) problems.push(`tests took ${(testMs / 1000).toFixed(0)} s > ${th.maxTestSeconds} s`)
+  step('budgets (coverage, page size, test time)', problems.length === 0, 0, problems.join('\n'))
 }
 
 const result: CheckResult = {

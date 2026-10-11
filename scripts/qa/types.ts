@@ -39,6 +39,8 @@ export type RunnerReport = {
 export type DevReport = {
   agent: 'backend-dev' | 'frontend-dev'
   branch: string
+  /** the ref the branch started from */
+  base: string
   /** run-checks run ids: the first time the agent said "done", and after its last fix */
   runIdFirst: string
   runIdFinal: string
@@ -46,15 +48,22 @@ export type DevReport = {
 }
 export type UxReport = { agent: 'ux-tester'; flows: { name: string; passed: boolean; consoleErrors: number; screenshot?: string }[] }
 export type Review = Record<string, { score: number; notes: string }>
+/** tokens and wall time per agent, copied from the task notifications: shown, not scored */
+export type Usage = Record<string, { tokens: number; ms: number; toolUses?: number }>
 
+export type Patch = { file: string; find: string; replace: string }
 export type SeededBug = {
   id: string
+  /** easy = an obvious `if (false)`; subtle = a plausible-looking change, sometimes in two places */
+  difficulty: 'easy' | 'subtle'
   category: string
   severity: Severity
-  file: string
-  find: string
-  replace: string
+  patches: Patch[]
   /** test file that should fail when the bug is present */
   tests: string
   description: string
 }
+/** safe code that looks suspicious: a finding on it is a false positive by construction */
+export type Decoy = Patch & { id: string; why: string }
+/** where `seed.ts prepare --record` planted things, so the scorer matches findings to the copy the auditor saw */
+export type SeedRecord = { dir: string; bugs: Record<string, { file: string; line: number }[]>; decoys: Record<string, { file: string; line: number }[]>; cleanDir?: string }

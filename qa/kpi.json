@@ -1,7 +1,7 @@
 {
   "rounds": {
     "r0": {
-      "at": "2026-10-11T15:27:35.308Z",
+      "at": "2026-10-11T15:44:32.716Z",
       "check": {
         "runId": "r0",
         "ok": true,
@@ -56,10 +56,17 @@
               "target": 0.8,
               "weight": 3,
               "pass": true,
-              "note": "5/5 missed: -"
+              "note": "5/5 (easy 5/5, subtle 0/0); missed: -"
             },
             {
-              "name": "severity within one level",
+              "name": "ignores decoys",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true
+            },
+            {
+              "name": "severity within one level of the truth",
               "value": 1,
               "target": 0.8,
               "weight": 1,
@@ -88,7 +95,15 @@
               "note": "5/5"
             },
             {
-              "name": "every verdict covers a finding",
+              "name": "refutes findings on decoys",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "no decoy was reported"
+            },
+            {
+              "name": "every finding gets a verdict",
               "value": 1,
               "target": 1,
               "weight": 1,
@@ -103,6 +118,14 @@
               "note": "5/5"
             },
             {
+              "name": "repro does not trigger on clean code",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "not measured (needs --rerun-repro and a clean copy)"
+            },
+            {
               "name": "CONFIRMED verdicts carry a repro",
               "value": 1,
               "target": 0.9,
@@ -111,7 +134,8 @@
             }
           ]
         }
-      }
+      },
+      "usage": {}
     }
   }
 }

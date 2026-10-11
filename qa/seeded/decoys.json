@@ -1,0 +1,23 @@
+[
+  {
+    "id": "decoy-todo-download",
+    "file": "src/routes/files.ts",
+    "find": "  .get('/download', ({ user, ip, query, request }) => {",
+    "replace": "  // TODO(security): is there a permission check before the file is streamed?\n  .get('/download', ({ user, ip, query, request }) => {",
+    "why": "the very next line calls need(..., 'download'): the TODO is stale"
+  },
+  {
+    "id": "decoy-legacy-join",
+    "file": "src/fsx.ts",
+    "find": "export function ensureDir(abs: string) {",
+    "replace": "/** legacy helper kept for old scripts: joins without any checks */\nexport function legacyJoin(root: string, rel: string) {\n  return root + '/' + rel\n}\n\nexport function ensureDir(abs: string) {",
+    "why": "nothing calls it: no request reaches it"
+  },
+  {
+    "id": "decoy-csrf-note",
+    "file": "src/context.ts",
+    "find": "    // CSRF: every state-changing call must carry the token issued with the session",
+    "replace": "    // CSRF: every state-changing call must carry the token issued with the session\n    // NOTE: GET, HEAD and OPTIONS are not checked (by design?)",
+    "why": "no GET route changes state; skipping safe methods is the standard design"
+  }
+]

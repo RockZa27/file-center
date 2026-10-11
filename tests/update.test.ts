@@ -82,7 +82,7 @@ async function login(who: Session, username: string, password: string) {
 }
 
 /** build a package the way scripts/package.ts does, but from hand-made files */
-function makePackage(name: string, opts: { version: string; server: string; extra?: Record<string, string>; tamper?: boolean }) {
+function makePackage(name: string, opts: { version: string; server: string; extra?: Record<string, string>; tamper?: boolean; tamperSameSize?: boolean }) {
   const enc = new TextEncoder()
   const files: Record<string, Uint8Array> = {
     'server.js': enc.encode(opts.server),
@@ -94,6 +94,8 @@ function makePackage(name: string, opts: { version: string; server: string; extr
   }
   const entries: Record<string, Uint8Array> = { 'manifest.json': enc.encode(JSON.stringify(manifest)), ...files }
   if (opts.tamper) entries['server.js'] = enc.encode('console.log("evil")')
+  // same length, different bytes: only the SHA-256 can tell
+  if (opts.tamperSameSize) entries['server.js'] = enc.encode(opts.server.replace(/1/g, '2'))
   for (const [p, c] of Object.entries(opts.extra ?? {})) entries[p] = enc.encode(c)
   const file = join(dirs.pkgs, name)
   writeFileSync(file, zipSync(entries))
@@ -159,6 +161,11 @@ suite('update from the web', () => {
     })
     test('files that do not match the manifest', async () => {
       const r = await sendPackage(makePackage('tamper.zip', { version: '9.1.0', server: 'console.log(1)', tamper: true }))
+      expect(r.status).toBe(400)
+      expect(r.data.error).toContain('server.js')
+    })
+    test('a file with the listed size but different content', async () => {
+      const r = await sendPackage(makePackage('same-size.zip', { version: '9.1.0', server: 'console.log(1)', tamperSameSize: true }))
       expect(r.status).toBe(400)
       expect(r.data.error).toContain('server.js')
     })
