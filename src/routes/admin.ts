@@ -4,7 +4,7 @@ import { Elysia, t } from 'elysia'
 import { audit, queryAudit } from '../audit'
 import {
   allUsers, checkPasswordStrength, cleanHomedir, cleanPerms, destroyUserSessions, findUser, hashPassword,
-  publicUser, saveUsers, USERNAME_RE,
+  isReservedUsername, publicUser, saveUsers, USERNAME_RE,
 } from '../auth'
 import { config, paths } from '../config'
 import { context, requireAdmin } from '../context'
@@ -78,6 +78,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     const admin = requireAdmin({ user, ip })
     const username = body.username.trim()
     if (!USERNAME_RE.test(username)) throw bad('ชื่อผู้ใช้ใช้ได้เฉพาะ a-z 0-9 . _ - ยาว 3-32 ตัว')
+    if (isReservedUsername(username)) throw bad('ชื่อผู้ใช้นี้สงวนไว้สำหรับผู้เยี่ยมชม กรุณาใช้ชื่ออื่น')
     if (findUser(username)) throw conflict('มีชื่อผู้ใช้นี้อยู่แล้ว')
     checkPasswordStrength(body.password, username)
     const name = body.name.trim()

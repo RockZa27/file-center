@@ -127,10 +127,10 @@ describe('backups (API)', () => {
   })
 
   test('only admins may see, make, download, delete or restore backups', async () => {
-    const r = await admin.json('POST', '/api/admin/users', { username: 'backup-user', name: 'x', password: 'password123', role: 'user', permissions: ['read'], publicPermissions: [] })
+    const r = await admin.json('POST', '/api/admin/users', { username: 'backup-user', name: 'x', password: 'harbor-lamp-42', role: 'user', permissions: ['read'], publicPermissions: [] })
     expect(r.status).toBe(200)
     const u = new Client()
-    await u.login('backup-user', 'password123')
+    await u.login('backup-user', 'harbor-lamp-42')
     const guest = new Client()
     guest.csrf = (await guest.json('GET', '/api/session')).data.csrf
     const [item] = (await admin.json('GET', '/api/admin/backups')).data.items
@@ -139,7 +139,7 @@ describe('backups (API)', () => {
       ['POST', '/api/admin/backups'],
       ['GET', `/api/admin/backups/${item.name}/download`],
       ['DELETE', `/api/admin/backups/${item.name}`],
-      ['POST', '/api/admin/backups/restore', { name: item.name, password: 'password123' }],
+      ['POST', '/api/admin/backups/restore', { name: item.name, password: 'harbor-lamp-42' }],
     ]
     for (const [method, path, body] of calls) {
       expect(`${method} ${path} ${(await u.raw(method, path, body)).status}`).toBe(`${method} ${path} 403`)

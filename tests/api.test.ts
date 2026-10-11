@@ -231,16 +231,16 @@ describe('users & permissions', () => {
   const user = new Client()
   test('admin creates a user with their own folder', async () => {
     const c = await admin.json('POST', '/api/admin/users', {
-      username: 'somchai', name: 'สมชาย', password: 'password123', role: 'user',
+      username: 'somchai', name: 'สมชาย', password: 'harbor-lamp-42', role: 'user',
       permissions: ['read', 'write', 'upload', 'download'], publicPermissions: ['read', 'download', 'upload'],
     })
     expect(c.status).toBe(200)
-    expect((await admin.json('POST', '/api/admin/users', { username: 'somchai', name: 'x', password: 'password123', role: 'user', permissions: [], publicPermissions: [] })).status).toBe(409)
+    expect((await admin.json('POST', '/api/admin/users', { username: 'somchai', name: 'x', password: 'harbor-lamp-42', role: 'user', permissions: [], publicPermissions: [] })).status).toBe(409)
     expect((await admin.json('POST', '/api/admin/users', { username: 'shortpw', name: 'x', password: '123', role: 'user', permissions: [], publicPermissions: [] })).status).toBe(400)
   })
   test('user sees only their folder and cannot escape', async () => {
     await user.start()
-    expect((await user.login('somchai', 'password123')).status).toBe(200)
+    expect((await user.login('somchai', 'harbor-lamp-42')).status).toBe(200)
     expect((await user.json('POST', '/api/mkdir', { space: 'home', path: '/', name: 'mine' })).status).toBe(200)
     const list = await user.json('GET', '/api/list?space=home&path=/')
     expect(list.data.entries.map((e: any) => e.name)).toEqual(['mine'])
@@ -277,8 +277,8 @@ describe('users & permissions', () => {
   test('password change invalidates other sessions', async () => {
     const other = new Client()
     await other.start()
-    await other.login('somchai', 'password123')
-    expect((await user.json('POST', '/api/password', { current: 'password123', next: 'new-password-456' })).status).toBe(200)
+    await other.login('somchai', 'harbor-lamp-42')
+    expect((await user.json('POST', '/api/password', { current: 'harbor-lamp-42', next: 'new-password-456' })).status).toBe(200)
     expect((await other.json('GET', '/api/list?space=home&path=/')).status).toBe(401)
     expect((await user.json('GET', '/api/list?space=home&path=/')).status).toBe(200)
   })
@@ -495,7 +495,7 @@ describe('regressions found in QA', () => {
   })
   test('a user folder can not be placed inside the public folder', async () => {
     const make = (homedir: string) => admin.json('POST', '/api/admin/users', {
-      username: 'pubhome', name: 'x', password: 'password123', role: 'user', homedir, permissions: ['read'], publicPermissions: [],
+      username: 'pubhome', name: 'x', password: 'harbor-lamp-42', role: 'user', homedir, permissions: ['read'], publicPermissions: [],
     })
     expect((await make('/public')).status).toBe(400)
     expect((await make('/public/inside')).status).toBe(400)
@@ -568,12 +568,12 @@ const sha256 = (b: Uint8Array) => createHash('sha256').update(b).digest('hex')
 
 /** admin creates a user, drops matrix.txt into their folder and returns a logged-in client */
 async function userWith(username: string, permissions: string[], publicPermissions: string[], role = 'user') {
-  const r = await admin.json('POST', '/api/admin/users', { username, name: username, password: 'password123', role, permissions, publicPermissions })
+  const r = await admin.json('POST', '/api/admin/users', { username, name: username, password: 'harbor-lamp-42', role, permissions, publicPermissions })
   expect(r.status).toBe(200)
   if (role === 'user') writeFileSync(storageAbs('users', username, 'matrix.txt'), 'matrix')
   const c = new Client()
   await c.start()
-  expect((await c.login(username, 'password123')).status).toBe(200)
+  expect((await c.login(username, 'harbor-lamp-42')).status).toBe(200)
   return c
 }
 
@@ -650,7 +650,7 @@ describe('full system: permission matrix', () => {
     const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])
     const adminCalls: [string, string, any?][] = [
       ['GET', '/api/admin/users'],
-      ['POST', '/api/admin/users', { username: 'sneaky', name: 'x', password: 'password123', role: 'admin', permissions: [], publicPermissions: [] }],
+      ['POST', '/api/admin/users', { username: 'sneaky', name: 'x', password: 'harbor-lamp-42', role: 'admin', permissions: [], publicPermissions: [] }],
       ['PUT', '/api/admin/users/:username', { role: 'admin' }],
       ['DELETE', '/api/admin/users/:username'],
       ['GET', '/api/admin/folders'],
@@ -698,7 +698,7 @@ describe('full system: CSRF', () => {
       ['POST', '/api/login', { username: 'admin', password: 'x' }],
       ['POST', '/api/logout'],
       ['POST', '/api/password', { current: 'test-admin-pass', next: 'hijacked-password' }],
-      ['POST', '/api/admin/users', { username: 'csrf-user', name: 'x', password: 'password123', role: 'admin', permissions: [], publicPermissions: [] }],
+      ['POST', '/api/admin/users', { username: 'csrf-user', name: 'x', password: 'harbor-lamp-42', role: 'admin', permissions: [], publicPermissions: [] }],
       ['PUT', '/api/admin/users/:username', { role: 'admin' }],
       ['DELETE', '/api/admin/users/:username'],
       ['POST', '/api/admin/trash/restore', { id: '0000000000000_00000000' }],
@@ -1142,7 +1142,7 @@ describe('full system: users', () => {
     // the only admin stays an admin
     expect((await update('admin', { role: 'user' })).status).toBe(400)
     const make = (username: string, name = 'x') =>
-      admin.json('POST', '/api/admin/users', { username, name, password: 'password123', role: 'user', permissions: [], publicPermissions: [] })
+      admin.json('POST', '/api/admin/users', { username, name, password: 'harbor-lamp-42', role: 'user', permissions: [], publicPermissions: [] })
     for (const username of ['ab', 'bad name', 'x'.repeat(33), 'ไทย', '../up']) expect((await make(username)).status).toBe(400)
     expect((await make('SOMCHAI')).status).toBe(409)
     expect((await make('okname', 'x'.repeat(61))).status).toBe(400)
@@ -1150,7 +1150,7 @@ describe('full system: users', () => {
   test('a password reset or deletion ends the sessions of that user', async () => {
     const c = new Client()
     await c.start()
-    expect((await c.login('lifecycle', 'password123')).status).toBe(200)
+    expect((await c.login('lifecycle', 'harbor-lamp-42')).status).toBe(200)
     expect((await update('lifecycle', { password: 'reset-pass-99' })).status).toBe(200)
     expect((await c.json('GET', '/api/list?space=home&path=/')).status).toBe(401)
     await c.start() // the old session is gone, fetch a fresh one like the web app does
@@ -1336,6 +1336,32 @@ describe('hardening: password policy', () => {
     }
     expect((await make('policy-ok', 'Tenchars10')).status).toBe(200)
   })
+  test('common passwords of 10+ characters are refused too', async () => {
+    for (const password of ['password123', 'Password1234', '1q2w3e4r5t', '1QAZ2WSX3EDC', 'qwerty123456', 'iloveyou123', 'Administrator', 'welcome123', 'changeme123']) {
+      const r = await make('policy-long', password)
+      expect(`${password} ${r.status}`).toBe(`${password} 400`)
+      expect(r.data.error).toMatch(/[฀-๿]/)
+    }
+  })
+  test('one repeated character or a straight keyboard, number or abc run is refused', async () => {
+    for (const password of [
+      'aaaaaaaaaa', 'ZZZZZZZZZZZZ', '!!!!!!!!!!', '7777777777', // one character over and over
+      '0987654321', '01234567890', '9876543210', // numbers either way
+      'abcdefghij', 'JIHGFEDCBA', 'klmnopqrstuvw', // the alphabet either way
+      'asdfghjkl;', 'zxcvbnm,./', 'poiuytrewq', '`1234567890-=', 'qwertyuiopasdfghjkl', // keyboard rows
+    ]) {
+      const r = await make('policy-run', password)
+      expect(`${password} ${r.status}`).toBe(`${password} 400`)
+      expect(r.data.error).toMatch(/[฀-๿]/)
+    }
+    // almost a run is fine, and a password change follows the same rule
+    expect((await make('policy-run', 'abcdefghik')).status).toBe(200)
+    const c = new Client()
+    await c.start()
+    expect((await c.login('policy-run', 'abcdefghik')).status).toBe(200)
+    expect((await c.json('POST', '/api/password', { current: 'abcdefghik', next: 'mmmmmmmmmmmm' })).status).toBe(400)
+    expect((await c.json('POST', '/api/password', { current: 'abcdefghik', next: ';lkjhgfdsa' })).status).toBe(400)
+  })
   test('admin-set passwords and password changes follow the same rule', async () => {
     for (const password of ['short-pw1', 'xxPolicy-OKxx', 'qwertyuiop']) {
       expect(`${password} ${(await admin.json('PUT', '/api/admin/users/policy-ok', { password })).status}`).toBe(`${password} 400`)
@@ -1358,6 +1384,23 @@ describe('hardening: password policy', () => {
     const a = new Client()
     await a.start()
     expect((await a.login('admin', 'test-admin-pass')).status).toBe(200)
+  })
+})
+
+describe('reserved username: guest', () => {
+  const make = (username: string) =>
+    admin.json('POST', '/api/admin/users', { username, name: username, password: 'quiet-harbor-7', role: 'user', permissions: ['read'], publicPermissions: [] })
+
+  test('no account may be named guest (visitors\' uploads go under that name), in any case', async () => {
+    for (const username of ['guest', 'GUEST', 'Guest', ' gUeSt ']) {
+      const r = await make(username)
+      expect(`${username} ${r.status}`).toBe(`${username} 400`)
+      expect(r.data.error).toMatch(/[฀-๿]/)
+    }
+    const users = (await admin.json('GET', '/api/admin/users')).data.users as any[]
+    expect(users.some(u => u.username.toLowerCase() === 'guest')).toBe(false)
+    // only the name itself is reserved
+    for (const username of ['guest2', 'my-guest']) expect(`${username} ${(await make(username)).status}`).toBe(`${username} 200`)
   })
 })
 
