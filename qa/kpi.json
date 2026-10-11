@@ -136,6 +136,166 @@
         }
       },
       "usage": {}
+    },
+    "r1": {
+      "at": "2026-10-11T16:00:27.996Z",
+      "check": {
+        "runId": "r1",
+        "ok": true,
+        "passed": 103,
+        "total": 104,
+        "lines": 82.45
+      },
+      "suite": {
+        "mutationScore": 1,
+        "missed": []
+      },
+      "agents": {
+        "qa-runner": {
+          "evidence": 1,
+          "review": null,
+          "composite": 1,
+          "kpis": [
+            {
+              "name": "numbers match run-checks",
+              "value": 1,
+              "target": 1,
+              "weight": 3,
+              "pass": true
+            },
+            {
+              "name": "flaky tests reported correctly",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true
+            }
+          ]
+        },
+        "security-auditor": {
+          "evidence": 1,
+          "review": null,
+          "composite": 1,
+          "kpis": [
+            {
+              "name": "precision (findings that are real)",
+              "value": 1,
+              "target": 0.7,
+              "weight": 2,
+              "pass": true,
+              "note": "8/8"
+            },
+            {
+              "name": "recall on planted bugs",
+              "value": 1,
+              "target": 0.8,
+              "weight": 3,
+              "pass": true,
+              "note": "7/7 (easy 1/1, subtle 6/6); missed: -"
+            },
+            {
+              "name": "ignores decoys",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true
+            },
+            {
+              "name": "severity within one level of the truth",
+              "value": 1,
+              "target": 0.8,
+              "weight": 1,
+              "pass": true
+            },
+            {
+              "name": "every finding has file, line, evidence",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true
+            }
+          ]
+        },
+        "verifier": {
+          "evidence": 0.8461538461538461,
+          "review": null,
+          "composite": 0.8461538461538461,
+          "kpis": [
+            {
+              "name": "confirms the planted bugs",
+              "value": 1,
+              "target": 0.9,
+              "weight": 3,
+              "pass": true,
+              "note": "7/7"
+            },
+            {
+              "name": "refutes findings on decoys",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "no decoy was reported"
+            },
+            {
+              "name": "every finding gets a verdict",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true
+            },
+            {
+              "name": "repro commands reproduce (run twice)",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "8/8"
+            },
+            {
+              "name": "repro does not trigger on clean code",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "7/7"
+            },
+            {
+              "name": "unplanted findings reproduce on the real code",
+              "value": 0,
+              "target": 1,
+              "weight": 2,
+              "pass": false,
+              "note": "0/1"
+            },
+            {
+              "name": "CONFIRMED verdicts carry a repro",
+              "value": 1,
+              "target": 0.9,
+              "weight": 1,
+              "pass": true,
+              "note": "F8 (not planted) does not reproduce on the real code"
+            }
+          ]
+        }
+      },
+      "usage": {
+        "qa-runner": {
+          "tokens": 50037,
+          "ms": 41329,
+          "toolUses": 3
+        },
+        "security-auditor": {
+          "tokens": 123315,
+          "ms": 81425,
+          "toolUses": 24
+        },
+        "verifier": {
+          "tokens": 147237,
+          "ms": 711178,
+          "toolUses": 46
+        }
+      }
     }
   }
 }

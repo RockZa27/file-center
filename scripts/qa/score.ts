@@ -108,7 +108,7 @@ const finish = (name: string, kpis: Kpi[]): Score => {
       const rightPlanted = onPlanted.filter(f => verdicts.get(f.id)?.verdict === 'CONFIRMED')
       const rightDecoy = decoyHits.filter(f => verdicts.get(f.id)?.verdict === 'REFUTED')
       const withRepro = v.verdicts.filter(x => x.repro)
-      let reproduces = withRepro.length, discriminates = 0, discriminateTotal = 0
+      let reproduces = withRepro.length, discriminates = 0, discriminateTotal = 0, standalone = 0, standaloneTotal = 0
       const notes: string[] = []
       if (flags.includes('--rerun-repro')) {
         reproduces = 0
@@ -118,13 +118,20 @@ const finish = (name: string, kpis: Kpi[]): Score => {
           else notes.push(`${x.findingId} did not reproduce`)
           // on code without the planted bug the same command must NOT report the problem
           const f = a.findings.find(y => y.id === x.findingId)
-          if (seed.cleanDir && f && bugOf(f)) {
-            discriminateTotal++
-            const cleanRepro = join(seed.cleanDir, 'qa', 'repro')
-            if (existsSync(join(seed.dir, 'qa', 'repro'))) cpSync(join(seed.dir, 'qa', 'repro'), cleanRepro, { recursive: true })
+          if (seed.cleanDir && f) {
+            if (existsSync(join(seed.dir, 'qa', 'repro'))) cpSync(join(seed.dir, 'qa', 'repro'), join(seed.cleanDir, 'qa', 'repro'), { recursive: true })
             const onClean = sh(x.repro!.command.replaceAll(seed.dir, seed.cleanDir))
-            if (onClean !== x.repro!.expectExit) discriminates++
-            else notes.push(`${x.findingId} also "reproduces" on clean code`)
+            if (bugOf(f)) {
+              discriminateTotal++
+              if (onClean !== x.repro!.expectExit) discriminates++
+              else notes.push(`${x.findingId} also "reproduces" on clean code`)
+            } else if (x.verdict === 'CONFIRMED') {
+              // a real defect that was not planted is in the clean code too: its repro must work there,
+              // otherwise it leans on some planted bug (or is not real)
+              standaloneTotal++
+              if (onClean === x.repro!.expectExit) standalone++
+              else notes.push(`${x.findingId} (not planted) does not reproduce on the real code`)
+            }
           }
         }
       }
@@ -134,6 +141,7 @@ const finish = (name: string, kpis: Kpi[]): Score => {
         kpi('every finding gets a verdict', frac(a.findings.filter(f => verdicts.has(f.id)).length, a.findings.length), 1, 1),
         kpi('repro commands reproduce (run twice)', frac(reproduces, withRepro.length), 1, 2, flags.includes('--rerun-repro') ? `${reproduces}/${withRepro.length}` : 'not re-run (use --rerun-repro)'),
         kpi('repro does not trigger on clean code', frac(discriminates, discriminateTotal), 1, 2, discriminateTotal ? `${discriminates}/${discriminateTotal}` : 'not measured (needs --rerun-repro and a clean copy)'),
+        kpi('unplanted findings reproduce on the real code', frac(standalone, standaloneTotal), 1, 2, standaloneTotal ? `${standalone}/${standaloneTotal}` : 'none to check'),
         kpi('CONFIRMED verdicts carry a repro', frac(v.verdicts.filter(x => x.verdict === 'CONFIRMED' && x.repro).length, v.verdicts.filter(x => x.verdict === 'CONFIRMED').length), 0.9, 1, notes.join('; ') || undefined),
       ])
     }
