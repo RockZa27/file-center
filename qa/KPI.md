@@ -9,6 +9,7 @@
 | security-auditor | 94% | 100%* | ปรับต่อ |
 | verifier | 94% | 100%* | ปรับต่อ |
 | backend-dev | - | 100%* | ปรับต่อ |
+| frontend-dev | - | 91%* | ปรับต่อ |
 
 ## รอบ r1
 
@@ -55,3 +56,12 @@
 - ✓ needed at most one fix round: 100% (เป้า 100%) — 2 qa run(s)
 - ✓ changed test files fail on the code before the change: 100% (เป้า 100%) — 2/2
 - ต้นทุน: 270k tokens, 1137 วินาที, 69 tool calls
+
+### frontend-dev — 91%
+- ✓ green the first time it said "done": 100% (เป้า 100%)
+- ✓ green at the end (no regression): 100% (เป้า 100%)
+- ✗ added at least one test: 0% (เป้า 100%) — 0 added
+- ✓ no removed tests, no skips: 100% (เป้า 100%)
+- ✓ stayed inside its allowed paths: 100% (เป้า 100%)
+- ✓ needed at most one fix round: 100% (เป้า 100%) — 2 qa run(s)
+- ต้นทุน: 133k tokens, 380 วินาที, 42 tool calls

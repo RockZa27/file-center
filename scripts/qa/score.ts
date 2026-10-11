@@ -164,7 +164,10 @@ for (const name of ['backend-dev', 'frontend-dev'] as const) {
     const ks = [
       kpi(`${task}green the first time it said "done"`, first.ok ? 1 : 0, 1, 2),
       kpi(`${task}green at the end (no regression)`, final.ok ? 1 : 0, 1, 3),
-      kpi(`${task}added at least one test`, (g?.addedTests.length ?? 0) >= 1 ? 1 : 0, 1, 1, g ? `${g.addedTests.length} added` : 'run-checks had no --base'),
+      // the web page has no test suite of its own and frontend-dev may not touch tests/: its proof is the ux-tester's flows
+      name === 'frontend-dev'
+        ? (() => { const u = agent<UxReport>('ux-tester'); return kpi(`${task}ux-tester flows pass on its page`, u ? frac(u.flows.filter(f => f.passed).length, u.flows.length) : 0, 1, 3, u ? undefined : 'no ux-tester report yet') })()
+        : kpi(`${task}added at least one test`, (g?.addedTests.length ?? 0) >= 1 ? 1 : 0, 1, 1, g ? `${g.addedTests.length} added` : 'run-checks had no --base'),
       kpi(`${task}no removed tests, no skips`, g && g.removedTests.length + g.skipAdded.length === 0 ? 1 : 0, 1, 2),
       kpi(`${task}stayed inside its allowed paths`, g && g.outOfScope.length === 0 ? 1 : 0, 1, 2, g?.outOfScope.join(', ') || undefined),
       kpi(`${task}needed at most one fix round`, d.iterations <= 2 ? 1 : 1 / d.iterations, 1, 1, `${d.iterations} qa run(s)`),
