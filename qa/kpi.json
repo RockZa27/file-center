@@ -891,9 +891,9 @@
       }
     },
     "r3": {
-      "at": "2026-10-11T18:42:26.333Z",
+      "at": "2026-10-11T19:29:04.908Z",
       "check": {
-        "runId": "r3-merged2",
+        "runId": "r3-final",
         "ok": true,
         "passed": 159,
         "total": 160,
@@ -906,7 +906,7 @@
       "agents": {
         "security-auditor": {
           "evidence": 1,
-          "review": null,
+          "review": 1,
           "composite": 1,
           "kpis": [
             {
@@ -950,7 +950,7 @@
         },
         "verifier": {
           "evidence": 1,
-          "review": null,
+          "review": 1,
           "composite": 1,
           "kpis": [
             {
@@ -1011,7 +1011,7 @@
         },
         "backend-dev": {
           "evidence": 1,
-          "review": null,
+          "review": 1,
           "composite": 1,
           "kpis": [
             {
@@ -1059,6 +1059,14 @@
               "note": "2 qa run(s)"
             },
             {
+              "name": "[log] test files with new tests fail on the code before the change",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "1/1"
+            },
+            {
               "name": "[perf] green the first time it said \"done\"",
               "value": 1,
               "target": 1,
@@ -1101,6 +1109,137 @@
               "weight": 1,
               "pass": true,
               "note": "2 qa run(s)"
+            },
+            {
+              "name": "[perf] test files with new tests fail on the code before the change",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "1/1"
+            }
+          ]
+        },
+        "frontend-dev": {
+          "evidence": 0.9538461538461538,
+          "review": 0.8,
+          "composite": 0.9076923076923076,
+          "kpis": [
+            {
+              "name": "green the first time it said \"done\"",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "green at the end (no regression)",
+              "value": 1,
+              "target": 1,
+              "weight": 3,
+              "pass": true
+            },
+            {
+              "name": "ux-tester flows pass on its page",
+              "value": 0.8,
+              "target": 1,
+              "weight": 3,
+              "pass": false
+            },
+            {
+              "name": "no removed tests, no skips",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "stayed inside its allowed paths",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "needed at most one fix round",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true,
+              "note": "2 qa run(s)"
+            },
+            {
+              "name": "[mobile] green the first time it said \"done\"",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "excused: tests/update.test.ts used pgrep -f on the worktree path and killed the agent's own running app (orchestrator's test bug, fixed in the same round)"
+            },
+            {
+              "name": "[mobile] green at the end (no regression)",
+              "value": 1,
+              "target": 1,
+              "weight": 3,
+              "pass": true
+            },
+            {
+              "name": "[mobile] ux-tester flows pass on its page",
+              "value": 0.8,
+              "target": 1,
+              "weight": 3,
+              "pass": false
+            },
+            {
+              "name": "[mobile] no removed tests, no skips",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[mobile] stayed inside its allowed paths",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[mobile] needed at most one fix round",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true,
+              "note": "2 qa run(s)"
+            }
+          ]
+        },
+        "ux-tester": {
+          "evidence": 1,
+          "review": 1,
+          "composite": 1,
+          "kpis": [
+            {
+              "name": "every flow has a screenshot",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "every failure explains its cause",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "2 failing flow(s)"
+            },
+            {
+              "name": "flows without unexplained console errors",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true
             }
           ]
         }
@@ -1120,6 +1259,16 @@
           "tokens": 40623,
           "ms": 122482,
           "toolUses": 15
+        },
+        "frontend-dev": {
+          "tokens": 243695,
+          "ms": 1705449,
+          "toolUses": 218
+        },
+        "ux-tester": {
+          "tokens": 207824,
+          "ms": 910570,
+          "toolUses": 100
         }
       }
     }

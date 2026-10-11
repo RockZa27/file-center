@@ -12,6 +12,8 @@
  * Score = 70% evidence + 30% reviewer. Evidence is recomputed here: run-checks results, planted bugs and decoys,
  * repro commands re-run twice on the seeded copy AND once on a clean copy (where they must not trigger).
  * An agent is "stable" after 3 rounds in a row at or above 0.8.
+ * Score a round once, when it ends: --rerun-repro needs that round's seeded copies in /tmp, which are deleted
+ * afterwards, and re-scoring an old round with today's rules rewrites history. qa/kpi.json keeps what was measured.
  */
 import { cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -167,7 +169,8 @@ for (const name of ['backend-dev', 'frontend-dev'] as const) {
     if (!d || !first || !final) { problems.push(`${file}: run ids have no result file`); continue }
     const g = final.guards
     const ks = [
-      kpi(`${task}green the first time it said "done"`, first.ok ? 1 : 0, 1, 2),
+      // the orchestrator may excuse a failed first run that was not the agent's doing (written down in the report)
+      kpi(`${task}green the first time it said "done"`, first.ok || d.excusedFirstRun ? 1 : 0, 1, 2, d.excusedFirstRun ? `excused: ${d.excusedFirstRun}` : undefined),
       kpi(`${task}green at the end (no regression)`, final.ok ? 1 : 0, 1, 3),
       // the web page has no test suite of its own and frontend-dev may not touch tests/: its proof is the ux-tester's flows
       name === 'frontend-dev'
@@ -202,14 +205,17 @@ for (const name of ['backend-dev', 'frontend-dev'] as const) {
   scores[name] = all.length ? finish(name, all) : missing(problems.join('; '))
 }
 
-// ── ux-tester
+// ── ux-tester: its job is to report truthfully, so a flow that FAILS because the app is broken is good work.
+// Judged by: every flow given was run, every result has its evidence, every failure names its cause.
+// (Whether the flows pass is the app's score, and counts for frontend-dev.)
 {
   const u = agent<UxReport>('ux-tester')
   if (u) {
+    const failed = u.flows.filter(f => !f.passed)
     scores['ux-tester'] = finish('ux-tester', [
-      kpi('flows passed', frac(u.flows.filter(f => f.passed).length, u.flows.length), 1, 3),
-      kpi('flows without console errors', frac(u.flows.filter(f => f.consoleErrors === 0).length, u.flows.length), 1, 2),
-      kpi('every flow has a screenshot', frac(u.flows.filter(f => f.screenshot && existsSync(resolve(root, f.screenshot))).length, u.flows.length), 1, 1),
+      kpi('every flow has a screenshot', frac(u.flows.filter(f => f.screenshot && existsSync(resolve(root, f.screenshot))).length, u.flows.length), 1, 2),
+      kpi('every failure explains its cause', frac(failed.filter(f => ((f as { notes?: string }).notes ?? '').length >= 40).length, failed.length), 1, 2, failed.length ? `${failed.length} failing flow(s)` : 'no failures'),
+      kpi('flows without unexplained console errors', frac(u.flows.filter(f => f.consoleErrors === 0).length, u.flows.length), 1, 1),
     ])
   }
 }

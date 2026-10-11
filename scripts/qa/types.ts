@@ -45,8 +45,10 @@ export type DevReport = {
   runIdFirst: string
   runIdFinal: string
   iterations: number
+  /** set by the orchestrator only, with the reason, when the first run failed for something that was not the agent's doing */
+  excusedFirstRun?: string
 }
-export type UxReport = { agent: 'ux-tester'; flows: { name: string; passed: boolean; consoleErrors: number; expectedHttpErrors?: number; screenshot?: string }[] }
+export type UxReport = { agent: 'ux-tester'; flows: { name: string; passed: boolean; consoleErrors: number; expectedHttpErrors?: number; screenshot?: string; notes?: string }[] }
 export type Review = Record<string, { score: number; notes: string }>
 /** tokens and wall time per agent, copied from the task notifications: shown, not scored */
 export type Usage = Record<string, { tokens: number; ms: number; toolUses?: number }>
