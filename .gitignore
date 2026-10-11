@@ -7,3 +7,5 @@ storage/
 bun.lockb
 package-lock.json
 dist-update/
+qa/results/
+qa/reports/*/screenshots/
