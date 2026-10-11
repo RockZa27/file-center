@@ -138,7 +138,7 @@
       "usage": {}
     },
     "r1": {
-      "at": "2026-10-11T16:11:52.035Z",
+      "at": "2026-10-11T16:16:33.060Z",
       "check": {
         "runId": "r1",
         "ok": true,
@@ -153,7 +153,7 @@
       "agents": {
         "qa-runner": {
           "evidence": 1,
-          "review": null,
+          "review": 1,
           "composite": 1,
           "kpis": [
             {
@@ -174,7 +174,7 @@
         },
         "security-auditor": {
           "evidence": 1,
-          "review": null,
+          "review": 1,
           "composite": 1,
           "kpis": [
             {
@@ -217,9 +217,9 @@
           ]
         },
         "verifier": {
-          "evidence": 1,
-          "review": null,
-          "composite": 1,
+          "evidence": 0.8461538461538461,
+          "review": 0.6,
+          "composite": 0.7723076923076924,
           "kpis": [
             {
               "name": "confirms the planted bugs",
@@ -250,7 +250,7 @@
               "target": 1,
               "weight": 2,
               "pass": true,
-              "note": "not re-run (use --rerun-repro)"
+              "note": "8/8"
             },
             {
               "name": "repro does not trigger on clean code",
@@ -258,28 +258,29 @@
               "target": 1,
               "weight": 2,
               "pass": true,
-              "note": "not measured (needs --rerun-repro and a clean copy)"
+              "note": "7/7"
             },
             {
               "name": "unplanted findings reproduce on the real code",
-              "value": 1,
+              "value": 0,
               "target": 1,
               "weight": 2,
-              "pass": true,
-              "note": "none to check"
+              "pass": false,
+              "note": "0/1"
             },
             {
               "name": "CONFIRMED verdicts carry a repro",
               "value": 1,
               "target": 0.9,
               "weight": 1,
-              "pass": true
+              "pass": true,
+              "note": "F8 (not planted) does not reproduce on the real code"
             }
           ]
         },
         "backend-dev": {
           "evidence": 1,
-          "review": null,
+          "review": 1,
           "composite": 1,
           "kpis": [
             {
@@ -389,9 +390,9 @@
           ]
         },
         "frontend-dev": {
-          "evidence": 0.9090909090909091,
-          "review": null,
-          "composite": 0.9090909090909091,
+          "evidence": 1,
+          "review": 0.8,
+          "composite": 0.94,
           "kpis": [
             {
               "name": "green the first time it said \"done\"",
@@ -408,12 +409,11 @@
               "pass": true
             },
             {
-              "name": "added at least one test",
-              "value": 0,
+              "name": "ux-tester flows pass on its page",
+              "value": 1,
               "target": 1,
-              "weight": 1,
-              "pass": false,
-              "note": "0 added"
+              "weight": 3,
+              "pass": true
             },
             {
               "name": "no removed tests, no skips",
@@ -436,6 +436,34 @@
               "weight": 1,
               "pass": true,
               "note": "2 qa run(s)"
+            }
+          ]
+        },
+        "ux-tester": {
+          "evidence": 1,
+          "review": 1,
+          "composite": 1,
+          "kpis": [
+            {
+              "name": "flows passed",
+              "value": 1,
+              "target": 1,
+              "weight": 3,
+              "pass": true
+            },
+            {
+              "name": "flows without console errors",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "every flow has a screenshot",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true
             }
           ]
         }
@@ -465,6 +493,11 @@
           "tokens": 132759,
           "ms": 379570,
           "toolUses": 42
+        },
+        "ux-tester": {
+          "tokens": 110625,
+          "ms": 219832,
+          "toolUses": 32
         }
       }
     }

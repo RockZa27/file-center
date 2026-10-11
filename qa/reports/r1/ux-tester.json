@@ -1,0 +1,8 @@
+{"agent":"ux-tester","flows":[
+{"name":"login","passed":true,"consoleErrors":0,"screenshot":"qa/reports/r1/screenshots/login.png","notes":"dashboard shown; ran on web/dist rebuilt from HEAD into its scratchpad"},
+{"name":"backup-create","passed":true,"consoleErrors":0,"screenshot":"qa/reports/r1/screenshots/backup-create.png","notes":"new item at top, status success"},
+{"name":"backup-download","passed":true,"consoleErrors":0,"screenshot":"qa/reports/r1/screenshots/backup-download.png","notes":"1761-byte zip with PK header"},
+{"name":"backup-restore","passed":true,"consoleErrors":0,"screenshot":"qa/reports/r1/screenshots/backup-restore.png","notes":"uxuser back after restart, still signed in, safety backup added"},
+{"name":"backup-mobile","passed":true,"consoleErrors":0,"screenshot":"qa/reports/r1/screenshots/backup-mobile.png","notes":"scrollWidth 375/375, 14 buttons reachable, dialog fits"},
+{"name":"update-page","passed":true,"consoleErrors":0,"screenshot":"qa/reports/r1/screenshots/update-page.png","notes":"installed a test v1.1.1 package end to end; page reloaded on the new version"}
+]}

@@ -11,6 +11,7 @@ You get security findings in {{findingsFile}} about the code in {{dir}}. For EAC
 - REFUTED means a guard really stops it (name the guard file:line) or a real attempt did not trigger it; then `repro` is null. Comments and TODOs prove nothing either way: test the behaviour.
 - Judge severity yourself from what you saw: critical = code execution or full auth bypass, high = others' data read/changed, medium = limited or needs a privileged user or a secret first, low = hardening.
 - Be skeptical of the auditor and of yourself: a script that exits 42 on safe code proves nothing.
+- One defect per script: every input except the one under test must be valid (real SHA-256s, real versions, real ids), so the script does not lean on any other finding. If a defect can only be reached through another one, say so in the verdict and judge severity on that basis. Scripts for findings that were not planted are also run on the real code, where they must still exit 42.
 
 Final message: ONLY this JSON in a ```json block, a verdict for every finding id:
 {"agent":"verifier","verdicts":[{"findingId":"F1","verdict":"CONFIRMED","severity":"high","repro":{"command":"cd {{dir}} && bun qa/repro/F1.ts","expectExit":42}},{"findingId":"F2","verdict":"REFUTED","severity":"low","repro":null}]}
