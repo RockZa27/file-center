@@ -502,8 +502,14 @@
       }
     },
     "r2": {
-      "at": "2026-10-11T16:41:07.321Z",
-      "check": null,
+      "at": "2026-10-11T17:09:51.481Z",
+      "check": {
+        "runId": "r2-merged2",
+        "ok": true,
+        "passed": 141,
+        "total": 142,
+        "lines": 87.11
+      },
       "suite": {
         "mutationScore": 1,
         "missed": []
@@ -511,7 +517,7 @@
       "agents": {
         "security-auditor": {
           "evidence": 1,
-          "review": null,
+          "review": 1,
           "composite": 1,
           "kpis": [
             {
@@ -555,7 +561,7 @@
         },
         "verifier": {
           "evidence": 1,
-          "review": null,
+          "review": 1,
           "composite": 1,
           "kpis": [
             {
@@ -615,9 +621,9 @@
           ]
         },
         "backend-dev": {
-          "evidence": 0.9696818181818181,
-          "review": null,
-          "composite": 0.9696818181818181,
+          "evidence": 0.9828974358974358,
+          "review": 0.9400000000000001,
+          "composite": 0.9700282051282051,
           "kpis": [
             {
               "name": "[sign] green the first time it said \"done\"",
@@ -664,6 +670,14 @@
               "note": "3 qa run(s)"
             },
             {
+              "name": "[sign] test files with new tests fail on the code before the change",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "1/1"
+            },
+            {
               "name": "[harden] green the first time it said \"done\"",
               "value": 1,
               "target": 1,
@@ -706,6 +720,144 @@
               "weight": 1,
               "pass": true,
               "note": "2 qa run(s)"
+            },
+            {
+              "name": "[harden] test files with new tests fail on the code before the change",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "1/1"
+            },
+            {
+              "name": "[pw] green the first time it said \"done\"",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[pw] green at the end (no regression)",
+              "value": 1,
+              "target": 1,
+              "weight": 3,
+              "pass": true
+            },
+            {
+              "name": "[pw] added at least one test",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true,
+              "note": "3 added"
+            },
+            {
+              "name": "[pw] no removed tests, no skips",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[pw] stayed inside its allowed paths",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[pw] needed at most one fix round",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true,
+              "note": "2 qa run(s)"
+            },
+            {
+              "name": "[pw] test files with new tests fail on the code before the change",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "1/1"
+            }
+          ]
+        },
+        "frontend-dev": {
+          "evidence": 1,
+          "review": 1,
+          "composite": 1,
+          "kpis": [
+            {
+              "name": "green the first time it said \"done\"",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "green at the end (no regression)",
+              "value": 1,
+              "target": 1,
+              "weight": 3,
+              "pass": true
+            },
+            {
+              "name": "ux-tester flows pass on its page",
+              "value": 1,
+              "target": 1,
+              "weight": 3,
+              "pass": true
+            },
+            {
+              "name": "no removed tests, no skips",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "stayed inside its allowed paths",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "needed at most one fix round",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true,
+              "note": "2 qa run(s)"
+            }
+          ]
+        },
+        "ux-tester": {
+          "evidence": 1,
+          "review": 1,
+          "composite": 1,
+          "kpis": [
+            {
+              "name": "flows passed",
+              "value": 1,
+              "target": 1,
+              "weight": 3,
+              "pass": true
+            },
+            {
+              "name": "flows without console errors",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "every flow has a screenshot",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true
             }
           ]
         }
@@ -717,9 +869,24 @@
           "toolUses": 26
         },
         "backend-dev": {
-          "tokens": 294607,
-          "ms": 1032855,
-          "toolUses": 82
+          "tokens": 389441,
+          "ms": 1415549,
+          "toolUses": 126
+        },
+        "verifier": {
+          "tokens": 176457,
+          "ms": 889423,
+          "toolUses": 67
+        },
+        "frontend-dev": {
+          "tokens": 185226,
+          "ms": 1237926,
+          "toolUses": 86
+        },
+        "ux-tester": {
+          "tokens": 137749,
+          "ms": 494222,
+          "toolUses": 58
         }
       }
     }

@@ -4,6 +4,29 @@ Change one thing per agent per round, so the effect is visible.
 
 <!-- newest first -->
 
+## r2 → r3
+ผลของการปรับเมื่อรอบก่อน (วัดได้):
+- verifier 77% → 100%: กฎ "สคริปต์ละหนึ่งจุดบกพร่อง" ได้ผลชัด รอบนี้แยก F8/F9 ที่อยู่ในโค้ดเดียวกันโดยตั้งใจ
+- frontend-dev 94% → 100%: ลองติดตั้งอัปเดตจริงเองตามกฎใหม่ (รอบก่อนข้าม)
+- ux-tester: เริ่มแอปด้วย PID ของ launcher ถูกต้องตั้งแต่ครั้งแรก
+- security-auditor: ≥ 80% ติดกัน 3 รอบ (94, 100, 100) → นิ่ง
+
+ความผิดพลาดของเกณฑ์/ground truth ที่ agent ทำให้เห็นในรอบนี้ (แก้แล้ว):
+- บั๊กฝัง inline-html มีด่าน CSP sandbox กันอยู่ verifier ปฏิเสธพร้อมชี้ด่าน ซึ่งถูก → ลดเป็น low และยอมรับคำตัดสินนี้
+- guard ของ run-checks ไม่เห็นไฟล์ที่ยังไม่ commit (backend-dev รายงาน) → แก้แล้ว
+- สเปกของผมสั่งใช้รายการรหัสผ่าน top-100 ที่มีแค่ 2 ตัวยาว ≥10 → มอบงานแก้
+- flow health-anonymous ทดสอบไม่ได้จากเครื่องเดียวกัน (frontend-dev ชี้) → เปลี่ยนเป็นจำลองผ่าน proxy
+- console error ที่มาจากการปฏิเสธที่ flow ตั้งใจทดสอบ ถูกนับเป็นความผิด → แยกเป็น expectedHttpErrors (รายงาน r2 ย้ายตัวเลขตามคำอธิบายของ ux-tester เอง: 2, 4, 1)
+
+การเปลี่ยน agent:
+- ux-tester: แยก expectedHttpErrors ออกจาก consoleErrors และต้องบอกว่ามาจากคำขอใด
+- ตัวอื่นไม่เปลี่ยน (คะแนนถึงเป้า)
+
+ข้อสังเกตเรื่องต้นทุน: verifier ~15 นาที/176k tokens และ frontend-dev ~21 นาที/185k tokens สูงสุด ถ้าจะลดต้นทุนรอบหน้า ควรจำกัดเวลา/จำนวน tool call ของ verifier ทีละ finding
+
+backlog จากรอบนี้: ข้อความ error จากเซิร์ฟเวอร์เป็นไทยอย่างเดียวแม้ UI เป็นอังกฤษ; ไม่มีคำเตือนชื่อ guest ก่อนกดบันทึก; ข้อความปฏิเสธแพ็กเกจหายไปใน 6 วินาที; การจัดวางคำแนะนำโลโก้ในหน้าตั้งค่า; Docker แบบไม่ใช่ root (ต้องมีเครื่องที่มี Docker)
+
+
 ## r1 → r2
 คะแนน r1: qa-runner 100%, security-auditor 100% (+6), verifier 77% (−17), backend-dev 100%, frontend-dev 94%, ux-tester 100% (ดู qa/KPI.md)
 

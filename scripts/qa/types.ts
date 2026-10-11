@@ -46,7 +46,7 @@ export type DevReport = {
   runIdFinal: string
   iterations: number
 }
-export type UxReport = { agent: 'ux-tester'; flows: { name: string; passed: boolean; consoleErrors: number; screenshot?: string }[] }
+export type UxReport = { agent: 'ux-tester'; flows: { name: string; passed: boolean; consoleErrors: number; expectedHttpErrors?: number; screenshot?: string }[] }
 export type Review = Record<string, { score: number; notes: string }>
 /** tokens and wall time per agent, copied from the task notifications: shown, not scored */
 export type Usage = Record<string, { tokens: number; ms: number; toolUses?: number }>

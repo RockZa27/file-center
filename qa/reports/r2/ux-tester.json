@@ -1,0 +1,9 @@
+{"agent":"ux-tester","flows":[
+{"name":"csp-tour","passed":true,"consoleErrors":0,"screenshot":"qa/reports/r2/screenshots/csp-tour.png","notes":"0 CSP messages, 0 console errors; image and PDF previews, PNG logo upload, public page all fine"},
+{"name":"weak-password","passed":true,"consoleErrors":0,"expectedHttpErrors":2,"screenshot":"qa/reports/r2/screenshots/weak-password.png","notes":"reported consoleErrors 2 = the browser's 'Failed to load resource: 400' for the two refusals the flow asks for (moved to expectedHttpErrors under the r2->r3 rule)"},
+{"name":"user-weak-password","passed":true,"consoleErrors":0,"expectedHttpErrors":4,"screenshot":"qa/reports/r2/screenshots/user-weak-password.png","notes":"reported 4 = the four expected 400 refusals; 'guest' refused"},
+{"name":"update-unsigned-refused","passed":true,"consoleErrors":0,"expectedHttpErrors":1,"screenshot":"qa/reports/r2/screenshots/update-unsigned-refused.png","notes":"reported 1 = the expected 400 for the unsigned package"},
+{"name":"update-signed","passed":true,"consoleErrors":0,"screenshot":"qa/reports/r2/screenshots/update-signed.png","notes":"signed and verified, installed, came back on 1.1.1"},
+{"name":"health-anonymous","passed":true,"consoleErrors":0,"screenshot":"qa/reports/r2/screenshots/health-anonymous.png","notes":"proxied visitor gets only status; admin gets version"},
+{"name":"mobile","passed":true,"consoleErrors":0,"screenshot":"qa/reports/r2/screenshots/mobile.png","notes":"scrollWidth 375 on both"}
+]}

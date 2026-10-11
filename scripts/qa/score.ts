@@ -180,7 +180,10 @@ for (const name of ['backend-dev', 'frontend-dev'] as const) {
     // a test that also passes without the feature tests nothing: run the branch's new tests on the base code
     if (flags.includes('--check-dev-tests') && name === 'backend-dev' && d.base) {
       const out = Bun.spawnSync(['git', 'diff', '--name-only', d.base, d.branch, '--', 'tests'], { cwd: root }).stdout.toString()
+      // only files that gained tests must fail on the old code; a file whose fixtures changed passes there, rightly
+      const added = g?.addedTests ?? []
       const changed = out.split('\n').filter(f => f.endsWith('.test.ts'))
+        .filter(f => { try { const src = Bun.spawnSync(['git', 'show', `${d.branch}:${f}`], { cwd: root }).stdout.toString(); return added.some(n => src.includes(n)) } catch { return false } })
       if (changed.length) {
         const tmp = mkdtempSync(join(tmpdir(), 'fc-devtests-'))
         sh(`git archive ${d.base} | tar -x -C ${tmp} && ln -s ${root}/node_modules ${tmp}/node_modules && ln -s ${root}/web/dist ${tmp}/web/dist`)
@@ -191,7 +194,7 @@ for (const name of ['backend-dev', 'frontend-dev'] as const) {
           if (sh(`bun test ${f}`, tmp) !== 0) failWithout++
         }
         rmSync(tmp, { recursive: true, force: true })
-        ks.push(kpi(`${task}changed test files fail on the code before the change`, frac(failWithout, changed.length), 1, 2, `${failWithout}/${changed.length}`))
+        ks.push(kpi(`${task}test files with new tests fail on the code before the change`, frac(failWithout, changed.length), 1, 2, `${failWithout}/${changed.length}`))
       }
     }
     all.push(...ks)

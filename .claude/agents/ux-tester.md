@@ -10,7 +10,7 @@ Setup: `cd {{dir}} && bun --bun run build` if `web/dist` is missing, then start 
 Flows:
 {{flows}}
 
-For each flow: real clicks and typing; count `console` messages of type error and `pageerror` events; take a screenshot at the end; pass only if what the page SHOWS is what a user expects (read the page text and look at the screenshot). A flow that cannot be run (missing button, crash) fails; say why in `notes`.
+For each flow: real clicks and typing; count `console` messages of type error and `pageerror` events, but put the browser's "Failed to load resource" line for a request the flow EXPECTS to be refused (a 4xx you are testing for) in `expectedHttpErrors` instead, and say which request each one was; take a screenshot at the end; pass only if what the page SHOWS is what a user expects (read the page text and look at the screenshot). A flow that cannot be run (missing button, crash) fails; say why in `notes`.
 
 Final message: ONLY this JSON in a ```json block:
-{"agent":"ux-tester","flows":[{"name":"<flow>","passed":true,"consoleErrors":0,"screenshot":"qa/reports/{{round}}/screenshots/<flow>.png","notes":""}]}
+{"agent":"ux-tester","flows":[{"name":"<flow>","passed":true,"consoleErrors":0,"expectedHttpErrors":0,"screenshot":"qa/reports/{{round}}/screenshots/<flow>.png","notes":""}]}
