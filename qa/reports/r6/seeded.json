@@ -1,0 +1,80 @@
+{
+  "dir": "/tmp/fc-audit-r6",
+  "bugs": {
+    "oneclick-no-password": [
+      {
+        "file": "src/routes/update.ts",
+        "line": 113
+      }
+    ],
+    "office-token-no-expiry": [
+      {
+        "file": "src/office.ts",
+        "line": 181
+      }
+    ],
+    "office-callback-any-origin": [
+      {
+        "file": "src/office.ts",
+        "line": 264
+      }
+    ],
+    "office-callback-no-jwt": [
+      {
+        "file": "src/office.ts",
+        "line": 249
+      }
+    ],
+    "alerts-unscrubbed": [
+      {
+        "file": "src/alerts.ts",
+        "line": 81
+      }
+    ],
+    "download-read-perm": [
+      {
+        "file": "src/routes/files.ts",
+        "line": 255
+      }
+    ],
+    "csv-formula": [
+      {
+        "file": "src/routes/logs.ts",
+        "line": 38
+      }
+    ]
+  },
+  "decoys": {
+    "decoy-todo-download": [
+      {
+        "file": "src/routes/files.ts",
+        "line": 253
+      }
+    ],
+    "decoy-legacy-join": [
+      {
+        "file": "src/fsx.ts",
+        "line": 282
+      }
+    ],
+    "decoy-csrf-note": [
+      {
+        "file": "src/context.ts",
+        "line": 100
+      }
+    ],
+    "decoy-backup-name": [
+      {
+        "file": "src/backup.ts",
+        "line": 60
+      }
+    ],
+    "decoy-access-url": [
+      {
+        "file": "src/logger.ts",
+        "line": 147
+      }
+    ]
+  },
+  "cleanDir": "/tmp/fc-audit-r6-clean"
+}
