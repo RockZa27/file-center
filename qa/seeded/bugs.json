@@ -344,5 +344,75 @@
         "replace": ".replace(/(\\/api\\/batch\\/)(?!)/g, `$1${HIDDEN}`)"
       }
     ]
+  },
+  {
+    "id": "search-follows-links",
+    "difficulty": "medium",
+    "category": "path-traversal",
+    "severity": "high",
+    "tests": "tests/perf.test.ts",
+    "description": "async search stats entries with stat instead of lstat, so a link inside a space is followed and files outside the space are listed",
+    "patches": [
+      {
+        "file": "src/fsx.ts",
+        "find": "const stats = await Promise.all(look.map(n => lstat(join(dir, n)).catch(() => null)))",
+        "replace": "const stats = await Promise.all(look.map(n => stat(join(dir, n)).catch(() => null)))"
+      },
+      {
+        "file": "src/fsx.ts",
+        "find": "import { copyFile, lstat, mkdir, readdir, rm } from 'node:fs/promises'",
+        "replace": "import { copyFile, lstat, mkdir, readdir, rm, stat } from 'node:fs/promises'"
+      }
+    ]
+  },
+  {
+    "id": "copy-follows-links",
+    "difficulty": "medium",
+    "category": "path-traversal",
+    "severity": "high",
+    "tests": "tests/perf.test.ts",
+    "description": "async copy follows links inside the source folder, so a copy pulls files from outside the space into it",
+    "patches": [
+      {
+        "file": "src/fsx.ts",
+        "find": "const st = await lstat(s)",
+        "replace": "const st = await stat(s)"
+      },
+      {
+        "file": "src/fsx.ts",
+        "find": "import { copyFile, lstat, mkdir, readdir, rm } from 'node:fs/promises'",
+        "replace": "import { copyFile, lstat, mkdir, readdir, rm, stat } from 'node:fs/promises'"
+      }
+    ]
+  },
+  {
+    "id": "copy-overwrites",
+    "difficulty": "easy",
+    "category": "integrity",
+    "severity": "medium",
+    "tests": "tests/perf.test.ts",
+    "description": "copying a single file drops COPYFILE_EXCL, so an existing file, or a link placed where the copy goes, is overwritten/written through",
+    "patches": [
+      {
+        "file": "src/fsx.ts",
+        "find": "try { await copyFile(from, to, FS.COPYFILE_EXCL) } catch (err: any) {",
+        "replace": "try { await copyFile(from, to) } catch (err: any) {"
+      }
+    ]
+  },
+  {
+    "id": "copy-no-space-check",
+    "difficulty": "easy",
+    "category": "dos",
+    "severity": "medium",
+    "tests": "tests/api.test.ts",
+    "description": "copy skips the free-space check, so copying a big folder can fill the disk",
+    "patches": [
+      {
+        "file": "src/routes/files.ts",
+        "find": "ensureSpace(destAbs, isDir(from) ? (await treeStats(from)).size : lstatSync(from).size)",
+        "replace": "void treeStats"
+      }
+    ]
   }
 ]
