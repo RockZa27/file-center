@@ -1,0 +1,61 @@
+{
+ "agent": "ux-tester",
+ "flows": [
+  {
+   "name": "office-preview",
+   "passed": true,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 0,
+   "screenshot": "qa/reports/r6/screenshots/office-preview.png",
+   "notes": "1200/375: docx (Thai heading, table, picture, header/footer); xlsx/xls (LibreOffice)/ods tabs switch, columns line up, dates as dates; 1,601-row sheet shows 1,000 + note; pptx 3 Thai slides with picture; md script/onerror inert; no sideways scroll."
+  },
+  {
+   "name": "editors",
+   "passed": true,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 0,
+   "screenshot": "qa/reports/r6/screenshots/editors.png",
+   "notes": "md live preview + save; csv add row/column, comma and quotes saved correctly with CRLF kept; .ts line numbers, colours, Ctrl+S."
+  },
+  {
+   "name": "edit-conflict",
+   "passed": true,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 2,
+   "screenshot": "qa/reports/r6/screenshots/edit-conflict.png",
+   "notes": "two 409s expected; 'load their version' and 'overwrite' (with confirm) both correct."
+  },
+  {
+   "name": "office-button",
+   "passed": true,
+   "consoleErrors": 1,
+   "expectedHttpErrors": 0,
+   "screenshot": "qa/reports/r6/screenshots/office-button.png",
+   "notes": "no button without OFFICE_*; with a stub: edit button for docx/xlsx/pptx (not md), POST /api/office/config, stub got JWT, document.url, callbackUrl; read-only user gets view mode without callbackUrl. The 1 console error is the tester's own rejected password (contained the username) when creating a user, flagged by the form first."
+  },
+  {
+   "name": "one-step-update",
+   "passed": true,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 2,
+   "screenshot": "qa/reports/r6/screenshots/one-step-update.png",
+   "notes": "dashboard 'new version 1.4.0' button opens the dialog; wrong password stays in the dialog; right password -> restart -> 1.4.0; bad sha256 for 1.5.0: fails at the download step, nothing staged, 1.4.0 kept."
+  },
+  {
+   "name": "alerts",
+   "passed": true,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 12,
+   "screenshot": "qa/reports/r6/screenshots/alerts.png",
+   "notes": "card shows on/Discord/host only; test message delivered; lockout alert once, second lockout within the hour silent; no password in any hook body."
+  },
+  {
+   "name": "language-and-mobile",
+   "passed": true,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 2,
+   "screenshot": "qa/reports/r6/screenshots/language-and-mobile.png",
+   "notes": "English: previews, editors, update dialog with failed step, alerts card; 375x812 no sideways scroll anywhere (file table scrolls inside itself)."
+  }
+ ]
+}

@@ -2075,6 +2075,400 @@
           "toolUses": 72
         }
       }
+    },
+    "r6": {
+      "at": "2026-10-12T17:02:00.904Z",
+      "check": {
+        "runId": "r6-final",
+        "ok": true,
+        "passed": 305,
+        "total": 306,
+        "lines": 95.51
+      },
+      "suite": {
+        "mutationScore": 1,
+        "missed": []
+      },
+      "agents": {
+        "security-auditor": {
+          "evidence": 0.9596875,
+          "review": 0.8,
+          "composite": 0.91178125,
+          "kpis": [
+            {
+              "name": "precision (findings that are real)",
+              "value": 1,
+              "target": 0.7,
+              "weight": 2,
+              "pass": true,
+              "note": "5/5"
+            },
+            {
+              "name": "recall on planted bugs",
+              "value": 0.714,
+              "target": 0.8,
+              "weight": 3,
+              "pass": false,
+              "note": "5/7 (easy 1/1, subtle 3/3); missed: office-token-no-expiry, alerts-unscrubbed"
+            },
+            {
+              "name": "ignores decoys",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true
+            },
+            {
+              "name": "severity within one level of the truth",
+              "value": 1,
+              "target": 0.8,
+              "weight": 1,
+              "pass": true
+            },
+            {
+              "name": "every finding has file, line, evidence",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true
+            }
+          ]
+        },
+        "verifier": {
+          "evidence": 1,
+          "review": 1,
+          "composite": 1,
+          "kpis": [
+            {
+              "name": "confirms the planted bugs",
+              "value": 1,
+              "target": 0.9,
+              "weight": 3,
+              "pass": true,
+              "note": "5/5"
+            },
+            {
+              "name": "refutes findings on decoys",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "no decoy was reported"
+            },
+            {
+              "name": "every finding gets a verdict",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true
+            },
+            {
+              "name": "repro commands reproduce (run twice)",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "5/5"
+            },
+            {
+              "name": "repro does not trigger on clean code",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "5/5"
+            },
+            {
+              "name": "unplanted findings reproduce on the real code",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "none to check"
+            },
+            {
+              "name": "CONFIRMED verdicts carry a repro",
+              "value": 1,
+              "target": 0.9,
+              "weight": 1,
+              "pass": true
+            }
+          ]
+        },
+        "backend-dev": {
+          "evidence": 0.8461538461538461,
+          "review": 1,
+          "composite": 0.8923076923076922,
+          "kpis": [
+            {
+              "name": "[alerts] green the first time it said \"done\"",
+              "value": 0,
+              "target": 1,
+              "weight": 2,
+              "pass": false
+            },
+            {
+              "name": "[alerts] green at the end (no regression)",
+              "value": 1,
+              "target": 1,
+              "weight": 3,
+              "pass": true
+            },
+            {
+              "name": "[alerts] added at least one test",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true,
+              "note": "23 added"
+            },
+            {
+              "name": "[alerts] no removed tests, no skips",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[alerts] stayed inside its allowed paths",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[alerts] needed at most one fix round",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true,
+              "note": "2 qa run(s)"
+            },
+            {
+              "name": "[alerts] test files with new tests fail on the code before the change",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "3/3"
+            },
+            {
+              "name": "[office] green the first time it said \"done\"",
+              "value": 0,
+              "target": 1,
+              "weight": 2,
+              "pass": false
+            },
+            {
+              "name": "[office] green at the end (no regression)",
+              "value": 1,
+              "target": 1,
+              "weight": 3,
+              "pass": true
+            },
+            {
+              "name": "[office] added at least one test",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true,
+              "note": "16 added"
+            },
+            {
+              "name": "[office] no removed tests, no skips",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[office] stayed inside its allowed paths",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[office] needed at most one fix round",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true,
+              "note": "2 qa run(s)"
+            },
+            {
+              "name": "[office] test files with new tests fail on the code before the change",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "1/1"
+            }
+          ]
+        },
+        "frontend-dev": {
+          "evidence": 1,
+          "review": 1,
+          "composite": 1,
+          "kpis": [
+            {
+              "name": "[update] green the first time it said \"done\"",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "excused: fresh worktree had no node_modules and tests/release.test.ts links to it (environment; the definitions now say to bun install once)"
+            },
+            {
+              "name": "[update] green at the end (no regression)",
+              "value": 1,
+              "target": 1,
+              "weight": 3,
+              "pass": true
+            },
+            {
+              "name": "[update] ux-tester flows pass on its page",
+              "value": 1,
+              "target": 1,
+              "weight": 3,
+              "pass": true
+            },
+            {
+              "name": "[update] no removed tests, no skips",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[update] stayed inside its allowed paths",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[update] needed at most one fix round",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true,
+              "note": "2 qa run(s)"
+            },
+            {
+              "name": "[docs] green the first time it said \"done\"",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[docs] green at the end (no regression)",
+              "value": 1,
+              "target": 1,
+              "weight": 3,
+              "pass": true
+            },
+            {
+              "name": "[docs] ux-tester flows pass on its page",
+              "value": 1,
+              "target": 1,
+              "weight": 3,
+              "pass": true
+            },
+            {
+              "name": "[docs] no removed tests, no skips",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[docs] stayed inside its allowed paths",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[docs] needed at most one fix round",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true,
+              "note": "2 qa run(s)"
+            }
+          ]
+        },
+        "ux-tester": {
+          "evidence": 0.9714,
+          "review": 1,
+          "composite": 0.9799800000000001,
+          "kpis": [
+            {
+              "name": "every flow has a screenshot",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "every failure explains its cause",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "no failures"
+            },
+            {
+              "name": "flows without unexplained console errors",
+              "value": 0.857,
+              "target": 1,
+              "weight": 1,
+              "pass": false
+            }
+          ]
+        }
+      },
+      "usage": {
+        "backend-dev.office": {
+          "tokens": 215772,
+          "ms": 877586,
+          "toolUses": 54
+        },
+        "backend-dev.alerts": {
+          "tokens": 208406,
+          "ms": 958030,
+          "toolUses": 57
+        },
+        "frontend-dev.update": {
+          "tokens": 189251,
+          "ms": 791593,
+          "toolUses": 36,
+          "note": "after resume"
+        },
+        "frontend-dev.docs": {
+          "tokens": 336682,
+          "ms": 2006870,
+          "toolUses": 123,
+          "note": "after resume"
+        },
+        "security-auditor": {
+          "tokens": 151310,
+          "ms": 174380,
+          "toolUses": 44
+        },
+        "verifier": {
+          "tokens": 72505,
+          "ms": 329485,
+          "toolUses": 36
+        },
+        "ux-tester": {
+          "tokens": 168702,
+          "ms": 1239206,
+          "toolUses": 85
+        }
+      }
     }
   }
 }
