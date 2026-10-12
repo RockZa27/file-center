@@ -72,6 +72,7 @@ import { useI18n } from 'vue-i18n'
 import { NAlert, NButton, NForm, NFormItem, NIcon, NInput, NInputNumber, NModal, NRadioButton, NRadioGroup } from 'naive-ui'
 import { CheckmarkOutline, CopyOutline, LinkOutline } from '@vicons/ionicons5'
 import { api } from '../api'
+import { useAppStore } from '../store'
 import { errorText } from '../composables'
 import { formatDate } from '../utils'
 import FileIcon from './FileIcon.vue'
@@ -84,8 +85,10 @@ const props = defineProps({ show: Boolean, space: { type: String, required: true
 const emit = defineEmits(['update:show'])
 const { t } = useI18n()
 
-// SHARE_MAX_DAYS on the server may allow fewer than these; its answer names the ones it takes and the choice shrinks to them
-const allowedDays = ref([1, 7, 30])
+// the choices the server takes (SHARE_MAX_DAYS may leave out the longer ones); if it still refuses one, its answer names
+// the ones it takes and the choice shrinks to them
+const store = useAppStore()
+const allowedDays = ref(store.config?.shareDays?.length ? [...store.config.shareDays] : [1, 7, 30])
 const days = ref(7)
 const password = ref('')
 const limit = ref(null)

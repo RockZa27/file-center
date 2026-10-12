@@ -1,0 +1,3 @@
+[test]
+# removes the shared test folder after the last test file (see tests/preload.ts)
+preload = ["./tests/preload.ts"]

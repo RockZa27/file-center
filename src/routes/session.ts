@@ -9,6 +9,7 @@ import { context, requireUser, SESSION_COOKIE } from '../context'
 import { HttpError } from '../fsx'
 import { type Lang, langOf } from '../messages'
 import { pageTexts, settings } from '../settings'
+import { allowedShareDays } from '../shares'
 
 /** cookies take whole seconds: SESSION_TTL_HOURS=0.0001 must not break every response */
 const cookieMaxAge = () => Math.max(1, Math.floor(config.sessionTtlMs / 1000))
@@ -18,6 +19,8 @@ function appConfig(user: User | null, lang: Lang) {
   return {
     // visitors do not need to know which version (and so which known holes) is running
     ...(user ? { version: config.version } : {}),
+    // the expiry choices of the share dialog (SHARE_MAX_DAYS may leave out the longer ones); visitors cannot share
+    ...(user ? { shareDays: allowedShareDays() } : {}),
     appName: s.appName,
     primaryColor: s.primaryColor,
     // left empty by the admin: the standard text in the visitor's language

@@ -8,6 +8,9 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
 export const base = mkdtempSync(join(tmpdir(), 'fc-test-'))
+// shared by every file of the run, so it may only go once all of them are done: tests/preload.ts removes it then
+// (a run of the suite left ~16 MB behind otherwise). bun test runs no exit handlers, hence the global hook.
+;(globalThis as any).__fcTestBase = base
 process.env.STORAGE_DIR = join(base, 'storage')
 process.env.DATA_DIR = join(base, 'data')
 process.env.ADMIN_PASSWORD = 'test-admin-pass'

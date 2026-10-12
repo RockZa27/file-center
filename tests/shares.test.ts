@@ -185,9 +185,14 @@ describe('share links: making and managing them', () => {
       expect(r.status).toBe(400)
       expect(r.data.params).toEqual({ days: '1, 7' })
       expect(await code({ days: 7 })).toBe('200')
+      // the share dialog learns the same choices from the session, so it never offers one the server refuses
+      expect((await owner.json('GET', '/api/session')).data.config.shareDays).toEqual([1, 7])
     } finally {
       config.shareMaxDays = before
     }
+    expect((await owner.json('GET', '/api/session')).data.config.shareDays).toEqual([1, 7, 30])
+    // visitors cannot share, so they are not told
+    expect((await new Client().json('GET', '/api/session')).data.config.shareDays).toBeUndefined()
   })
 })
 

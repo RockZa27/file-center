@@ -10,7 +10,7 @@ import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypt
 import { lstatSync } from 'node:fs'
 import { basename } from 'node:path'
 import { accessFor, findUser, type Lockout, type Space } from './auth'
-import { paths } from './config'
+import { config, paths } from './config'
 import { notFound, resolveIn, storagePath } from './fsx'
 import { JsonStore } from './store'
 
@@ -34,6 +34,8 @@ export type Share = {
 export type ShareState = 'active' | 'expired' | 'revoked' | 'used-up' | 'unavailable'
 
 export const SHARE_DAYS = [1, 7, 30]
+/** the expiry choices this server takes: SHARE_DAYS up to SHARE_MAX_DAYS */
+export const allowedShareDays = () => SHARE_DAYS.filter(d => d <= config.shareMaxDays)
 export const SHARE_PASSWORD_MIN = 6
 export const SHARE_MAX_DOWNLOADS = 100_000
 /** links one user may hold at a time (until they expire and are cleaned up) */

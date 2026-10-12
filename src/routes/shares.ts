@@ -8,7 +8,7 @@ import { context, need, requireAdmin, requireUser } from '../context'
 import { bad, HttpError, listDir, normRel, notFound, resolveIn, storagePath, treeStats } from '../fsx'
 import {
   allShares, createShare, findShare, isUnlocked, lockoutKey, openShare, publicShare, revokeShare, type Share, SHARE_COOKIE,
-  SHARE_DAYS, SHARE_LOCKOUT, SHARE_MAX_DOWNLOADS, SHARE_PASSWORD_MIN, shareTarget, SHARES_PER_USER, sharesOf, startDownload,
+  allowedShareDays, SHARE_LOCKOUT, SHARE_MAX_DOWNLOADS, SHARE_PASSWORD_MIN, shareTarget, SHARES_PER_USER, sharesOf, startDownload,
   UNLOCK_MS, unlockCookie,
 } from '../shares'
 import { collectZipItems, zipStream } from '../zip'
@@ -82,7 +82,7 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
     try { st = lstatSync(abs) } catch { throw notFound() }
     if (st.isSymbolicLink() || !(st.isFile() || st.isDirectory())) throw notFound()
 
-    const days = SHARE_DAYS.filter(d => d <= config.shareMaxDays)
+    const days = allowedShareDays()
     if (!days.includes(body.days)) throw bad('share.bad-days', { days: days.join(', ') })
     const max = body.maxDownloads ?? null
     if (max !== null && (!Number.isInteger(max) || max < 1 || max > SHARE_MAX_DOWNLOADS)) {
