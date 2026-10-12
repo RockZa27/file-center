@@ -4,6 +4,27 @@ Change one thing per agent per round, so the effect is visible.
 
 <!-- newest first -->
 
+## r4 → r5
+คะแนน r4: security-auditor 100%, verifier 100%, backend-dev 94%, frontend-dev 98%, ux-tester 100% (qa-runner ไม่เรียก — ชุดตรวจไม่ล้มเลยทั้งรอบ)
+นิ่งแล้วทุกตัวที่ใช้งาน (≥80% สามรอบติด): verifier ครบ 3 รอบ (100 → 100 → 100)
+
+ผลของการเปลี่ยนเมื่อรอบก่อน:
+- security-auditor ไม่ได้รับชื่อบั๊กฝังเป็นครั้งแรก: ยังได้ 6/6 + เจอบั๊กจริงที่ไม่ได้ฝัง 1 ตัว (F3) แปลว่าคะแนนรอบเก่าไม่ได้มาจากคำใบ้เป็นหลัก
+- frontend-dev (กฎ 375px + ชื่อยาว): ux-tester ไม่ต้องจับปัญหาจอแคบเลยรอบนี้ (รอบ 3 จับ 2 ครั้ง) → 91% → 98%
+- verifier ใส่ตัวควบคุมเอง (แก้เฉพาะจุดแล้วสคริปต์ต้องออก 0) โดยไม่มีใครสั่ง
+
+การเปลี่ยน agent:
+- backend-dev (94%, reviewer 4/5): เมื่อแทน library call/โค้ด sync ด้วยโค้ดของตัวเอง ต้องลิสต์สิ่งที่ตัวเก่ารับประกันให้ (cpSync กันคัดลอกเข้าตัวเอง ไม่เขียนทับ ไม่ตามลิงก์) และมีเทสต์ทุกข้อ — รอบนี้เปลี่ยน cpSync เป็น copyTree แล้วตัวกันเดิมที่พึ่ง cpSync อยู่ใช้ไม่ได้กับชื่อ '..a' (F3); พร้อมแก้ข้อความที่ล้าสมัย "ข้อความไทย" → รหัสใน src/messages.ts (hash 061f595823 → 8f5bcd6ea6)
+- ตัวอื่นไม่เปลี่ยน
+
+ความผิดพลาดของเกณฑ์/ของผม ที่รอบนี้เผย (แก้แล้ว):
+- คำสั่ง auditor บอกชื่อบั๊กฝังมาตั้งแต่ r0 (ดูหัวข้อ r3 → r4)
+- คำสั่ง backend-dev ให้ `--skip-build` ใน worktree ใหม่ที่ไม่มี web/dist (ดูหัวข้อ r3 → r4)
+- สเปก frontend ของผมพูดถึงแค่ดาวน์โหลด log/CSV/backup ลืมลิงก์ดาวน์โหลดไฟล์ปกติ → flow english-errors ล้ม แก้โดย backend-dev (คุกกี้ fc_lang + หน้า error HTML) แล้ว re-test ผ่าน
+- บั๊กฝังสองตัวแก้บรรทัด import เดียวกันจึงฝังพร้อมกันไม่ได้ → copy-follows-links แก้บรรทัดเดียว
+
+backlog: ข้อความที่เก็บเป็นไทยในไฟล์ (สถานะ backup/update, ข้อความต้อนรับเริ่มต้น), หน้า error แสดงรหัสภายในใต้ข้อความ, /files?path=โฟลเดอร์ที่ไม่มี กลับหน้าแรกเงียบ ๆ, moveSync ข้ามดิสก์ยังใช้ cpSync, ปุ่มดาวน์โหลดคลิกกลางไม่ได้, Docker non-root
+
 ## r3 → r4
 คะแนน r3: security-auditor 100%, verifier 100%, backend-dev 100%, ux-tester 100%, frontend-dev 91% (qa-runner ไม่เรียก)
 นิ่งแล้ว (≥80% สามรอบติด): security-auditor, backend-dev, frontend-dev, ux-tester; verifier นิ่งได้ในรอบหน้า (77 → 100 → 100)
