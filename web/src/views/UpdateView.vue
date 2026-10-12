@@ -47,7 +47,9 @@
             </n-tag>
             <n-tag v-else type="warning" :bordered="false" class="sig"><template #icon><n-icon :component="WarningOutline" /></template>{{ t('update.unsigned') }}</n-tag>
           </div>
-          <n-alert v-if="!staged.signed" type="warning" class="gap top">{{ t('update.unsignedBody') }}</n-alert>
+          <div v-if="staged.fromWeb" class="kv"><span class="muted">{{ t('update.source') }}</span><span class="mono small url">{{ t('update.fromWeb', { url: staged.fromWeb }) }}</span></div>
+          <n-alert v-if="!staged.signed && staged.fromWeb" type="error" :title="t('update.unsignedWebTitle')" class="gap top">{{ t('update.unsignedWebBody') }}</n-alert>
+          <n-alert v-else-if="!staged.signed" type="warning" class="gap top">{{ t('update.unsignedBody') }}</n-alert>
           <n-alert type="success" class="gap" :class="{ top: staged.signed }">{{ t('update.checked') }}</n-alert>
           <n-alert type="info" class="gap">{{ t('update.restartNote') }}</n-alert>
           <n-alert v-if="st.uploadsInProgress" type="warning" class="gap">{{ t('update.uploadsWarn', { n: st.uploadsInProgress }) }}</n-alert>
@@ -62,8 +64,37 @@
           </div>
         </div>
 
+        <!-- a newer version published at UPDATE_SOURCE: asked only when the admin presses the button -->
+        <div v-if="st.source?.enabled && (phase === 'idle' || phase === 'fetching')" class="surface block">
+          <h2>{{ t('update.web') }}</h2>
+          <div class="kv"><span class="muted label">{{ t('update.webFrom') }}</span><span class="mono small url">{{ st.source.url }}</span></div>
+          <template v-if="check">
+            <div class="kv"><span class="muted">{{ t('update.current') }}</span><span class="strong">v{{ check.current }}</span></div>
+            <div class="kv"><span class="muted">{{ t('update.latest') }}</span><span class="strong">v{{ check.latest.version }}</span></div>
+            <div v-if="check.latest.builtAt" class="kv"><span class="muted">{{ t('update.builtAt') }}</span><span>{{ formatDate(check.latest.builtAt) }}</span></div>
+            <div class="kv"><span class="muted">{{ t('update.size') }}</span><span>{{ formatBytes(check.latest.size) }}</span></div>
+            <div class="kv">
+              <span class="muted">{{ t('update.signature') }}</span>
+              <n-tag v-if="check.latest.signed" type="success" :bordered="false" class="sig"><template #icon><n-icon :component="ShieldCheckmarkOutline" /></template>{{ t('update.latestSigned') }}</n-tag>
+              <n-tag v-else type="warning" :bordered="false" class="sig"><template #icon><n-icon :component="WarningOutline" /></template>{{ t('update.latestUnsigned') }}</n-tag>
+            </div>
+            <div v-if="check.latest.notes" class="kv"><span class="muted">{{ t('update.notes') }}</span><span class="notes">{{ check.latest.notes }}</span></div>
+            <n-alert v-if="check.newer" type="info" class="gap top">{{ t('update.newer', { v: check.latest.version }) }}</n-alert>
+            <n-alert v-else type="success" class="gap top">{{ t('update.upToDate', { v: check.current }) }}</n-alert>
+          </template>
+          <!-- stays until the next try: unreachable, not newer, checksum mismatch... -->
+          <n-alert v-if="sourceError" type="error" :title="sourceError.title" closable class="gap top refused" @close="sourceError = null">{{ sourceError.message }}</n-alert>
+          <div v-if="phase === 'fetching'" class="fetching"><n-spin size="small" /><span>{{ t('update.fetching') }}</span></div>
+          <div class="actions">
+            <n-button :loading="checking" :disabled="busy" @click="checkSource"><template #icon><n-icon :component="SearchOutline" /></template>{{ t('update.check') }}</n-button>
+            <n-button v-if="check?.newer" type="primary" :loading="phase === 'fetching'" :disabled="!canUpdate || (busy && phase !== 'fetching')" @click="fetchPackage">
+              <template #icon><n-icon :component="CloudDownloadOutline" /></template>{{ t('update.fetch') }}
+            </n-button>
+          </div>
+        </div>
+
         <!-- drop zone -->
-        <div v-else class="surface block">
+        <div v-if="phase !== 'installing' && !(phase === 'ready' && staged)" class="surface block">
           <!-- stays until the next package is dropped: a toast is gone before a long message is read -->
           <n-alert v-if="refused" type="error" :title="t('update.refused', { name: refused.name })" closable class="gap refused" @close="refused = null">{{ refused.message }}</n-alert>
           <n-upload :show-file-list="false" accept=".zip,application/zip" :disabled="!canUpdate || phase !== 'idle'" :custom-request="() => {}" :on-before-upload="onFile">
@@ -122,7 +153,9 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NAlert, NButton, NForm, NFormItem, NIcon, NInput, NModal, NProgress, NSpin, NTag, NUpload, NUploadDragger } from 'naive-ui'
-import { ArrowUndoOutline, CloudUploadOutline, RefreshOutline, ShieldCheckmarkOutline, ShieldOutline, WarningOutline } from '@vicons/ionicons5'
+import {
+  ArrowUndoOutline, CloudDownloadOutline, CloudUploadOutline, RefreshOutline, SearchOutline, ShieldCheckmarkOutline, ShieldOutline, WarningOutline,
+} from '@vicons/ionicons5'
 import { api, ApiError, putChunk } from '../api'
 import { errorText, useFeedback } from '../composables'
 import { bootId, sleep, waitForRestart } from '../restart'
@@ -133,7 +166,7 @@ const fb = useFeedback()
 const st = ref(null)
 const loading = ref(false)
 const working = ref(false)
-// idle -> uploading -> checking -> ready -> installing (page reloads when done)
+// idle -> uploading -> checking -> ready -> installing (page reloads when done); idle -> fetching -> ready from UPDATE_SOURCE
 const phase = ref('idle')
 const progress = ref(0)
 const staged = ref(null)
@@ -142,6 +175,10 @@ const refused = ref(null)
 const password = ref('')
 const rollbackOpen = ref(false)
 const rollbackTarget = ref(null)
+// the answer of "check for updates" ({ current, latest, newer }), and why checking or fetching failed ({ title, message })
+const check = ref(null)
+const checking = ref(false)
+const sourceError = ref(null)
 let poll = null
 
 const busy = computed(() => phase.value !== 'idle')
@@ -199,6 +236,37 @@ async function onFile({ file }) {
     refused.value = { name: file.name, message: errorText(e, t('common.unknownError')) }
   }
   return false
+}
+
+async function checkSource() {
+  checking.value = true
+  sourceError.value = null
+  try {
+    const r = await api.updateCheck()
+    check.value = r.latest ? r : null
+  } catch (e) {
+    check.value = null
+    sourceError.value = { title: t('update.checkFailed'), message: errorText(e, t('common.unknownError')) }
+  } finally { checking.value = false }
+}
+
+// the server downloads and checks the package; its answer is the same as after an upload, so the same next step
+async function fetchPackage() {
+  if (busy.value) return
+  sourceError.value = null
+  refused.value = null
+  phase.value = 'fetching'
+  try {
+    const from = st.value?.source?.url || ''
+    staged.value = { ...(await api.updateFetch()), fromWeb: from }
+    password.value = ''
+    check.value = null
+    await load()
+    phase.value = 'ready'
+  } catch (e) {
+    phase.value = 'idle'
+    sourceError.value = { title: t('update.fetchFailed'), message: errorText(e, t('common.unknownError')) }
+  }
 }
 
 async function discard() {
@@ -262,6 +330,8 @@ onBeforeUnmount(() => clearInterval(poll))
 .gap { margin-bottom: 12px; }
 .gap.top { margin-top: 14px; }
 .refused { overflow-wrap: anywhere; }
+.url { overflow-wrap: anywhere; text-align: right; min-width: 0; }
+.fetching { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 14px; }
 .kv { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 9px 0; border-top: 1px solid var(--border); font-size: 14px; }
 .kv:first-of-type { border-top: 0; }
 .strong { font-weight: 600; }

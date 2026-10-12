@@ -6,6 +6,8 @@ export const router = createRouter({
   routes: [
     { path: '/', name: 'public', component: () => import('./views/PublicView.vue'), meta: { guestOk: true } },
     { path: '/login', name: 'login', component: () => import('./views/LoginView.vue'), meta: { guestOk: true } },
+    // a share link: opened by people without an account, and by signed-in users alike
+    { path: '/s/:token', name: 'share', component: () => import('./views/ShareLinkView.vue'), meta: { guestOk: true } },
     {
       path: '/',
       component: () => import('./layouts/AppLayout.vue'),
@@ -13,6 +15,7 @@ export const router = createRouter({
       children: [
         { path: 'files', name: 'files', component: () => import('./views/FilesView.vue') },
         { path: 'shared', name: 'shared', component: () => import('./views/SharedView.vue') },
+        { path: 'links', name: 'links', component: () => import('./views/SharesView.vue') },
         { path: 'admin', name: 'dashboard', component: () => import('./views/DashboardView.vue'), meta: { admin: true } },
         { path: 'admin/users', name: 'users', component: () => import('./views/UsersView.vue'), meta: { admin: true } },
         { path: 'admin/activity', name: 'activity', component: () => import('./views/ActivityView.vue'), meta: { admin: true } },
@@ -35,4 +38,5 @@ router.beforeEach(to => {
   if (to.meta.auth && !app.user) return { name: 'login' }
   if (to.meta.admin && !app.isAdmin) return { name: 'files' }
   if (to.name === 'shared' && !app.hasSpace('public')) return { name: 'files' }
+  if (to.name === 'links' && !app.canShare) return { name: 'files' }
 })

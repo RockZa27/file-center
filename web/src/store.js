@@ -24,6 +24,8 @@ export const useAppStore = defineStore('app', {
     can: s => (space, perm) => !!s.spaces[space]?.includes(perm),
     hasSpace: s => space => !!s.spaces[space],
     publicAvailable: s => !!s.spaces.public,
+    // a share link needs `share` and `download` in the same space; visitors never make links
+    canShare: s => !!s.user && Object.values(s.spaces).some(p => p.includes('share') && p.includes('download')),
   },
   actions: {
     apply(snapshot) {
@@ -55,7 +57,13 @@ export const useAppStore = defineStore('app', {
       this.apply(await api.logout())
     },
     setTheme(v) { this.theme = v; write('fc.theme', v) },
-    setLang(v) { this.lang = v; write('fc.lang', v); i18n.global.locale.value = v },
+    setLang(v) {
+      this.lang = v
+      write('fc.lang', v)
+      i18n.global.locale.value = v
+      // the public page's texts come from the server in the asked language: ask again so they follow at once
+      this.refresh().catch(() => { /* kept as they were; the next refresh brings them */ })
+    },
     setView(v) { this.view = v; write('fc.view', v) },
   },
 })

@@ -61,7 +61,10 @@
               <div class="muted small"><span class="mono name">{{ b.name }}</span> · {{ formatBytes(b.size) }}</div>
             </div>
             <div class="item-actions">
-              <n-button size="small" secondary :loading="saving === b.name" :disabled="saving !== null && saving !== b.name" @click="save(api.backupUrl(b.name), { key: b.name, name: b.name, admin: true })">
+              <n-button
+                tag="a" :href="api.backupUrl(b.name)" :download="b.name" size="small" secondary :loading="saving === b.name"
+                @click="e => follow(e, api.backupUrl(b.name), { key: b.name, name: b.name, admin: true })"
+              >
                 <template #icon><n-icon :component="DownloadOutline" /></template>{{ t('common.download') }}
               </n-button>
               <n-button size="small" secondary :disabled="working || creating" @click="askRestore(b)">
@@ -111,7 +114,7 @@ import { formatBytes, formatDate } from '../utils'
 
 const { t } = useI18n()
 const fb = useFeedback()
-const { busy: saving, save } = useDownload()
+const { busy: saving, follow } = useDownload()
 const data = ref(null)
 const loading = ref(false)
 const creating = ref(false)
