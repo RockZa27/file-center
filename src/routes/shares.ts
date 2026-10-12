@@ -1,6 +1,7 @@
 import { lstatSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { Elysia, t } from 'elysia'
+import { alert } from '../alerts'
 import { audit } from '../audit'
 import { clearFailures, hashPassword, lockedFor, recordFailure } from '../auth'
 import { config } from '../config'
@@ -159,7 +160,7 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
     const wait = lockedFor(key)
     if (wait) throw new HttpError(429, 'auth.confirm-locked', { seconds: wait })
     if (!(await Bun.password.verify(body.password, share.passwordHash).catch(() => false))) {
-      recordFailure(key, SHARE_LOCKOUT)
+      if (recordFailure(key, SHARE_LOCKOUT)) alert('lockout', 'admin.alert-share-locked', { share: share.id, owner: share.owner, ip })
       throw new HttpError(403, 'auth.wrong-password')
     }
     clearFailures(key)

@@ -13,6 +13,7 @@ import {
 } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { BlobReader, ZipReader } from '@zip.js/zip.js'
+import { alert } from './alerts'
 import { config, paths } from './config'
 import { bad, cleanName, conflict, ensureSpace, fromFsError, HttpError, notFound, within } from './fsx'
 import { restartSoon } from './lifecycle'
@@ -192,6 +193,7 @@ async function writeBackup(protect?: string): Promise<BackupItem> {
     // a known reason (disk full...) is shown in the reader's language too; anything else as it was said
     const params: Params = known && !Object.keys(known.params).length ? { reason: why, reasonCode: known.code } : { reason: why }
     writeStatus({ status: 'failed', lastSuccess: readStatus()?.lastSuccess ?? null, lastAttempt: attempt, code: 'backup.failed', params, file: null, size: null })
+    alert('backup-failed', 'backup.failed', params)
     throw err
   }
 }

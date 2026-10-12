@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto'
+import { alert } from './alerts'
 import { audit } from './audit'
 import { COMMON_PASSWORDS, isRunOrRepeat } from './common-passwords'
 import { config, paths } from './config'
@@ -197,7 +198,8 @@ export function lockedFor(key: string): number {
   return a && a.until > Date.now() ? Math.ceil((a.until - Date.now()) / 1000) : 0
 }
 
-export function recordFailure(key: string, limits: Lockout = loginLockout()) {
+/** count a wrong password; true when this one locks the key (the caller sends the alert, it knows what was locked) */
+export function recordFailure(key: string, limits: Lockout = loginLockout()): boolean {
   if (attempts.size >= ATTEMPTS_MAX) pruneLoginAttempts()
   const now = Date.now()
   const a = attempts.get(key) ?? { count: 0, until: 0, last: now, lockMs: limits.lockMs }
@@ -205,8 +207,10 @@ export function recordFailure(key: string, limits: Lockout = loginLockout()) {
   a.count++
   a.last = now
   a.lockMs = limits.lockMs
+  const locks = a.count >= limits.max && !a.until
   if (a.count >= limits.max) a.until = now + limits.lockMs
   attempts.set(key, a)
+  return locks
 }
 
 export const clearFailures = (key: string) => attempts.delete(key)
@@ -234,7 +238,7 @@ export async function confirmPassword(user: User, ip: string, password: string, 
   const wait = lockedFor(key)
   if (wait) throw new HttpError(429, 'auth.confirm-locked', { seconds: wait })
   if (!(await Bun.password.verify(password, user.passwordHash).catch(() => false))) {
-    recordFailure(key)
+    if (recordFailure(key)) alert('lockout', 'admin.alert-confirm-locked', { user: user.username, ip })
     audit({ user: user.username, ip, action: deniedAction })
     throw new HttpError(403, 'auth.wrong-password')
   }

@@ -1,4 +1,4 @@
-import { rmSync, statfsSync } from 'node:fs'
+import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { Elysia, t } from 'elysia'
 import { audit, queryAudit } from '../audit'
@@ -14,24 +14,15 @@ import { errorsSince } from '../logger'
 import { langOf, type MessageCode, type Params, text } from '../messages'
 import { settings } from '../settings'
 import { revokeSharesOf } from '../shares'
-import { storageStats } from '../stats'
+import { DISK_CRITICAL_PERCENT, DISK_LOW_PERCENT, diskInfo, storageStats } from '../stats'
 import { listTrash, purge, restore, trashSummary } from '../trash'
+import { availableVersion } from '../update-source'
 import { uploadsInProgress } from '../uploads'
+import { alertRoutes } from './alerts'
 
 const startedAt = Date.now()
 const roleT = t.Union([t.Literal('admin'), t.Literal('user')])
 const permsT = t.Array(t.String())
-
-function diskInfo() {
-  try {
-    const s = statfsSync(config.storageDir)
-    const total = Number(s.blocks) * Number(s.bsize)
-    const free = Number(s.bavail) * Number(s.bsize)
-    return { total, free, used: total - free }
-  } catch {
-    return null
-  }
-}
 
 function adminCount() {
   return allUsers().filter(u => u.role === 'admin').length
@@ -39,6 +30,8 @@ function adminCount() {
 
 export const adminRoutes = new Elysia({ prefix: '/api' })
   .use(context)
+  // /api/admin/alerts: mounted here so the app's route list in index.ts stays as it is
+  .use(alertRoutes)
 
   // ───────────── public branding ─────────────
   .get('/branding/logo', () => {
@@ -168,8 +161,8 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
       warnings.push({ level, code, message: text(lang, code, params), params })
     if (disk) {
       const freePct = (disk.free / disk.total) * 100
-      if (freePct < 5) warn('critical', 'admin.disk-critical', { percent: freePct.toFixed(1) })
-      else if (freePct < 10) warn('warning', 'admin.disk-low', { percent: freePct.toFixed(1) })
+      if (freePct < DISK_CRITICAL_PERCENT) warn('critical', 'admin.disk-critical', { percent: freePct.toFixed(1) })
+      else if (freePct < DISK_LOW_PERCENT) warn('warning', 'admin.disk-low', { percent: freePct.toFixed(1) })
     }
     if (!backup) warn('info', 'backup.never')
     else if (backup.status === 'failed') warn('critical', 'backup.last-failed')
@@ -177,6 +170,9 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     if (allUsers().some(u => u.mustChangePassword)) warn('warning', 'admin.default-password')
     const errors = errorsSince(Date.now() - 24 * 3600_000)
     if (errors) warn('warning', 'errors', { count: errors })
+    // found by the daily look at UPDATE_SOURCE (alerts.ts)
+    const newer = availableVersion()
+    if (newer) warn('info', 'update.available', { version: newer })
     return {
       version: config.version,
       uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),

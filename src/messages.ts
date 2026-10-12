@@ -123,6 +123,28 @@ export const MESSAGES = {
   'admin.disk-critical': { th: 'พื้นที่ดิสก์เหลือเพียง {percent}%', en: 'Only {percent}% of the disk is free.' },
   'admin.disk-low': { th: 'พื้นที่ดิสก์เหลือน้อย ({percent}%)', en: 'Disk space is running low ({percent}% free).' },
   'admin.default-password': { th: 'ยังมีบัญชีที่ใช้รหัสผ่านเริ่มต้น กรุณาเปลี่ยนรหัสผ่าน', en: 'Some accounts still use their initial password. Please change it.' },
+  // alerts sent to ALERT_WEBHOOK_URL (alerts.ts), in ALERT_LANG
+  'admin.alert-test': { th: 'ทดสอบการแจ้งเตือน: ระบบส่งข้อความถึงช่องทางนี้ได้', en: 'Test alert: messages reach this channel.' },
+  'admin.alert-errors': { th: 'มี error {count} รายการในชั่วโมงที่ผ่านมา (เกิน {max} รายการ) ดูได้ที่หน้า log ของระบบ', en: '{count} errors in the last hour (more than {max}). See the system log page.' },
+  'admin.alert-login-locked': {
+    th: 'ล็อกการเข้าสู่ระบบของ {user} จาก IP {ip} ชั่วคราว เพราะใส่รหัสผ่านผิดหลายครั้ง',
+    en: 'Sign-in for {user} from IP {ip} is locked for a while after too many wrong passwords.',
+  },
+  'admin.alert-confirm-locked': {
+    th: 'ล็อกการยืนยันรหัสผ่าน (ติดตั้งอัปเดต/กู้คืนข้อมูล) ของ {user} จาก IP {ip} ชั่วคราว เพราะใส่รหัสผ่านผิดหลายครั้ง',
+    en: 'Password confirmation (update/restore) for {user} from IP {ip} is locked for a while after too many wrong passwords.',
+  },
+  'admin.alert-share-locked': {
+    th: 'ล็อกลิงก์แชร์ {share} ของ {owner} สำหรับ IP {ip} ชั่วคราว เพราะใส่รหัสผ่านผิดหลายครั้ง',
+    en: 'Share link {share} of {owner} is locked for IP {ip} for a while after too many wrong passwords.',
+  },
+  'admin.alert-off': {
+    th: 'ยังไม่ได้ตั้งการแจ้งเตือน หรือค่าไม่ถูกต้อง (ALERT_WEBHOOK_URL, ALERT_WEBHOOK_KIND, ALERT_TELEGRAM_CHAT_ID) ดูคำเตือนใน log ตอนเริ่มระบบ',
+    en: 'Alerts are not set up, or a setting is wrong (ALERT_WEBHOOK_URL, ALERT_WEBHOOK_KIND, ALERT_TELEGRAM_CHAT_ID). See the warning in the log at startup.',
+  },
+  'admin.alert-timeout': { th: 'ปลายทางการแจ้งเตือนไม่ตอบใน {seconds} วินาที', en: 'The alert destination did not answer within {seconds} seconds.' },
+  'admin.alert-status': { th: 'ปลายทางการแจ้งเตือนตอบกลับ HTTP {status}', en: 'The alert destination answered HTTP {status}.' },
+  'admin.alert-unreachable': { th: 'ติดต่อปลายทางการแจ้งเตือนไม่ได้', en: 'The alert destination could not be reached.' },
   // standard texts of the public page, used while the admin leaves the setting empty
   'admin.default-welcome-title': { th: 'ศูนย์รวมไฟล์', en: 'File Center' },
   'admin.default-welcome-text': {
@@ -239,6 +261,8 @@ export const MESSAGES = {
     th: 'เวอร์ชันล่าสุดที่แหล่งอัปเดต ({version}) ไม่ใหม่กว่าเวอร์ชันที่ใช้อยู่ ({running})',
     en: 'The latest version at the update source ({version}) is not newer than the running version ({running}).',
   },
+  // dashboard warning and alert: the daily look at UPDATE_SOURCE found a newer version
+  'update.available': { th: 'มีเวอร์ชันใหม่ {version} ให้ติดตั้งที่หน้าอัปเดตระบบ', en: 'Version {version} is available on the update page.' },
   'update.source-mismatch': {
     th: 'ไฟล์ที่ดาวน์โหลดไม่ตรงกับ SHA-256 หรือขนาดใน latest.json ไฟล์อาจเสียหายหรือถูกแก้ไข',
     en: 'The downloaded file does not match the SHA-256 or size in latest.json. It may be damaged or altered.',

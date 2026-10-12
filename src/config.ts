@@ -98,6 +98,19 @@ export const config = {
   officeJwtSecret: env('OFFICE_JWT_SECRET', '').trim(),
   /** biggest file that opens in the office editor (and biggest saved version taken back) */
   officeMaxSize: num('OFFICE_MAX_SIZE', 100 * 1024 ** 2), // 100 MB
+  /**
+   * where alerts go (alerts.ts): https only (http to this machine, for tests). Empty = no alerts. Checked in alerts.ts:
+   * a wrong value leaves alerts off with a warning at startup. A Telegram bot token is part of this URL: never shown.
+   */
+  alertWebhookUrl: env('ALERT_WEBHOOK_URL', '').trim(),
+  /** the shape of the message: discord | slack | telegram | json */
+  alertWebhookKind: env('ALERT_WEBHOOK_KIND', 'json').trim().toLowerCase(),
+  /** the chat a Telegram bot writes to (ALERT_WEBHOOK_KIND=telegram needs it) */
+  alertTelegramChatId: env('ALERT_TELEGRAM_CHAT_ID', '').trim(),
+  /** language of the alert texts */
+  alertLang: (env('ALERT_LANG', 'th').trim().toLowerCase() === 'en' ? 'en' : 'th') as 'th' | 'en',
+  /** more errors than this in the last hour sends an alert */
+  alertErrorsPerHour: Math.max(1, Math.floor(num('ALERT_ERRORS_PER_HOUR', 20))),
 }
 
 export const paths = {

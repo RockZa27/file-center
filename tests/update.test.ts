@@ -3,7 +3,7 @@
  * the way the web page does it. Needs web/dist (bun --bun run build).
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createHash } from 'node:crypto'
@@ -350,4 +350,39 @@ suite('update from the web', () => {
     // nothing newer is left to fetch
     expect((await api('GET', '/api/admin/update/check')).data).toMatchObject({ current: '9.9.9', newer: false })
   }, 90_000)
+
+  test('one step: the published version is checked, fetched, staged, tested and installed after one password', async () => {
+    // runs on 9.9.9 from the test before; the next version is this source tree again, as 9.9.10
+    const built = Bun.spawnSync([process.execPath, join(root, 'scripts', 'package.ts'), '--skip-web', '--version', '9.9.10', '--out', join(dirs.pkgs, 'next'), '--notes', 'one step'], { cwd: root })
+    expect(built.exitCode).toBe(0)
+    const zip = new Uint8Array(readFileSync(join(dirs.pkgs, 'next', 'file-center-9.9.10.zip')))
+    published.set('/updates/file-center-9.9.10.zip', zip)
+    published.set('/updates/latest.json', JSON.stringify({
+      version: '9.9.10', file: 'file-center-9.9.10.zip', sha256: createHash('sha256').update(zip).digest('hex'), size: zip.length,
+      builtAt: new Date().toISOString(), commit: 'abc1234', notes: 'one step', signed: false,
+    }))
+    const before = (await health()).boot
+    const denied = await api('POST', '/api/admin/update/fetch-and-apply', { password: 'wrong-password' })
+    expect([denied.status, denied.data.code]).toEqual([403, 'auth.wrong-password'])
+    const r = await api('POST', '/api/admin/update/fetch-and-apply', { password: PASSWORD })
+    expect([r.status, r.data]).toEqual([200, { ok: true, version: '9.9.10', restarting: true }])
+    const after = await until(async () => {
+      const h = await health()
+      return h && h.boot !== before && h.version === '9.9.10' ? h : null
+    }, 40_000, 'restart onto 9.9.10')
+    expect(after.release).toMatch(/^9\.9\.10-/)
+    const done = await until(async () => {
+      const s = await api('GET', '/api/admin/update')
+      return s.data?.last?.ok ? s.data : null
+    }, 20_000, 'confirmation')
+    expect(done).toMatchObject({ runningVersion: '9.9.10', pending: null, last: { version: '9.9.10', ok: true } })
+    // both halves are in the activity log, as when done one by one
+    const audit = async (action: string) => (await api('GET', `/api/admin/activity?action=${action}`)).data.items[0]
+    expect(await audit('update-fetch')).toMatchObject({ user: 'admin', detail: '9.9.10' })
+    expect(await audit('update-apply')).toMatchObject({ user: 'admin', detail: '9.9.10' })
+    // nothing was left staged, and once more there is nothing newer
+    expect(existsSync(join(dirs.data, 'app', 'staging')) ? readdirSync(join(dirs.data, 'app', 'staging')) : []).toEqual([])
+    const again = await api('POST', '/api/admin/update/fetch-and-apply', { password: PASSWORD })
+    expect([again.status, again.data.code, again.data.params.step]).toEqual([400, 'update.source-not-newer', 'check'])
+  }, 120_000)
 })

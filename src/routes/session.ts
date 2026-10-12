@@ -1,4 +1,5 @@
 import { Elysia, t } from 'elysia'
+import { alert } from '../alerts'
 import { audit } from '../audit'
 import {
   accessFor, checkPasswordStrength, clearFailures, createSession, destroySession, destroyUserSessions,
@@ -71,7 +72,7 @@ export const sessionRoutes = new Elysia({ prefix: '/api' })
     if (wait) throw new HttpError(429, 'auth.locked', { seconds: wait })
     const user = await verifyLogin(username, body.password)
     if (!user) {
-      recordFailure(key)
+      if (recordFailure(key)) alert('lockout', 'admin.alert-login-locked', { user: username || '-', ip })
       audit({ user: username || '-', ip, action: 'login-failed' })
       throw new HttpError(401, 'auth.bad-credentials')
     }

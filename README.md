@@ -136,8 +136,15 @@ bun run release --sign ~/file-center-keys/update-signing.key --notes "สิ่�
 UPDATE_SOURCE=https://raw.githubusercontent.com/<owner>/<repo>/updates
 ```
 
-หน้าอัปเดตจะมีปุ่มตรวจหาเวอร์ชันใหม่ (server อ่าน `latest.json` เฉพาะตอนกดปุ่ม ไม่มีการตรวจเองเบื้องหลัง) ถ้ามีเวอร์ชันใหม่กว่า กดดาวน์โหลดแล้ว server
+หน้าอัปเดตจะมีปุ่มตรวจหาเวอร์ชันใหม่ ถ้ามีเวอร์ชันใหม่กว่า กดดาวน์โหลดแล้ว server
 ดึงไฟล์มาเอง ตรวจ SHA-256 กับ `latest.json` แล้วตรวจแพ็กเกจแบบเดียวกับไฟล์ที่ลากมาวางทุกอย่าง การติดตั้งยังต้องใส่รหัสผ่านซ้ำเหมือนเดิม
+
+- **ตรวจเองเบื้องหลัง:** server อ่านเฉพาะ `latest.json` ราว 1 นาทีหลังเริ่มระบบและวันละครั้ง (ไม่ดาวน์โหลดหรือติดตั้งอะไรเอง) ถ้ามีเวอร์ชันใหม่กว่า
+  หน้าภาพรวมของ admin เตือน `update.available` พร้อม `{ version }` และส่งการแจ้งเตือนหนึ่งครั้งต่อเวอร์ชันใหม่ (ถ้าตั้งไว้ ดู การแจ้งเตือน) ผลเก็บในหน่วยความจำ เริ่มระบบใหม่ก็ตรวจใหม่
+- **อัปเดตในขั้นตอนเดียว:** `POST /api/admin/update/fetch-and-apply` `{ password }` ตรวจรหัสผ่านก่อน (ล็อกเมื่อผิดซ้ำเหมือน `/apply` และยังไม่ดาวน์โหลดอะไร)
+  แล้วทำ `/check` → `/fetch` → `/apply` ต่อกันโดยไม่ข้ามการตรวจใด ๆ: ต้องใหม่กว่าที่ใช้อยู่, SHA-256 และขนาดตรง `latest.json`, ตรวจไฟล์ในแพ็กเกจแบบเดียวกับที่อัปโหลด,
+  ลายเซ็นเมื่อตั้ง `UPDATE_PUBLIC_KEY`, ลองเปิดเวอร์ชันใหม่แยกต่างหาก แล้วจึงรีสตาร์ต ตอบ `{ ok, version, restarting }`
+  ถ้าขั้นใดล้มเหลว คำตอบบอกขั้นนั้นใน `params.step` (`check` / `fetch` / `stage` / `apply`) และไม่มีแพ็กเกจค้างอยู่ ประวัติการใช้งานบันทึก `update-fetch` และ `update-apply` เหมือนทำทีละขั้น
 
 - ใช้ได้กับ **repo สาธารณะ** เท่านั้น (server ดาวน์โหลดโดยไม่มีรหัสผ่านหรือ token) repo ส่วนตัวให้ดาวน์โหลดไฟล์ .zip เองแล้วลากมาวางแทน
 - รับเฉพาะ `https://` (ยกเว้น `http://127.0.0.1` / `localhost` สำหรับทดสอบ) และไม่ตามการ redirect ค่าอื่นระบบยังเปิดได้ แต่จะเตือนใน log และปิดการตรวจหาอัปเดตไว้
@@ -260,6 +267,11 @@ OFFICE_SERVER_INTERNAL_URL=http://onlyoffice
 | `SECURE_COOKIE` | `false` | ตั้งเป็น `true` เมื่อใช้ผ่าน HTTPS (เปิด cookie แบบ Secure และหัว `Strict-Transport-Security`) |
 | `LOG_MAX_BYTES` / `LOG_MAX_FILES` | 10 MB / 5 | หมุนไฟล์ `logs/system.log` (และ `access.log`, `launcher.log`) เมื่อใหญ่ถึงขนาดนี้ เก็บไว้กี่ไฟล์ (นับรวมไฟล์ปัจจุบัน) |
 | `ACCESS_LOG` | `false` | `true` = บันทึกทุกคำขอลง `logs/access.log` บรรทัดละคำขอ (method, path ที่ตัด query และโทเคนออกแล้ว, status, เวลาที่ใช้ ms, IP, ผู้ใช้) |
+| `ALERT_WEBHOOK_URL` | ว่าง (ปิด) | ส่งการแจ้งเตือนไปที่นี่ (https เท่านั้น ดู การแจ้งเตือน) ค่าที่ใช้ไม่ได้ ระบบยังเปิดได้แต่ปิดการแจ้งเตือนและเตือนใน log ตอนเริ่ม |
+| `ALERT_WEBHOOK_KIND` | `json` | รูปแบบข้อความ `discord`, `slack`, `telegram` หรือ `json` |
+| `ALERT_TELEGRAM_CHAT_ID` | ว่าง | chat ที่บอท Telegram ส่งถึง (ต้องตั้งเมื่อใช้ `telegram`) |
+| `ALERT_LANG` | `th` | ภาษาของการแจ้งเตือน `th` หรือ `en` |
+| `ALERT_ERRORS_PER_HOUR` | 20 | แจ้งเตือนเมื่อมี error มากกว่านี้ในหนึ่งชั่วโมงที่ผ่านมา |
 | `TRUST_PROXY` | `false` | ที่มาของ IP ผู้ใช้: `cloudflare` = หัว `CF-Connecting-IP` (Cloudflare Tunnel), `true` = ค่าสุดท้ายของ `X-Forwarded-For` (nginx/Caddy ของคุณเอง), `false` = ไม่มี proxy |
 
 ## ความปลอดภัยเพิ่มเติม
@@ -286,8 +298,34 @@ error และเหตุการณ์สำคัญของระบบ�
 - ทุกไฟล์หมุนเมื่อใหญ่ถึง `LOG_MAX_BYTES` (`system.log` → `system.log.1` → ...) เก็บไว้ `LOG_MAX_FILES` ไฟล์ ส่วนประวัติการใช้งาน `audit.log` หมุนแบบเดียวกันที่ 10 MB × 10 ไฟล์
 - **ไม่มีความลับใน log:** ไม่บันทึกรหัสผ่าน, cookie, CSRF token, โทเคนใน `/api/batch/:token`, ในลิงก์แชร์ (`/api/s/:token`, `/s/:token`) และในลิงก์ของ ONLYOFFICE (`/api/office/file/:token`, `/api/office/callback/:token`), รหัสการอัปโหลด และ query string ของ URL (ตัดออกก่อนเขียน ทั้งในไฟล์และ stdout)
   ข้อยกเว้นเดียวคือรหัสผ่าน admin ที่สุ่มให้ตอนเริ่มครั้งแรก ซึ่งแสดงบน stdout เท่านั้น ไม่ลงไฟล์
-- หน้าภาพรวม (`GET /api/admin/status`) เตือน "มี error N รายการใน 24 ชั่วโมงที่ผ่านมา" เมื่อมี error
+- หน้าภาพรวม (`GET /api/admin/status`) เตือน "มี error N รายการใน 24 ชั่วโมงที่ผ่านมา" เมื่อมี error (และส่งการแจ้งเตือนเมื่อเกิน `ALERT_ERRORS_PER_HOUR` ต่อชั่วโมง ดู การแจ้งเตือน)
 - `system.log` ปัจจุบันรวมอยู่ในไฟล์สำรองข้อมูลด้วย
+
+## การแจ้งเตือน
+
+ระบบส่งข้อความสั้น ๆ ถึงผู้ดูแลทาง Discord, Slack, Telegram หรือ webhook ใด ๆ ที่รับ JSON เมื่อมีเรื่องที่ต้องดู:
+
+- สำรองข้อมูลไม่สำเร็จ (ทั้งอัตโนมัติและที่กดเอง) พร้อมสาเหตุ
+- error มากกว่า `ALERT_ERRORS_PER_HOUR` (ค่าเริ่มต้น 20) ในหนึ่งชั่วโมงที่ผ่านมา (ตรวจทุก 5 นาที)
+- บัญชีหรือลิงก์แชร์ถูกล็อกเพราะใส่รหัสผ่านผิดซ้ำ: เข้าสู่ระบบ, ยืนยันรหัสผ่านก่อนติดตั้งอัปเดต/กู้คืน, ปลดล็อกลิงก์แชร์ (บอกชื่อผู้ใช้หรือรหัสลิงก์ และ IP แบบเดียวกับประวัติการใช้งาน)
+- ดิสก์เหลือน้อยขั้นวิกฤต (เกณฑ์เดียวกับคำเตือนในหน้าภาพรวม ต่ำกว่า 5%) (ตรวจทุก 5 นาที)
+- มีเวอร์ชันใหม่ที่ `UPDATE_SOURCE` (หนึ่งครั้งต่อเวอร์ชัน)
+
+ตั้งใน `.env` แล้วรีสตาร์ต (`docker compose up -d`):
+
+```env
+ALERT_WEBHOOK_URL=https://discord.com/api/webhooks/<id>/<token>
+ALERT_WEBHOOK_KIND=discord        # slack: URL ของ Incoming Webhook, json: ส่ง { event, code, message, params, lang, version, time }
+# Telegram: ALERT_WEBHOOK_KIND=telegram, ALERT_WEBHOOK_URL=https://api.telegram.org/bot<token>/sendMessage, ALERT_TELEGRAM_CHAT_ID=<chat id>
+ALERT_LANG=th
+```
+
+- แต่ละเรื่องส่งไม่เกินชั่วโมงละครั้ง ส่งเบื้องหลัง รอไม่เกิน 10 วินาที ไม่ตาม redirect ส่งไม่สำเร็จแค่บันทึก `alert-failed` (warn) ใน log ไม่ทำให้คำขอใดช้าหรือล้มเหลว
+- ข้อความมาจากรายการข้อความ (`src/messages.ts`) ตาม `ALERT_LANG` และผ่านการตัดความลับแบบเดียวกับ log: ไม่มีรหัสผ่าน โทเคน หรือ cookie
+  ชื่อที่ผู้เยี่ยมชมพิมพ์มา (เช่น ชื่อผู้ใช้ที่ login ผิด) เรียก `@everyone` ใน Discord หรือ `<!channel>` ใน Slack ไม่ได้
+- รับเฉพาะ `https://` (ยกเว้น `http://127.0.0.1` / `localhost` สำหรับทดสอบ) URL ของ webhook และ Telegram มีโทเคนอยู่ในตัว หน้าเว็บและ log จึงแสดงแค่ชื่อโฮสต์
+- `GET /api/admin/alerts` ตอบ `{ enabled, kind, host, lastSent: { <เรื่อง>: เวลา } }` · `POST /api/admin/alerts/test` ส่งข้อความทดสอบทันที ตอบ `{ ok: true }` หรือ error ที่บอกสาเหตุ
+  (`admin.alert-off`, `admin.alert-status`, `admin.alert-timeout`, `admin.alert-unreachable`) และบันทึก `alert-test` ในประวัติการใช้งาน (เฉพาะ admin)
 
 ## สิทธิ์
 
@@ -332,6 +370,7 @@ src/
   launcher.ts       ตัวรันแอป: รีสตาร์ตหลังอัปเดต และย้อนกลับเวอร์ชันเองถ้าเวอร์ชันใหม่เปิดไม่ขึ้น
   updater.ts, release.ts, routes/update.ts   ตรวจ/ติดตั้ง/ย้อนกลับแพ็กเกจอัปเดตจากหน้าเว็บ
   update-source.ts  ตรวจหาและดาวน์โหลดแพ็กเกจจาก UPDATE_SOURCE (latest.json)
+  alerts.ts, routes/alerts.ts               แจ้งเตือนผู้ดูแลทาง Discord/Slack/Telegram/webhook และงานตรวจเบื้องหลัง (error, ดิสก์, เวอร์ชันใหม่)
   backup.ts, routes/backup.ts               สำรองข้อมูลระบบอัตโนมัติ และกู้คืน
   config.ts         ค่าตั้งต้นและตำแหน่งโฟลเดอร์
   auth.ts           ผู้ใช้, session, ล็อกการเข้าสู่ระบบ, การแปลงสิทธิ์เป็นพื้นที่ที่เข้าถึงได้
@@ -345,7 +384,7 @@ src/
   shares.ts, routes/shares.ts               ลิงก์แชร์ให้คนที่ไม่มีบัญชีดาวน์โหลด
   office.ts, routes/office.ts               แก้ไขเอกสาร office ผ่าน ONLYOFFICE Docs: config ที่เซ็นแล้ว, โทเคนของลิงก์, JWT, รับไฟล์ที่บันทึก
   trash.ts, audit.ts, settings.ts, store.ts, common-passwords.ts
-  routes/           session, files, upload, admin, update, backup, logs, shares, office
+  routes/           session, files, upload, admin, update, backup, logs, shares, office, alerts
 scripts/package.ts  สร้างแพ็กเกจอัปเดต (bun run package)
 scripts/release.ts  เผยแพร่แพ็กเกจลง branch updates (bun run release)
 web/                Vue 3 + Naive UI (build ไปที่ web/dist)
@@ -356,6 +395,7 @@ tests/messages.test.ts  ทุกรหัสที่ใช้ใน src/ ม�
 tests/update.test.ts, tests/backup.test.ts   ทดสอบอัปเดตและกู้คืนข้อมูลกับ launcher จริง
 tests/update-source.test.ts, tests/release.test.ts   ตรวจหา/ดาวน์โหลดอัปเดตจาก server ทดสอบในเครื่อง และ bun run release กับ repo ชั่วคราว
 tests/office.test.ts  ONLYOFFICE กับ document server ปลอม: สิทธิ์ โทเคน JWT การบันทึกลงถังขยะ CSP และ expectedMtime ของไฟล์ข้อความ
+tests/alerts.test.ts  การแจ้งเตือนกับ webhook ทดสอบในเครื่อง: รูปแบบแต่ละชนิด ชั่วโมงละครั้ง ตัดความลับ และการตรวจเวอร์ชันใหม่รายวัน
 tests/perf.test.ts  การนับไฟล์ 50,000 ไฟล์ การคัดลอก 20,000 ไฟล์ และการค้นหาต้องไม่ทำให้คำขออื่นช้า (โหมด `dashboard` ใน scripts/loadtest.ts ใช้ลองกับ server จริง)
 ```
 
@@ -414,6 +454,8 @@ tests/perf.test.ts  การนับไฟล์ 50,000 ไฟล์ การ
 | `GET /api/admin/activity/export?format=csv` | ส่งออกประวัติการใช้งานเป็น CSV ตามตัวกรองเดียวกับหน้าประวัติ (`user`, `action`, `q`) เป็น UTF-8 มี BOM ให้ Excel แสดงภาษาไทยได้ ช่องที่ขึ้นต้นด้วย `=` `+` `-` `@` tab หรือ CR จะมี `'` นำหน้ากันสูตร Excel (เฉพาะ admin) |
 | `/api/admin/update/*` | อัปเดตระบบ: อัปโหลดแพ็กเกจ (ส่งชิ้นส่วนด้วย `PUT /api/upload/:id/:n`), ตรวจ, ติดตั้ง, ย้อนกลับ (เฉพาะ admin) `GET /api/admin/update` มี `source: { enabled, url }` และ `last.message` ตามภาษาของคำขอ |
 | `GET /api/admin/update/check` · `POST /api/admin/update/fetch` | ถาม `latest.json` ของ `UPDATE_SOURCE` → `{ enabled, current, latest: { version, notes, size, signed, builtAt }, newer }` · ดาวน์โหลดแพ็กเกจล่าสุดแล้วตรวจแบบเดียวกับ `/stage` (ตอบเหมือนกัน) ติดตั้งต่อด้วย `/apply` (เฉพาะ admin) |
+| `POST /api/admin/update/fetch-and-apply` | `{ password }` ตรวจ ดาวน์โหลด ตรวจแพ็กเกจ และติดตั้งเวอร์ชันล่าสุดจาก `UPDATE_SOURCE` ในครั้งเดียว ล้มเหลวบอกขั้นใน `params.step` (เฉพาะ admin) |
+| `GET /api/admin/alerts` · `POST /api/admin/alerts/test` | สถานะการแจ้งเตือน · ส่งข้อความทดสอบ (เฉพาะ admin) |
 | `GET /api/health` | ตรวจสุขภาพ (ใช้กับ Docker healthcheck) ผู้เยี่ยมชมได้แค่ `status` เครื่อง server เองและ admin ได้เวอร์ชันด้วย |
 
 ## ต่างจาก FileGator ต้นแบบอย่างไร

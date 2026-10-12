@@ -1,6 +1,8 @@
 /**
  * Updates published on the web (UPDATE_SOURCE): "bun run release --push" puts each package with a latest.json in
- * the `updates` branch, and the update page asks for it only when an admin presses the button (no polling).
+ * the `updates` branch. The update page asks for it when an admin presses the button; in the background only
+ * latest.json is read, once a day (lookForNewVersion), to tell the admin a newer version exists. Nothing is
+ * downloaded or installed without an admin.
  *
  * A fetched package is only downloaded here: it then goes through exactly the staging of an uploaded one
  * (updater.ts), and installing it still needs the password and, with UPDATE_PUBLIC_KEY set, a valid signature.
@@ -166,6 +168,23 @@ export async function checkSource() {
     newer: compareVersions(l.version, current) > 0,
   }
 }
+
+/** the newer version the last background look at latest.json found (memory only: the next start looks again) */
+let announced: string | null = null
+
+/**
+ * The daily look at latest.json (alerts.ts schedules it): remembers a newer version for the dashboard and returns it,
+ * or null. Only latest.json is read; nothing is downloaded. Throws like /check when the source can not be read.
+ */
+export async function lookForNewVersion(): Promise<string | null> {
+  const c = await checkSource()
+  announced = c.newer && c.latest ? c.latest.version : null
+  return announced
+}
+
+/** a newer version than the running one, as the last background look found it (null once installed or with the source off) */
+export const availableVersion = (): string | null =>
+  announced && activeBase() && compareVersions(announced, runningVersion()) > 0 ? announced : null
 
 /** one download at a time: a second click must not fetch the same 100 MB again */
 let fetching = false
