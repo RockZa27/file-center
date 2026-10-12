@@ -1,7 +1,8 @@
 import {
   cpSync, existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, renameSync, rmSync, statfsSync, statSync,
 } from 'node:fs'
-import { lstat, readdir } from 'node:fs/promises'
+import { constants as FS, type Stats } from 'node:fs'
+import { copyFile, lstat, mkdir, readdir, rm } from 'node:fs/promises'
 import { basename, dirname, extname, join, relative, sep } from 'node:path'
 import { config } from './config'
 
@@ -127,17 +128,20 @@ export function resolveIn(root: string, rel: string): string {
 
 export type Entry = { name: string; path: string; type: 'file' | 'dir'; size: number; mtime: number }
 
+function entryOf(abs: string, rel: string, st: Stats | null): Entry | null {
+  if (!st || st.isSymbolicLink()) return null // never follow or list links
+  return {
+    name: basename(abs),
+    path: rel,
+    type: st.isDirectory() ? 'dir' : 'file',
+    size: st.isDirectory() ? 0 : st.size,
+    mtime: Math.round(st.mtimeMs),
+  }
+}
+
 export function statEntry(abs: string, rel: string): Entry | null {
   try {
-    const st = lstatSync(abs)
-    if (st.isSymbolicLink()) return null // never follow or list links
-    return {
-      name: basename(abs),
-      path: rel,
-      type: st.isDirectory() ? 'dir' : 'file',
-      size: st.isDirectory() ? 0 : st.size,
-      mtime: Math.round(st.mtimeMs),
-    }
+    return entryOf(abs, rel, lstatSync(abs))
   } catch {
     return null
   }
@@ -179,14 +183,53 @@ export function moveSync(from: string, to: string) {
   }
 }
 
-export function copySync(from: string, to: string) {
+/**
+ * copy a file or a folder tree to `to`, which must not exist yet. Asynchronous, in batches like treeStats, so a
+ * folder of 20,000 files does not hold up everyone else. Links are skipped (never followed, never copied), and a
+ * copy that fails half way removes what it wrote.
+ */
+export async function copyTree(from: string, to: string) {
   if (isDir(from)) {
     const rel = relative(from, to)
     if (!rel.startsWith('..') && !rel.startsWith(sep) && rel !== '') {
       if (within(from, to)) throw bad('ไม่สามารถคัดลอกโฟลเดอร์เข้าไปในตัวมันเองได้')
     }
   }
-  cpSync(from, to, { recursive: true, errorOnExist: true, force: false, dereference: false })
+  const st = await lstat(from)
+  if (st.isSymbolicLink()) throw notFound()
+  if (!st.isDirectory()) {
+    // EXCL: never overwrite, and never write through a link put where the copy goes
+    try { await copyFile(from, to, FS.COPYFILE_EXCL) } catch (err: any) {
+      if (err?.code !== 'EEXIST') await rm(to, { force: true }).catch(() => {})
+      throw err
+    }
+    return
+  }
+  await mkdir(to) // fails when `to` exists: from here on everything under it is ours
+  try {
+    const stack: [string, string][] = [[from, to]]
+    while (stack.length) {
+      const [src, dst] = stack.pop()!
+      const names = await readdir(src)
+      for (let i = 0; i < names.length; i += COPY_BATCH) {
+        const batch = names.slice(i, i + COPY_BATCH)
+        // allSettled: nothing of this batch may still be writing when a failure removes the copy
+        const done = await Promise.allSettled(batch.map(async n => {
+          const s = join(src, n)
+          const d = join(dst, n)
+          const st = await lstat(s)
+          if (st.isDirectory()) { await mkdir(d); stack.push([s, d]) }
+          else if (st.isFile()) await copyFile(s, d, FS.COPYFILE_EXCL)
+          // links, sockets and pipes are left out
+        }))
+        const failed = done.find(r => r.status === 'rejected')
+        if (failed) throw (failed as PromiseRejectedResult).reason
+      }
+    }
+  } catch (err) {
+    await rm(to, { recursive: true, force: true }).catch(() => {})
+    throw err
+  }
 }
 
 export function ensureDir(abs: string) {
@@ -213,6 +256,8 @@ export function ensureSpace(abs: string, size: number) {
 
 /** entries looked at between two breaks, so other requests are answered while a big tree is counted */
 const STATS_BATCH = 2000
+/** files copied at the same time: enough to keep the disk busy, few enough to stay far from the open-file limit */
+const COPY_BATCH = 64
 
 /**
  * total size and file count of a directory tree (symlinks skipped). Asynchronous: a tree of a million entries
@@ -243,6 +288,35 @@ export async function treeStats(abs: string, limit = Infinity): Promise<{ size: 
     }
   }
   return { size, files, truncated: false }
+}
+
+/**
+ * entries of the tree under `abs` whose name contains `needle` (lower case), links skipped. Stops after `maxSeen`
+ * entries or `maxResults` hits with `truncated: true`. Asynchronous in batches like treeStats.
+ */
+export async function searchTree(abs: string, rel: string, needle: string, maxSeen = 50_000, maxResults = 200) {
+  const results: Entry[] = []
+  const stack: [string, string][] = [[abs, rel]]
+  let seen = 0
+  while (stack.length) {
+    const [dir, dirRel] = stack.pop()!
+    let names: string[]
+    try { names = await readdir(dir) } catch { continue }
+    for (let i = 0; i < names.length; i += STATS_BATCH) {
+      const batch = names.slice(i, i + STATS_BATCH)
+      // one more than the room left, so that "there was more" is still noticed
+      const look = batch.slice(0, Math.max(0, maxSeen - seen + 1))
+      const stats = await Promise.all(look.map(n => lstat(join(dir, n)).catch(() => null)))
+      for (let k = 0; k < look.length; k++) {
+        if (++seen > maxSeen || results.length >= maxResults) return { results, truncated: true }
+        const e = entryOf(join(dir, look[k]), joinRel(dirRel, look[k]), stats[k])
+        if (!e) continue
+        if (e.name.toLowerCase().includes(needle)) results.push(e)
+        if (e.type === 'dir') stack.push([join(dir, look[k]), e.path])
+      }
+    }
+  }
+  return { results, truncated: false }
 }
 
 export { within }

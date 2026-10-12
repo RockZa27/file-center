@@ -1,13 +1,13 @@
 import { randomBytes } from 'node:crypto'
-import { existsSync, lstatSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
 import { Elysia, t } from 'elysia'
 import { audit } from '../audit'
 import { config, paths } from '../config'
 import { context, need } from '../context'
 import {
-  bad, conflict, copySync, ensureSpace, forbidden, freeSpace, fromFsError, HttpError, isDir, joinRel, listDir, moveSync,
-  normRel, notFound, resolveIn, sameFile, statEntry, storagePath, treeStats, uniquePath, validName, within,
+  bad, conflict, copyTree, ensureSpace, forbidden, freeSpace, fromFsError, HttpError, isDir, joinRel, listDir, moveSync,
+  normRel, notFound, resolveIn, sameFile, searchTree, storagePath, treeStats, uniquePath, validName, within,
 } from '../fsx'
 import { log } from '../logger'
 import { moveToTrash } from '../trash'
@@ -97,28 +97,13 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     return { path: rel, entries: listDir(abs, rel).filter(e => e.type === 'dir') }
   }, { query: spaceQ })
 
-  .get('/search', ({ user, query }) => {
+  .get('/search', async ({ user, query }) => {
     const a = need({ user, ip: '' }, query.space, 'read')
     const needle = query.q.trim().toLowerCase()
     if (needle.length < 1) return { results: [], truncated: false }
     const startRel = normRel(query.path)
-    const results: ReturnType<typeof statEntry>[] = []
-    const stack: [string, string][] = [[resolveIn(a.root, startRel), startRel]]
-    let visited = 0
-    let truncated = false
-    while (stack.length && !truncated) {
-      const [dir, rel] = stack.pop()!
-      let names: string[]
-      try { names = readdirSync(dir) } catch { continue }
-      for (const n of names) {
-        if (++visited > 50_000 || results.length >= 200) { truncated = true; break }
-        const e = statEntry(join(dir, n), joinRel(rel, n))
-        if (!e) continue
-        if (e.name.toLowerCase().includes(needle)) results.push(e)
-        if (e.type === 'dir') stack.push([join(dir, n), e.path])
-      }
-    }
-    return { results, truncated }
+    // a walk of up to 50,000 entries: in batches, so other requests are answered meanwhile
+    return await searchTree(resolveIn(a.root, startRel), startRel, needle)
   }, { query: t.Object({ space: t.String(), q: t.String(), path: t.Optional(t.String()) }) })
 
   // ───────────── create / edit ─────────────
@@ -337,7 +322,7 @@ async function transfer(kind: 'copy' | 'move', user: any, ip: string, body: { sp
       } else {
         // counting a big folder takes a while: other requests are answered meanwhile
         ensureSpace(destAbs, isDir(from) ? (await treeStats(from)).size : lstatSync(from).size)
-        copySync(from, uniquePath(to))
+        await copyTree(from, uniquePath(to))
       }
       done++
       audit({ user: user?.username ?? 'guest', ip, action: kind, target: storagePath(from), detail: storagePath(destAbs) })
