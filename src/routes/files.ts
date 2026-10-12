@@ -142,16 +142,21 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     return { content: await Bun.file(abs).text(), mtime: Math.round(st.mtimeMs) }
   }, { query: spaceQ })
 
-  .put('/content', async ({ user, ip, body }) => {
+  .put('/content', ({ user, ip, body }) => {
     const a = need({ user, ip }, body.space, 'write')
     const rel = normRel(body.path)
     const abs = resolveIn(a.root, rel)
-    if (!existsSync(abs) || !statSync(abs).isFile()) throw notFound()
+    const st = existsSync(abs) ? statSync(abs) : null
+    if (!st || !st.isFile()) throw notFound()
     if (Buffer.byteLength(body.content) > MAX_TEXT) throw new HttpError(413, 'files.text-too-big')
-    await Bun.write(abs, body.content)
+    // the mtime GET /api/content gave: someone else saved since then, and writing now would silently undo their work
+    // check and write in one step, with no await between them: two saves of the same version can not both pass
+    if (body.expectedMtime !== undefined && Math.round(st.mtimeMs) !== body.expectedMtime) throw conflict('files.changed-elsewhere')
+    writeFileSync(abs, body.content)
     audit({ user: user?.username ?? 'guest', ip, action: 'edit', target: storagePath(abs) })
-    return { ok: true }
-  }, { body: t.Object({ space: t.String(), path: t.String(), content: t.String() }) })
+    // the next save sends this one back
+    return { ok: true, mtime: Math.round(statSync(abs).mtimeMs) }
+  }, { body: t.Object({ space: t.String(), path: t.String(), content: t.String(), expectedMtime: t.Optional(t.Number()) }) })
 
   // ───────────── rename / copy / move / delete ─────────────
   .post('/rename', async ({ user, ip, body }) => {

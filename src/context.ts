@@ -21,8 +21,10 @@ const DOWNLOAD_ROUTES = [
   /^\/api\/admin\/backups\/[^/]+\/download$/, /^\/api\/s\/[^/]+\/download$/,
 ]
 
-// the password form of a share link: it works without an account or a session, and the cookie it sets opens only that link
-const CSRF_EXEMPT = /^\/api\/s\/[^/]+\/unlock$/
+// the password form of a share link: it works without an account or a session, and the cookie it sets opens only that link.
+// The ONLYOFFICE callback comes from the document server, which has no session: a signed token in the path and the
+// server's JWT (office.ts) take the place of the cookie, so a forged cross-site request has nothing to ride on
+const CSRF_EXEMPT = /^\/api\/(?:s\/[^/]+\/unlock|office\/callback\/[^/]+)$/
 
 /** the tab opening a download link, not the page's own fetch (which sends x-lang and reads the JSON) */
 function isDownloadNavigation(request: Request): boolean {

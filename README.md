@@ -182,13 +182,54 @@ Cloudflare Tunnel ให้คนภายนอกเข้าผ่านโ�
 - โทเคนใน `.env` คือกุญแจของ tunnel ใครได้ไปก็ต่อเข้าโดเมนนี้ได้ ห้ามแชร์ ถ้าหลุดให้ Refresh token ในหน้า tunnel
 - ถ้าเปิด `BIND_ADDRESS=0.0.0.0` คู่กับ `TRUST_PROXY=cloudflare` คนในวง LAN ที่เข้าตรงจะปลอม IP ของตัวเองได้ (ไม่กระทบสิทธิ์ แต่กระทบการล็อกและประวัติ)
 
+## แก้ไขเอกสาร office ด้วย ONLYOFFICE Docs
+
+เปิดและแก้ไฟล์ `.docx` `.xlsx` `.pptx` `.odt` `.ods` `.odp` `.csv` `.txt` ในเบราว์เซอร์ได้ด้วย ONLYOFFICE Docs (Community Edition ฟรี) ซึ่งรันเป็นคอนเทนเนอร์แยก
+(`.doc` `.xls` `.ppt` แบบเก่าเปิดดูได้อย่างเดียว) **ปิดไว้โดยค่าเริ่มต้น** จะเปิดเมื่อตั้งค่าครบเท่านั้น
+
+- **ทรัพยากร:** document server ใช้ RAM ราว 2–4 GB (ขั้นต่ำ 2 GB + swap แนะนำ 4 GB) และดิสก์ราว 3 GB สำหรับอิมเมจ ครั้งแรกที่เริ่มใช้เวลา 1–2 นาทีก่อนพร้อมใช้งาน
+- **รุ่นฟรีจำกัด 20 การเชื่อมต่อพร้อมกัน** (นับทุกแท็บที่เปิดเอกสารอยู่ ทั้งดูและแก้) เกินนั้นผู้ใช้คนถัดไปจะเปิดเอกสารไม่ได้จนกว่าจะมีคนปิด
+
+**เปิดใช้งาน (Docker):** เพิ่มใน `.env` แล้ว `docker compose up -d`
+
+```env
+# ถ้าใช้ tunnel อยู่แล้ว: COMPOSE_PROFILES=tunnel,office
+COMPOSE_PROFILES=office
+# สร้างด้วย  openssl rand -hex 32  (ไม่ตั้งหรือสั้นกว่า 32 ตัวอักษร = ปิด)
+OFFICE_JWT_SECRET=ค่าที่สร้างได้
+# ที่อยู่ของ document server ที่ "เบราว์เซอร์" เปิดได้
+OFFICE_URL=http://localhost:8080
+# ที่อยู่ที่ document server ใช้เรียก File Center (ชื่อคอนเทนเนอร์ ไม่ใช่ localhost)
+OFFICE_INTERNAL_URL=http://file-center:3000
+# ที่อยู่ที่ File Center ใช้ดาวน์โหลดไฟล์ที่บันทึก (ไม่ตั้ง = OFFICE_URL)
+OFFICE_SERVER_INTERNAL_URL=http://onlyoffice
+```
+
+- `OFFICE_URL` ต้องเป็น `https://` (ยกเว้น `http://localhost` / `127.0.0.1` ใช้ในเครื่องเดียว) ค่าไม่ถูกต้องระบบยังเปิดได้ แต่จะเตือนใน log และปิดการแก้ไขเอกสารไว้
+- คอนเทนเนอร์ `onlyoffice` เปิดพอร์ตที่ `127.0.0.1:8080` เท่านั้น (เปลี่ยนด้วย `OFFICE_PORT`) และได้ `JWT_SECRET` จาก `OFFICE_JWT_SECRET` เดียวกันอัตโนมัติ
+- **ผ่าน Cloudflare Tunnel ต้องมี hostname ที่สอง** เพราะเบราว์เซอร์ของผู้ใช้โหลดโปรแกรมแก้ไขจาก document server โดยตรง: ในหน้า tunnel > Public Hostname > Add
+  Subdomain `office` · Service `HTTP` · URL `onlyoffice:80` แล้วตั้ง `OFFICE_URL=https://office.โดเมนของคุณ` (ไม่ต้องเปิดพอร์ตเพิ่ม)
+- รันด้วย bun โดยตรง (ไม่ใช้ Docker): ติดตั้ง document server เอง เปิด JWT ด้วยความลับเดียวกัน และตั้ง `OFFICE_INTERNAL_URL` เป็นที่อยู่ที่เครื่องนั้นเรียกถึง File Center ได้
+
+**ทำงานอย่างไร:** หน้าเว็บขอ `POST /api/office/config` `{ space, path, mode: "edit" | "view" }` (ต้องเข้าสู่ระบบ ดูต้องมีสิทธิ์ `read` + `download` แก้ต้องมี `write` ด้วย
+ไฟล์ไม่เกิน `OFFICE_MAX_SIZE` ค่าเริ่มต้น 100 MB) ได้ `{ apiUrl, config }` ซึ่งเป็น config ของ ONLYOFFICE ที่เซ็นด้วย `OFFICE_JWT_SECRET` (`config.token`)
+แล้ว document server ติดต่อ File Center เอง ไม่ใช้ cookie ของผู้ใช้: ดาวน์โหลดไฟล์จาก `GET /api/office/file/:token` และส่งไฟล์ที่บันทึกกลับมาทาง `POST /api/office/callback/:token`
+`GET /api/session` บอกผู้ที่เข้าสู่ระบบใน `config.office: { enabled, edit: [...], view: [...] }` ว่าเปิดไฟล์นามสกุลไหนได้
+
+- **บันทึก:** เมื่อทุกคนปิดเอกสาร (หรือกดบันทึกแบบ force save) document server ส่งไฟล์ใหม่มา ระบบย้าย **ฉบับเดิมไปถังขยะก่อน** (กู้คืนได้จากหน้าถังขยะ)
+  แล้ววางไฟล์ใหม่แทนที่ในครั้งเดียว (ไม่มีช่วงที่ไฟล์เขียนไม่ครบ) บันทึก `office-save` ในประวัติการใช้งาน และ `office-open` ทุกครั้งที่เปิด
+- **ความปลอดภัย:** ลิงก์ที่ให้ document server มีโทเคนที่ File Center เซ็นด้วยกุญแจของตัวเอง (`office-links.key` ใน `DATA_DIR`) ระบุไฟล์ ผู้ใช้ โหมด และหมดอายุใน 24 ชั่วโมง
+  ทุกครั้งที่ใช้ตรวจสิทธิ์ของผู้ใช้ใหม่ (ถูกถอนสิทธิ์ `write` แล้วบันทึกไม่ได้ ลิงก์แบบดูบันทึกไม่ได้เลย) document server ต้องส่ง JWT ที่เซ็นด้วย `OFFICE_JWT_SECRET` ทุกคำขอ
+  ไฟล์ที่บันทึกดาวน์โหลดจาก origin ของ document server (`OFFICE_SERVER_INTERNAL_URL` / `OFFICE_URL`) เท่านั้น ไม่ตาม redirect จำกัดขนาดตาม `OFFICE_MAX_SIZE` และเวลา
+  และ `Content-Security-Policy` ของหน้าเว็บเพิ่ม origin ของ `OFFICE_URL` ใน `script-src`, `frame-src`, `connect-src` เฉพาะเมื่อเปิดใช้งาน
+
 ## ตั้งค่า (ตัวแปรสภาพแวดล้อม)
 
 | ตัวแปร | ค่าเริ่มต้น | ความหมาย |
 |---|---|---|
 | `PORT` / `HOST` | `3000` / `0.0.0.0` | พอร์ตและที่อยู่ที่เปิดรับ (ใน Docker `PORT` คือพอร์ตฝั่งเครื่อง host) |
 | `BIND_ADDRESS` | `127.0.0.1` | (Docker) เปิดพอร์ตให้เครื่องไหนเข้าตรงได้ `0.0.0.0` = ทุกเครื่องในวง LAN |
-| `COMPOSE_PROFILES` / `TUNNEL_TOKEN` | ว่าง | (Docker) ตั้ง `tunnel` และโทเคนเพื่อเปิด Cloudflare Tunnel |
+| `COMPOSE_PROFILES` / `TUNNEL_TOKEN` | ว่าง | (Docker) ตั้ง `tunnel` และโทเคนเพื่อเปิด Cloudflare Tunnel, `office` เพื่อเปิด ONLYOFFICE (หลายค่าคั่นด้วย `,`) |
 | `STORAGE_DIR` | `./storage` (Docker: `/data/storage`) | ที่เก็บไฟล์ที่อัปโหลด |
 | `DATA_DIR` | `./data` (Docker: `/data/system`) | ผู้ใช้, ตั้งค่า, session, log, ถังขยะ, ไฟล์อัปโหลดที่ยังไม่เสร็จ |
 | `FC_RUN_AS_ROOT` | `false` | (Docker) `true` = รันแอปเป็น root แบบเดิม ไม่เปลี่ยนเจ้าของ `./data` (ปกติรันเป็นผู้ใช้ `bun` uid 1000) |
@@ -212,6 +253,10 @@ Cloudflare Tunnel ให้คนภายนอกเข้าผ่านโ�
 | `BACKUP_KEEP` | 7 | เก็บไฟล์สำรองล่าสุดกี่ไฟล์ |
 | `BACKUP_HOUR` | 3 | สำรองอัตโนมัติทุกวันชั่วโมงไหน (0-23 ตามเวลาเครื่อง) `off` = ปิดการสำรองอัตโนมัติ |
 | `BACKUP_INCLUDE_FILES` | `false` | `true` = รวมไฟล์ที่อัปโหลด (`storage`) ไว้ในไฟล์สำรองด้วย (อาจใหญ่มาก) |
+| `OFFICE_URL` / `OFFICE_INTERNAL_URL` | ว่าง (ปิด) | ONLYOFFICE: ที่อยู่ของ document server ที่เบราว์เซอร์เปิด / ที่อยู่ที่ document server เรียก File Center (ดู แก้ไขเอกสาร office) |
+| `OFFICE_SERVER_INTERNAL_URL` | `OFFICE_URL` | ที่อยู่ที่ File Center ใช้ดาวน์โหลดไฟล์ที่บันทึกจาก document server |
+| `OFFICE_JWT_SECRET` | ว่าง | ความลับที่ใช้ร่วมกับ document server อย่างน้อย 32 ตัวอักษร (ไม่ตั้ง = ปิดการแก้ไขเอกสาร) |
+| `OFFICE_MAX_SIZE` / `OFFICE_PORT` | 100 MB / 8080 | ขนาดไฟล์สูงสุดที่เปิดในโปรแกรมแก้ไขเอกสาร (ไบต์) / (Docker) พอร์ตของ document server บน 127.0.0.1 |
 | `SECURE_COOKIE` | `false` | ตั้งเป็น `true` เมื่อใช้ผ่าน HTTPS (เปิด cookie แบบ Secure และหัว `Strict-Transport-Security`) |
 | `LOG_MAX_BYTES` / `LOG_MAX_FILES` | 10 MB / 5 | หมุนไฟล์ `logs/system.log` (และ `access.log`, `launcher.log`) เมื่อใหญ่ถึงขนาดนี้ เก็บไว้กี่ไฟล์ (นับรวมไฟล์ปัจจุบัน) |
 | `ACCESS_LOG` | `false` | `true` = บันทึกทุกคำขอลง `logs/access.log` บรรทัดละคำขอ (method, path ที่ตัด query และโทเคนออกแล้ว, status, เวลาที่ใช้ ms, IP, ผู้ใช้) |
@@ -219,7 +264,7 @@ Cloudflare Tunnel ให้คนภายนอกเข้าผ่านโ�
 
 ## ความปลอดภัยเพิ่มเติม
 
-- **หัว HTTP:** หน้าเว็บและไฟล์ JS/CSS ของหน้าเว็บส่ง `Content-Security-Policy` (โหลดสคริปต์ได้เฉพาะจากเว็บนี้เอง) และ `Permissions-Policy` (ปิดกล้อง ไมโครโฟน ตำแหน่ง)
+- **หัว HTTP:** หน้าเว็บและไฟล์ JS/CSS ของหน้าเว็บส่ง `Content-Security-Policy` (โหลดสคริปต์ได้เฉพาะจากเว็บนี้เอง และจาก `OFFICE_URL` เมื่อเปิด ONLYOFFICE) และ `Permissions-Policy` (ปิดกล้อง ไมโครโฟน ตำแหน่ง)
   ไฟล์ที่ดาวน์โหลดและโลโก้ใช้ policy ของตัวเองที่เข้มกว่า (`sandbox`) ไม่ถูกแทนที่ เมื่อ `SECURE_COOKIE=true` ทุกคำตอบมี `Strict-Transport-Security: max-age=31536000` ด้วย
 - **เลขเวอร์ชัน:** `GET /api/health` ตอบแค่ `{ "status": "ok" }` เว้นแต่คำขอมาจากเครื่อง server เอง (ที่อยู่ของการเชื่อมต่อเป็น loopback และไม่มีหัว `X-Forwarded-For` / `CF-Connecting-IP` ที่ proxy ใส่มา) หรือจาก admin ที่เข้าสู่ระบบ
   ซึ่งได้ `version`, `release`, `boot`, `time` ตามเดิม (launcher และหน้าอัปเดต/กู้คืนใช้ค่าเหล่านี้) ส่วน `GET /api/session` ส่ง `config.version` ให้เฉพาะผู้ที่เข้าสู่ระบบ
@@ -239,7 +284,7 @@ error และเหตุการณ์สำคัญของระบบ�
 - `logs/launcher.log` เขียนโดย launcher: เริ่มระบบ, รีสตาร์ต, ย้อนกลับเวอร์ชัน, ระบบหยุดทำงาน (crash)
 - `logs/access.log` เฉพาะเมื่อตั้ง `ACCESS_LOG=true` (ปิดไว้โดยค่าเริ่มต้น)
 - ทุกไฟล์หมุนเมื่อใหญ่ถึง `LOG_MAX_BYTES` (`system.log` → `system.log.1` → ...) เก็บไว้ `LOG_MAX_FILES` ไฟล์ ส่วนประวัติการใช้งาน `audit.log` หมุนแบบเดียวกันที่ 10 MB × 10 ไฟล์
-- **ไม่มีความลับใน log:** ไม่บันทึกรหัสผ่าน, cookie, CSRF token, โทเคนใน `/api/batch/:token` และในลิงก์แชร์ (`/api/s/:token`, `/s/:token`), รหัสการอัปโหลด และ query string ของ URL (ตัดออกก่อนเขียน ทั้งในไฟล์และ stdout)
+- **ไม่มีความลับใน log:** ไม่บันทึกรหัสผ่าน, cookie, CSRF token, โทเคนใน `/api/batch/:token`, ในลิงก์แชร์ (`/api/s/:token`, `/s/:token`) และในลิงก์ของ ONLYOFFICE (`/api/office/file/:token`, `/api/office/callback/:token`), รหัสการอัปโหลด และ query string ของ URL (ตัดออกก่อนเขียน ทั้งในไฟล์และ stdout)
   ข้อยกเว้นเดียวคือรหัสผ่าน admin ที่สุ่มให้ตอนเริ่มครั้งแรก ซึ่งแสดงบน stdout เท่านั้น ไม่ลงไฟล์
 - หน้าภาพรวม (`GET /api/admin/status`) เตือน "มี error N รายการใน 24 ชั่วโมงที่ผ่านมา" เมื่อมี error
 - `system.log` ปัจจุบันรวมอยู่ในไฟล์สำรองข้อมูลด้วย
@@ -298,8 +343,9 @@ src/
   logger.ts         log ของระบบ (logs/system.log), หมุนไฟล์ log, ตัดความลับออกก่อนเขียน
   stats.ts          นับจำนวนและขนาดไฟล์ให้หน้าภาพรวม (เบื้องหลัง เก็บผลไว้ใน stats-cache.json)
   shares.ts, routes/shares.ts               ลิงก์แชร์ให้คนที่ไม่มีบัญชีดาวน์โหลด
+  office.ts, routes/office.ts               แก้ไขเอกสาร office ผ่าน ONLYOFFICE Docs: config ที่เซ็นแล้ว, โทเคนของลิงก์, JWT, รับไฟล์ที่บันทึก
   trash.ts, audit.ts, settings.ts, store.ts, common-passwords.ts
-  routes/           session, files, upload, admin, update, backup, logs, shares
+  routes/           session, files, upload, admin, update, backup, logs, shares, office
 scripts/package.ts  สร้างแพ็กเกจอัปเดต (bun run package)
 scripts/release.ts  เผยแพร่แพ็กเกจลง branch updates (bun run release)
 web/                Vue 3 + Naive UI (build ไปที่ web/dist)
@@ -309,6 +355,7 @@ tests/logs.test.ts  ทดสอบ log ของระบบ การหมุ
 tests/messages.test.ts  ทุกรหัสที่ใช้ใน src/ มีในรายการข้อความ ทั้งสองภาษามีตัวแปรตรงกัน error ตอบตามภาษาของคำขอ และลิงก์ดาวน์โหลดที่ล้มเหลวได้หน้า HTML
 tests/update.test.ts, tests/backup.test.ts   ทดสอบอัปเดตและกู้คืนข้อมูลกับ launcher จริง
 tests/update-source.test.ts, tests/release.test.ts   ตรวจหา/ดาวน์โหลดอัปเดตจาก server ทดสอบในเครื่อง และ bun run release กับ repo ชั่วคราว
+tests/office.test.ts  ONLYOFFICE กับ document server ปลอม: สิทธิ์ โทเคน JWT การบันทึกลงถังขยะ CSP และ expectedMtime ของไฟล์ข้อความ
 tests/perf.test.ts  การนับไฟล์ 50,000 ไฟล์ การคัดลอก 20,000 ไฟล์ และการค้นหาต้องไม่ทำให้คำขออื่นช้า (โหมด `dashboard` ใน scripts/loadtest.ts ใช้ลองกับ server จริง)
 ```
 
@@ -355,7 +402,8 @@ tests/perf.test.ts  การนับไฟล์ 50,000 ไฟล์ การ
 | `GET /api/session` · `POST /api/login` · `POST /api/logout` · `POST /api/password` | เซสชัน |
 | `GET /api/list` · `/api/folders` · `/api/search` | ดูรายการ ค้นหา (พารามิเตอร์ `space=home\|public`, `path`) |
 | `POST /api/mkdir` · `/newfile` · `/rename` · `/copy` · `/move` · `/delete` · `/zip` · `/unzip` | จัดการไฟล์ (ลบ = ย้ายไปถังขยะ) |
-| `GET/PUT /api/content` | อ่าน/บันทึกไฟล์ข้อความ (≤ 2 MB) |
+| `GET/PUT /api/content` | อ่าน/บันทึกไฟล์ข้อความ (≤ 2 MB) `GET` ตอบ `mtime` ส่งกลับใน `PUT` เป็น `expectedMtime` ถ้าไฟล์ถูกแก้จากที่อื่นหลังจากเปิดจะได้ 409 `files.changed-elsewhere` และไม่บันทึก `PUT` ตอบ `mtime` ใหม่ |
+| `POST /api/office/config` · `GET /api/office/file/:token` · `POST /api/office/callback/:token` | แก้ไขเอกสาร office ด้วย ONLYOFFICE (ดู แก้ไขเอกสาร office) สองตัวหลังเรียกโดย document server เท่านั้น |
 | `GET /api/download` (รองรับ `Range`) · `POST /api/batch` + `GET /api/batch/:token` | ดาวน์โหลด |
 | `POST/GET /api/shares` · `DELETE /api/shares/:id` · `GET /api/s/:token` · `POST /api/s/:token/unlock` · `GET /api/s/:token/download` | ลิงก์แชร์ (ดู ลิงก์แชร์) |
 | `POST /api/upload` → `PUT /api/upload/:id/:n` → `POST /api/upload/:id/complete` | อัปโหลดแบบแบ่งชิ้น |

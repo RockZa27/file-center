@@ -13,6 +13,7 @@ import { adminRoutes } from './routes/admin'
 import { backupRoutes } from './routes/backup'
 import { fileRoutes } from './routes/files'
 import { logRoutes } from './routes/logs'
+import { officeRoutes } from './routes/office'
 import { sessionRoutes } from './routes/session'
 import { shareRoutes } from './routes/shares'
 import { updateRoutes } from './routes/update'
@@ -20,6 +21,7 @@ import { uploadRoutes } from './routes/upload'
 import { purgeExpiredShares } from './shares'
 import { purgeExpired } from './trash'
 import { cleanStaleUploads } from './uploads'
+import { officeConfig, officeOrigin } from './office'
 import { cleanStaging, signingKey } from './updater'
 import { sourceConfig } from './update-source'
 
@@ -32,6 +34,9 @@ if (keyError) log.error('update-key-invalid', `UPDATE_PUBLIC_KEY ไม่ถู
 // the same for UPDATE_SOURCE: the app starts, checking for updates stays off
 const source = sourceConfig()
 if (source.error) log.warn('update-source-invalid', `UPDATE_SOURCE ${source.shown ?? ''} ไม่ถูกต้อง: ${source.error} ปิดการตรวจหาอัปเดตไว้จนกว่าจะแก้ค่านี้`)
+// and for the office editor: a wrong OFFICE_* value keeps it off
+const office = officeConfig()
+if (office.error) log.warn('office-config-invalid', `ตั้งค่า ONLYOFFICE ไม่ถูกต้อง: ${office.error} ปิดการแก้ไขเอกสาร office ไว้จนกว่าจะแก้ค่านี้`)
 
 function housekeeping() {
   try {
@@ -72,32 +77,38 @@ const indexHtml = join(config.webDir, 'index.html')
 
 // The page loads only its own files. Naive UI writes its styles into <style> tags (hence 'unsafe-inline' for
 // styles only); previews use blob: URLs and frames of our own downloads. Downloads and the logo send their own,
-// stricter policy: it is set on those responses only, never here.
-const WEB_HEADERS = {
-  'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; " +
-    "media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; " +
-    "form-action 'self'; frame-ancestors 'self'",
-  'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+// stricter policy: it is set on those responses only, never here. With ONLYOFFICE on (OFFICE_URL), the editor's
+// script, its frame and its connections come from the document server's origin as well, and from nowhere else.
+function webHeaders(): Record<string, string> {
+  const office = officeOrigin()
+  const plus = office ? ` ${office}` : ''
+  return {
+    'Content-Security-Policy': `default-src 'self'; script-src 'self'${plus}; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; ` +
+      `media-src 'self' blob:; font-src 'self' data:; connect-src 'self'${plus}; frame-src 'self'${plus}; object-src 'none'; base-uri 'self'; ` +
+      "form-action 'self'; frame-ancestors 'self'",
+    'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+  }
 }
 
 function serveStatic(pathname: string): Response {
+  const web = webHeaders()
   let decoded: string
-  try { decoded = decodeURIComponent(pathname) } catch { return new Response('Bad request', { status: 400, headers: WEB_HEADERS }) }
+  try { decoded = decodeURIComponent(pathname) } catch { return new Response('Bad request', { status: 400, headers: web }) }
   const abs = normalize(join(config.webDir, decoded))
   if (within(config.webDir, abs) && existsSync(abs) && statSync(abs).isFile()) {
     const immutable = decoded.startsWith('/assets/')
     return new Response(Bun.file(abs), {
-      headers: { ...WEB_HEADERS, 'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache' },
+      headers: { ...web, 'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache' },
     })
   }
   // a missing asset must stay a 404, any other path is a client-side route
-  if (extname(decoded) && decoded !== '/') return new Response('Not found', { status: 404, headers: WEB_HEADERS })
+  if (extname(decoded) && decoded !== '/') return new Response('Not found', { status: 404, headers: web })
   if (!existsSync(indexHtml)) {
     return new Response('ยังไม่ได้ build หน้าเว็บ — รัน "bun run build" ก่อน หรือใช้ "bun run dev" ระหว่างพัฒนา', {
-      status: 503, headers: { ...WEB_HEADERS, 'Content-Type': 'text/plain; charset=utf-8' },
+      status: 503, headers: { ...web, 'Content-Type': 'text/plain; charset=utf-8' },
     })
   }
-  return new Response(Bun.file(indexHtml), { headers: { ...WEB_HEADERS, 'Cache-Control': 'no-cache', 'Content-Type': 'text/html; charset=utf-8' } })
+  return new Response(Bun.file(indexHtml), { headers: { ...web, 'Cache-Control': 'no-cache', 'Content-Type': 'text/html; charset=utf-8' } })
 }
 
 // Only the socket address counts: X-Forwarded-For and CF-Connecting-IP are written by the client as much as by a
@@ -142,6 +153,7 @@ export const app = new Elysia({ serve: { maxRequestBodySize: config.uploadChunkS
   .use(fileRoutes)
   .use(uploadRoutes)
   .use(shareRoutes)
+  .use(officeRoutes)
   .get('/*', ({ request }) => {
     const { pathname } = new URL(request.url)
     if (pathname.startsWith('/api/')) throw notFound('request.no-api')
