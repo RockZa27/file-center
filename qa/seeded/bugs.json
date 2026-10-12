@@ -159,8 +159,8 @@
     "patches": [
       {
         "file": "src/routes/files.ts",
-        "find": "const a = need({ user, ip }, body.space, 'write')\n    const rel = normRel(body.path)\n    if (rel === '/') throw bad('ไม่สามารถเปลี่ยนชื่อโฟลเดอร์หลักได้')",
-        "replace": "const a = need({ user, ip }, body.space, 'read')\n    const rel = normRel(body.path)\n    if (rel === '/') throw bad('ไม่สามารถเปลี่ยนชื่อโฟลเดอร์หลักได้')"
+        "find": "const a = need({ user, ip }, body.space, 'write')\n    const rel = normRel(body.path)\n    if (rel === '/') throw bad('files.rename-root')",
+        "replace": "const a = need({ user, ip }, body.space, 'read')\n    const rel = normRel(body.path)\n    if (rel === '/') throw bad('files.rename-root')"
       }
     ],
     "difficulty": "subtle"
