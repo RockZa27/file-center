@@ -185,22 +185,27 @@ export function purgeExpiredSessions() {
 // ───────────────────────────── login lockout ─────────────────────────────
 
 // per "ip|username": failures within the lockout window, and when the lockout ends
-const attempts = new Map<string, { count: number; until: number; last: number }>()
+const attempts = new Map<string, { count: number; until: number; last: number; lockMs: number }>()
 const ATTEMPTS_MAX = 10_000
+
+/** how many failures lock a key, and for how long; logins use LOGIN_MAX_ATTEMPTS / LOGIN_LOCKOUT_SECONDS */
+export type Lockout = { max: number; lockMs: number }
+const loginLockout = (): Lockout => ({ max: config.loginMaxAttempts, lockMs: config.loginLockoutMs })
 
 export function lockedFor(key: string): number {
   const a = attempts.get(key)
   return a && a.until > Date.now() ? Math.ceil((a.until - Date.now()) / 1000) : 0
 }
 
-export function recordFailure(key: string) {
+export function recordFailure(key: string, limits: Lockout = loginLockout()) {
   if (attempts.size >= ATTEMPTS_MAX) pruneLoginAttempts()
   const now = Date.now()
-  const a = attempts.get(key) ?? { count: 0, until: 0, last: now }
+  const a = attempts.get(key) ?? { count: 0, until: 0, last: now, lockMs: limits.lockMs }
   if (a.until && a.until <= now) { a.count = 0; a.until = 0 }
   a.count++
   a.last = now
-  if (a.count >= config.loginMaxAttempts) a.until = now + config.loginLockoutMs
+  a.lockMs = limits.lockMs
+  if (a.count >= limits.max) a.until = now + limits.lockMs
   attempts.set(key, a)
 }
 
@@ -211,7 +216,7 @@ export function pruneLoginAttempts(): number {
   const now = Date.now()
   let n = 0
   for (const [k, a] of attempts) {
-    if (a.until ? a.until <= now : now - a.last > config.loginLockoutMs) {
+    if (a.until ? a.until <= now : now - a.last > a.lockMs) {
       attempts.delete(k)
       n++
     }

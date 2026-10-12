@@ -119,6 +119,15 @@ export const MESSAGES = {
   'admin.disk-low': { th: 'พื้นที่ดิสก์เหลือน้อย ({percent}%)', en: 'Disk space is running low ({percent}% free).' },
   'admin.default-password': { th: 'ยังมีบัญชีที่ใช้รหัสผ่านเริ่มต้น กรุณาเปลี่ยนรหัสผ่าน', en: 'Some accounts still use their initial password. Please change it.' },
 
+  // ───────────── share links ─────────────
+  // one answer for every link that does not work (unknown, expired, revoked, used up, item or owner gone): a guesser learns nothing
+  'share.not-found': { th: 'ไม่พบลิงก์นี้ หรือลิงก์หมดอายุแล้ว', en: 'Link not found or expired.' },
+  'share.bad-days': { th: 'อายุของลิงก์เลือกได้ {days} วัน', en: 'A link can last {days} days.' },
+  'share.bad-max-downloads': { th: 'จำนวนครั้งที่ดาวน์โหลดได้ต้องเป็นจำนวนเต็ม 1 ถึง {max}', en: 'The download limit must be a whole number from 1 to {max}.' },
+  'share.password-too-short': { th: 'รหัสผ่านของลิงก์ต้องยาวอย่างน้อย {min} ตัวอักษร', en: 'The link password must be at least {min} characters long.' },
+  'share.password-required': { th: 'ลิงก์นี้ต้องใส่รหัสผ่านก่อน', en: 'This link needs a password.' },
+  'share.too-many': { th: 'มีลิงก์แชร์ครบ {max} ลิงก์แล้ว กรุณายกเลิกลิงก์เก่าก่อน', en: 'You already have {max} share links. Please revoke an old one first.' },
+
   // ───────────── backup ─────────────
   'backup.bad-name': { th: 'ชื่อไฟล์สำรองข้อมูลไม่ถูกต้อง', en: 'The backup file name is not valid.' },
   'backup.not-found': { th: 'ไม่พบไฟล์สำรองข้อมูลนี้', en: 'This backup file was not found.' },

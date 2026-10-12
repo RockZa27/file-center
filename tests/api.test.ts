@@ -677,6 +677,7 @@ describe('full system: permission matrix', () => {
       ['GET', '/api/admin/backups/:name/download'],
       ['DELETE', '/api/admin/backups/:name'],
       ['POST', '/api/admin/backups/restore', { name: 'file-center-backup-20000101-000000.zip', password: 'x' }],
+      ['GET', '/api/admin/shares'],
     ]
     const routes = app.routes.filter((r: any) => r.path.startsWith('/api/admin')).map((r: any) => `${r.method} ${r.path}`)
     expect(routes.filter((r: string) => !adminCalls.some(([m, p]) => `${m} ${p}` === r))).toEqual([])
@@ -731,9 +732,13 @@ describe('full system: CSRF', () => {
       ['PUT', '/api/upload/:id/:index', new Uint8Array(1)],
       ['POST', '/api/upload/:id/complete'],
       ['DELETE', '/api/upload/:id'],
+      ['POST', '/api/shares', { ...files, path: '/matrix.txt', days: 7 }],
+      ['DELETE', '/api/shares/:id'],
     ]
+    // the only exception, on purpose: a share link's password form needs no session (tests/shares.test.ts)
+    const exempt: [string, string][] = [['POST', '/api/s/:token/unlock']]
     const routes = app.routes.filter((r: any) => !['GET', 'HEAD'].includes(r.method)).map((r: any) => `${r.method} ${r.path}`)
-    expect(routes.filter((r: string) => !mutating.some(([m, p]) => `${m} ${p}` === r))).toEqual([])
+    expect(routes.filter((r: string) => ![...mutating, ...exempt].some(([m, p]) => `${m} ${p}` === r))).toEqual([])
 
     const init = await admin.json('POST', '/api/upload', { space: 'home', path: '/', name: 'csrf-target.bin', size: 1 })
     for (const token of ['', 'wrong', guest.csrf]) {

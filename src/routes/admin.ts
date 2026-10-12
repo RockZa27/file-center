@@ -12,6 +12,7 @@ import { bad, conflict, ensureDir, forbidden, HttpError, isDir, listDir, normRel
 import { errorsSince } from '../logger'
 import { langOf, type MessageCode, type Params, text } from '../messages'
 import { settings } from '../settings'
+import { revokeSharesOf } from '../shares'
 import { storageStats } from '../stats'
 import { listTrash, purge, restore, trashSummary } from '../trash'
 import { uploadsInProgress } from '../uploads'
@@ -148,6 +149,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     list.splice(list.indexOf(target), 1)
     saveUsers()
     destroyUserSessions(target.username)
+    revokeSharesOf(target.username)
     audit({ user: admin.username, ip, action: 'user-delete', target: target.username })
     return { ok: true }
   })

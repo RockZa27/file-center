@@ -14,8 +14,10 @@ import { backupRoutes } from './routes/backup'
 import { fileRoutes } from './routes/files'
 import { logRoutes } from './routes/logs'
 import { sessionRoutes } from './routes/session'
+import { shareRoutes } from './routes/shares'
 import { updateRoutes } from './routes/update'
 import { uploadRoutes } from './routes/upload'
+import { purgeExpiredShares } from './shares'
 import { purgeExpired } from './trash'
 import { cleanStaleUploads } from './uploads'
 import { cleanStaging, signingKey } from './updater'
@@ -48,6 +50,18 @@ function housekeeping() {
 }
 housekeeping()
 setInterval(housekeeping, 60 * 60 * 1000).unref()
+
+// share links that ran out leave the store at start and once a day
+function cleanShares() {
+  try {
+    const n = purgeExpiredShares()
+    if (n) log.info('shares-cleaned', { expired: n })
+  } catch (err) {
+    log.error('shares-clean-failed', err)
+  }
+}
+cleanShares()
+setInterval(cleanShares, 24 * 60 * 60 * 1000).unref()
 
 const bootedAt = Date.now()
 const indexHtml = join(config.webDir, 'index.html')
@@ -123,6 +137,7 @@ export const app = new Elysia({ serve: { maxRequestBodySize: config.uploadChunkS
   .use(logRoutes)
   .use(fileRoutes)
   .use(uploadRoutes)
+  .use(shareRoutes)
   .get('/*', ({ request }) => {
     const { pathname } = new URL(request.url)
     if (pathname.startsWith('/api/')) throw notFound('request.no-api')

@@ -1,7 +1,8 @@
 import { paths } from './config'
 import { JsonStore } from './store'
 
-export const PERMISSIONS = ['read', 'write', 'upload', 'download', 'batchdownload', 'zip'] as const
+/** `share` (hand out a link to someone without an account) also needs `download` on the same space */
+export const PERMISSIONS = ['read', 'write', 'upload', 'download', 'batchdownload', 'zip', 'share'] as const
 export type Perm = (typeof PERMISSIONS)[number]
 
 export type Settings = {

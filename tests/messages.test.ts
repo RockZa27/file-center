@@ -13,7 +13,7 @@ import './in-process-env'
 import { langOf, MESSAGES, text, type MessageCode } from '../src/messages'
 
 const SRC = resolve(import.meta.dir, '..', 'src')
-const AREAS = ['auth', 'files', 'upload', 'zip', 'admin', 'update', 'backup', 'logs', 'fs', 'request']
+const AREAS = ['auth', 'files', 'upload', 'zip', 'admin', 'update', 'backup', 'logs', 'fs', 'request', 'share']
 // codes the web page checked before there was a catalog; they stay as they are
 const LEGACY = ['csrf', 'must-change-password', 'disk-full', 'not-supervised', 'errors']
 
