@@ -140,7 +140,7 @@ import SearchModal from './SearchModal.vue'
 import UploadPanel from './UploadPanel.vue'
 
 const props = defineProps({ space: { type: String, required: true }, emptyText: { type: String, default: '' } })
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const app = useAppStore()
 const route = useRoute()
 const router = useRouter()
@@ -227,6 +227,8 @@ function go(path, replace = false) {
 }
 
 watch(() => [props.space, location.value], () => { items.value = []; load() }, { immediate: true })
+// a folder that could not be read shows the server's text: read it again so the text follows the language switch
+watch(locale, () => { if (error.value) load(true) })
 
 // ───── opening & downloading ─────
 function triggerDownload(url) {

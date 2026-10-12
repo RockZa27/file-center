@@ -6,7 +6,7 @@
     </div>
     <div class="surface">
       <n-data-table :columns="columns" :data="items" :loading="loading" :bordered="false" :single-line="false"
-        :scroll-x="narrow ? undefined : 880" table-layout="fixed" :row-key="r => r.id" :pagination="{ pageSize: 25 }"
+        :scroll-x="narrow ? undefined : 760" table-layout="fixed" :row-key="r => r.id" :pagination="{ pageSize: 25 }"
       >
         <template #empty><n-empty :description="t('trash.none')" /></template>
       </n-data-table>
@@ -51,7 +51,7 @@ async function emptyAll() {
 
 const nameCell = r => h('div', { class: 'name-cell' }, [
   h(FileIcon, { item: { name: r.name, type: r.type }, size: 20 }),
-  h('div', { style: 'min-width:0' }, [h('div', { class: 'truncate', title: r.name }, r.name), h('div', { class: 'muted mono truncate', title: r.originalPath }, r.originalPath)]),
+  h('div', { style: 'min-width:0' }, [h('div', { class: 'truncate name-text', title: r.name }, r.name), h('div', { class: 'muted mono truncate', title: r.originalPath }, r.originalPath)]),
 ])
 const leftTag = r => h(NTag, { size: 'small', round: true, type: daysLeft(r) <= 3 ? 'warning' : 'default' }, () => t('trash.days', { n: daysLeft(r) }))
 const actions = r => h('div', { class: 'row-actions' }, [
@@ -76,12 +76,19 @@ const columns = computed(() => (narrow.value
       ]),
     }]
   : [
-      { title: t('common.name'), key: 'name', minWidth: 200, render: nameCell },
-      { title: t('common.size'), key: 'size', width: 100, render: r => formatBytes(r.size) },
-      { title: t('trash.deletedBy'), key: 'deletedBy', width: 130 },
-      { title: t('trash.deletedAt'), key: 'deletedAt', width: 150, render: r => formatDate(r.deletedAt) },
-      { title: t('trash.left'), key: 'left', width: 110, render: leftTag },
-      { title: '', key: 'a', width: 190, align: 'right', fixed: 'right', render: actions },
+      // the name takes what the others leave: they hold short values, so they get just their width
+      { title: t('common.name'), key: 'name', minWidth: 260, render: nameCell },
+      { title: t('common.size'), key: 'size', width: 90, render: r => formatBytes(r.size) },
+      // who deleted it goes under when: one column less for the name to share
+      {
+        title: t('trash.deletedAt'), key: 'deletedAt', width: 150,
+        render: r => h('div', { class: 'when' }, [
+          h('div', { class: 'nowrap' }, formatDate(r.deletedAt)),
+          h('div', { class: 'muted small truncate', title: r.deletedBy }, `${t('trash.deletedBy')} ${r.deletedBy}`),
+        ]),
+      },
+      { title: t('trash.left'), key: 'left', width: 100, render: leftTag },
+      { title: '', key: 'a', width: 170, align: 'right', fixed: 'right', render: actions },
     ]))
 onMounted(load)
 </script>
@@ -89,6 +96,11 @@ onMounted(load)
 <style scoped>
 :deep(.name-cell) { display: flex; align-items: center; gap: 10px; min-width: 0; }
 :deep(.row-actions) { display: flex; gap: 6px; justify-content: flex-end; }
+:deep(.when) { min-width: 0; }
+:deep(.when .small) { font-size: 12.5px; margin-top: 2px; }
+:deep(.nowrap) { white-space: nowrap; }
+/* the whole file name, wrapped, rather than a few letters and a tooltip; the deep path stays on one line */
+:deep(.name-cell .name-text) { white-space: normal; overflow-wrap: anywhere; text-overflow: clip; }
 :deep(.stacked) { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 :deep(.stacked-meta) { display: flex; align-items: center; gap: 4px 12px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); padding-left: 30px; }
 :deep(.stacked .row-actions) { justify-content: flex-start; padding-left: 30px; }

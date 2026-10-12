@@ -61,7 +61,7 @@
               <div class="muted small"><span class="mono name">{{ b.name }}</span> · {{ formatBytes(b.size) }}</div>
             </div>
             <div class="item-actions">
-              <n-button size="small" tag="a" :href="api.backupUrl(b.name)" :download="b.name" secondary>
+              <n-button size="small" secondary :loading="saving === b.name" :disabled="saving !== null && saving !== b.name" @click="save(api.backupUrl(b.name), { key: b.name, name: b.name, admin: true })">
                 <template #icon><n-icon :component="DownloadOutline" /></template>{{ t('common.download') }}
               </n-button>
               <n-button size="small" secondary :disabled="working || creating" @click="askRestore(b)">
@@ -105,12 +105,13 @@ import { useI18n } from 'vue-i18n'
 import { NAlert, NButton, NEmpty, NForm, NFormItem, NIcon, NInput, NModal, NSpin, NTag } from 'naive-ui'
 import { ArchiveOutline, ArrowUndoOutline, DownloadOutline, RefreshOutline, TrashOutline } from '@vicons/ionicons5'
 import { api } from '../api'
-import { useFeedback } from '../composables'
+import { useDownload, useFeedback } from '../composables'
 import { bootId, sleep, waitForRestart } from '../restart'
 import { formatBytes, formatDate } from '../utils'
 
 const { t } = useI18n()
 const fb = useFeedback()
+const { busy: saving, save } = useDownload()
 const data = ref(null)
 const loading = ref(false)
 const creating = ref(false)

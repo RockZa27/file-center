@@ -8,6 +8,13 @@ const th = {
     folder: 'โฟลเดอร์', remove: 'นำออก', edit: 'แก้ไข', open: 'เปิด', saved: 'บันทึกแล้ว', never: 'ยังไม่เคย',
     unknownError: 'เกิดข้อผิดพลาด กรุณาลองใหม่', cannotConnect: 'ไม่สามารถเชื่อมต่อระบบได้ กรุณารีเฟรชหน้าเว็บ',
   },
+  // texts the page writes itself when the server gave none (no answer, or an answer that is not JSON)
+  api: {
+    noConnection: 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้', failed: 'เกิดข้อผิดพลาด ({status})', uploadFailed: 'อัปโหลดไม่สำเร็จ ({status})',
+    connectionLost: 'การเชื่อมต่อขัดข้อง', canceled: 'ยกเลิกแล้ว',
+    signedOut: 'เซสชันหมดอายุแล้ว กรุณาเข้าสู่ระบบใหม่แล้วดาวน์โหลดอีกครั้ง', mustChangePassword: 'กรุณาเปลี่ยนรหัสผ่านก่อนใช้งาน',
+    forbidden: 'ไม่มีสิทธิ์ทำรายการนี้',
+  },
   nav: {
     files: 'ไฟล์ของฉัน', dashboard: 'ภาพรวมระบบ', users: 'ผู้ใช้', activity: 'ประวัติการใช้งาน', trash: 'ถังขยะ',
     settings: 'ตั้งค่า', update: 'อัปเดตระบบ', backup: 'สำรองข้อมูล', logs: 'บันทึกระบบ', login: 'เข้าสู่ระบบ', logout: 'ออกจากระบบ', changePassword: 'เปลี่ยนรหัสผ่าน',
@@ -17,6 +24,7 @@ const th = {
   login: {
     title: 'เข้าสู่ระบบ', subtitle: 'กรอกชื่อผู้ใช้และรหัสผ่านเพื่อจัดการไฟล์', username: 'ชื่อผู้ใช้', password: 'รหัสผ่าน',
     submit: 'เข้าสู่ระบบ', failed: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', backToPublic: 'กลับไปหน้าดาวน์โหลด',
+    locked: 'พยายามเข้าสู่ระบบผิดหลายครั้ง กรุณารอ {seconds} วินาทีแล้วลองใหม่',
   },
   profile: {
     current: 'รหัสผ่านปัจจุบัน', new: 'รหัสผ่านใหม่', confirm: 'ยืนยันรหัสผ่านใหม่',
@@ -170,6 +178,12 @@ const en = {
     folder: 'Folder', remove: 'Remove', edit: 'Edit', open: 'Open', saved: 'Saved', never: 'Never',
     unknownError: 'Something went wrong. Please try again.', cannotConnect: 'Cannot reach the server. Please refresh the page.',
   },
+  api: {
+    noConnection: 'Cannot reach the server', failed: 'Something went wrong ({status})', uploadFailed: 'Upload failed ({status})',
+    connectionLost: 'The connection was lost', canceled: 'Canceled',
+    signedOut: 'Your session has expired. Please sign in again and download once more.', mustChangePassword: 'Please change your password before continuing.',
+    forbidden: 'You do not have permission to do this.',
+  },
   nav: {
     files: 'My files', dashboard: 'Dashboard', users: 'Users', activity: 'Activity', trash: 'Trash',
     settings: 'Settings', update: 'System update', backup: 'Backup', logs: 'System log', login: 'Sign in', logout: 'Sign out', changePassword: 'Change password',
@@ -179,6 +193,7 @@ const en = {
   login: {
     title: 'Sign in', subtitle: 'Enter your username and password to manage files', username: 'Username', password: 'Password',
     submit: 'Sign in', failed: 'Wrong username or password', backToPublic: 'Back to downloads',
+    locked: 'Too many failed sign-ins. Wait {seconds} seconds and try again.',
   },
   profile: {
     current: 'Current password', new: 'New password', confirm: 'Confirm new password',
