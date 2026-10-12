@@ -2,6 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { existsSync, lstatSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { config, paths } from './config'
+import { holdNow, ownerOfPath, ready } from './quota'
 import {
   conflict, ensureDir, moveTree, notFound, parentRel, resolveIn, storagePath, treeStats, uniquePath,
 } from './fsx'
@@ -73,9 +74,20 @@ export async function restore(idRaw: unknown): Promise<{ meta: TrashMeta; restor
   const meta = JSON.parse(readFileSync(join(dir, 'meta.json'), 'utf8')) as TrashMeta
   const target = resolveIn(config.storageDir, meta.originalPath)
   ensureDir(dirname(target))
+  // the item goes back into a home that may have a quota: it counts again (counted first, so nothing awaits between
+  // choosing the name and moving)
+  const owner = ownerOfPath(target)
+  await ready(owner)
   const finalPath = uniquePath(target)
   if (existsSync(finalPath)) throw conflict('admin.trash-name-taken')
-  await moveTree(join(dir, 'item'), finalPath)
+  const hold = holdNow(owner, meta.size)
+  try {
+    await moveTree(join(dir, 'item'), finalPath)
+  } catch (err) {
+    hold.release()
+    throw err
+  }
+  hold.commit()
   rmSync(dir, { recursive: true, force: true })
   return { meta, restoredTo: storagePath(finalPath) }
 }

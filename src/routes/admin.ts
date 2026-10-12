@@ -12,6 +12,7 @@ import { context, requireAdmin } from '../context'
 import { bad, conflict, ensureDir, forbidden, HttpError, isDir, listDir, normRel, notFound, resolveIn } from '../fsx'
 import { errorsSince } from '../logger'
 import { langOf, type MessageCode, type Params, text } from '../messages'
+import { cleanQuota, forget } from '../quota'
 import { settings } from '../settings'
 import { revokeSharesOf } from '../shares'
 import { DISK_CRITICAL_PERCENT, DISK_LOW_PERCENT, diskInfo, storageStats } from '../stats'
@@ -66,8 +67,10 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     const homedir = body.role === 'admin' ? '/' : cleanHomedir(body.homedir, username)
     if (body.role !== 'admin' && homedir === '/') throw bad('admin.home-required')
     ensureDir(resolveIn(config.storageDir, homedir))
+    const quotaBytes = body.quotaBytes === undefined ? 0 : cleanQuota(body.quotaBytes)
     allUsers().push({
       username, name, role: body.role, homedir,
+      ...(quotaBytes ? { quotaBytes } : {}),
       permissions: cleanPerms(body.permissions),
       publicPermissions: cleanPerms(body.publicPermissions),
       passwordHash: await hashPassword(body.password),
@@ -80,6 +83,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     body: t.Object({
       username: t.String(), name: t.String(), password: t.String(), role: roleT,
       homedir: t.Optional(t.String()), permissions: permsT, publicPermissions: permsT,
+      quotaBytes: t.Optional(t.Number()),
     }),
   })
 
@@ -102,6 +106,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     const homeAbs = resolveIn(config.storageDir, homedir)
     if (body.password) checkPasswordStrength(body.password, target.username)
     const passwordHash = body.password ? await hashPassword(body.password) : null
+    const quotaBytes = body.quotaBytes === undefined ? undefined : cleanQuota(body.quotaBytes)
 
     ensureDir(homeAbs)
     if (name !== undefined) target.name = name
@@ -109,6 +114,12 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     target.homedir = homedir
     if (body.permissions) target.permissions = cleanPerms(body.permissions)
     if (body.publicPermissions) target.publicPermissions = cleanPerms(body.publicPermissions)
+    if (quotaBytes !== undefined) {
+      if (quotaBytes) target.quotaBytes = quotaBytes
+      else delete target.quotaBytes
+    }
+    // a new limit or home folder: the old count says nothing about it
+    forget(target.username)
     if (passwordHash) {
       target.passwordHash = passwordHash
       target.mustChangePassword = false
@@ -121,6 +132,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     body: t.Object({
       name: t.Optional(t.String()), password: t.Optional(t.String()), role: t.Optional(roleT),
       homedir: t.Optional(t.String()), permissions: t.Optional(permsT), publicPermissions: t.Optional(permsT),
+      quotaBytes: t.Optional(t.Number()),
     }),
   })
 

@@ -119,6 +119,7 @@ export const MESSAGES = {
   'admin.display-name-required': { th: 'กรุณากรอกชื่อที่แสดง (ไม่เกิน 60 ตัวอักษร)', en: 'Please enter a display name (up to 60 characters).' },
   'admin.bad-display-name': { th: 'ชื่อที่แสดงไม่ถูกต้อง', en: 'The display name is not valid.' },
   'admin.home-required': { th: 'ผู้ใช้ทั่วไปต้องมีโฟลเดอร์ของตัวเอง', en: 'A regular user needs a folder of their own.' },
+  'admin.bad-quota': { th: 'โควตาต้องเป็นจำนวนไบต์เต็ม 0 (ไม่จำกัด) ถึง 2^50', en: 'The quota must be a whole number of bytes from 0 (no limit) to 2^50.' },
   'admin.home-in-public': { th: 'โฟลเดอร์ของผู้ใช้ต้องไม่อยู่ในโฟลเดอร์สาธารณะ', en: 'A user\'s folder must not be inside the public folder.' },
   'admin.user-not-found': { th: 'ไม่พบผู้ใช้', en: 'The user was not found.' },
   'admin.last-admin': { th: 'ต้องมีผู้ดูแลระบบอย่างน้อยหนึ่งคน', en: 'There must be at least one administrator.' },
@@ -174,6 +175,17 @@ export const MESSAGES = {
   'share.password-too-short': { th: 'รหัสผ่านของลิงก์ต้องยาวอย่างน้อย {min} ตัวอักษร', en: 'The link password must be at least {min} characters long.' },
   'share.password-required': { th: 'ลิงก์นี้ต้องใส่รหัสผ่านก่อน', en: 'This link needs a password.' },
   'share.too-many': { th: 'มีลิงก์แชร์ครบ {max} ลิงก์แล้ว กรุณายกเลิกลิงก์เก่าก่อน', en: 'You already have {max} share links. Please revoke an old one first.' },
+
+  'share.upload-folder-only': { th: 'ลิงก์รับไฟล์ใช้ได้กับโฟลเดอร์เท่านั้น', en: 'An upload link can only be made for a folder.' },
+  'share.bad-upload-limits': { th: 'ขีดจำกัดของลิงก์รับไฟล์ไม่ถูกต้อง (ขนาดต่อไฟล์ไม่เกิน {file} ไบต์, จำนวนไฟล์ไม่เกิน {files}, ขนาดรวมไม่เกิน {total} ไบต์)', en: 'The upload link limits are not valid (file size up to {file} bytes, up to {files} files, total up to {total} bytes).' },
+  'share.note-too-long': { th: 'ข้อความถึงผู้อัปโหลดต้องไม่เกิน {max} ตัวอักษร', en: 'The note for the visitor must be at most {max} characters.' },
+  'share.upload-too-big': { th: 'ไฟล์ใหญ่เกินที่ลิงก์นี้รับได้ (สูงสุด {max} ไบต์)', en: 'The file is bigger than this link accepts (at most {max} bytes).' },
+  'share.upload-full': { th: 'ลิงก์นี้รับไฟล์ครบตามที่กำหนดแล้ว', en: 'This link has received all the files it accepts.' },
+  'share.upload-busy': { th: 'มีการอัปโหลดค้างอยู่หลายรายการเกินไป กรุณารอให้เสร็จก่อน', en: 'Too many uploads are in progress. Please wait for them to finish.' },
+
+  // ───────────── quota ─────────────
+  // the numbers are bytes
+  'quota.exceeded': { th: 'พื้นที่ของคุณเต็ม (ใช้ไป {used} จาก {quota} ไบต์) กรุณาลบไฟล์ก่อนหรือติดต่อผู้ดูแลระบบ', en: 'Your storage is full ({used} of {quota} bytes used). Delete some files or contact the administrator.' },
 
   // ───────────── office documents (ONLYOFFICE) ─────────────
   'office.disabled': { th: 'ยังไม่ได้เปิดใช้การแก้ไขเอกสาร office บนเซิร์ฟเวอร์นี้', en: 'Office document editing is not enabled on this server.' },

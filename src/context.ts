@@ -25,6 +25,11 @@ const DOWNLOAD_ROUTES = [
 // The ONLYOFFICE callback comes from the document server, which has no session: a signed token in the path and the
 // server's JWT (office.ts) take the place of the cookie, so a forged cross-site request has nothing to ride on
 const CSRF_EXEMPT = /^\/api\/(?:s\/[^/]+\/unlock|office\/callback\/[^/]+)$/
+// The upload routes of an upload-request link (announce, chunk, complete, cancel) are for visitors without an account.
+// They need no CSRF token because there is no session to ride on: an upload is tied to a random visitor key in an
+// HttpOnly, SameSite=Strict cookie that only that link's path receives (a request from another site does not carry it),
+// and every route checks it against the upload's owner.
+const VISITOR_UPLOAD = /^\/api\/s\/[^/]+\/upload(?:\/[a-f0-9]{24}(?:\/(?:\d+|complete))?)?$/
 
 /** the tab opening a download link, not the page's own fetch (which sends x-lang and reads the JSON) */
 function isDownloadNavigation(request: Request): boolean {
@@ -100,7 +105,9 @@ export const context = new Elysia({ name: 'context' })
   .onBeforeHandle({ as: 'global' }, ({ request, session }) => {
     // CSRF: every state-changing call must carry the token issued with the session
     if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return
-    if (request.method === 'POST' && CSRF_EXEMPT.test(new URL(request.url).pathname)) return
+    const { pathname } = new URL(request.url)
+    if (request.method === 'POST' && CSRF_EXEMPT.test(pathname)) return
+    if (VISITOR_UPLOAD.test(pathname)) return
     const token = request.headers.get('x-csrf-token')
     if (!session || !token || token !== session.csrf) throw new HttpError(403, 'csrf')
   })

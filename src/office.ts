@@ -19,6 +19,7 @@ import { accessFor, findUser, type Space, type User } from './auth'
 import { config, paths } from './config'
 import { bad, ensureDir, ensureSpace, forbidden, HttpError, moveTree, normRel, notFound, resolveIn, storagePath } from './fsx'
 import type { Lang } from './messages'
+import { holdNow, markStale, ready } from './quota'
 import { moveToTrash } from './trash'
 
 /** ONLYOFFICE edits these as they are; legacy binary formats (doc, xls, ppt) only open for reading */
@@ -346,13 +347,26 @@ export async function saveVersion(t: OfficeToken, data: Record<string, unknown>)
     try {
       const size = await download(url, tmp)
       ensureSpace(dirname(abs), size)
+      // the count is awaited before the rights are checked, so nothing awaits between that check and the reservation
+      if (t.s === 'home') await ready(findUser(t.u))
       // checked again after the download: rights or the file may have changed meanwhile
       const { user } = tokenFile(t, ['write'])
-      // next to the file first (a copy when DATA_DIR is on another disk), then one rename into place
-      await moveTree(tmp, stage)
-      await moveToTrash(abs, user.username)
-      if (existsSync(abs)) throw new HttpError(409, 'files.name-taken')
-      await rename(stage, abs)
+      // the old version goes to the trash (outside the home), so only the growth counts against a quota
+      const q = t.s === 'home' ? user : null
+      const grow = size - lstatSync(abs).size
+      const hold = holdNow(q, grow)
+      try {
+        // next to the file first (a copy when DATA_DIR is on another disk), then one rename into place
+        await moveTree(tmp, stage)
+        await moveToTrash(abs, user.username)
+        if (existsSync(abs)) throw new HttpError(409, 'files.name-taken')
+        await rename(stage, abs)
+      } catch (err) {
+        hold.release()
+        if (q) markStale(q.username)
+        throw err
+      }
+      hold.commit(grow)
       return { user, abs, size }
     } finally {
       await rm(tmp, { force: true }).catch(() => {})

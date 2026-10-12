@@ -759,7 +759,13 @@ describe('full system: CSRF', () => {
     // the exceptions, on purpose: a share link's password form needs no session (tests/shares.test.ts), and the
     // ONLYOFFICE callback comes from the document server, which has no session: it proves itself with a signed token
     // in the path and a JWT signed with OFFICE_JWT_SECRET instead (tests/office.test.ts)
-    const exempt: [string, string][] = [['POST', '/api/s/:token/unlock'], ['POST', '/api/office/callback/:token']]
+    // the upload routes of an upload-request link: a visitor's cookie (HttpOnly, SameSite=Strict, only that link's path)
+    // takes the place of the session (tests/upload-links.test.ts)
+    const exempt: [string, string][] = [
+      ['POST', '/api/s/:token/unlock'], ['POST', '/api/office/callback/:token'],
+      ['POST', '/api/s/:token/upload'], ['PUT', '/api/s/:token/upload/:id/:n'],
+      ['POST', '/api/s/:token/upload/:id/complete'], ['DELETE', '/api/s/:token/upload/:id'],
+    ]
     const routes = app.routes.filter((r: any) => !['GET', 'HEAD'].includes(r.method)).map((r: any) => `${r.method} ${r.path}`)
     expect(routes.filter((r: string) => ![...mutating, ...exempt].some(([m, p]) => `${m} ${p}` === r))).toEqual([])
 
