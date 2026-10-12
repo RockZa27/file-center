@@ -45,12 +45,12 @@ export const MESSAGES = {
 
   // devices and two-factor sign-in
   'auth.session-not-found': { th: 'ไม่พบอุปกรณ์ที่ระบุ', en: 'The device was not found.' },
-  'auth.2fa-bad-code': { th: 'รหัสยืนยันไม่ถูกต้อง', en: 'The verification code is wrong.' },
-  'auth.2fa-bad-ticket': { th: 'หมดเวลาหรือขั้นตอนเข้าสู่ระบบไม่ถูกต้อง กรุณาใส่รหัสผ่านใหม่', en: 'The sign-in step expired or is not valid. Please enter your password again.' },
-  'auth.2fa-locked': { th: 'ใส่รหัสยืนยันผิดหลายครั้ง กรุณารอ {seconds} วินาทีแล้วลองใหม่', en: 'Too many wrong verification codes. Wait {seconds} seconds and try again.' },
-  'auth.2fa-already-enabled': { th: 'เปิดการยืนยันสองขั้นตอนไว้แล้ว', en: 'Two-factor sign-in is already on.' },
-  'auth.2fa-not-enabled': { th: 'ยังไม่ได้เปิดการยืนยันสองขั้นตอน', en: 'Two-factor sign-in is not on.' },
-  'auth.2fa-no-setup': { th: 'ยังไม่ได้เริ่มตั้งค่า หรือหมดเวลาแล้ว กรุณาเริ่มตั้งค่าใหม่', en: 'Setup was not started or has expired. Please start again.' },
+  'auth.two-factor-bad-code': { th: 'รหัสยืนยันไม่ถูกต้อง', en: 'The verification code is wrong.' },
+  'auth.two-factor-bad-ticket': { th: 'หมดเวลาหรือขั้นตอนเข้าสู่ระบบไม่ถูกต้อง กรุณาใส่รหัสผ่านใหม่', en: 'The sign-in step expired or is not valid. Please enter your password again.' },
+  'auth.two-factor-locked': { th: 'ใส่รหัสยืนยันผิดหลายครั้ง กรุณารอ {seconds} วินาทีแล้วลองใหม่', en: 'Too many wrong verification codes. Wait {seconds} seconds and try again.' },
+  'auth.two-factor-already-enabled': { th: 'เปิดการยืนยันสองขั้นตอนไว้แล้ว', en: 'Two-factor sign-in is already on.' },
+  'auth.two-factor-not-enabled': { th: 'ยังไม่ได้เปิดการยืนยันสองขั้นตอน', en: 'Two-factor sign-in is not on.' },
+  'auth.two-factor-no-setup': { th: 'ยังไม่ได้เริ่มตั้งค่า หรือหมดเวลาแล้ว กรุณาเริ่มตั้งค่าใหม่', en: 'Setup was not started or has expired. Please start again.' },
 
   // ───────────── fs: what a file-system error means for the visitor ─────────────
   'fs.bad-name': { th: 'ชื่อไม่ถูกต้อง', en: 'The name is not valid.' },

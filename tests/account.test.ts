@@ -415,7 +415,7 @@ describe('two-factor sign-in', () => {
     await again.start()
     const reuse = await again.json('POST', '/api/login/2fa', { ticket: first.data.ticket, code: codes[1] })
     expect(reuse.status).toBe(401)
-    expect(reuse.data.code).toBe('auth.2fa-bad-ticket')
+    expect(reuse.data.code).toBe('auth.two-factor-bad-ticket')
     expect((await again.json('POST', '/api/login/2fa', { ticket: 'made-up', code: codes[1] })).status).toBe(401)
     // a ticket is bound to the address that asked for it
     const t = auth.createLoginTicket('ac-ticket', '10.0.0.1')
@@ -457,7 +457,7 @@ describe('two-factor sign-in', () => {
     // locked: even the right code waits
     const locked = await c.json('POST', '/api/login/2fa', { ticket: first.data.ticket, code: codes[0] })
     expect(locked.status).toBe(429)
-    expect(locked.data.code).toBe('auth.2fa-locked')
+    expect(locked.data.code).toBe('auth.two-factor-locked')
     expect(auditLines().filter(l => l.action === 'login-2fa-failed' && l.user === 'ac-lock').length).toBe(3)
     auth.clearFailures('unknown|ac-lock'.replace('unknown|ac-lock', '2fa|unknown|ac-lock'))
   })

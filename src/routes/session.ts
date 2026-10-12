@@ -65,7 +65,7 @@ const codeKey = (ip: string, user: User) => `2fa-step-up|${ip}|${user.username.t
 function wrongCode(user: User, ip: string): never {
   if (recordFailure(codeKey(ip, user))) alert('lockout', 'admin.alert-2fa-locked', { user: user.username, ip })
   audit({ user: user.username, ip, action: '2fa-code-denied' })
-  throw new HttpError(403, 'auth.2fa-bad-code')
+  throw new HttpError(403, 'auth.two-factor-bad-code')
 }
 
 function notLockedForCodes(user: User, ip: string) {
@@ -75,7 +75,7 @@ function notLockedForCodes(user: User, ip: string) {
 
 /** password and a current code (or a backup code) of a user who has 2FA on */
 async function confirmWithCode(user: User, ip: string, password: string, code: string) {
-  if (!user.twoFactor) throw new HttpError(400, 'auth.2fa-not-enabled')
+  if (!user.twoFactor) throw new HttpError(400, 'auth.two-factor-not-enabled')
   notLockedForCodes(user, ip)
   await confirmPassword(user, ip, password, '2fa-password-denied')
   if (!checkSecondFactor(user, code)) wrongCode(user, ip)
@@ -128,14 +128,14 @@ export const sessionRoutes = new Elysia({ prefix: '/api' })
   .post('/login/2fa', ({ cookie, sid, ip, body, request }) => {
     const username = peekLoginTicket(body.ticket, ip)
     const user = username ? findUser(username) : undefined
-    if (!username || !user?.twoFactor) throw new HttpError(401, 'auth.2fa-bad-ticket')
+    if (!username || !user?.twoFactor) throw new HttpError(401, 'auth.two-factor-bad-ticket')
     const key = `2fa|${ip}|${user.username.toLowerCase()}`
     const wait = lockedFor(key)
-    if (wait) throw new HttpError(429, 'auth.2fa-locked', { seconds: wait })
+    if (wait) throw new HttpError(429, 'auth.two-factor-locked', { seconds: wait })
     if (!checkSecondFactor(user, body.code)) {
       if (recordFailure(key)) alert('lockout', 'admin.alert-2fa-locked', { user: user.username, ip })
       audit({ user: user.username, ip, action: 'login-2fa-failed' })
-      throw new HttpError(401, 'auth.2fa-bad-code')
+      throw new HttpError(401, 'auth.two-factor-bad-code')
     }
     clearFailures(key)
     useLoginTicket(body.ticket)
@@ -173,7 +173,7 @@ export const sessionRoutes = new Elysia({ prefix: '/api' })
   // ───────────── two-factor sign-in ─────────────
   .post('/2fa/setup', async ({ user, ip, body }) => {
     const u = requireUser({ user, ip })
-    if (u.twoFactor) throw new HttpError(409, 'auth.2fa-already-enabled')
+    if (u.twoFactor) throw new HttpError(409, 'auth.two-factor-already-enabled')
     await confirmPassword(u, ip, body.password, '2fa-password-denied')
     const secret = startTwoFactorSetup(u)
     return { secret, uri: otpauthUri(secret, u.username, settings.get().appName) }
@@ -181,8 +181,8 @@ export const sessionRoutes = new Elysia({ prefix: '/api' })
 
   .post('/2fa/enable', ({ user, ip, sid, body }) => {
     const u = requireUser({ user, ip })
-    if (u.twoFactor) throw new HttpError(409, 'auth.2fa-already-enabled')
-    if (!hasPendingSetup(u)) throw new HttpError(400, 'auth.2fa-no-setup')
+    if (u.twoFactor) throw new HttpError(409, 'auth.two-factor-already-enabled')
+    if (!hasPendingSetup(u)) throw new HttpError(400, 'auth.two-factor-no-setup')
     notLockedForCodes(u, ip)
     const backupCodes = finishTwoFactorSetup(u, body.code)
     if (!backupCodes) wrongCode(u, ip)
