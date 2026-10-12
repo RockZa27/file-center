@@ -1,0 +1,3 @@
+{ "dir": "/tmp/fc-audit-r0",
+  "bugs": { "authz-admin": [{"file":"src/context.ts","line":74}], "csrf-off": [{"file":"src/context.ts","line":54}], "symlink-escape": [{"file":"src/fsx.ts","line":120}], "upload-owner": [{"file":"src/uploads.ts","line":30}], "update-password-skip": [{"file":"src/routes/update.ts","line":29}] },
+  "decoys": {} }

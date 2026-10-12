@@ -1,5 +1,5 @@
 import { mkdirSync } from 'node:fs'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import pkg from '../package.json'
 
 const root = resolve(import.meta.dir, '..')
@@ -8,6 +8,13 @@ const num = (k: string, d: number) => {
   const v = Number(process.env[k])
   return Number.isFinite(v) && process.env[k] !== undefined && process.env[k] !== '' ? v : d
 }
+function backupHour(v: string): number | null {
+  if (v.trim().toLowerCase() === 'off') return null
+  const h = Number(v)
+  return Number.isInteger(h) && h >= 0 && h <= 23 && v.trim() !== '' ? h : 3
+}
+
+const dataDir = resolve(env('DATA_DIR', join(root, 'data')))
 
 export const config = {
   /** a web update runs with FC_VERSION set to the version in its manifest; otherwise the version of package.json */
@@ -18,7 +25,7 @@ export const config = {
   /** uploaded files live here */
   storageDir: resolve(env('STORAGE_DIR', join(root, 'storage'))),
   /** users, settings, logs, trash, sessions, temp uploads */
-  dataDir: resolve(env('DATA_DIR', join(root, 'data'))),
+  dataDir,
   /** compiled frontend */
   webDir: resolve(env('WEB_DIR', join(root, 'web', 'dist'))),
   /** folder (inside storage) shown to visitors who are not logged in */
@@ -27,6 +34,8 @@ export const config = {
   uploadChunkSize: num('UPLOAD_CHUNK_SIZE', 8 * 1024 ** 2), // 8 MB
   uploadSimultaneous: num('UPLOAD_SIMULTANEOUS', 3),
   uploadStaleMs: num('UPLOAD_STALE_HOURS', 3) * 3600_000,
+  /** bytes all visitors (not signed in) may upload together per day; 0 = visitors can not upload */
+  guestUploadDailyBytes: num('GUEST_UPLOAD_DAILY_BYTES', 1024 ** 3), // 1 GB
   /** uploads are refused when they would leave less free disk space than this */
   minFreeSpace: num('MIN_FREE_SPACE', 2 * 1024 ** 3), // 2 GB
   sessionTtlMs: num('SESSION_TTL_HOURS', 24 * 7) * 3600_000,
@@ -35,6 +44,11 @@ export const config = {
   loginLockoutMs: num('LOGIN_LOCKOUT_SECONDS', 60) * 1000,
   auditMaxBytes: 10 * 1024 * 1024,
   auditMaxFiles: 10,
+  /** logs/system.log (and access.log) is rotated past this size; LOG_MAX_FILES counts the current file too */
+  logMaxBytes: num('LOG_MAX_BYTES', 10 * 1024 ** 2), // 10 MB
+  logMaxFiles: Math.max(2, Math.floor(num('LOG_MAX_FILES', 5))),
+  /** "true" writes one line per request to logs/access.log (method, path without tokens or query, status, ms, ip, user) */
+  accessLog: env('ACCESS_LOG', 'false') === 'true',
   unzipMaxBytes: num('UNZIP_MAX_BYTES', 20 * 1024 ** 3),
   unzipMaxFiles: num('UNZIP_MAX_FILES', 50_000),
   /** set to "true" behind HTTPS so the session cookie is marked Secure */
@@ -51,6 +65,19 @@ export const config = {
   webUpdate: env('WEB_UPDATE', 'true') !== 'false',
   /** biggest update package an admin may upload */
   updateMaxSize: num('UPDATE_MAX_SIZE', 200 * 1024 ** 2),
+  /**
+   * Ed25519 public key (base64 SPKI DER, from "bun run package --gen-key") that update packages must be signed with.
+   * Empty = packages are not signed-checked. Parsed in updater.ts, so a bad value refuses packages instead of crashing the app.
+   */
+  updatePublicKey: env('UPDATE_PUBLIC_KEY', '').trim(),
+  /** where backups are written; best on another disk, a dead disk takes the backups on it along */
+  backupDir: resolve(env('BACKUP_DIR', join(dirname(dataDir), 'backups'))),
+  /** after a successful backup the oldest beyond this many are deleted */
+  backupKeep: Math.max(1, Math.floor(num('BACKUP_KEEP', 7))),
+  /** local hour (0-23) of the daily backup, null = "off" (no schedule; backups still run from the web page) */
+  backupHour: backupHour(env('BACKUP_HOUR', '3')),
+  /** "true" also puts the uploaded files (storage) in every backup; off by default because it can be huge */
+  backupIncludeFiles: env('BACKUP_INCLUDE_FILES', 'false') === 'true',
 }
 
 export const paths = {
@@ -59,12 +86,19 @@ export const paths = {
   sessions: join(config.dataDir, 'sessions.json'),
   logs: join(config.dataDir, 'logs'),
   audit: join(config.dataDir, 'logs', 'audit.log'),
+  /** errors and events of the app (logger.ts), shown on the admin logs page */
+  systemLog: join(config.dataDir, 'logs', 'system.log'),
+  /** written by launcher.ts: starts, restarts, rollbacks, crashes */
+  launcherLog: join(config.dataDir, 'logs', 'launcher.log'),
+  accessLog: join(config.dataDir, 'logs', 'access.log'),
   trash: join(config.dataDir, 'trash'),
   tmp: join(config.dataDir, 'tmp'),
   branding: join(config.dataDir, 'branding'),
   /** installed web updates: state.json, releases/, staging/ (see release.ts) */
   app: join(config.dataDir, 'app'),
   backupStatus: join(config.dataDir, 'backup-status.json'),
+  /** what visitors uploaded today, so a restart does not hand out a fresh daily allowance */
+  guestUploads: join(config.dataDir, 'guest-uploads.json'),
   publicDir: join(config.storageDir, config.publicDirName),
   /** parent of the default user folders (/users/<name>) */
   usersDir: join(config.storageDir, 'users'),

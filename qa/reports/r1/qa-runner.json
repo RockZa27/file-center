@@ -1,0 +1,1 @@
+{"agent":"qa-runner","runId":"r1","reported":{"typecheck":true,"passed":103,"failed":0,"skipped":1,"coverageLines":82.45},"flaky":[],"failedSteps":[]}

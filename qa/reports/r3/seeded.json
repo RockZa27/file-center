@@ -1,0 +1,74 @@
+{
+  "dir": "/tmp/fc-audit-r3",
+  "bugs": {
+    "logs-download-no-admin": [
+      {
+        "file": "src/routes/logs.ts",
+        "line": 87
+      }
+    ],
+    "csv-formula": [
+      {
+        "file": "src/routes/logs.ts",
+        "line": 38
+      }
+    ],
+    "batch-token-in-log": [
+      {
+        "file": "src/logger.ts",
+        "line": 73
+      }
+    ],
+    "symlink-escape": [
+      {
+        "file": "src/fsx.ts",
+        "line": 121
+      }
+    ],
+    "csrf-off": [
+      {
+        "file": "src/context.ts",
+        "line": 56
+      }
+    ],
+    "download-read-perm": [
+      {
+        "file": "src/routes/files.ts",
+        "line": 263
+      }
+    ]
+  },
+  "decoys": {
+    "decoy-todo-download": [
+      {
+        "file": "src/routes/files.ts",
+        "line": 261
+      }
+    ],
+    "decoy-legacy-join": [
+      {
+        "file": "src/fsx.ts",
+        "line": 192
+      }
+    ],
+    "decoy-csrf-note": [
+      {
+        "file": "src/context.ts",
+        "line": 52
+      }
+    ],
+    "decoy-backup-name": [
+      {
+        "file": "src/backup.ts",
+        "line": 53
+      }
+    ],
+    "decoy-access-url": [
+      {
+        "file": "src/logger.ts",
+        "line": 142
+      }
+    ]
+  },
+  "cleanDir": "/tmp/fc-clean-r3"
+}

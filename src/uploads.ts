@@ -4,6 +4,7 @@ import { open } from 'node:fs/promises'
 import { join } from 'node:path'
 import { config, paths } from './config'
 import { bad, ensureDir, ensureSpace, forbidden, HttpError, notFound, resolveIn, uniquePath, validName } from './fsx'
+import { JsonStore } from './store'
 
 type Meta = {
   id: string
@@ -15,6 +16,8 @@ type Meta = {
   chunkSize: number
   total: number
   createdAt: number
+  /** set for a visitor's upload: the day its size was counted against the visitors' allowance */
+  guestDay?: string
 }
 
 // Every chunk is written straight to its offset in one "data" file, and an empty file named after the chunk
@@ -24,20 +27,51 @@ const dirOf = (id: string) => join(paths.tmp, id)
 const dataOf = (id: string) => join(dirOf(id), 'data')
 
 function loadMeta(id: unknown, owner: string): Meta {
-  if (typeof id !== 'string' || !/^[a-f0-9]{24}$/.test(id)) throw notFound('ไม่พบการอัปโหลดนี้')
+  if (typeof id !== 'string' || !/^[a-f0-9]{24}$/.test(id)) throw notFound('upload.not-found')
   try {
     const meta = JSON.parse(readFileSync(join(dirOf(id), 'meta.json'), 'utf8')) as Meta
     if (meta.owner !== owner) throw forbidden()
     return meta
   } catch (err) {
     if (err instanceof HttpError) throw err
-    throw notFound('ไม่พบการอัปโหลดนี้')
+    throw notFound('upload.not-found')
   }
 }
 
 /** throws unless `owner` has this upload; lets a route refuse before it reads the request body */
 export function checkUpload(id: string, owner: string) {
   loadMeta(id, owner)
+}
+
+// ───────────── visitors' daily allowance ─────────────
+
+// All visitors share one allowance per day (machine time). An upload takes its whole size when it is announced,
+// so uploads sent in parallel can not together go past it, and gives it back when it is cancelled or never completes.
+const guestStore = new JsonStore<{ day: string; bytes: number }>(paths.guestUploads, () => ({ day: '', bytes: 0 }))
+const pad = (n: number) => String(n).padStart(2, '0')
+const today = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+export function guestUploadUsage(): { day: string; used: number; limit: number } {
+  const day = today()
+  const s = guestStore.value
+  return { day, used: s.day === day && Number.isFinite(s.bytes) ? s.bytes : 0, limit: config.guestUploadDailyBytes }
+}
+
+function reserveGuest(size: number): string {
+  const { day, used, limit } = guestUploadUsage()
+  if (limit <= 0) throw new HttpError(429, 'upload.guest-disabled')
+  if (used + size > limit) throw new HttpError(429, 'upload.guest-quota')
+  guestStore.replace({ day, bytes: used + size })
+  return day
+}
+
+function releaseGuest(meta: Meta) {
+  // bytes counted on an earlier day are not taken off today's count: that one started from zero
+  if (!meta.guestDay || guestStore.value.day !== meta.guestDay) return
+  guestStore.update(d => { d.bytes = Math.max(0, d.bytes - meta.size) })
 }
 
 const touch = (id: string) => {
@@ -47,6 +81,8 @@ const touch = (id: string) => {
 
 export function initUpload(args: {
   owner: string
+  /** a visitor who is not signed in: counted against the visitors' daily allowance */
+  guest?: boolean
   root: string
   dir: string
   relativeDir: string[]
@@ -55,8 +91,8 @@ export function initUpload(args: {
 }) {
   const name = validName(args.name)
   const size = Number(args.size)
-  if (!Number.isSafeInteger(size) || size < 0) throw bad('ขนาดไฟล์ไม่ถูกต้อง')
-  if (size > config.uploadMaxSize) throw new HttpError(413, 'ไฟล์ใหญ่เกินกำหนด')
+  if (!Number.isSafeInteger(size) || size < 0) throw bad('upload.bad-size')
+  if (size > config.uploadMaxSize) throw new HttpError(413, 'upload.too-big')
   ensureSpace(paths.tmp, size)
 
   const segments = args.relativeDir.map(validName)
@@ -66,10 +102,18 @@ export function initUpload(args: {
   const id = randomBytes(12).toString('hex')
   const chunkSize = config.uploadChunkSize
   const total = Math.max(1, Math.ceil(size / chunkSize))
-  ensureDir(dirOf(id))
   const meta: Meta = { id, owner: args.owner, destDir, name, size, chunkSize, total, createdAt: Date.now() }
-  writeFileSync(dataOf(id), '')
-  writeFileSync(join(dirOf(id), 'meta.json'), JSON.stringify(meta))
+  // counted before anything is written and in the same tick as the check: nothing can slip in between
+  if (args.guest) meta.guestDay = reserveGuest(size)
+  try {
+    ensureDir(dirOf(id))
+    writeFileSync(dataOf(id), '')
+    writeFileSync(join(dirOf(id), 'meta.json'), JSON.stringify(meta))
+  } catch (err) {
+    releaseGuest(meta)
+    rmSync(dirOf(id), { recursive: true, force: true })
+    throw err
+  }
   return { id, chunkSize, total }
 }
 
@@ -81,9 +125,9 @@ export function receivedChunks(id: string, owner: string): { received: number[];
 
 export async function saveChunk(id: string, owner: string, index: number, data: ArrayBuffer) {
   const meta = loadMeta(id, owner)
-  if (!Number.isInteger(index) || index < 0 || index >= meta.total) throw bad('ลำดับชิ้นส่วนไม่ถูกต้อง')
+  if (!Number.isInteger(index) || index < 0 || index >= meta.total) throw bad('upload.bad-chunk-index')
   const expected = index === meta.total - 1 ? meta.size - meta.chunkSize * (meta.total - 1) : meta.chunkSize
-  if (data.byteLength !== expected) throw bad(`ขนาดชิ้นส่วนไม่ถูกต้อง (ต้องเป็น ${expected} ไบต์)`)
+  if (data.byteLength !== expected) throw bad('upload.bad-chunk-size', { bytes: expected })
   ensureSpace(paths.tmp, data.byteLength)
   const fh = await open(dataOf(id), 'r+')
   try {
@@ -99,10 +143,10 @@ export async function saveChunk(id: string, owner: string, index: number, data: 
 export async function completeUpload(id: string, owner: string) {
   const meta = loadMeta(id, owner)
   for (let i = 0; i < meta.total; i++) {
-    if (!existsSync(join(dirOf(id), String(i)))) throw bad(`ยังขาดชิ้นส่วนที่ ${i + 1}`)
+    if (!existsSync(join(dirOf(id), String(i)))) throw bad('upload.missing-chunk', { n: i + 1 })
   }
   const data = dataOf(id)
-  if (statSync(data).size !== meta.size) throw bad('ขนาดไฟล์หลังรวมไม่ตรงกับที่แจ้งไว้')
+  if (statSync(data).size !== meta.size) throw bad('upload.size-mismatch')
 
   ensureDir(meta.destDir)
   const finalPath = uniquePath(join(meta.destDir, meta.name))
@@ -119,8 +163,9 @@ export async function completeUpload(id: string, owner: string) {
 }
 
 export function cancelUpload(id: string, owner: string) {
-  loadMeta(id, owner)
+  const meta = loadMeta(id, owner)
   rmSync(dirOf(id), { recursive: true, force: true })
+  releaseGuest(meta)
 }
 
 /** remove uploads that did not receive anything new for a few hours */
@@ -131,7 +176,10 @@ export function cleanStaleUploads(): number {
     try {
       const stamp = statSync(join(paths.tmp, id, 'meta.json')).mtimeMs
       if (Date.now() - stamp > config.uploadStaleMs) {
+        let meta: Meta | null = null
+        try { meta = JSON.parse(readFileSync(join(paths.tmp, id, 'meta.json'), 'utf8')) as Meta } catch { /* unreadable: nothing to give back */ }
         rmSync(join(paths.tmp, id), { recursive: true, force: true })
+        if (meta) releaseGuest(meta)
         n++
       }
     } catch {

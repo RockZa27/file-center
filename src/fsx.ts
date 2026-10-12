@@ -1,19 +1,26 @@
 import {
   cpSync, existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, renameSync, rmSync, statfsSync, statSync,
 } from 'node:fs'
+import { constants as FS, type Stats } from 'node:fs'
+import { copyFile, lstat, mkdir, readdir, rm } from 'node:fs/promises'
 import { basename, dirname, extname, join, relative, sep } from 'node:path'
 import { config } from './config'
+import { type MessageCode, type Params, text } from './messages'
 
+/**
+ * An answer for the visitor: a code from the catalog in messages.ts and its params. The text is picked in the
+ * request's language when the answer is written; `message` is the Thai text, for logs.
+ */
 export class HttpError extends Error {
-  constructor(public status: number, message: string, public code?: string) {
-    super(message)
+  constructor(public status: number, public code: MessageCode, public params: Params = {}) {
+    super(text('th', code, params))
   }
 }
 
-export const bad = (m: string) => new HttpError(400, m)
-export const forbidden = (m = 'ไม่มีสิทธิ์ทำรายการนี้') => new HttpError(403, m)
-export const notFound = (m = 'ไม่พบรายการที่ระบุ') => new HttpError(404, m)
-export const conflict = (m: string) => new HttpError(409, m)
+export const bad = (code: MessageCode, params?: Params) => new HttpError(400, code, params)
+export const forbidden = (code: MessageCode = 'auth.forbidden', params?: Params) => new HttpError(403, code, params)
+export const notFound = (code: MessageCode = 'request.not-found', params?: Params) => new HttpError(404, code, params)
+export const conflict = (code: MessageCode, params?: Params) => new HttpError(409, code, params)
 
 const BAD_NAME_CHARS = /[<>:"|?*\\/\u0000-\u001f]/
 // file systems count bytes, not letters: a Thai letter takes 3, so a Thai name fits about 85 of them
@@ -28,11 +35,11 @@ function fit(stem: string, tail: string): string {
 }
 
 export function validName(name: unknown): string {
-  if (typeof name !== 'string') throw bad('ชื่อไม่ถูกต้อง')
+  if (typeof name !== 'string') throw bad('fs.bad-name')
   const n = name.trim()
-  if (!n || n === '.' || n === '..') throw bad('ชื่อไม่ถูกต้อง')
-  if (bytes(n) > NAME_MAX) throw bad('ชื่อยาวเกินไป (ภาษาไทยได้ประมาณ 85 ตัวอักษร ภาษาอังกฤษ 255 ตัวอักษร)')
-  if (BAD_NAME_CHARS.test(n)) throw bad('ชื่อห้ามมีอักขระ \\ / : * ? " < > |')
+  if (!n || n === '.' || n === '..') throw bad('fs.bad-name')
+  if (bytes(n) > NAME_MAX) throw bad('fs.name-too-long')
+  if (BAD_NAME_CHARS.test(n)) throw bad('fs.name-bad-chars')
   return n
 }
 
@@ -46,26 +53,26 @@ export function cleanName(name: string): string {
   return n === '' || n === '.' || n === '..' ? '_' : n
 }
 
-const FS_ERRORS: Record<string, [number, string]> = {
-  ENOENT: [404, 'ไม่พบรายการที่ระบุ'],
-  ENOTDIR: [404, 'ไม่พบโฟลเดอร์นี้'],
-  EISDIR: [400, 'รายการนี้เป็นโฟลเดอร์'],
-  EEXIST: [409, 'มีชื่อนี้อยู่แล้ว'],
-  ENOTEMPTY: [409, 'มีชื่อนี้อยู่แล้ว'],
-  ENAMETOOLONG: [400, 'ชื่อหรือพาธยาวเกินไป'],
-  ENOSPC: [507, 'พื้นที่จัดเก็บบนเซิร์ฟเวอร์เต็ม กรุณาติดต่อผู้ดูแลระบบ'],
-  EDQUOT: [507, 'พื้นที่จัดเก็บบนเซิร์ฟเวอร์เต็ม กรุณาติดต่อผู้ดูแลระบบ'],
-  EACCES: [403, 'เซิร์ฟเวอร์ไม่มีสิทธิ์เข้าถึงรายการนี้'],
-  EPERM: [403, 'เซิร์ฟเวอร์ไม่มีสิทธิ์เข้าถึงรายการนี้'],
-  EROFS: [403, 'พื้นที่จัดเก็บเป็นแบบอ่านอย่างเดียว'],
-  EBUSY: [409, 'รายการนี้กำลังถูกใช้งานอยู่'],
+const FS_ERRORS: Record<string, [number, MessageCode]> = {
+  ENOENT: [404, 'fs.not-found'],
+  ENOTDIR: [404, 'fs.not-a-folder'],
+  EISDIR: [400, 'fs.is-a-folder'],
+  EEXIST: [409, 'fs.exists'],
+  ENOTEMPTY: [409, 'fs.exists'],
+  ENAMETOOLONG: [400, 'fs.path-too-long'],
+  ENOSPC: [507, 'disk-full'],
+  EDQUOT: [507, 'disk-full'],
+  EACCES: [403, 'fs.no-access'],
+  EPERM: [403, 'fs.no-access'],
+  EROFS: [403, 'fs.read-only'],
+  EBUSY: [409, 'fs.busy'],
 }
 
 /** a clear HttpError for a file-system error (whose own message would show server paths), or null */
 export function fromFsError(err: unknown): HttpError | null {
   if (err instanceof HttpError) return err
   const known = FS_ERRORS[(err as any)?.code]
-  return known ? new HttpError(known[0], known[1], known[0] === 507 ? 'disk-full' : undefined) : null
+  return known ? new HttpError(known[0], known[1]) : null
 }
 
 /** "/users/bob/report.pdf": where an absolute path sits inside the storage, for logs and the trash */
@@ -85,11 +92,11 @@ export function sameFile(a: string, b: string) {
 /** "/a//b/./c" -> "/a/b/c". Rejects ".." and NUL. */
 export function normRel(input: unknown): string {
   if (input === undefined || input === null || input === '') return '/'
-  if (typeof input !== 'string' || input.includes('\u0000')) throw bad('พาธไม่ถูกต้อง')
+  if (typeof input !== 'string' || input.includes('\u0000')) throw bad('fs.bad-path')
   const parts: string[] = []
   for (const seg of input.replaceAll('\\', '/').split('/')) {
     if (!seg || seg === '.') continue
-    if (seg === '..') throw bad('พาธไม่ถูกต้อง')
+    if (seg === '..') throw bad('fs.bad-path')
     parts.push(seg)
   }
   return '/' + parts.join('/')
@@ -109,7 +116,7 @@ const within = (root: string, abs: string) => abs === root || abs.startsWith(roo
  */
 export function resolveIn(root: string, rel: string): string {
   const abs = join(root, ...rel.split('/').filter(Boolean))
-  if (!within(root, abs)) throw bad('พาธไม่ถูกต้อง')
+  if (!within(root, abs)) throw bad('fs.bad-path')
   let probe = abs
   while (!existsSync(probe)) {
     const up = dirname(probe)
@@ -126,17 +133,20 @@ export function resolveIn(root: string, rel: string): string {
 
 export type Entry = { name: string; path: string; type: 'file' | 'dir'; size: number; mtime: number }
 
+function entryOf(abs: string, rel: string, st: Stats | null): Entry | null {
+  if (!st || st.isSymbolicLink()) return null // never follow or list links
+  return {
+    name: basename(abs),
+    path: rel,
+    type: st.isDirectory() ? 'dir' : 'file',
+    size: st.isDirectory() ? 0 : st.size,
+    mtime: Math.round(st.mtimeMs),
+  }
+}
+
 export function statEntry(abs: string, rel: string): Entry | null {
   try {
-    const st = lstatSync(abs)
-    if (st.isSymbolicLink()) return null // never follow or list links
-    return {
-      name: basename(abs),
-      path: rel,
-      type: st.isDirectory() ? 'dir' : 'file',
-      size: st.isDirectory() ? 0 : st.size,
-      mtime: Math.round(st.mtimeMs),
-    }
+    return entryOf(abs, rel, lstatSync(abs))
   } catch {
     return null
   }
@@ -165,7 +175,7 @@ export function uniquePath(abs: string): string {
     const candidate = join(dir, fit(stem, ` (${i})${ext}`))
     if (!existsSync(candidate)) return candidate
   }
-  throw conflict('ไม่สามารถตั้งชื่อใหม่ได้')
+  throw conflict('fs.no-free-name')
 }
 
 export function moveSync(from: string, to: string) {
@@ -178,14 +188,49 @@ export function moveSync(from: string, to: string) {
   }
 }
 
-export function copySync(from: string, to: string) {
-  if (isDir(from)) {
-    const rel = relative(from, to)
-    if (!rel.startsWith('..') && !rel.startsWith(sep) && rel !== '') {
-      if (within(from, to)) throw bad('ไม่สามารถคัดลอกโฟลเดอร์เข้าไปในตัวมันเองได้')
+/**
+ * copy a file or a folder tree to `to`, which must not exist yet. Asynchronous, in batches like treeStats, so a
+ * folder of 20,000 files does not hold up everyone else. Links are skipped (never followed, never copied), and a
+ * copy that fails half way removes what it wrote.
+ */
+export async function copyTree(from: string, to: string) {
+  // compare whole path segments: a folder may be called "..a", so a relative path starting with ".." proves nothing
+  if (isDir(from) && within(from, to)) throw bad('files.copy-into-self')
+  const st = await lstat(from)
+  if (st.isSymbolicLink()) throw notFound()
+  if (!st.isDirectory()) {
+    // EXCL: never overwrite, and never write through a link put where the copy goes
+    try { await copyFile(from, to, FS.COPYFILE_EXCL) } catch (err: any) {
+      if (err?.code !== 'EEXIST') await rm(to, { force: true }).catch(() => {})
+      throw err
     }
+    return
   }
-  cpSync(from, to, { recursive: true, errorOnExist: true, force: false, dereference: false })
+  await mkdir(to) // fails when `to` exists: from here on everything under it is ours
+  try {
+    const stack: [string, string][] = [[from, to]]
+    while (stack.length) {
+      const [src, dst] = stack.pop()!
+      const names = await readdir(src)
+      for (let i = 0; i < names.length; i += COPY_BATCH) {
+        const batch = names.slice(i, i + COPY_BATCH)
+        // allSettled: nothing of this batch may still be writing when a failure removes the copy
+        const done = await Promise.allSettled(batch.map(async n => {
+          const s = join(src, n)
+          const d = join(dst, n)
+          const st = await lstat(s)
+          if (st.isDirectory()) { await mkdir(d); stack.push([s, d]) }
+          else if (st.isFile()) await copyFile(s, d, FS.COPYFILE_EXCL)
+          // links, sockets and pipes are left out
+        }))
+        const failed = done.find(r => r.status === 'rejected')
+        if (failed) throw (failed as PromiseRejectedResult).reason
+      }
+    }
+  } catch (err) {
+    await rm(to, { recursive: true, force: true }).catch(() => {})
+    throw err
+  }
 }
 
 export function ensureDir(abs: string) {
@@ -206,32 +251,73 @@ export function freeSpace(abs: string): number | null {
 export function ensureSpace(abs: string, size: number) {
   const free = freeSpace(abs)
   if (free !== null && free - size < config.minFreeSpace) {
-    throw new HttpError(507, 'พื้นที่จัดเก็บบนเซิร์ฟเวอร์ไม่พอ กรุณาติดต่อผู้ดูแลระบบ', 'disk-full')
+    throw new HttpError(507, 'disk-full')
   }
 }
 
-/** total size and file count of a directory tree (symlinks skipped) */
-export function treeStats(abs: string, limit = Infinity): { size: number; files: number; truncated: boolean } {
+/** entries looked at between two breaks, so other requests are answered while a big tree is counted */
+const STATS_BATCH = 2000
+/** files copied at the same time: enough to keep the disk busy, few enough to stay far from the open-file limit */
+const COPY_BATCH = 64
+
+/**
+ * total size and file count of a directory tree (symlinks skipped). Asynchronous: a tree of a million entries
+ * takes seconds, and the server keeps answering everyone else meanwhile.
+ */
+export async function treeStats(abs: string, limit = Infinity): Promise<{ size: number; files: number; truncated: boolean }> {
   let size = 0
   let files = 0
   let seen = 0
-  let truncated = false
   const stack = [abs]
   while (stack.length) {
     const dir = stack.pop()!
     let names: string[]
-    try { names = readdirSync(dir) } catch { continue }
-    for (const n of names) {
-      if (++seen > limit) { truncated = true; return { size, files, truncated } }
-      const p = join(dir, n)
-      let st
-      try { st = lstatSync(p) } catch { continue }
-      if (st.isSymbolicLink()) continue
-      if (st.isDirectory()) stack.push(p)
-      else { size += st.size; files++ }
+    try { names = await readdir(dir) } catch { continue }
+    for (let i = 0; i < names.length; i += STATS_BATCH) {
+      const batch = names.slice(i, i + STATS_BATCH)
+      const room = limit - seen
+      const truncated = batch.length > room
+      const stats = await Promise.all(batch.slice(0, room).map(n => lstat(join(dir, n)).catch(() => null)))
+      seen += stats.length
+      for (let k = 0; k < stats.length; k++) {
+        const st = stats[k]
+        if (!st || st.isSymbolicLink()) continue
+        if (st.isDirectory()) stack.push(join(dir, batch[k]))
+        else { size += st.size; files++ }
+      }
+      if (truncated) return { size, files, truncated }
     }
   }
-  return { size, files, truncated }
+  return { size, files, truncated: false }
+}
+
+/**
+ * entries of the tree under `abs` whose name contains `needle` (lower case), links skipped. Stops after `maxSeen`
+ * entries or `maxResults` hits with `truncated: true`. Asynchronous in batches like treeStats.
+ */
+export async function searchTree(abs: string, rel: string, needle: string, maxSeen = 50_000, maxResults = 200) {
+  const results: Entry[] = []
+  const stack: [string, string][] = [[abs, rel]]
+  let seen = 0
+  while (stack.length) {
+    const [dir, dirRel] = stack.pop()!
+    let names: string[]
+    try { names = await readdir(dir) } catch { continue }
+    for (let i = 0; i < names.length; i += STATS_BATCH) {
+      const batch = names.slice(i, i + STATS_BATCH)
+      // one more than the room left, so that "there was more" is still noticed
+      const look = batch.slice(0, Math.max(0, maxSeen - seen + 1))
+      const stats = await Promise.all(look.map(n => lstat(join(dir, n)).catch(() => null)))
+      for (let k = 0; k < look.length; k++) {
+        if (++seen > maxSeen || results.length >= maxResults) return { results, truncated: true }
+        const e = entryOf(join(dir, look[k]), joinRel(dirRel, look[k]), stats[k])
+        if (!e) continue
+        if (e.name.toLowerCase().includes(needle)) results.push(e)
+        if (e.type === 'dir') stack.push([join(dir, look[k]), e.path])
+      }
+    }
+  }
+  return { results, truncated: false }
 }
 
 export { within }

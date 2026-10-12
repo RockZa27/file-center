@@ -1,0 +1,413 @@
+[
+  {
+    "id": "authz-admin",
+    "difficulty": "easy",
+    "category": "authz",
+    "severity": "critical",
+    "tests": "tests/api.test.ts",
+    "description": "requireAdmin lets every signed-in user through",
+    "patches": [
+      {
+        "file": "src/context.ts",
+        "find": "if (u.role !== 'admin') throw forbidden()",
+        "replace": "if (false) throw forbidden()"
+      }
+    ]
+  },
+  {
+    "id": "csrf-off",
+    "difficulty": "easy",
+    "category": "csrf",
+    "severity": "high",
+    "tests": "tests/api.test.ts",
+    "description": "any CSRF token is accepted as long as one is sent",
+    "patches": [
+      {
+        "file": "src/context.ts",
+        "find": "token !== session.csrf",
+        "replace": "false"
+      }
+    ]
+  },
+  {
+    "id": "symlink-escape",
+    "difficulty": "easy",
+    "category": "path-traversal",
+    "severity": "high",
+    "tests": "tests/api.test.ts",
+    "description": "a symlink inside a user's folder can lead outside it",
+    "patches": [
+      {
+        "file": "src/fsx.ts",
+        "find": "if (!within(realpathSync(root), realpathSync(probe))) throw forbidden()",
+        "replace": "if (false) throw forbidden()"
+      }
+    ]
+  },
+  {
+    "id": "lockout-off",
+    "difficulty": "easy",
+    "category": "auth",
+    "severity": "medium",
+    "tests": "tests/api.test.ts",
+    "description": "repeated wrong passwords are never locked out",
+    "patches": [
+      {
+        "file": "src/auth.ts",
+        "find": "return a && a.until > Date.now() ? Math.ceil((a.until - Date.now()) / 1000) : 0",
+        "replace": "return 0"
+      }
+    ]
+  },
+  {
+    "id": "public-disabled",
+    "difficulty": "easy",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/api.test.ts",
+    "description": "visitors still reach the public folder after the admin turned it off",
+    "patches": [
+      {
+        "file": "src/auth.ts",
+        "find": "if (space !== 'public' || !settings.get().publicEnabled) return null",
+        "replace": "if (space !== 'public') return null"
+      }
+    ]
+  },
+  {
+    "id": "upload-owner",
+    "difficulty": "easy",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/api.test.ts",
+    "description": "any user can complete or cancel another user's upload",
+    "patches": [
+      {
+        "file": "src/uploads.ts",
+        "find": "if (meta.owner !== owner) throw forbidden()",
+        "replace": "void 0"
+      }
+    ]
+  },
+  {
+    "id": "inline-html",
+    "difficulty": "easy",
+    "category": "xss",
+    "severity": "low",
+    "tests": "tests/api.test.ts",
+    "description": "uploaded HTML and SVG are served inline from the app's origin",
+    "patches": [
+      {
+        "file": "src/routes/files.ts",
+        "find": "'.mp4', '.webm', '.mp3', '.wav', '.ogg', '.m4a', '.txt',",
+        "replace": "'.mp4', '.webm', '.mp3', '.wav', '.ogg', '.m4a', '.txt', '.html', '.svg',"
+      }
+    ],
+    "mitigated": "every inline response also carries CSP 'default-src none; sandbox', so scripts in the HTML do not run: a verifier may REFUTE it (or confirm it as low) and be right"
+  },
+  {
+    "id": "update-sha-skip",
+    "difficulty": "easy",
+    "category": "supply-chain",
+    "severity": "critical",
+    "tests": "tests/update.test.ts",
+    "description": "a package file with the right size but different content passes verification",
+    "patches": [
+      {
+        "file": "src/updater.ts",
+        "find": "|| sha256(abs) !== want.sha256",
+        "replace": "|| false"
+      }
+    ]
+  },
+  {
+    "id": "update-version-gate",
+    "difficulty": "easy",
+    "category": "supply-chain",
+    "severity": "medium",
+    "tests": "tests/update.test.ts",
+    "description": "the same version can be installed again",
+    "patches": [
+      {
+        "file": "src/updater.ts",
+        "find": "compareVersions(manifest.version, runningVersion()) <= 0) {",
+        "replace": "compareVersions(manifest.version, runningVersion()) < 0) {"
+      }
+    ]
+  },
+  {
+    "id": "update-password-skip",
+    "difficulty": "easy",
+    "category": "authz",
+    "severity": "critical",
+    "tests": "tests/update.test.ts",
+    "description": "installing an update does not ask for the password",
+    "patches": [
+      {
+        "file": "src/auth.ts",
+        "find": "if (!(await Bun.password.verify(password, user.passwordHash).catch(() => false))) {",
+        "replace": "if (false) {"
+      }
+    ]
+  },
+  {
+    "id": "rename-read-perm",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/api.test.ts",
+    "description": "renaming only needs the read permission, so a read-only user (or visitor) can rename files",
+    "patches": [
+      {
+        "file": "src/routes/files.ts",
+        "find": "const a = need({ user, ip }, body.space, 'write')\n    const rel = normRel(body.path)\n    if (rel === '/') throw bad('files.rename-root')",
+        "replace": "const a = need({ user, ip }, body.space, 'read')\n    const rel = normRel(body.path)\n    if (rel === '/') throw bad('files.rename-root')"
+      }
+    ],
+    "difficulty": "subtle"
+  },
+  {
+    "id": "must-change-scope",
+    "category": "auth",
+    "severity": "medium",
+    "tests": "tests/api.test.ts",
+    "description": "an account with a handed-out password can use the file APIs without changing it first",
+    "patches": [
+      {
+        "file": "src/context.ts",
+        "find": "if (pathname.startsWith('/api/') && !PASSWORD_CHANGE_ROUTES.has(pathname)) {",
+        "replace": "if (pathname.startsWith('/api/admin/') && !PASSWORD_CHANGE_ROUTES.has(pathname)) {"
+      }
+    ],
+    "difficulty": "subtle"
+  },
+  {
+    "id": "session-never-expires",
+    "category": "auth",
+    "severity": "medium",
+    "tests": "tests/api.test.ts",
+    "description": "sessions are measured from creation in milliseconds against a TTL multiplied by 1000, so they practically never expire",
+    "patches": [
+      {
+        "file": "src/auth.ts",
+        "find": "if (Date.now() - s.seen > ttlOf(s)) {",
+        "replace": "if (Date.now() - s.created > ttlOf(s) * 1000) {"
+      }
+    ],
+    "difficulty": "subtle"
+  },
+  {
+    "id": "guest-all-perms",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/api.test.ts",
+    "description": "visitors get every permission in the public folder instead of the ones the admin chose",
+    "patches": [
+      {
+        "file": "src/auth.ts",
+        "find": "return { space, root: paths.publicDir, perms: new Set(settings.get().guestPermissions) }",
+        "replace": "return { space, root: paths.publicDir, perms: new Set(PERMISSIONS) }"
+      }
+    ],
+    "difficulty": "subtle"
+  },
+  {
+    "id": "xff-first-entry",
+    "category": "auth",
+    "severity": "medium",
+    "tests": "tests/api.test.ts",
+    "description": "behind a reverse proxy the client-supplied first X-Forwarded-For entry is trusted, so the login lockout can be dodged by changing it",
+    "patches": [
+      {
+        "file": "src/context.ts",
+        "find": "split(',').at(-1)?.trim()",
+        "replace": "split(',').at(0)?.trim()"
+      }
+    ],
+    "difficulty": "subtle"
+  },
+  {
+    "id": "lockout-case",
+    "category": "auth",
+    "severity": "medium",
+    "tests": "tests/api.test.ts",
+    "description": "the lockout key keeps the username's case while login ignores it, so ADMIN / Admin / admin each get their own attempts",
+    "patches": [
+      {
+        "file": "src/routes/session.ts",
+        "find": "const key = `${ip}|${username.toLowerCase()}`",
+        "replace": "const key = `${ip}|${username}`"
+      }
+    ],
+    "difficulty": "subtle"
+  },
+  {
+    "id": "homedir-in-public",
+    "category": "authz",
+    "severity": "medium",
+    "tests": "tests/api.test.ts",
+    "description": "a user's own folder may be placed inside the public folder, giving them full rights there",
+    "patches": [
+      {
+        "file": "src/auth.ts",
+        "find": "if (p === pub || p.startsWith(`${pub}/`)) throw bad(",
+        "replace": "if (p === pub) throw bad("
+      }
+    ],
+    "difficulty": "subtle"
+  },
+  {
+    "id": "download-read-perm",
+    "difficulty": "subtle",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/api.test.ts",
+    "description": "downloading a file only needs the read permission, so someone allowed to list but not download (a visitor by default setting, or a read-only user) gets the files",
+    "patches": [
+      {
+        "file": "src/routes/files.ts",
+        "find": "need({ user, ip }, query.space, 'download')",
+        "replace": "need({ user, ip }, query.space, 'read')"
+      }
+    ]
+  },
+  {
+    "id": "backup-name-traversal",
+    "difficulty": "subtle",
+    "category": "path-traversal",
+    "severity": "medium",
+    "tests": "tests/backup.test.ts",
+    "description": "backup names only need the prefix and .zip, so an encoded ../ in the name reaches files outside the backup folder (download / delete / restore)",
+    "patches": [
+      {
+        "file": "src/backup.ts",
+        "find": "export const BACKUP_NAME_RE = /^file-center-backup-\\d{8}-\\d{6}\\.zip$/",
+        "replace": "export const BACKUP_NAME_RE = /^file-center-backup-.+\\.zip$/"
+      }
+    ]
+  },
+  {
+    "id": "restore-no-step-up",
+    "difficulty": "easy",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/backup.test.ts",
+    "description": "restoring a backup does not ask for the password again: a stolen admin cookie can replace every account",
+    "patches": [
+      {
+        "file": "src/routes/backup.ts",
+        "find": "await confirmPassword(admin, ip, body.password, 'backup-restore-denied')",
+        "replace": "void body.password"
+      }
+    ]
+  },
+  {
+    "id": "logs-download-no-admin",
+    "difficulty": "subtle",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/api.test.ts",
+    "description": "anyone, even a visitor, can download every log (audit trail with usernames and IPs, system errors)",
+    "patches": [
+      {
+        "file": "src/routes/logs.ts",
+        "find": "    const admin = requireAdmin({ user, ip })\n    const name = `file-center-logs-${stamp()}.zip`",
+        "replace": "    const admin = { username: user?.username ?? 'guest' }\n    const name = `file-center-logs-${stamp()}.zip`"
+      }
+    ]
+  },
+  {
+    "id": "csv-formula",
+    "difficulty": "subtle",
+    "category": "injection",
+    "severity": "low",
+    "tests": "tests/logs.test.ts",
+    "description": "the CSV export only defuses cells starting with '=': a file name like +cmd|... or @SUM(...) becomes a formula in Excel",
+    "patches": [
+      {
+        "file": "src/routes/logs.ts",
+        "find": "if (/^[=+\\-@\\t\\r]/.test(s)) s = `'${s}`",
+        "replace": "if (/^[=]/.test(s)) s = `'${s}`"
+      }
+    ]
+  },
+  {
+    "id": "batch-token-in-log",
+    "difficulty": "subtle",
+    "category": "secrets",
+    "severity": "medium",
+    "tests": "tests/logs.test.ts",
+    "description": "download tokens in /api/batch/<token> are written to the logs (access log, errors), so whoever reads the logs can download the files",
+    "patches": [
+      {
+        "file": "src/logger.ts",
+        "find": ".replace(/(\\/api\\/batch\\/)[^/\\s?#\"'`]+/g, `$1${HIDDEN}`)",
+        "replace": ".replace(/(\\/api\\/batch\\/)(?!)/g, `$1${HIDDEN}`)"
+      }
+    ]
+  },
+  {
+    "id": "search-follows-links",
+    "difficulty": "medium",
+    "category": "path-traversal",
+    "severity": "high",
+    "tests": "tests/perf.test.ts",
+    "description": "async search stats entries with stat instead of lstat, so a link inside a space is followed and files outside the space are listed",
+    "patches": [
+      {
+        "file": "src/fsx.ts",
+        "find": "const stats = await Promise.all(look.map(n => lstat(join(dir, n)).catch(() => null)))",
+        "replace": "const stats = await Promise.all(look.map(n => stat(join(dir, n)).catch(() => null)))"
+      },
+      {
+        "file": "src/fsx.ts",
+        "find": "import { copyFile, lstat, mkdir, readdir, rm } from 'node:fs/promises'",
+        "replace": "import { copyFile, lstat, mkdir, readdir, rm, stat } from 'node:fs/promises'"
+      }
+    ]
+  },
+  {
+    "id": "copy-follows-links",
+    "difficulty": "medium",
+    "category": "path-traversal",
+    "severity": "high",
+    "tests": "tests/perf.test.ts",
+    "description": "async copy follows links inside the source folder, so a copy pulls files from outside the space into it",
+    "patches": [
+      {
+        "file": "src/fsx.ts",
+        "find": "const st = await lstat(s)",
+        "replace": "const st = statSync(s)"
+      }
+    ]
+  },
+  {
+    "id": "copy-overwrites",
+    "difficulty": "easy",
+    "category": "integrity",
+    "severity": "medium",
+    "tests": "tests/perf.test.ts",
+    "description": "copying a single file drops COPYFILE_EXCL, so an existing file, or a link placed where the copy goes, is overwritten/written through",
+    "patches": [
+      {
+        "file": "src/fsx.ts",
+        "find": "try { await copyFile(from, to, FS.COPYFILE_EXCL) } catch (err: any) {",
+        "replace": "try { await copyFile(from, to) } catch (err: any) {"
+      }
+    ]
+  },
+  {
+    "id": "copy-no-space-check",
+    "difficulty": "easy",
+    "category": "dos",
+    "severity": "medium",
+    "tests": "tests/api.test.ts",
+    "description": "copy skips the free-space check, so copying a big folder can fill the disk",
+    "patches": [
+      {
+        "file": "src/routes/files.ts",
+        "find": "ensureSpace(destAbs, isDir(from) ? (await treeStats(from)).size : lstatSync(from).size)",
+        "replace": "void treeStats"
+      }
+    ]
+  }
+]

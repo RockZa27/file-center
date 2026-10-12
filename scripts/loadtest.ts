@@ -3,7 +3,7 @@
  *
  *   BASE=http://127.0.0.1:3101 FC_USER=admin FC_PASS=... WORK=/work bun scripts/loadtest.ts <step> [...]
  *
- * WORK must hold src.bin, the file to upload (for example: head -c 5G /dev/urandom > src.bin).
+ * WORK must hold src.bin, the file to upload (for example: head -c 5G /dev/urandom > src.bin); only "dashboard" runs without it.
  * Steps (run in this order, each prints one JSON line):
  *   big            upload src.bin to /load/big.bin, download it again, compare sha256
  *   range          random Range requests against src.bin
@@ -11,6 +11,8 @@
  *   zip            server-side zip of /load/big.bin, then unzip that archive again
  *   unzip          unzip /load/big-archive.zip (made by "zip") once more
  *   many           list and search a folder with FILES files (default 20,000) created through the API's disk (FCDATA)
+ *   dashboard      FILES files (default 50,000) in /load/count, then /api/list latency while the dashboard recounts the storage
+ *                  (each answer should stay under ~100 ms; waits up to 75 s for the cached numbers to get old enough to recount)
  *   parallel       3 users upload 1 GB each at the same time
  *   restart-start  begin a 1 GB upload, send half of it, save the state in WORK/restart.json
  *   restart-end    finish the upload saved by restart-start (run after restarting the server)
@@ -212,7 +214,47 @@ const steps: Record<string, () => Promise<void>> = {
       list: { entries: flat.entries.length, secs: listSecs.toFixed(2), jsonKB: Math.round(listBytes / 1024) },
       search: { found: hit.results.length, truncated: hit.truncated, secs: searchSecs.toFixed(2) },
       searchMiss: { truncated: miss.truncated, secs: missSecs.toFixed(2) },
-      status: { files: status.storage.files, secs: secs(t0).toFixed(2) },
+      status: { files: status.storage?.files ?? null, stale: status.stale, secs: secs(t0).toFixed(2) },
+    })
+  },
+
+  async dashboard() {
+    const n = Number(process.env.FILES ?? 50_000)
+    const dir = join(process.env.FCDATA ?? '/fcdata', 'storage', 'load', 'count')
+    let t0 = performance.now()
+    for (let d = 0; d < Math.ceil(n / 1000); d++) {
+      const group = join(dir, `group-${d}`)
+      if (existsSync(group)) continue // made by an earlier run
+      mkdirSync(group, { recursive: true })
+      for (let i = d * 1000; i < Math.min(n, (d + 1) * 1000); i++) writeFileSync(join(group, `file-${i}.txt`), String(i))
+    }
+    const createSecs = secs(t0)
+    const c = await admin()
+    const timed = async (path: string) => {
+      const t = performance.now()
+      const data = await c.json('GET', path)
+      return { data, ms: performance.now() - t }
+    }
+    // a recount starts only when the numbers are more than a minute old: wait until a status call starts one
+    t0 = performance.now()
+    let first = await timed('/api/admin/status')
+    while (!first.data.stale && secs(t0) < 75) {
+      await Bun.sleep(5000)
+      first = await timed('/api/admin/status')
+    }
+    const latencies: number[] = []
+    let last = first
+    t0 = performance.now()
+    while (last.data.stale && secs(t0) < 600) {
+      latencies.push((await timed('/api/list?space=home&path=/load/count')).ms)
+      last = await timed('/api/admin/status')
+    }
+    const sorted = [...latencies].sort((a, b) => a - b)
+    const pct = (p: number) => sorted.length ? sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * p))].toFixed(1) : null
+    out('dashboard', {
+      files: n, createSecs: createSecs.toFixed(1), recountStarted: first.data.stale, statusMs: first.ms.toFixed(1),
+      countSecs: secs(t0).toFixed(1), listCalls: latencies.length, listMs: { p50: pct(0.5), p95: pct(0.95), max: pct(1) },
+      under100ms: latencies.every(ms => ms < 100), storage: last.data.storage,
     })
   },
 
@@ -269,7 +311,7 @@ const steps: Record<string, () => Promise<void>> = {
   },
 }
 
-if (!existsSync(SRC)) throw new Error(`missing ${SRC}`)
+if (!existsSync(SRC) && process.argv.slice(2).some(s => s !== 'dashboard')) throw new Error(`missing ${SRC}`)
 for (const name of process.argv.slice(2)) {
   const step = steps[name]
   if (!step) throw new Error(`unknown step ${name}; known: ${Object.keys(steps).join(', ')}`)

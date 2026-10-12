@@ -5,7 +5,7 @@
       <app-logo class="logo" />
       <h1>{{ t('login.title') }}</h1>
       <p class="muted sub">{{ t('login.subtitle') }}</p>
-      <n-alert v-if="error" type="error" class="alert">{{ error }}</n-alert>
+      <n-alert v-if="failure" type="error" class="alert">{{ errorMessage }}</n-alert>
       <n-form @submit.prevent="submit">
         <n-form-item :label="t('login.username')" :show-feedback="false" class="field">
           <n-input ref="userRef" v-model:value="form.username" size="large" :input-props="{ autocomplete: 'username', name: 'username' }" @keyup.enter="submit" />
@@ -25,7 +25,7 @@
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { NAlert, NButton, NForm, NFormItem, NInput } from 'naive-ui'
@@ -34,25 +34,37 @@ import PreferenceControls from '../components/PreferenceControls.vue'
 import { errorText } from '../composables'
 import { useAppStore } from '../store'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const app = useAppStore()
 const router = useRouter()
 const form = reactive({ username: '', password: '' })
 const loading = ref(false)
-const error = ref('')
+const failure = ref(null)
 const userRef = ref(null)
+
+// the cases a visitor meets most are written here, so they follow the language switch; any other text came from
+// the server in the old language and is dropped when the language changes
+const errorMessage = computed(() => {
+  const e = failure.value
+  if (e?.code === 'auth.bad-credentials') return t('login.failed')
+  if (e?.code === 'auth.locked') return t('login.locked', { seconds: e.params?.seconds ?? '' })
+  return errorText(e, t('login.failed'))
+})
+watch(locale, () => {
+  if (!['auth.bad-credentials', 'auth.locked'].includes(failure.value?.code)) failure.value = null
+})
 
 onMounted(() => userRef.value?.focus())
 
 async function submit() {
   if (loading.value || !form.username || !form.password) return
   loading.value = true
-  error.value = ''
+  failure.value = null
   try {
     await app.login(form.username, form.password)
     router.replace({ name: app.isAdmin ? 'dashboard' : 'files' })
   } catch (e) {
-    error.value = errorText(e, t('login.failed'))
+    failure.value = e
     form.password = ''
   } finally {
     loading.value = false

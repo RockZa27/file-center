@@ -1,0 +1,78 @@
+{
+  "dir": "/tmp/fc-audit-r4",
+  "bugs": {
+    "search-follows-links": [
+      {
+        "file": "src/fsx.ts",
+        "line": 319
+      },
+      {
+        "file": "src/fsx.ts",
+        "line": 5
+      }
+    ],
+    "copy-follows-links": [
+      {
+        "file": "src/fsx.ts",
+        "line": 225
+      }
+    ],
+    "copy-no-space-check": [
+      {
+        "file": "src/routes/files.ts",
+        "line": 326
+      }
+    ],
+    "rename-read-perm": [
+      {
+        "file": "src/routes/files.ts",
+        "line": 157
+      }
+    ],
+    "restore-no-step-up": [
+      {
+        "file": "src/routes/backup.ts",
+        "line": 54
+      }
+    ],
+    "lockout-case": [
+      {
+        "file": "src/routes/session.ts",
+        "line": 63
+      }
+    ]
+  },
+  "decoys": {
+    "decoy-todo-download": [
+      {
+        "file": "src/routes/files.ts",
+        "line": 247
+      }
+    ],
+    "decoy-legacy-join": [
+      {
+        "file": "src/fsx.ts",
+        "line": 240
+      }
+    ],
+    "decoy-csrf-note": [
+      {
+        "file": "src/context.ts",
+        "line": 47
+      }
+    ],
+    "decoy-backup-name": [
+      {
+        "file": "src/backup.ts",
+        "line": 53
+      }
+    ],
+    "decoy-access-url": [
+      {
+        "file": "src/logger.ts",
+        "line": 142
+      }
+    ]
+  },
+  "cleanDir": "/tmp/fc-audit-r4-clean"
+}

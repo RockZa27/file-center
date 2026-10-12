@@ -1,0 +1,1 @@
+{"backend-dev": {"tokens": 304796, "ms": 1616286, "toolUses": 153}, "security-auditor": {"tokens": 112186, "ms": 68128, "toolUses": 28}, "verifier": {"tokens": 40623, "ms": 122482, "toolUses": 15}, "frontend-dev": {"tokens": 243695, "ms": 1705449, "toolUses": 218}, "ux-tester": {"tokens": 207824, "ms": 910570, "toolUses": 100}}

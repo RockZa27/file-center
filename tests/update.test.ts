@@ -82,7 +82,7 @@ async function login(who: Session, username: string, password: string) {
 }
 
 /** build a package the way scripts/package.ts does, but from hand-made files */
-function makePackage(name: string, opts: { version: string; server: string; extra?: Record<string, string>; tamper?: boolean }) {
+function makePackage(name: string, opts: { version: string; server: string; extra?: Record<string, string>; tamper?: boolean; tamperSameSize?: boolean }) {
   const enc = new TextEncoder()
   const files: Record<string, Uint8Array> = {
     'server.js': enc.encode(opts.server),
@@ -94,6 +94,8 @@ function makePackage(name: string, opts: { version: string; server: string; extr
   }
   const entries: Record<string, Uint8Array> = { 'manifest.json': enc.encode(JSON.stringify(manifest)), ...files }
   if (opts.tamper) entries['server.js'] = enc.encode('console.log("evil")')
+  // same length, different bytes: only the SHA-256 can tell
+  if (opts.tamperSameSize) entries['server.js'] = enc.encode(opts.server.replace(/1/g, '2'))
   for (const [p, c] of Object.entries(opts.extra ?? {})) entries[p] = enc.encode(c)
   const file = join(dirs.pkgs, name)
   writeFileSync(file, zipSync(entries))
@@ -141,13 +143,24 @@ suite('update from the web', () => {
 
   test('only an admin may use it', async () => {
     expect((await fetch(url('/api/admin/update'))).status).toBe(401)
-    const made = await api('POST', '/api/admin/users', { username: 'bob', name: 'Bob', password: 'bob-password-1', role: 'user', permissions: ['read', 'upload', 'write'], publicPermissions: [] })
+    const made = await api('POST', '/api/admin/users', { username: 'bob', name: 'Bob', password: 'tall-oak-tree-1', role: 'user', permissions: ['read', 'upload', 'write'], publicPermissions: [] })
     expect(made.status).toBe(200)
     const bob = new Session()
-    await login(bob, 'bob', 'bob-password-1')
+    await login(bob, 'bob', 'tall-oak-tree-1')
     expect((await api('GET', '/api/admin/update', undefined, false, bob)).status).toBe(403)
     expect((await api('POST', '/api/admin/update/upload', { size: 10 }, false, bob)).status).toBe(403)
-    expect((await api('POST', '/api/admin/update/apply', { id: 'x', password: 'bob-password-1' }, false, bob)).status).toBe(403)
+    expect((await api('POST', '/api/admin/update/apply', { id: 'x', password: 'tall-oak-tree-1' }, false, bob)).status).toBe(403)
+  })
+
+  test('staging runs none of the package\'s code; that waits for the password', async () => {
+    const marker = join(base, 'stage-ran-code')
+    const server = `require('node:fs').writeFileSync(${JSON.stringify(marker)}, 'ran')`
+    const staged = await sendPackage(makePackage('marker.zip', { version: '9.3.0', server }))
+    expect(staged.status).toBe(200)
+    expect(staged.data).toMatchObject({ version: '9.3.0', runningVersion: BUILTIN, tested: false })
+    await Bun.sleep(1000)
+    expect(existsSync(marker)).toBe(false)
+    expect((await api('DELETE', `/api/admin/update/staged/${staged.data.id}`)).status).toBe(200)
   })
 
   describe('rejects bad packages', () => {
@@ -159,6 +172,11 @@ suite('update from the web', () => {
     })
     test('files that do not match the manifest', async () => {
       const r = await sendPackage(makePackage('tamper.zip', { version: '9.1.0', server: 'console.log(1)', tamper: true }))
+      expect(r.status).toBe(400)
+      expect(r.data.error).toContain('server.js')
+    })
+    test('a file with the listed size but different content', async () => {
+      const r = await sendPackage(makePackage('same-size.zip', { version: '9.1.0', server: 'console.log(1)', tamperSameSize: true }))
       expect(r.status).toBe(400)
       expect(r.data.error).toContain('server.js')
     })
@@ -177,11 +195,23 @@ suite('update from the web', () => {
       expect(r.data.error).toContain('ไม่ใหม่กว่า')
     })
     test('a server that does not start is caught before installing', async () => {
-      const r = await sendPackage(makePackage('broken.zip', { version: '9.2.0', server: 'throw new Error("boom from the new version")' }))
+      const staged = await sendPackage(makePackage('broken.zip', { version: '9.2.0', server: 'throw new Error("boom from the new version")' }))
+      expect(staged.status).toBe(200)
+      expect(staged.data.tested).toBe(false)
+      const before = (await health()).boot
+      // the test run happens on install, after the password
+      const r = await api('POST', '/api/admin/update/apply', { id: staged.data.id, password: PASSWORD })
       expect(r.status).toBe(400)
       expect(r.data.error).toContain('เริ่มทำงานไม่สำเร็จ')
       expect(r.data.error).toContain('boom')
-      expect((await health()).version).toBe(BUILTIN)
+      const h = await health()
+      expect(h.version).toBe(BUILTIN)
+      expect(h.boot).toBe(before)
+      const s = (await api('GET', '/api/admin/update')).data
+      expect(s).toMatchObject({ runningVersion: BUILTIN, pending: null, history: [] })
+      expect(existsSync(join(dirs.data, 'app', 'releases'))).toBe(false)
+      // and it is gone: it can not be tried again
+      expect((await api('POST', '/api/admin/update/apply', { id: staged.data.id, password: PASSWORD })).status).toBe(404)
     }, 40_000)
   })
 
@@ -255,7 +285,8 @@ suite('update from the web', () => {
     writeFileSync(join(dirs.data, 'app', 'state.json'), JSON.stringify({ ...state, current: '9.9.8-deadbeef', pending: { dir: '9.9.8-deadbeef', previous: null, at: new Date().toISOString() }, last: null }))
 
     // crash the app: the launcher restarts it, picks up the new state, and 9.9.8 must be rejected
-    const pid = (await Bun.$`pgrep -f ${join(root, 'src', 'index.ts')}`.nothrow().text()).trim().split('\n')[0]
+    // the launcher's own child only: matching by command line could hit another app run from this folder
+    const pid = (await Bun.$`pgrep -P ${launcher!.pid}`.nothrow().text()).trim().split('\n')[0]
     expect(pid).toBeTruthy()
     process.kill(Number(pid), 'SIGKILL')
 

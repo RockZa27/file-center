@@ -2,17 +2,21 @@ import { Elysia, t } from 'elysia'
 import { audit } from '../audit'
 import {
   accessFor, checkPasswordStrength, clearFailures, createSession, destroySession, destroyUserSessions,
-  findUser, hashPassword, lockedFor, publicUser, recordFailure, saveUsers, verifyLogin, type Session, type User,
+  findUser, hashPassword, lockedFor, PASSWORD_MIN_LENGTH, publicUser, recordFailure, saveUsers, verifyLogin, type Session, type User,
 } from '../auth'
 import { config } from '../config'
 import { context, requireUser, SESSION_COOKIE } from '../context'
 import { HttpError } from '../fsx'
 import { settings } from '../settings'
 
-function appConfig() {
+/** cookies take whole seconds: SESSION_TTL_HOURS=0.0001 must not break every response */
+const cookieMaxAge = () => Math.max(1, Math.floor(config.sessionTtlMs / 1000))
+
+function appConfig(user: User | null) {
   const s = settings.get()
   return {
-    version: config.version,
+    // visitors do not need to know which version (and so which known holes) is running
+    ...(user ? { version: config.version } : {}),
     appName: s.appName,
     primaryColor: s.primaryColor,
     welcomeTitle: s.welcomeTitle,
@@ -24,6 +28,7 @@ function appConfig() {
     uploadChunkSize: config.uploadChunkSize,
     uploadSimultaneous: config.uploadSimultaneous,
     trashRetentionDays: config.trashRetentionDays,
+    passwordMinLength: PASSWORD_MIN_LENGTH,
   }
 }
 
@@ -33,7 +38,7 @@ function snapshot(user: User | null, session: Session) {
     const a = accessFor(user, space)
     if (a) spaces[space] = [...a.perms]
   }
-  return { csrf: session.csrf, user: user ? publicUser(user) : null, spaces, config: appConfig() }
+  return { csrf: session.csrf, user: user ? publicUser(user) : null, spaces, config: appConfig(user) }
 }
 
 export const sessionRoutes = new Elysia({ prefix: '/api' })
@@ -47,7 +52,7 @@ export const sessionRoutes = new Elysia({ prefix: '/api' })
       s = created.session
       cookie[SESSION_COOKIE].set({
         value: created.sid, httpOnly: true, sameSite: 'lax', path: '/',
-        secure: config.secureCookie, maxAge: config.sessionTtlMs / 1000,
+        secure: config.secureCookie, maxAge: cookieMaxAge(),
       })
     }
     return snapshot(user, s)
@@ -57,19 +62,19 @@ export const sessionRoutes = new Elysia({ prefix: '/api' })
     const username = body.username.trim()
     const key = `${ip}|${username.toLowerCase()}`
     const wait = lockedFor(key)
-    if (wait) throw new HttpError(429, `พยายามเข้าสู่ระบบผิดหลายครั้ง กรุณารอ ${wait} วินาทีแล้วลองใหม่`)
+    if (wait) throw new HttpError(429, 'auth.locked', { seconds: wait })
     const user = await verifyLogin(username, body.password)
     if (!user) {
       recordFailure(key)
       audit({ user: username || '-', ip, action: 'login-failed' })
-      throw new HttpError(401, 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง')
+      throw new HttpError(401, 'auth.bad-credentials')
     }
     clearFailures(key)
     destroySession(sid) // new id on every login
     const { sid: newSid, session } = createSession(user.username)
     cookie[SESSION_COOKIE].set({
       value: newSid, httpOnly: true, sameSite: 'lax', path: '/',
-      secure: config.secureCookie, maxAge: config.sessionTtlMs / 1000,
+      secure: config.secureCookie, maxAge: cookieMaxAge(),
     })
     user.lastLogin = new Date().toISOString()
     saveUsers()
@@ -83,15 +88,15 @@ export const sessionRoutes = new Elysia({ prefix: '/api' })
     const { sid: newSid, session } = createSession(null)
     cookie[SESSION_COOKIE].set({
       value: newSid, httpOnly: true, sameSite: 'lax', path: '/',
-      secure: config.secureCookie, maxAge: config.sessionTtlMs / 1000,
+      secure: config.secureCookie, maxAge: cookieMaxAge(),
     })
     return snapshot(null, session)
   })
 
   .post('/password', async ({ user, ip, sid, body }) => {
     const u = requireUser({ user, ip })
-    if (!(await Bun.password.verify(body.current, u.passwordHash))) throw new HttpError(400, 'รหัสผ่านปัจจุบันไม่ถูกต้อง')
-    checkPasswordStrength(body.next)
+    if (!(await Bun.password.verify(body.current, u.passwordHash))) throw new HttpError(400, 'auth.wrong-current-password')
+    checkPasswordStrength(body.next, u.username)
     u.passwordHash = await hashPassword(body.next)
     u.mustChangePassword = false
     saveUsers()

@@ -1,0 +1,1 @@
+{"agent":"backend-dev","branch":"fix/stage-no-code","base":"3623559","runIdFirst":"r1-f8-1","runIdFinal":"r1-f8-final","iterations":2,"notes":"smoke test moved from stagePackage to applyStaged (after confirmPassword); failed packages removed from staging; README and i18n text left to the orchestrator (outside its paths)"}

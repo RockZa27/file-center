@@ -1,0 +1,11 @@
+{"agent":"verifier","verdicts":[
+{"findingId":"F1","verdict":"CONFIRMED","severity":"medium","repro":{"command":"cd /tmp/fc-audit-r2 && bun qa/repro/F1.ts","expectExit":42}},
+{"findingId":"F2","verdict":"CONFIRMED","severity":"medium","repro":{"command":"cd /tmp/fc-audit-r2 && bun qa/repro/F2.ts","expectExit":42}},
+{"findingId":"F3","verdict":"CONFIRMED","severity":"medium","repro":{"command":"cd /tmp/fc-audit-r2 && bun qa/repro/F3.ts","expectExit":42}},
+{"findingId":"F4","verdict":"REFUTED","severity":"low","repro":null},
+{"findingId":"F5","verdict":"CONFIRMED","severity":"low","repro":{"command":"cd /tmp/fc-audit-r2 && bun qa/repro/F5.ts","expectExit":42}},
+{"findingId":"F6","verdict":"CONFIRMED","severity":"medium","repro":{"command":"cd /tmp/fc-audit-r2 && bun qa/repro/F6.ts","expectExit":42}},
+{"findingId":"F7","verdict":"CONFIRMED","severity":"medium","repro":{"command":"cd /tmp/fc-audit-r2 && bun qa/repro/F7.ts","expectExit":42}},
+{"findingId":"F8","verdict":"CONFIRMED","severity":"medium","repro":{"command":"cd /tmp/fc-audit-r2 && bun qa/repro/F8.ts","expectExit":42}},
+{"findingId":"F9","verdict":"CONFIRMED","severity":"medium","repro":{"command":"cd /tmp/fc-audit-r2 && bun qa/repro/F9.ts","expectExit":42}}
+]}

@@ -10,6 +10,12 @@
         <div class="surface block">
           <div class="kv"><span class="muted">{{ t('update.current') }}</span><span class="strong">v{{ st.runningVersion }}</span></div>
           <div class="kv"><span class="muted">{{ t('update.source') }}</span><span>{{ st.runningRelease ? t('update.sourceUpdate') : t('update.sourceBuiltin') }}</span></div>
+          <div class="kv">
+            <span class="muted label">{{ t('update.signing') }}</span>
+            <span class="badge" :class="{ on: st.signatureRequired }">
+              <n-icon :component="st.signatureRequired ? ShieldCheckmarkOutline : ShieldOutline" /><span>{{ st.signatureRequired ? t('update.signingRequired') : t('update.signingOptional') }}</span>
+            </span>
+          </div>
         </div>
 
         <n-alert v-if="st.pending" type="info" class="gap">{{ t('update.pending', { v: pendingVersion }) }}</n-alert>
@@ -33,7 +39,16 @@
           <div class="kv"><span class="muted">{{ t('update.files') }}</span><span>{{ staged.files }} · {{ formatBytes(staged.bytes) }}</span></div>
           <div v-if="staged.notes" class="kv"><span class="muted">{{ t('update.notes') }}</span><span class="notes">{{ staged.notes }}</span></div>
           <div class="kv"><span class="muted">SHA-256</span><span class="mono small">{{ staged.serverSha256.slice(0, 16) }}…</span></div>
-          <n-alert type="success" class="gap top">{{ t('update.checked') }}</n-alert>
+          <div class="kv">
+            <span class="muted">{{ t('update.signature') }}</span>
+            <n-tag v-if="staged.signed" :type="staged.signatureVerified ? 'success' : 'info'" :bordered="false" class="sig">
+              <template #icon><n-icon :component="staged.signatureVerified ? ShieldCheckmarkOutline : ShieldOutline" /></template>
+              {{ staged.signatureVerified ? t('update.signedVerified') : t('update.signedUnchecked') }}
+            </n-tag>
+            <n-tag v-else type="warning" :bordered="false" class="sig"><template #icon><n-icon :component="WarningOutline" /></template>{{ t('update.unsigned') }}</n-tag>
+          </div>
+          <n-alert v-if="!staged.signed" type="warning" class="gap top">{{ t('update.unsignedBody') }}</n-alert>
+          <n-alert type="success" class="gap" :class="{ top: staged.signed }">{{ t('update.checked') }}</n-alert>
           <n-alert type="info" class="gap">{{ t('update.restartNote') }}</n-alert>
           <n-alert v-if="st.uploadsInProgress" type="warning" class="gap">{{ t('update.uploadsWarn', { n: st.uploadsInProgress }) }}</n-alert>
           <n-form label-placement="top" @submit.prevent="install">
@@ -49,6 +64,8 @@
 
         <!-- drop zone -->
         <div v-else class="surface block">
+          <!-- stays until the next package is dropped: a toast is gone before a long message is read -->
+          <n-alert v-if="refused" type="error" :title="t('update.refused', { name: refused.name })" closable class="gap refused" @close="refused = null">{{ refused.message }}</n-alert>
           <n-upload :show-file-list="false" accept=".zip,application/zip" :disabled="!canUpdate || phase !== 'idle'" :custom-request="() => {}" :on-before-upload="onFile">
             <n-upload-dragger>
               <div class="drop">
@@ -104,10 +121,11 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NAlert, NButton, NForm, NFormItem, NIcon, NInput, NModal, NProgress, NSpin, NUpload, NUploadDragger } from 'naive-ui'
-import { ArrowUndoOutline, CloudUploadOutline, RefreshOutline } from '@vicons/ionicons5'
+import { NAlert, NButton, NForm, NFormItem, NIcon, NInput, NModal, NProgress, NSpin, NTag, NUpload, NUploadDragger } from 'naive-ui'
+import { ArrowUndoOutline, CloudUploadOutline, RefreshOutline, ShieldCheckmarkOutline, ShieldOutline, WarningOutline } from '@vicons/ionicons5'
 import { api, ApiError, putChunk } from '../api'
-import { useFeedback } from '../composables'
+import { errorText, useFeedback } from '../composables'
+import { bootId, sleep, waitForRestart } from '../restart'
 import { formatBytes, formatDate } from '../utils'
 
 const { t } = useI18n()
@@ -119,6 +137,8 @@ const working = ref(false)
 const phase = ref('idle')
 const progress = ref(0)
 const staged = ref(null)
+// why the last dropped package was refused ({ name, message }), until the next one
+const refused = ref(null)
 const password = ref('')
 const rollbackOpen = ref(false)
 const rollbackTarget = ref(null)
@@ -138,8 +158,6 @@ async function load() {
   loading.value = true
   try { st.value = await api.updateStatus() } catch (e) { fb.fail(e) } finally { loading.value = false }
 }
-
-const sleep = ms => new Promise(r => setTimeout(r, ms))
 
 async function sendPackage(file) {
   const init = await api.updateInit(file.size)
@@ -166,6 +184,7 @@ async function sendPackage(file) {
 async function onFile({ file }) {
   if (!file.file || busy.value) return false
   progress.value = 0
+  refused.value = null
   phase.value = 'uploading'
   try {
     const id = await sendPackage(file.file)
@@ -177,7 +196,7 @@ async function onFile({ file }) {
     phase.value = 'ready'
   } catch (e) {
     phase.value = 'idle'
-    fb.fail(e)
+    refused.value = { name: file.name, message: errorText(e, t('common.unknownError')) }
   }
   return false
 }
@@ -190,42 +209,22 @@ async function discard() {
   if (id) { try { await api.updateDiscard(id) } catch { /* it is cleaned up later anyway */ } }
 }
 
-/** the process id of the running server changes with every restart, so a changed `boot` means it came back */
-async function bootId() {
-  try {
-    const r = await fetch('/api/health', { cache: 'no-store' })
-    return r.ok ? (await r.json()).boot : null
-  } catch { return null }
-}
-
-async function waitForRestart(before, expectedVersion) {
+async function afterRestart(before, expectedVersion) {
   phase.value = 'installing'
-  const deadline = Date.now() + 150_000
-  await sleep(1500)
-  while (Date.now() < deadline) {
-    try {
-      const r = await fetch('/api/health', { cache: 'no-store' })
-      if (r.ok) {
-        const h = await r.json()
-        if (h.boot !== before) {
-          if (h.version === expectedVersion) {
-            fb.ok(t('update.done', { v: h.version }))
-            await sleep(800)
-            location.reload()
-          } else {
-            phase.value = 'idle'
-            staged.value = null
-            await load()
-            fb.warn(t('update.rolledBack', { v: h.version }))
-          }
-          return
-        }
-      }
-    } catch { /* the server is restarting */ }
-    await sleep(1000)
+  const h = await waitForRestart(before)
+  if (!h) {
+    phase.value = 'idle'
+    fb.warn(t('update.timeout'))
+  } else if (h.version === expectedVersion) {
+    fb.ok(t('update.done', { v: h.version }))
+    await sleep(800)
+    location.reload()
+  } else {
+    phase.value = 'idle'
+    staged.value = null
+    await load()
+    fb.warn(t('update.rolledBack', { v: h.version }))
   }
-  phase.value = 'idle'
-  fb.warn(t('update.timeout'))
 }
 
 async function run(call, version) {
@@ -236,7 +235,7 @@ async function run(call, version) {
     password.value = ''
     rollbackOpen.value = false
     working.value = false
-    await waitForRestart(before, version)
+    await afterRestart(before, version)
   } catch (e) {
     fb.fail(e)
     if (e instanceof ApiError && e.status === 404) { staged.value = null; phase.value = 'idle' }
@@ -262,6 +261,7 @@ onBeforeUnmount(() => clearInterval(poll))
 .block h2 { margin: 0 0 12px; font-size: 16px; font-weight: 600; }
 .gap { margin-bottom: 12px; }
 .gap.top { margin-top: 14px; }
+.refused { overflow-wrap: anywhere; }
 .kv { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 9px 0; border-top: 1px solid var(--border); font-size: 14px; }
 .kv:first-of-type { border-top: 0; }
 .strong { font-weight: 600; }
@@ -271,6 +271,12 @@ onBeforeUnmount(() => clearInterval(poll))
 .center h2 { margin-top: 18px; }
 .drop { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 18px 8px; text-align: center; }
 .drop-title { font-size: 15px; font-weight: 500; }
-.howto { margin-top: 14px; font-size: 13px; }
+.howto { margin-top: 14px; font-size: 13px; overflow-wrap: anywhere; }
 .actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px; }
+.label { flex: none; }
+.badge { display: inline-flex; align-items: flex-start; gap: 6px; text-align: right; }
+.badge .n-icon { flex: none; font-size: 16px; margin-top: 2px; }
+.badge.on { color: var(--primary); font-weight: 500; }
+/* a tag stays on one line by default: let long labels wrap at 375 px */
+.sig { height: auto; min-height: 24px; padding-top: 2px; padding-bottom: 2px; white-space: normal; text-align: left; }
 </style>

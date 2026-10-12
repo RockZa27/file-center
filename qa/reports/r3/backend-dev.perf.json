@@ -1,0 +1,1 @@
+{"agent":"backend-dev","branch":"feature/perf","base":"2da8c70","runIdFirst":"r3-perf-1","runIdFinal":"r3-perf-final","iterations":2,"notes":"async treeStats + src/stats.ts cache; trash/copy use it; perf.test.ts 50k hard links; loadtest dashboard mode; flagged the dashboard null-storage break for frontend"}

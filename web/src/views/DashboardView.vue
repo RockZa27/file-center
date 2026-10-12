@@ -7,7 +7,12 @@
 
     <n-alert v-if="error" type="error" class="gap">{{ error }}</n-alert>
     <div v-if="s?.warnings?.length" class="warnings">
-      <n-alert v-for="w in s.warnings" :key="w.code + w.message" :type="w.level === 'critical' ? 'error' : w.level === 'warning' ? 'warning' : 'info'" :show-icon="true">{{ w.message }}</n-alert>
+      <n-alert v-for="w in s.warnings" :key="w.code + w.message" :type="w.level === 'critical' ? 'error' : w.level === 'warning' ? 'warning' : 'info'" :show-icon="true">
+        <span class="warn-row">
+          <span>{{ w.message }}</span>
+          <router-link v-if="w.code === 'errors'" :to="{ name: 'logs', query: { level: 'error' } }" class="warn-link">{{ t('dash.viewLogs') }} →</router-link>
+        </span>
+      </n-alert>
     </div>
 
     <n-spin :show="loading && !s">
@@ -21,15 +26,16 @@
           </template>
           <div v-else class="muted note">{{ t('dash.unknown') }}</div>
         </div>
-        <div class="surface card">
-          <div class="label">{{ t('dash.files') }}</div>
-          <div class="value">{{ s.storage.files.toLocaleString() }}</div>
-          <div class="muted note">{{ formatBytes(s.storage.size) }}<span v-if="s.storage.truncated"> +</span></div>
-        </div>
-        <div class="surface card">
-          <div class="label">{{ t('dash.publicFiles') }}</div>
-          <div class="value">{{ s.storage.public.files.toLocaleString() }}</div>
-          <div class="muted note">{{ formatBytes(s.storage.public.size) }}</div>
+        <!-- counted in the background: null until the first count ends, stale while a new count runs -->
+        <div v-for="c in storageCards" :key="c.key" class="surface card">
+          <div class="label">{{ c.label }}</div>
+          <template v-if="c.files !== null">
+            <div class="value">{{ c.files.toLocaleString() }}<span v-if="c.truncated">+</span></div>
+            <div class="muted note">{{ formatBytes(c.size) }}<span v-if="c.truncated"> +</span></div>
+            <div v-if="s.stale" class="muted note counting-note"><n-icon :component="SyncOutline" class="turning" /><span>{{ t('dash.counting') }}</span></div>
+          </template>
+          <div v-else class="value small counting"><n-icon :component="SyncOutline" class="turning" /><span>{{ t('dash.counting') }}</span></div>
+          <div v-if="s.storage?.countedAt" class="muted small-note">{{ t('dash.countedAt', { time: formatDate(s.storage.countedAt) }) }}</div>
         </div>
         <div class="surface card">
           <div class="label">{{ t('dash.trash') }}</div>
@@ -60,28 +66,48 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NAlert, NButton, NIcon, NProgress, NSpin, NTag } from 'naive-ui'
-import { RefreshOutline } from '@vicons/ionicons5'
+import { RefreshOutline, SyncOutline } from '@vicons/ionicons5'
 import { api } from '../api'
 import { formatBytes, formatDate, formatDuration } from '../utils'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const s = ref(null)
 const loading = ref(false)
 const error = ref('')
 let timer = null
 
+const storageCards = computed(() => {
+  const st = s.value?.storage
+  return [
+    { key: 'all', label: t('dash.files'), files: st?.files ?? null, size: st?.size ?? 0, truncated: !!st?.truncated },
+    { key: 'public', label: t('dash.publicFiles'), files: st?.public?.files ?? null, size: st?.public?.size ?? 0, truncated: false },
+  ]
+})
 const diskPct = computed(() => (s.value?.disk ? Math.round((s.value.disk.used / s.value.disk.total) * 100) : 0))
 
+let recheck = null
+let asked = 0
 async function load() {
+  // only the latest answer counts: one asked before a language switch may arrive after the one asked in the new language
+  const mine = ++asked
   loading.value = true
   error.value = ''
-  try { s.value = await api.status() } catch (e) { error.value = e.message } finally { loading.value = false }
+  let next = s.value
+  try { next = await api.status() } catch (e) { if (mine === asked) error.value = e.message }
+  if (mine !== asked) return
+  s.value = next
+  loading.value = false
+  // while the files are being counted, ask again soon rather than at the next 30 s round
+  clearTimeout(recheck)
+  if (s.value?.stale) recheck = setTimeout(load, 5000)
 }
 onMounted(() => { load(); timer = setInterval(load, 30_000) })
-onBeforeUnmount(() => clearInterval(timer))
+// the warnings (and any error) are written by the server in the page's language: ask again in the new one
+watch(locale, () => load())
+onBeforeUnmount(() => { clearInterval(timer); clearTimeout(recheck) })
 </script>
 
 <style scoped>
@@ -95,5 +121,13 @@ onBeforeUnmount(() => clearInterval(timer))
 .value.small { font-size: 20px; }
 .unit { font-size: 14px; font-weight: 400; }
 .note { font-size: 13px; margin-top: 8px; }
+.small-note { font-size: 12px; margin-top: 6px; }
+.counting { display: flex; align-items: center; gap: 8px; color: var(--muted); }
+.counting-note { display: flex; align-items: center; gap: 6px; margin-top: 4px; }
+.turning { animation: turn 1.6s linear infinite; }
+@keyframes turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .turning { animation: none; } }
+.warn-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.warn-link { color: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
 @media (max-width: 600px) { .card.wide { grid-column: auto; } }
 </style>

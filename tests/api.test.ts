@@ -1,16 +1,10 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
-import { existsSync, mkdtempSync, mkdirSync, rmSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs'
-import { tmpdir } from 'node:os'
+import { existsSync, mkdirSync, rmSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createHash, randomBytes } from 'node:crypto'
 import { unzipSync, zipSync } from 'fflate'
-
-const base = mkdtempSync(join(tmpdir(), 'fc-test-'))
-process.env.STORAGE_DIR = join(base, 'storage')
-process.env.DATA_DIR = join(base, 'data')
-process.env.ADMIN_PASSWORD = 'test-admin-pass'
-process.env.UPLOAD_CHUNK_SIZE = String(1024 * 1024) // 1 MB chunks keep the test fast
-process.env.LOGIN_MAX_ATTEMPTS = '3'
+// sets STORAGE_DIR, DATA_DIR, ADMIN_PASSWORD (test-admin-pass), 1 MB upload chunks and LOGIN_MAX_ATTEMPTS=3
+import { base } from './in-process-env'
 
 let app: any
 class Client {
@@ -223,22 +217,30 @@ describe('zip', () => {
     const u = await admin.json('POST', '/api/unzip', { space: 'home', path: '/evil.zip' })
     expect(u.status).toBe(400)
   })
+  test('zip-slip into a sibling folder whose name starts like the destination is rejected', async () => {
+    // extracting slip2.zip goes to /slip2; "/slip2-evil" passes a plain startsWith("/slip2") check
+    const evil = zipSync({ '../slip2-evil/x.txt': new Uint8Array([1]) })
+    writeFileSync(join(process.env.STORAGE_DIR!, 'slip2.zip'), evil)
+    const u = await admin.json('POST', '/api/unzip', { space: 'home', path: '/slip2.zip' })
+    expect(u.status).toBe(400)
+    expect(existsSync(join(process.env.STORAGE_DIR!, 'slip2-evil'))).toBe(false)
+  })
 })
 
 describe('users & permissions', () => {
   const user = new Client()
   test('admin creates a user with their own folder', async () => {
     const c = await admin.json('POST', '/api/admin/users', {
-      username: 'somchai', name: 'สมชาย', password: 'password123', role: 'user',
+      username: 'somchai', name: 'สมชาย', password: 'harbor-lamp-42', role: 'user',
       permissions: ['read', 'write', 'upload', 'download'], publicPermissions: ['read', 'download', 'upload'],
     })
     expect(c.status).toBe(200)
-    expect((await admin.json('POST', '/api/admin/users', { username: 'somchai', name: 'x', password: 'password123', role: 'user', permissions: [], publicPermissions: [] })).status).toBe(409)
+    expect((await admin.json('POST', '/api/admin/users', { username: 'somchai', name: 'x', password: 'harbor-lamp-42', role: 'user', permissions: [], publicPermissions: [] })).status).toBe(409)
     expect((await admin.json('POST', '/api/admin/users', { username: 'shortpw', name: 'x', password: '123', role: 'user', permissions: [], publicPermissions: [] })).status).toBe(400)
   })
   test('user sees only their folder and cannot escape', async () => {
     await user.start()
-    expect((await user.login('somchai', 'password123')).status).toBe(200)
+    expect((await user.login('somchai', 'harbor-lamp-42')).status).toBe(200)
     expect((await user.json('POST', '/api/mkdir', { space: 'home', path: '/', name: 'mine' })).status).toBe(200)
     const list = await user.json('GET', '/api/list?space=home&path=/')
     expect(list.data.entries.map((e: any) => e.name)).toEqual(['mine'])
@@ -275,8 +277,8 @@ describe('users & permissions', () => {
   test('password change invalidates other sessions', async () => {
     const other = new Client()
     await other.start()
-    await other.login('somchai', 'password123')
-    expect((await user.json('POST', '/api/password', { current: 'password123', next: 'new-password-456' })).status).toBe(200)
+    await other.login('somchai', 'harbor-lamp-42')
+    expect((await user.json('POST', '/api/password', { current: 'harbor-lamp-42', next: 'new-password-456' })).status).toBe(200)
     expect((await other.json('GET', '/api/list?space=home&path=/')).status).toBe(401)
     expect((await user.json('GET', '/api/list?space=home&path=/')).status).toBe(200)
   })
@@ -456,6 +458,28 @@ describe('regressions found in QA', () => {
     const act = await admin.json('GET', '/api/admin/activity?action=login-failed&pageSize=100')
     expect(act.data.items.every((i: any) => i.user.length <= 64)).toBe(true)
   })
+  test('the lockout counts a username however it is capitalised', async () => {
+    const failLogin = (c: Client, username: string) => c.raw('POST', '/api/login', { username, password: 'nope' }).then(r => r.status)
+    const c = new Client()
+    await c.start()
+    // login ignores case, so the lockout must too: otherwise every spelling gets its own attempts
+    for (const name of ['LockCase', 'lockcase', 'LOCKCASE']) expect(await failLogin(c, name)).toBe(401)
+    expect(await failLogin(c, 'lOcKcAsE')).toBe(429)
+  })
+  test('a signed-in session ends after the idle time', async () => {
+    const { config } = await import('../src/config')
+    const c = new Client()
+    await c.start()
+    expect((await c.login('admin', 'test-admin-pass')).status).toBe(200)
+    const keep = config.sessionTtlMs
+    config.sessionTtlMs = 50
+    try {
+      await Bun.sleep(120)
+      expect((await c.json('GET', '/api/session')).data.user).toBeNull()
+    } finally {
+      config.sessionTtlMs = keep
+    }
+  })
   test('expired login attempts are forgotten', async () => {
     const auth = await import('../src/auth')
     const { config } = await import('../src/config')
@@ -471,7 +495,7 @@ describe('regressions found in QA', () => {
   })
   test('a user folder can not be placed inside the public folder', async () => {
     const make = (homedir: string) => admin.json('POST', '/api/admin/users', {
-      username: 'pubhome', name: 'x', password: 'password123', role: 'user', homedir, permissions: ['read'], publicPermissions: [],
+      username: 'pubhome', name: 'x', password: 'harbor-lamp-42', role: 'user', homedir, permissions: ['read'], publicPermissions: [],
     })
     expect((await make('/public')).status).toBe(400)
     expect((await make('/public/inside')).status).toBe(400)
@@ -544,12 +568,12 @@ const sha256 = (b: Uint8Array) => createHash('sha256').update(b).digest('hex')
 
 /** admin creates a user, drops matrix.txt into their folder and returns a logged-in client */
 async function userWith(username: string, permissions: string[], publicPermissions: string[], role = 'user') {
-  const r = await admin.json('POST', '/api/admin/users', { username, name: username, password: 'password123', role, permissions, publicPermissions })
+  const r = await admin.json('POST', '/api/admin/users', { username, name: username, password: 'harbor-lamp-42', role, permissions, publicPermissions })
   expect(r.status).toBe(200)
   if (role === 'user') writeFileSync(storageAbs('users', username, 'matrix.txt'), 'matrix')
   const c = new Client()
   await c.start()
-  expect((await c.login(username, 'password123')).status).toBe(200)
+  expect((await c.login(username, 'harbor-lamp-42')).status).toBe(200)
   return c
 }
 
@@ -626,12 +650,15 @@ describe('full system: permission matrix', () => {
     const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])
     const adminCalls: [string, string, any?][] = [
       ['GET', '/api/admin/users'],
-      ['POST', '/api/admin/users', { username: 'sneaky', name: 'x', password: 'password123', role: 'admin', permissions: [], publicPermissions: [] }],
+      ['POST', '/api/admin/users', { username: 'sneaky', name: 'x', password: 'harbor-lamp-42', role: 'admin', permissions: [], publicPermissions: [] }],
       ['PUT', '/api/admin/users/:username', { role: 'admin' }],
       ['DELETE', '/api/admin/users/:username'],
       ['GET', '/api/admin/folders'],
       ['GET', '/api/admin/status'],
       ['GET', '/api/admin/activity'],
+      ['GET', '/api/admin/activity/export'],
+      ['GET', '/api/admin/logs'],
+      ['GET', '/api/admin/logs/download'],
       ['GET', '/api/admin/trash'],
       ['POST', '/api/admin/trash/restore', { id: '0000000000000_00000000' }],
       ['POST', '/api/admin/trash/purge', {}],
@@ -645,6 +672,11 @@ describe('full system: permission matrix', () => {
       ['DELETE', '/api/admin/update/staged/:id'],
       ['POST', '/api/admin/update/apply', { id: 'x', password: 'x' }],
       ['POST', '/api/admin/update/rollback', { dir: 'builtin', password: 'x' }],
+      ['GET', '/api/admin/backups'],
+      ['POST', '/api/admin/backups'],
+      ['GET', '/api/admin/backups/:name/download'],
+      ['DELETE', '/api/admin/backups/:name'],
+      ['POST', '/api/admin/backups/restore', { name: 'file-center-backup-20000101-000000.zip', password: 'x' }],
     ]
     const routes = app.routes.filter((r: any) => r.path.startsWith('/api/admin')).map((r: any) => `${r.method} ${r.path}`)
     expect(routes.filter((r: string) => !adminCalls.some(([m, p]) => `${m} ${p}` === r))).toEqual([])
@@ -669,7 +701,7 @@ describe('full system: CSRF', () => {
       ['POST', '/api/login', { username: 'admin', password: 'x' }],
       ['POST', '/api/logout'],
       ['POST', '/api/password', { current: 'test-admin-pass', next: 'hijacked-password' }],
-      ['POST', '/api/admin/users', { username: 'csrf-user', name: 'x', password: 'password123', role: 'admin', permissions: [], publicPermissions: [] }],
+      ['POST', '/api/admin/users', { username: 'csrf-user', name: 'x', password: 'harbor-lamp-42', role: 'admin', permissions: [], publicPermissions: [] }],
       ['PUT', '/api/admin/users/:username', { role: 'admin' }],
       ['DELETE', '/api/admin/users/:username'],
       ['POST', '/api/admin/trash/restore', { id: '0000000000000_00000000' }],
@@ -682,6 +714,9 @@ describe('full system: CSRF', () => {
       ['DELETE', '/api/admin/update/staged/:id'],
       ['POST', '/api/admin/update/apply', { id: 'x', password: 'x' }],
       ['POST', '/api/admin/update/rollback', { dir: 'builtin', password: 'x' }],
+      ['POST', '/api/admin/backups'],
+      ['DELETE', '/api/admin/backups/:name'],
+      ['POST', '/api/admin/backups/restore', { name: 'file-center-backup-20000101-000000.zip', password: 'test-admin-pass' }],
       ['POST', '/api/mkdir', { ...files, path: '/', name: 'csrf-dir' }],
       ['POST', '/api/newfile', { ...files, path: '/', name: 'csrf.txt' }],
       ['PUT', '/api/content', { ...files, path: '/matrix.txt', content: 'pwned' }],
@@ -1110,7 +1145,7 @@ describe('full system: users', () => {
     // the only admin stays an admin
     expect((await update('admin', { role: 'user' })).status).toBe(400)
     const make = (username: string, name = 'x') =>
-      admin.json('POST', '/api/admin/users', { username, name, password: 'password123', role: 'user', permissions: [], publicPermissions: [] })
+      admin.json('POST', '/api/admin/users', { username, name, password: 'harbor-lamp-42', role: 'user', permissions: [], publicPermissions: [] })
     for (const username of ['ab', 'bad name', 'x'.repeat(33), 'ไทย', '../up']) expect((await make(username)).status).toBe(400)
     expect((await make('SOMCHAI')).status).toBe(409)
     expect((await make('okname', 'x'.repeat(61))).status).toBe(400)
@@ -1118,7 +1153,7 @@ describe('full system: users', () => {
   test('a password reset or deletion ends the sessions of that user', async () => {
     const c = new Client()
     await c.start()
-    expect((await c.login('lifecycle', 'password123')).status).toBe(200)
+    expect((await c.login('lifecycle', 'harbor-lamp-42')).status).toBe(200)
     expect((await update('lifecycle', { password: 'reset-pass-99' })).status).toBe(200)
     expect((await c.json('GET', '/api/list?space=home&path=/')).status).toBe(401)
     await c.start() // the old session is gone, fetch a fresh one like the web app does
@@ -1187,9 +1222,276 @@ describe('full system: sessions & links', () => {
   })
 })
 
+describe('hardening: security headers', () => {
+  const PAGE_CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; " +
+    "media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; frame-src 'self'; object-src 'none'; base-uri 'self'; " +
+    "form-action 'self'; frame-ancestors 'self'"
+
+  test('the page, its scripts and its styles carry the CSP and Permissions-Policy', async () => {
+    const { config } = await import('../src/config')
+    const keep = config.webDir
+    const web = join(base, 'web-csp')
+    mkdirSync(join(web, 'assets'), { recursive: true })
+    writeFileSync(join(web, 'assets', 'app.js'), 'console.log(1)')
+    writeFileSync(join(web, 'assets', 'app.css'), 'body{}')
+    config.webDir = web
+    try {
+      for (const path of ['/', '/files/some/route', '/assets/app.js', '/assets/app.css', '/assets/missing.js']) {
+        const r = await guest.raw('GET', path)
+        expect(`${path} ${r.headers.get('content-security-policy')}`).toBe(`${path} ${PAGE_CSP}`)
+        expect(`${path} ${r.headers.get('permissions-policy')}`).toBe(`${path} camera=(), microphone=(), geolocation=()`)
+      }
+    } finally {
+      config.webDir = keep
+    }
+  })
+  test('downloads and the logo keep their own stricter CSP, untouched', async () => {
+    writeFileSync(storageAbs('csp.txt'), 'x')
+    const dl = await admin.raw('GET', '/api/download?space=home&path=/csp.txt')
+    expect(dl.headers.get('content-security-policy')).toBe("default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; sandbox")
+    // the PDF viewer gets no policy at all, so the page's one must not slip in either
+    writeFileSync(storageAbs('csp.pdf'), '%PDF-1.4')
+    const pdf = await admin.raw('GET', '/api/download?space=home&path=/csp.pdf&inline=1')
+    expect(pdf.headers.get('content-disposition')).toStartWith('inline')
+    expect(pdf.headers.get('content-security-policy')).toBeNull()
+    const logo = await guest.raw('GET', '/api/branding/logo')
+    expect(logo.status).toBe(200)
+    expect(logo.headers.get('content-security-policy')).toBe("default-src 'none'; style-src 'unsafe-inline'; sandbox")
+  })
+  test('HSTS only when the site runs on HTTPS, then on every response', async () => {
+    const { config } = await import('../src/config')
+    const paths = ['/', '/api/health', '/api/nope', '/api/download?space=home&path=/csp.txt', '/api/branding/logo']
+    for (const path of paths) expect((await admin.raw('GET', path)).headers.get('strict-transport-security')).toBeNull()
+    config.secureCookie = true
+    try {
+      for (const path of paths) {
+        expect(`${path} ${(await admin.raw('GET', path)).headers.get('strict-transport-security')}`).toBe(`${path} max-age=31536000`)
+      }
+    } finally {
+      config.secureCookie = false
+    }
+  })
+})
+
+describe('hardening: version only for those who need it', () => {
+  test('visitors and users get only the status, admins the full answer', async () => {
+    expect((await guest.json('GET', '/api/health')).data).toEqual({ status: 'ok' })
+    const u = new Client()
+    await u.start()
+    expect((await u.login('somchai', 'new-password-456')).status).toBe(200)
+    expect((await u.json('GET', '/api/health')).data).toEqual({ status: 'ok' })
+    const h = (await admin.json('GET', '/api/health')).data
+    const { config } = await import('../src/config')
+    expect(h).toMatchObject({ status: 'ok', version: config.version })
+    expect(Object.keys(h).sort()).toEqual(['boot', 'release', 'status', 'time', 'version'])
+  })
+  test('a faked forwarding header does not pass for this machine', async () => {
+    const { config } = await import('../src/config')
+    for (const [proxy, header] of [['true', 'x-forwarded-for'], ['cloudflare', 'cf-connecting-ip'], ['false', 'x-forwarded-for']] as const) {
+      config.trustProxy = proxy
+      try {
+        for (const ip of ['127.0.0.1', '::1', '::ffff:127.0.0.1']) {
+          const r = await guest.raw('GET', '/api/health', undefined, { [header]: ip })
+          expect(`${proxy} ${ip} ${JSON.stringify(await r.json())}`).toBe(`${proxy} ${ip} {"status":"ok"}`)
+        }
+      } finally {
+        config.trustProxy = 'false'
+      }
+    }
+  })
+  test('a request from this machine itself gets the version (the launcher depends on it)', async () => {
+    const { config } = await import('../src/config')
+    app.listen({ port: 0, hostname: '127.0.0.1' })
+    try {
+      const at = `http://127.0.0.1:${app.server.port}/api/health`
+      expect(await (await fetch(at)).json()).toMatchObject({ status: 'ok', version: config.version })
+      // a proxy on this machine connects from loopback too: what it forwards is not this machine
+      expect(await (await fetch(at, { headers: { 'cf-connecting-ip': '203.0.113.9' } })).json()).toEqual({ status: 'ok' })
+      expect(await (await fetch(at, { headers: { 'x-forwarded-for': '203.0.113.9' } })).json()).toEqual({ status: 'ok' })
+    } finally {
+      await app.stop()
+    }
+  })
+  test('the session tells the version to signed-in people only, and the password rule to everyone', async () => {
+    const { config } = await import('../src/config')
+    const visitor = (await new Client().json('GET', '/api/session')).data.config
+    expect(visitor.version).toBeUndefined()
+    expect(visitor.passwordMinLength).toBe(10)
+    expect((await admin.json('GET', '/api/session')).data.config.version).toBe(config.version)
+  })
+})
+
+describe('hardening: password policy', () => {
+  const make = (username: string, password: string) =>
+    admin.json('POST', '/api/admin/users', { username, name: username, password, role: 'user', permissions: ['read'], publicPermissions: [] })
+
+  test('new users need 10 characters, no username inside and no common password', async () => {
+    for (const [username, password] of [
+      ['policy-a', 'Nine-chr9'], // 9 characters
+      ['policy-username', 'Policy-Username'], // the username itself, other case
+      ['policy-c', 'my-POLICY-C-pass'], // contains it, other case
+      ['policy-d', 'QwertyUiop'], // common, other case
+      ['policy-e', '1234567890'],
+    ]) {
+      const r = await make(username, password)
+      expect(`${username} ${r.status}`).toBe(`${username} 400`)
+      expect(r.data.error).toMatch(/[฀-๿]/)
+    }
+    expect((await make('policy-ok', 'Tenchars10')).status).toBe(200)
+  })
+  test('common passwords of 10+ characters are refused too', async () => {
+    for (const password of ['password123', 'Password1234', '1q2w3e4r5t', '1QAZ2WSX3EDC', 'qwerty123456', 'iloveyou123', 'Administrator', 'welcome123', 'changeme123']) {
+      const r = await make('policy-long', password)
+      expect(`${password} ${r.status}`).toBe(`${password} 400`)
+      expect(r.data.error).toMatch(/[฀-๿]/)
+    }
+  })
+  test('one repeated character or a straight keyboard, number or abc run is refused', async () => {
+    for (const password of [
+      'aaaaaaaaaa', 'ZZZZZZZZZZZZ', '!!!!!!!!!!', '7777777777', // one character over and over
+      '0987654321', '01234567890', '9876543210', // numbers either way
+      'abcdefghij', 'JIHGFEDCBA', 'klmnopqrstuvw', // the alphabet either way
+      'asdfghjkl;', 'zxcvbnm,./', 'poiuytrewq', '`1234567890-=', 'qwertyuiopasdfghjkl', // keyboard rows
+    ]) {
+      const r = await make('policy-run', password)
+      expect(`${password} ${r.status}`).toBe(`${password} 400`)
+      expect(r.data.error).toMatch(/[฀-๿]/)
+    }
+    // almost a run is fine, and a password change follows the same rule
+    expect((await make('policy-run', 'abcdefghik')).status).toBe(200)
+    const c = new Client()
+    await c.start()
+    expect((await c.login('policy-run', 'abcdefghik')).status).toBe(200)
+    expect((await c.json('POST', '/api/password', { current: 'abcdefghik', next: 'mmmmmmmmmmmm' })).status).toBe(400)
+    expect((await c.json('POST', '/api/password', { current: 'abcdefghik', next: ';lkjhgfdsa' })).status).toBe(400)
+  })
+  test('admin-set passwords and password changes follow the same rule', async () => {
+    for (const password of ['short-pw1', 'xxPolicy-OKxx', 'qwertyuiop']) {
+      expect(`${password} ${(await admin.json('PUT', '/api/admin/users/policy-ok', { password })).status}`).toBe(`${password} 400`)
+    }
+    const c = new Client()
+    await c.start()
+    expect((await c.login('policy-ok', 'Tenchars10')).status).toBe(200)
+    for (const next of ['short-pw1', 'new-policy-ok-1', '1234567890']) {
+      expect(`${next} ${(await c.json('POST', '/api/password', { current: 'Tenchars10', next })).status}`).toBe(`${next} 400`)
+    }
+    expect((await c.json('POST', '/api/password', { current: 'Tenchars10', next: 'quiet-harbor-7' })).status).toBe(200)
+  })
+  test('passwords set before the rule keep working', async () => {
+    const { findUser, hashPassword } = await import('../src/auth')
+    findUser('policy-ok')!.passwordHash = await hashPassword('policy') // short, the username's start and common-ish
+    const c = new Client()
+    await c.start()
+    expect((await c.login('policy-ok', 'policy')).status).toBe(200)
+    // test-admin-pass contains "admin"; the admin still logs in with it
+    const a = new Client()
+    await a.start()
+    expect((await a.login('admin', 'test-admin-pass')).status).toBe(200)
+  })
+})
+
+describe('reserved username: guest', () => {
+  const make = (username: string) =>
+    admin.json('POST', '/api/admin/users', { username, name: username, password: 'quiet-harbor-7', role: 'user', permissions: ['read'], publicPermissions: [] })
+
+  test('no account may be named guest (visitors\' uploads go under that name), in any case', async () => {
+    for (const username of ['guest', 'GUEST', 'Guest', ' gUeSt ']) {
+      const r = await make(username)
+      expect(`${username} ${r.status}`).toBe(`${username} 400`)
+      expect(r.data.error).toMatch(/[฀-๿]/)
+    }
+    const users = (await admin.json('GET', '/api/admin/users')).data.users as any[]
+    expect(users.some(u => u.username.toLowerCase() === 'guest')).toBe(false)
+    // only the name itself is reserved
+    for (const username of ['guest2', 'my-guest']) expect(`${username} ${(await make(username)).status}`).toBe(`${username} 200`)
+  })
+})
+
+describe('hardening: visitors\' daily upload allowance', () => {
+  const announce = (c: Client, size: number, name = 'guest.bin') => c.json('POST', '/api/upload', { space: 'public', path: '/', name, size })
+
+  test('shared by all visitors, counted on announce, given back when cancelled or left unfinished', async () => {
+    const { config, paths } = await import('../src/config')
+    const { cleanStaleUploads, guestUploadUsage } = await import('../src/uploads')
+    const { JsonStore } = await import('../src/store')
+    const { utimesSync, readFileSync } = await import('node:fs')
+    const keep = config.guestUploadDailyBytes
+    await admin.json('PUT', '/api/admin/settings', { guestPermissions: ['read', 'download', 'batchdownload', 'upload'] })
+    const v1 = new Client()
+    const v2 = new Client()
+    await v1.start()
+    await v2.start()
+    config.guestUploadDailyBytes = guestUploadUsage().used + 100
+    try {
+      // announced at the same time, they still can not go past the allowance together
+      const all = await Promise.all([v1, v2, v1, v2, v1].map(c => announce(c, 40)))
+      expect(all.map(r => r.status).sort()).toEqual([200, 200, 429, 429, 429])
+      expect(all.find(r => r.status === 429)!.data.error).toMatch(/[฀-๿]/)
+      // signed-in people do not count and are not limited
+      const signedIn = await admin.json('POST', '/api/upload', { space: 'public', path: '/', name: 'admin.bin', size: 1000 })
+      expect(signedIn.status).toBe(200)
+      expect((await announce(v1, 40)).status).toBe(429)
+
+      const [a, b] = all.filter(r => r.status === 200).map(r => r.data.id as string)
+      const ownerOf = (id: string) => all.indexOf(all.find(r => r.data?.id === id)!) % 2 ? v2 : v1
+      // cancelled: given back
+      expect((await ownerOf(a).json('DELETE', `/api/upload/${a}`)).status).toBe(200)
+      const d = await announce(v1, 40)
+      expect(d.status).toBe(200)
+      expect((await announce(v2, 40)).status).toBe(429)
+      // completed: stays counted
+      expect((await putChunk(ownerOf(b), b, 0, new Uint8Array(40))).status).toBe(200)
+      expect((await ownerOf(b).json('POST', `/api/upload/${b}/complete`)).status).toBe(200)
+      expect((await announce(v2, 40)).status).toBe(429)
+      // never completed: given back when the stale upload is cleaned up
+      const old = new Date(Date.now() - config.uploadStaleMs - 60_000)
+      utimesSync(join(paths.tmp, d.data.id, 'meta.json'), old, old)
+      cleanStaleUploads()
+      expect((await announce(v2, 40)).status).toBe(200)
+      // the count is kept in DATA_DIR
+      await JsonStore.flushAll()
+      const stored = JSON.parse(readFileSync(paths.guestUploads, 'utf8'))
+      expect(stored).toEqual({ day: guestUploadUsage().day, bytes: guestUploadUsage().used })
+      expect(guestUploadUsage().used).toBe(config.guestUploadDailyBytes - 20)
+
+      // 0 = visitors can not upload at all
+      config.guestUploadDailyBytes = 0
+      expect((await announce(v1, 0)).status).toBe(429)
+      expect((await admin.json('POST', '/api/upload', { space: 'public', path: '/', name: 'admin.bin', size: 1 })).status).toBe(200)
+    } finally {
+      config.guestUploadDailyBytes = keep
+      await admin.json('PUT', '/api/admin/settings', { guestPermissions: ['read', 'download', 'batchdownload'] })
+    }
+  })
+  test('the count survives a restart and starts again the next day', () => {
+    const dir = join(base, 'guest-quota-restart')
+    mkdirSync(dir, { recursive: true })
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const dayOf = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+    const usageAfterStart = (stored: unknown) => {
+      writeFileSync(join(dir, 'guest-uploads.json'), JSON.stringify(stored))
+      const code = `const { guestUploadUsage } = await import(${JSON.stringify(join(import.meta.dir, '..', 'src', 'uploads.ts'))}); console.log(JSON.stringify(guestUploadUsage()))`
+      const r = Bun.spawnSync([process.execPath, '-e', code], {
+        env: { ...process.env, DATA_DIR: dir, STORAGE_DIR: join(dir, 'storage'), GUEST_UPLOAD_DAILY_BYTES: '500' },
+      })
+      expect(r.exitCode).toBe(0)
+      return JSON.parse(r.stdout.toString().trim().split('\n').at(-1)!)
+    }
+    const today = new Date()
+    expect(usageAfterStart({ day: dayOf(today), bytes: 300 })).toEqual({ day: dayOf(today), used: 300, limit: 500 })
+    const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 12)
+    expect(usageAfterStart({ day: dayOf(yesterday), bytes: 300 }).used).toBe(0)
+  })
+})
+
 describe('admin', () => {
   test('status, activity, settings, logo', async () => {
-    const st = await admin.json('GET', '/api/admin/status')
+    let st = await admin.json('GET', '/api/admin/status')
+    // files are counted in the background: the first call answers before the count is done
+    for (let i = 0; i < 250 && st.data.stale; i++) {
+      await Bun.sleep(20)
+      st = await admin.json('GET', '/api/admin/status')
+    }
     expect(st.status).toBe(200)
     expect(st.data.storage.files).toBeGreaterThan(0)
     const act = await admin.json('GET', '/api/admin/activity?action=upload')

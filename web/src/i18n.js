@@ -1,3 +1,4 @@
+import { watch } from 'vue'
 import { createI18n } from 'vue-i18n'
 
 const th = {
@@ -8,20 +9,33 @@ const th = {
     folder: 'โฟลเดอร์', remove: 'นำออก', edit: 'แก้ไข', open: 'เปิด', saved: 'บันทึกแล้ว', never: 'ยังไม่เคย',
     unknownError: 'เกิดข้อผิดพลาด กรุณาลองใหม่', cannotConnect: 'ไม่สามารถเชื่อมต่อระบบได้ กรุณารีเฟรชหน้าเว็บ',
   },
+  // texts the page writes itself when the server gave none (no answer, or an answer that is not JSON)
+  api: {
+    noConnection: 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้', failed: 'เกิดข้อผิดพลาด ({status})', uploadFailed: 'อัปโหลดไม่สำเร็จ ({status})',
+    connectionLost: 'การเชื่อมต่อขัดข้อง', canceled: 'ยกเลิกแล้ว',
+    signedOut: 'เซสชันหมดอายุแล้ว กรุณาเข้าสู่ระบบใหม่แล้วดาวน์โหลดอีกครั้ง', mustChangePassword: 'กรุณาเปลี่ยนรหัสผ่านก่อนใช้งาน',
+    forbidden: 'ไม่มีสิทธิ์ทำรายการนี้',
+  },
   nav: {
     files: 'ไฟล์ของฉัน', dashboard: 'ภาพรวมระบบ', users: 'ผู้ใช้', activity: 'ประวัติการใช้งาน', trash: 'ถังขยะ',
-    settings: 'ตั้งค่า', update: 'อัปเดตระบบ', login: 'เข้าสู่ระบบ', logout: 'ออกจากระบบ', changePassword: 'เปลี่ยนรหัสผ่าน',
+    settings: 'ตั้งค่า', update: 'อัปเดตระบบ', backup: 'สำรองข้อมูล', logs: 'บันทึกระบบ', login: 'เข้าสู่ระบบ', logout: 'ออกจากระบบ', changePassword: 'เปลี่ยนรหัสผ่าน',
     language: 'ภาษา', theme: 'ธีม', themeLight: 'โหมดสว่าง', themeDark: 'โหมดมืด', themeAuto: 'ตามระบบ',
     publicPage: 'หน้าสาธารณะ', publicFolder: 'โฟลเดอร์สาธารณะ', admin: 'ผู้ดูแลระบบ',
   },
   login: {
     title: 'เข้าสู่ระบบ', subtitle: 'กรอกชื่อผู้ใช้และรหัสผ่านเพื่อจัดการไฟล์', username: 'ชื่อผู้ใช้', password: 'รหัสผ่าน',
     submit: 'เข้าสู่ระบบ', failed: 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง', backToPublic: 'กลับไปหน้าดาวน์โหลด',
+    locked: 'พยายามเข้าสู่ระบบผิดหลายครั้ง กรุณารอ {seconds} วินาทีแล้วลองใหม่',
   },
   profile: {
-    current: 'รหัสผ่านปัจจุบัน', new: 'รหัสผ่านใหม่', confirm: 'ยืนยันรหัสผ่านใหม่', hint: 'อย่างน้อย 8 ตัวอักษร',
+    current: 'รหัสผ่านปัจจุบัน', new: 'รหัสผ่านใหม่', confirm: 'ยืนยันรหัสผ่านใหม่',
     mismatch: 'รหัสผ่านไม่ตรงกัน', done: 'เปลี่ยนรหัสผ่านแล้ว',
     mustChange: 'บัญชีนี้ยังใช้รหัสผ่านเริ่มต้นที่ระบบสร้างให้ กรุณาตั้งรหัสผ่านใหม่ก่อนใช้งานต่อ',
+  },
+  password: {
+    rule: 'อย่างน้อย {n} ตัวอักษร ไม่ซ้ำกับชื่อผู้ใช้ และไม่ใช่รหัสผ่านที่ใช้กันทั่วไป',
+    lengthOk: 'ยาว {len} ตัวอักษร', tooShort: 'ยาว {len} ตัวอักษร ต้องมีอย่างน้อย {n}',
+    noUsername: 'ไม่มีชื่อผู้ใช้อยู่ในรหัสผ่าน', hasUsername: 'มีชื่อผู้ใช้อยู่ในรหัสผ่าน',
   },
   files: {
     emptyTitle: 'โฟลเดอร์นี้ยังว่างอยู่', emptyText: 'ลากไฟล์มาวางที่นี่ หรือกดปุ่มอัปโหลดเพื่อเพิ่มไฟล์',
@@ -59,6 +73,7 @@ const th = {
     publicFiles: 'ไฟล์สาธารณะ', trash: 'ในถังขยะ', users: 'ผู้ใช้', uploading: 'กำลังอัปโหลด {n} รายการ',
     backup: 'การสำรองข้อมูล', backupOk: 'สำเร็จ', backupFailed: 'ล้มเหลว', noBackup: 'ยังไม่มีบันทึกการสำรองข้อมูล',
     system: 'ระบบ', uptime: 'เปิดมา {time}',
+    counting: 'กำลังนับ…', countedAt: 'นับล่าสุด {time}', viewLogs: 'ดูบันทึกระบบ',
   },
   users: {
     subtitle: 'จัดการบัญชีผู้ใช้ โฟลเดอร์ส่วนตัว และสิทธิ์', add: 'เพิ่มผู้ใช้', edit: 'แก้ไขผู้ใช้', delete: 'ลบผู้ใช้',
@@ -67,10 +82,12 @@ const th = {
     keepPassword: 'เว้นว่างไว้ถ้าไม่เปลี่ยน', ownPerms: 'สิทธิ์ในโฟลเดอร์ของตัวเอง', publicPerms: 'สิทธิ์ในโฟลเดอร์สาธารณะ',
     publicHint: 'ถ้าไม่เลือกอะไรเลย ผู้ใช้จะไม่เห็นเมนูโฟลเดอร์สาธารณะ', adminHint: 'ผู้ดูแลระบบเห็นและจัดการได้ทุกโฟลเดอร์',
     useThisFolder: 'ใช้โฟลเดอร์นี้',
+    guestReserved: 'ชื่อ "guest" สงวนไว้ให้ผู้เยี่ยมชมหน้าสาธารณะ ใช้เป็นชื่อผู้ใช้ไม่ได้ กรุณาเลือกชื่ออื่น',
   },
   activity: {
     subtitle: 'ใครเข้าสู่ระบบ อัปโหลด ดาวน์โหลด ลบ หรือแก้ไขอะไรบ้าง', search: 'ค้นหาชื่อไฟล์หรือรายละเอียด',
-    user: 'ผู้ใช้', action: 'การกระทำ', time: 'เวลา', target: 'รายการ', none: 'ไม่พบประวัติ', more: 'แสดงเพิ่ม',
+    user: 'ผู้ใช้', action: 'การกระทำ', time: 'เวลา', target: 'รายการ', none: 'ไม่พบประวัติ', more: 'แสดงเพิ่ม', event: 'เหตุการณ์',
+    export: 'ส่งออก CSV', exportHint: 'ดาวน์โหลดประวัติตามตัวกรองที่ตั้งไว้ เป็นไฟล์ CSV เปิดด้วย Excel ได้',
   },
   action: {
     login: 'เข้าสู่ระบบ', 'login-failed': 'เข้าสู่ระบบไม่สำเร็จ', logout: 'ออกจากระบบ', upload: 'อัปโหลด', download: 'ดาวน์โหลด',
@@ -79,6 +96,15 @@ const th = {
     'password-change': 'เปลี่ยนรหัสผ่าน', 'user-create': 'เพิ่มผู้ใช้', 'user-update': 'แก้ไขผู้ใช้', 'user-delete': 'ลบผู้ใช้',
     'settings-update': 'แก้ไขการตั้งค่า', 'logo-update': 'เปลี่ยนโลโก้', 'logo-remove': 'ลบโลโก้',
     'update-stage': 'ตรวจแพ็กเกจอัปเดต', 'update-apply': 'อัปเดตระบบ', 'update-rollback': 'ย้อนเวอร์ชันระบบ', 'update-denied': 'ยืนยันอัปเดตไม่สำเร็จ',
+    'backup-create': 'สำรองข้อมูล', 'backup-download': 'ดาวน์โหลดไฟล์สำรอง', 'backup-delete': 'ลบไฟล์สำรอง',
+    'backup-restore': 'กู้คืนข้อมูลจากไฟล์สำรอง', 'backup-restore-denied': 'ยืนยันกู้คืนไม่สำเร็จ',
+    'logs-download': 'ดาวน์โหลดบันทึกระบบ', 'activity-export': 'ส่งออกประวัติการใช้งาน',
+  },
+  logs: {
+    subtitle: 'ข้อผิดพลาดและเหตุการณ์ของเซิร์ฟเวอร์ ดูได้จากที่นี่โดยไม่ต้องเข้าเครื่อง server', search: 'ค้นหาเหตุการณ์หรือรายละเอียด',
+    allLevels: 'ทุกระดับ', levelTitle: 'ระดับ', time: 'เวลา', event: 'เหตุการณ์', detail: 'รายละเอียด',
+    level: { info: 'ข้อมูล', warn: 'คำเตือน', error: 'ข้อผิดพลาด' },
+    none: 'ไม่พบบันทึก', more: 'แสดงเพิ่ม', download: 'ดาวน์โหลด log ทั้งหมด (.zip)', stack: 'ลำดับการเรียก (stack trace)',
   },
   trash: {
     subtitle: 'รายการที่ถูกลบจะอยู่ที่นี่ {days} วันก่อนถูกลบถาวร กู้คืนกลับตำแหน่งเดิมได้', empty: 'ล้างถังขยะ',
@@ -89,24 +115,51 @@ const th = {
   update: {
     subtitle: 'อัปเดตระบบโดยโยนไฟล์แพ็กเกจ (.zip) ลงในหน้านี้ ไม่ต้อง FTP และไม่ต้องเข้าเครื่อง server',
     current: 'เวอร์ชันที่ใช้อยู่', source: 'ที่มา', sourceBuiltin: 'เวอร์ชันที่มากับระบบ', sourceUpdate: 'อัปเดตผ่านเว็บ',
+    signing: 'ลายเซ็นแพ็กเกจ', signingRequired: 'บังคับ: รับเฉพาะแพ็กเกจที่ลงนามด้วยกุญแจของคุณ',
+    signingOptional: 'ไม่บังคับ (ยังไม่ได้ตั้ง UPDATE_PUBLIC_KEY)',
+    signature: 'ลายเซ็น', signedVerified: 'ลงนามแล้ว ตรวจลายเซ็นผ่าน', signedUnchecked: 'ลงนามแล้ว (ระบบยังไม่ได้ตั้งกุญแจตรวจ)',
+    unsigned: 'แพ็กเกจไม่ได้ลงนาม',
+    unsignedBody: 'ระบบตรวจไม่ได้ว่าใครสร้างแพ็กเกจนี้ ติดตั้งเฉพาะเมื่อคุณสร้างเองหรือมั่นใจในที่มา ตั้ง UPDATE_PUBLIC_KEY เพื่อรับเฉพาะแพ็กเกจที่ลงนามแล้ว',
     notSupervised: 'ระบบนี้ไม่ได้เริ่มผ่านตัวควบคุม จึงรีสตาร์ตตัวเองไม่ได้ ให้เริ่มด้วย "bun start" หรือ Docker (docker compose up -d --build) แล้วกลับมาที่หน้านี้',
     disabled: 'ปิดการอัปเดตผ่านหน้าเว็บอยู่ (ตั้งค่า WEB_UPDATE=false)',
     dropTitle: 'ลากไฟล์แพ็กเกจ .zip มาวางที่นี่ หรือคลิกเพื่อเลือกไฟล์',
     dropHint: 'สร้างแพ็กเกจด้วยคำสั่ง "bun run package" ได้ไฟล์ file-center-x.y.z.zip ขนาดไม่เกิน {max}',
-    uploading: 'กำลังอัปโหลดแพ็กเกจ {pct}%', checking: 'กำลังตรวจแพ็กเกจและลองเปิดระบบเวอร์ชันใหม่ (ไม่กระทบระบบที่ใช้อยู่)…',
+    uploading: 'กำลังอัปโหลดแพ็กเกจ {pct}%', checking: 'กำลังตรวจไฟล์ในแพ็กเกจ (ยังไม่รันโค้ดใด ๆ ของแพ็กเกจ)…',
     ready: 'แพ็กเกจพร้อมติดตั้ง', newVersion: 'เวอร์ชันใหม่', builtAt: 'สร้างเมื่อ', files: 'จำนวนไฟล์', notes: 'หมายเหตุ',
-    checked: 'ตรวจครบแล้ว: ไฟล์ครบและตรงกับ manifest (SHA-256) และเวอร์ชันใหม่เปิดทำงานได้จริง',
+    checked: 'ตรวจไฟล์ครบแล้ว: ไฟล์ครบและตรงกับ manifest (SHA-256) เมื่อกดติดตั้ง ระบบจะลองเปิดเวอร์ชันใหม่แยกต่างหากก่อน (ใช้เวลาไม่เกินครึ่งนาที) ถ้าเปิดไม่ขึ้นจะไม่ติดตั้ง',
     restartNote: 'ระบบจะรีสตาร์ตประมาณ 2–5 วินาที ผู้ที่กำลังใช้งานจะต่อใหม่เองอัตโนมัติ ข้อมูลและไฟล์ทั้งหมดไม่ถูกแตะต้อง ถ้าเวอร์ชันใหม่เปิดไม่ขึ้น ระบบจะย้อนกลับเวอร์ชันเดิมให้เอง',
     uploadsWarn: 'ตอนนี้มีการอัปโหลด {n} รายการค้างอยู่ การรีสตาร์ตอาจทำให้บางรายการต้องส่งใหม่',
     password: 'ยืนยันด้วยรหัสผ่านของคุณ', install: 'ติดตั้งและรีสตาร์ต', discard: 'ยกเลิก',
     installing: 'กำลังรีสตาร์ตระบบ…', waiting: 'รอระบบกลับมา อย่าปิดหน้านี้', done: 'อัปเดตเป็นเวอร์ชัน {v} แล้ว กำลังโหลดหน้าใหม่…',
     rolledBack: 'เวอร์ชันใหม่เปิดไม่ขึ้น ระบบย้อนกลับเป็นเวอร์ชัน {v} แล้ว', timeout: 'รอนานเกินไป กรุณารีเฟรชหน้าเว็บแล้วตรวจสอบสถานะ',
     pending: 'เวอร์ชัน {v} เพิ่งติดตั้ง กำลังเฝ้าดูว่าทำงานปกติ หากมีปัญหาจะย้อนกลับเอง',
+    refused: 'ใช้แพ็กเกจ {name} ไม่ได้',
     lastOk: 'ติดตั้งเวอร์ชัน {v} สำเร็จ', lastFail: 'ติดตั้งเวอร์ชัน {v} ไม่สำเร็จและย้อนกลับแล้ว: {msg}',
     versions: 'เวอร์ชันที่ย้อนกลับได้', none: 'ยังไม่มีเวอร์ชันเก่าให้ย้อนกลับ (ระบบเก็บไว้ 2 เวอร์ชันล่าสุด)',
     builtin: 'เวอร์ชันที่มากับระบบ', rollback: 'ย้อนกลับ', rollbackTitle: 'ย้อนกลับเป็นเวอร์ชัน {v}?',
     rollbackBody: 'ระบบจะรีสตาร์ตเป็นเวอร์ชัน {v} ข้อมูลและไฟล์ไม่ถูกแตะต้อง',
-    how: 'วิธีสร้างแพ็กเกจ', howBody: 'บนเครื่องที่มีโค้ด: เพิ่มเลข "version" ใน package.json แล้วรัน bun run package จะได้ไฟล์ใน dist-update/',
+    how: 'วิธีสร้างแพ็กเกจ', howBody: 'บนเครื่องที่มีโค้ด: เพิ่มเลข "version" ใน package.json แล้วรัน bun run package --sign ~/file-center-keys/update-signing.key จะได้ไฟล์ที่ลงนามแล้วใน dist-update/ (ไม่ใส่ --sign จะได้แพ็กเกจที่ไม่ได้ลงนาม ซึ่งระบบรับเฉพาะเมื่อไม่ได้ตั้ง UPDATE_PUBLIC_KEY)',
+  },
+  backup: {
+    subtitle: 'สำรองบัญชีผู้ใช้ รหัสผ่าน การตั้งค่า โลโก้ และประวัติการใช้งาน ไว้กู้คืนเมื่อข้อมูลเสียหายหรือตั้งค่าผิด',
+    status: 'สถานะ', lastSuccess: 'สำรองสำเร็จล่าสุด', lastAttempt: 'ผลครั้งล่าสุด', ok: 'สำเร็จ', failed: 'ล้มเหลว',
+    schedule: 'สำรองอัตโนมัติ', daily: 'ทุกวันเวลา {time}', off: 'ปิดอยู่ (BACKUP_HOUR=off)',
+    dir: 'ที่เก็บไฟล์สำรอง', keep: 'จำนวนที่เก็บไว้', keepN: '{n} ไฟล์ล่าสุด',
+    files: 'ไฟล์ที่ผู้ใช้อัปโหลด', filesIn: 'รวมอยู่ในไฟล์สำรอง', filesOut: 'ไม่รวม (ตั้ง BACKUP_INCLUDE_FILES=true เพื่อรวม)',
+    sameDiskTitle: 'ไฟล์สำรองอยู่บนดิสก์เดียวกับข้อมูลของระบบ',
+    sameDisk: 'ถ้าดิสก์นี้เสีย ไฟล์สำรองจะหายไปพร้อมข้อมูล ควรตั้ง BACKUP_DIR ให้ชี้ไปดิสก์อื่น เช่น ใน Docker เพิ่ม volume "/mnt/backup-disk/file-center:/backups" ใน docker-compose.yml แล้วใส่ BACKUP_DIR=/backups ใน .env จากนั้นเริ่มระบบใหม่',
+    now: 'สำรองตอนนี้', created: 'สำรองข้อมูลแล้ว ({size})',
+    list: 'ไฟล์สำรองข้อมูล', none: 'ยังไม่มีไฟล์สำรองข้อมูล กด "สำรองตอนนี้" เพื่อสร้างไฟล์แรก',
+    deleteTitle: 'ลบไฟล์สำรองนี้?', deleteBody: 'ลบ {name} ถาวร ไม่สามารถนำกลับมาได้อีก', deleted: 'ลบไฟล์สำรองแล้ว',
+    restore: 'กู้คืน', restoreTitle: 'กู้คืนข้อมูลของวันที่ {date}?', restoreIntro: 'สิ่งต่อไปนี้จะถูกแทนที่ด้วยข้อมูลในไฟล์สำรอง:',
+    restoreUsers: 'บัญชีผู้ใช้และรหัสผ่าน (ผู้ใช้ที่เพิ่มหลังวันนั้นจะหายไป รหัสผ่านที่เปลี่ยนหลังวันนั้นจะกลับเป็นรหัสเดิม)',
+    restoreSettings: 'การตั้งค่าเว็บ (ชื่อ สี หน้าสาธารณะ)', restoreLogo: 'โลโก้',
+    restoreNotFiles: 'ไฟล์ที่อัปโหลดไว้ไม่ถูกแตะต้อง',
+    restoreSafety: 'ก่อนกู้คืน ระบบจะสำรองข้อมูลปัจจุบันไว้อีกหนึ่งไฟล์ ถ้ากู้คืนผิดก็กู้คืนจากไฟล์นั้นกลับมาได้',
+    restoreRestart: 'ระบบจะรีสตาร์ตประมาณ 2–5 วินาที หลังจากนั้นให้ใช้รหัสผ่านตามไฟล์สำรองในการเข้าสู่ระบบ',
+    password: 'ยืนยันด้วยรหัสผ่านของคุณ', restoreGo: 'กู้คืนและรีสตาร์ต',
+    restoring: 'กำลังกู้คืนข้อมูลและรีสตาร์ตระบบ…', waiting: 'รอระบบกลับมา อย่าปิดหน้านี้',
+    done: 'กู้คืนข้อมูลแล้ว กำลังโหลดหน้าใหม่…', timeout: 'รอนานเกินไป กรุณารีเฟรชหน้าเว็บแล้วตรวจสอบสถานะ',
   },
   settings: {
     subtitle: 'ปรับชื่อ สี โลโก้ และหน้าสาธารณะของเว็บ', brand: 'แบรนด์', appName: 'ชื่อเว็บ', color: 'สีหลัก', logo: 'โลโก้',
@@ -126,20 +179,32 @@ const en = {
     folder: 'Folder', remove: 'Remove', edit: 'Edit', open: 'Open', saved: 'Saved', never: 'Never',
     unknownError: 'Something went wrong. Please try again.', cannotConnect: 'Cannot reach the server. Please refresh the page.',
   },
+  api: {
+    noConnection: 'Cannot reach the server', failed: 'Something went wrong ({status})', uploadFailed: 'Upload failed ({status})',
+    connectionLost: 'The connection was lost', canceled: 'Canceled',
+    signedOut: 'Your session has expired. Please sign in again and download once more.', mustChangePassword: 'Please change your password before continuing.',
+    forbidden: 'You do not have permission to do this.',
+  },
   nav: {
     files: 'My files', dashboard: 'Dashboard', users: 'Users', activity: 'Activity', trash: 'Trash',
-    settings: 'Settings', update: 'System update', login: 'Sign in', logout: 'Sign out', changePassword: 'Change password',
+    settings: 'Settings', update: 'System update', backup: 'Backup', logs: 'System log', login: 'Sign in', logout: 'Sign out', changePassword: 'Change password',
     language: 'Language', theme: 'Theme', themeLight: 'Light', themeDark: 'Dark', themeAuto: 'System',
     publicPage: 'Public page', publicFolder: 'Public folder', admin: 'Administrator',
   },
   login: {
     title: 'Sign in', subtitle: 'Enter your username and password to manage files', username: 'Username', password: 'Password',
     submit: 'Sign in', failed: 'Wrong username or password', backToPublic: 'Back to downloads',
+    locked: 'Too many failed sign-ins. Wait {seconds} seconds and try again.',
   },
   profile: {
-    current: 'Current password', new: 'New password', confirm: 'Confirm new password', hint: 'At least 8 characters',
+    current: 'Current password', new: 'New password', confirm: 'Confirm new password',
     mismatch: 'Passwords do not match', done: 'Password changed',
     mustChange: 'This account still uses the generated first-run password. Please choose a new one to continue.',
+  },
+  password: {
+    rule: 'At least {n} characters, not the same as the username, and not a commonly used password',
+    lengthOk: '{len} characters long', tooShort: '{len} characters long, needs at least {n}',
+    noUsername: 'Does not contain the username', hasUsername: 'Contains the username',
   },
   files: {
     emptyTitle: 'This folder is empty', emptyText: 'Drop files here or press upload to add some',
@@ -177,6 +242,7 @@ const en = {
     publicFiles: 'Public files', trash: 'In trash', users: 'Users', uploading: '{n} upload(s) in progress',
     backup: 'Backup', backupOk: 'OK', backupFailed: 'Failed', noBackup: 'No backup recorded yet',
     system: 'System', uptime: 'up {time}',
+    counting: 'Counting…', countedAt: 'Last counted {time}', viewLogs: 'View system log',
   },
   users: {
     subtitle: 'Manage accounts, personal folders and permissions', add: 'Add user', edit: 'Edit user', delete: 'Delete user',
@@ -185,10 +251,12 @@ const en = {
     keepPassword: 'Leave empty to keep the current one', ownPerms: 'Permissions in their own folder', publicPerms: 'Permissions in the public folder',
     publicHint: 'With nothing selected the user will not see the public folder', adminHint: 'Administrators can see and manage every folder.',
     useThisFolder: 'Use this folder',
+    guestReserved: 'The name "guest" is reserved for visitors of the public page and can not be a username. Please choose another one.',
   },
   activity: {
     subtitle: 'Who signed in, uploaded, downloaded, deleted or changed what', search: 'Search file names or details',
-    user: 'User', action: 'Action', time: 'Time', target: 'Item', none: 'No activity found', more: 'Show more',
+    user: 'User', action: 'Action', time: 'Time', target: 'Item', none: 'No activity found', more: 'Show more', event: 'Event',
+    export: 'Export CSV', exportHint: 'Download the activity matching the current filters as a CSV file for Excel',
   },
   action: {
     login: 'Sign in', 'login-failed': 'Failed sign-in', logout: 'Sign out', upload: 'Upload', download: 'Download',
@@ -197,6 +265,15 @@ const en = {
     'password-change': 'Change password', 'user-create': 'Add user', 'user-update': 'Edit user', 'user-delete': 'Delete user',
     'settings-update': 'Change settings', 'logo-update': 'Change logo', 'logo-remove': 'Remove logo',
     'update-stage': 'Check update package', 'update-apply': 'Update system', 'update-rollback': 'Roll back system', 'update-denied': 'Update confirmation failed',
+    'backup-create': 'Back up', 'backup-download': 'Download backup', 'backup-delete': 'Delete backup',
+    'backup-restore': 'Restore from backup', 'backup-restore-denied': 'Restore confirmation failed',
+    'logs-download': 'Download system logs', 'activity-export': 'Export activity',
+  },
+  logs: {
+    subtitle: 'Errors and events of the server, readable here without logging into the server', search: 'Search events or details',
+    allLevels: 'All levels', levelTitle: 'Level', time: 'Time', event: 'Event', detail: 'Detail',
+    level: { info: 'Info', warn: 'Warning', error: 'Error' },
+    none: 'No log entries found', more: 'Show more', download: 'Download all logs (.zip)', stack: 'Stack trace',
   },
   trash: {
     subtitle: 'Deleted items stay here for {days} days before they are removed for good. You can restore them to their original place.',
@@ -207,24 +284,51 @@ const en = {
   update: {
     subtitle: 'Update the system by dropping a package (.zip) on this page: no FTP, no access to the server',
     current: 'Running version', source: 'Source', sourceBuiltin: 'Shipped with the system', sourceUpdate: 'Web update',
+    signing: 'Package signatures', signingRequired: 'Required: only packages signed with your key are accepted',
+    signingOptional: 'Not required (UPDATE_PUBLIC_KEY is not set)',
+    signature: 'Signature', signedVerified: 'Signed, signature verified', signedUnchecked: 'Signed (no verification key is set on this system)',
+    unsigned: 'The package is not signed',
+    unsignedBody: 'The system can not tell who built this package. Install it only if you built it yourself or trust where it came from. Set UPDATE_PUBLIC_KEY to accept signed packages only.',
     notSupervised: 'This instance was not started by the launcher, so it can not restart itself. Start it with "bun start" or Docker (docker compose up -d --build), then come back.',
     disabled: 'Updating from the web is turned off (WEB_UPDATE=false)',
     dropTitle: 'Drop the package .zip here, or click to choose a file',
     dropHint: 'Create it with "bun run package": file-center-x.y.z.zip, up to {max}',
-    uploading: 'Uploading package {pct}%', checking: 'Checking the package and test-starting the new version (the running system is not affected)…',
+    uploading: 'Uploading package {pct}%', checking: 'Checking the files in the package (none of its code runs yet)…',
     ready: 'Package ready to install', newVersion: 'New version', builtAt: 'Built', files: 'Files', notes: 'Notes',
-    checked: 'Verified: files are complete and match the manifest (SHA-256), and the new version really starts',
+    checked: 'Files verified: complete and matching the manifest (SHA-256). When you install, the new version is first test-started on its own (up to half a minute); if it does not start it is not installed.',
     restartNote: 'The system restarts for about 2–5 seconds and people using it reconnect on their own. Your data and files are not touched. If the new version does not come up, the system goes back to the old one by itself.',
     uploadsWarn: '{n} upload(s) are still in progress; a restart may make some of them start over.',
     password: 'Confirm with your password', install: 'Install and restart', discard: 'Cancel',
     installing: 'Restarting…', waiting: 'Waiting for the system to come back. Keep this page open.', done: 'Updated to version {v}. Reloading…',
     rolledBack: 'The new version did not start, so the system went back to version {v}', timeout: 'Waited too long. Refresh the page and check the status.',
     pending: 'Version {v} was just installed and is being watched. It rolls back by itself if it misbehaves.',
+    refused: 'Package {name} was not accepted',
     lastOk: 'Version {v} installed', lastFail: 'Version {v} failed and was rolled back: {msg}',
     versions: 'Versions you can go back to', none: 'No older version to go back to yet (the last 2 are kept)',
     builtin: 'Shipped with the system', rollback: 'Roll back', rollbackTitle: 'Go back to version {v}?',
     rollbackBody: 'The system restarts as version {v}. Data and files are not touched.',
-    how: 'Building a package', howBody: 'On a machine with the code: raise "version" in package.json and run bun run package. The file appears in dist-update/',
+    how: 'Building a package', howBody: 'On a machine with the code: raise "version" in package.json and run bun run package --sign ~/file-center-keys/update-signing.key. The signed file appears in dist-update/ (without --sign the package is unsigned, which is accepted only when UPDATE_PUBLIC_KEY is not set)',
+  },
+  backup: {
+    subtitle: 'Back up accounts, passwords, settings, the logo and the activity log, to restore after damage or a wrong change',
+    status: 'Status', lastSuccess: 'Last successful backup', lastAttempt: 'Last attempt', ok: 'OK', failed: 'Failed',
+    schedule: 'Automatic backup', daily: 'Every day at {time}', off: 'Off (BACKUP_HOUR=off)',
+    dir: 'Backups are kept in', keep: 'Backups kept', keepN: 'the latest {n}',
+    files: 'Uploaded files', filesIn: 'Included in backups', filesOut: 'Not included (set BACKUP_INCLUDE_FILES=true to include them)',
+    sameDiskTitle: 'Backups are on the same disk as the system data',
+    sameDisk: 'If this disk fails, the backups are lost along with the data. Point BACKUP_DIR at another disk, for example in Docker add the volume "/mnt/backup-disk/file-center:/backups" in docker-compose.yml, put BACKUP_DIR=/backups in .env, then start the system again.',
+    now: 'Back up now', created: 'Backup created ({size})',
+    list: 'Backup files', none: 'No backups yet. Press "Back up now" to create the first one.',
+    deleteTitle: 'Delete this backup?', deleteBody: 'Permanently delete {name}? This cannot be undone.', deleted: 'Backup deleted',
+    restore: 'Restore', restoreTitle: 'Restore the data of {date}?', restoreIntro: 'These are replaced with what the backup holds:',
+    restoreUsers: 'Accounts and passwords (users added since then disappear, passwords changed since then go back)',
+    restoreSettings: 'Site settings (name, colour, public page)', restoreLogo: 'Logo',
+    restoreNotFiles: 'Uploaded files are not touched',
+    restoreSafety: 'The current data is backed up first, so a wrong restore can be undone from that backup',
+    restoreRestart: 'The system restarts for about 2–5 seconds. Afterwards, sign in with the passwords from the backup.',
+    password: 'Confirm with your password', restoreGo: 'Restore and restart',
+    restoring: 'Restoring and restarting…', waiting: 'Waiting for the system to come back. Keep this page open.',
+    done: 'Data restored. Reloading…', timeout: 'Waited too long. Refresh the page and check the status.',
   },
   settings: {
     subtitle: 'Name, colour, logo and the public page', brand: 'Brand', appName: 'Site name', color: 'Primary colour', logo: 'Logo',
@@ -247,3 +351,12 @@ export const i18n = createI18n({
   missingWarn: false,
   fallbackWarn: false,
 })
+
+// A download link opens in the tab without the x-lang header, so the server reads the language from this cookie
+// to answer a failed download in it. Set at startup and every time the language changes (the store saves it there).
+function langCookie(locale) {
+  if (locale !== 'th' && locale !== 'en') return
+  const secure = location.protocol === 'https:' ? '; Secure' : ''
+  document.cookie = `fc_lang=${locale}; path=/; max-age=31536000; SameSite=Lax${secure}`
+}
+watch(i18n.global.locale, langCookie, { immediate: true })

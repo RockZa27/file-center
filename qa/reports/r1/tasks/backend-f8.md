@@ -1,0 +1,7 @@
+Security fix (finding F8 of round r1, confirmed): `POST /api/admin/update/stage` runs the uploaded package's `server.js` (the smoke test in `src/updater.ts`) with nothing more than an admin session. Someone holding a stolen admin cookie can therefore run their own code on the server without the password, although installing code is supposed to need the password again.
+
+Change it so no code from a package runs before the password step-up:
+- `stagePackage` only does the static checks (unzip, manifest, sizes and SHA-256, version gate) and returns the same fields as now plus `tested: false`.
+- `POST /api/admin/update/apply` checks the password first (as it does now), then runs the smoke test on the staged package, and installs and restarts only if it passes. A package whose server does not start is refused with 400 and the running version stays.
+- Keep the scratch data of the smoke test out of DATA_DIR's live files as it is now (it is already a separate temporary folder; keep it that way).
+- Tests: prove that `/stage` with a valid package whose `server.js` writes a marker file when it starts does NOT create the marker; prove that `/apply` (right password) refuses a package whose server throws at start, with the running version unchanged. The existing test "a server that does not start is caught before installing" must keep its name and still prove that such a package is never installed; change its steps to go through `/apply`. Do not remove or rename any other test.

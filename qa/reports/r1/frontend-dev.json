@@ -1,0 +1,1 @@
+{"agent":"frontend-dev","branch":"feature/backup-ui","base":"3623559","runIdFirst":"r1-frontend-1","runIdFinal":"r1-frontend-final","iterations":2,"notes":"BackupView.vue + web/src/restart.js shared by UpdateView and BackupView; checked in Chromium at 1200 and 375 px with a real restore; UpdateView install flow not run end to end"}

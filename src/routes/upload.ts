@@ -11,9 +11,10 @@ export const uploadRoutes = new Elysia({ prefix: '/api/upload' })
   .post('/', ({ user, body }) => {
     const a = need({ user, ip: '' }, body.space, 'upload')
     const relDir = (body.relativeDir ?? '').split('/').filter(Boolean)
-    if (relDir.length > 30) throw bad('โฟลเดอร์ซ้อนลึกเกินไป')
+    if (relDir.length > 30) throw bad('upload.too-deep')
     return initUpload({
       owner: user?.username ?? 'guest',
+      guest: !user,
       root: a.root,
       dir: normRel(body.path),
       relativeDir: relDir,

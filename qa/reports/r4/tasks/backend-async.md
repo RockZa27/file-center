@@ -1,0 +1,6 @@
+Two things still block every request while they run: copying (`copySync` in `src/fsx.ts`, which uses `fs.cpSync`) and searching (`GET /api/search` in `src/routes/files.ts`, a synchronous walk of up to 50,000 entries). Make both asynchronous, the way `treeStats` in `src/fsx.ts` already is (batches with a yield to the event loop).
+
+- Copy: `fs.promises.cp` (or an async walk) with the same rules as today: no copy of a folder into itself, never follow or write through symlinks, no overwrite (`errorOnExist`), the free-space check before copying stays. A copy that fails half way removes what it wrote.
+- Search: async walk, same limits (50,000 entries visited, 200 results, `truncated` flag), same answer shape, never leaves the space root (keep using `resolveIn` for the start, skip symlinks as `statEntry` does).
+- Tests like `tests/perf.test.ts`: while a big copy (e.g. a folder of ~20,000 small files made with hard links) and a search over ~50,000 entries run, `/api/list` keeps answering in under ~100 ms; plus correctness tests (copy result identical, search results unchanged, symlinks not followed, a failed copy leaves nothing behind).
+- Another backend-dev is changing every error message to codes in `src/` at the same time: do not touch messages or `HttpError` calls beyond what your change needs, so the branches merge cleanly.
