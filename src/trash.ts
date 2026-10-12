@@ -74,7 +74,7 @@ export function restore(idRaw: unknown): { meta: TrashMeta; restoredTo: string }
   const target = resolveIn(config.storageDir, meta.originalPath)
   ensureDir(dirname(target))
   const finalPath = uniquePath(target)
-  if (existsSync(finalPath)) throw conflict('มีรายการชื่อเดียวกันอยู่แล้ว')
+  if (existsSync(finalPath)) throw conflict('admin.trash-name-taken')
   moveSync(join(dir, 'item'), finalPath)
   rmSync(dir, { recursive: true, force: true })
   return { meta, restoredTo: storagePath(finalPath) }

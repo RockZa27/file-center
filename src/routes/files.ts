@@ -10,6 +10,7 @@ import {
   normRel, notFound, resolveIn, sameFile, statEntry, storagePath, treeStats, uniquePath, validName, within,
 } from '../fsx'
 import { log } from '../logger'
+import { type Lang, langOf, type MessageCode, text } from '../messages'
 import { moveToTrash } from '../trash'
 import { collectZipItems, unzipTo, zipStream } from '../zip'
 
@@ -17,7 +18,7 @@ const MAX_TEXT = 2 * 1024 * 1024
 
 /** the visitor page and the user folders live here: they may be copied, but never deleted, moved or renamed */
 function guardSystemFolder(abs: string) {
-  if (abs === paths.publicDir || abs === paths.usersDir) throw forbidden('โฟลเดอร์ระบบ ลบ ย้าย หรือเปลี่ยนชื่อไม่ได้')
+  if (abs === paths.publicDir || abs === paths.usersDir) throw forbidden('files.system-folder')
 }
 
 const spaceQ = t.Object({ space: t.String(), path: t.Optional(t.String()) })
@@ -27,10 +28,10 @@ const SAFE_INLINE = new Set([
 ])
 
 function items(input: string[], max = 2000): string[] {
-  if (!input.length || input.length > max) throw bad('จำนวนรายการไม่ถูกต้อง')
+  if (!input.length || input.length > max) throw bad('files.bad-count')
   return input.map(p => {
     const n = normRel(p)
-    if (n === '/') throw bad('ไม่สามารถทำรายการกับโฟลเดอร์หลักได้')
+    if (n === '/') throw bad('files.root-item')
     return n
   })
 }
@@ -83,8 +84,8 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     const a = need({ user, ip: '' }, query.space, 'read')
     const rel = normRel(query.path)
     const abs = resolveIn(a.root, rel)
-    if (!existsSync(abs)) throw notFound('ไม่พบโฟลเดอร์นี้')
-    if (!isDir(abs)) throw bad('พาธนี้ไม่ใช่โฟลเดอร์')
+    if (!existsSync(abs)) throw notFound('files.folder-not-found')
+    if (!isDir(abs)) throw bad('files.not-a-folder')
     return { path: rel, entries: listDir(abs, rel), permissions: [...a.perms] }
   }, { query: spaceQ })
 
@@ -93,7 +94,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     const a = need({ user, ip: '' }, query.space, 'read')
     const rel = normRel(query.path)
     const abs = resolveIn(a.root, rel)
-    if (!isDir(abs)) throw notFound('ไม่พบโฟลเดอร์นี้')
+    if (!isDir(abs)) throw notFound('files.folder-not-found')
     return { path: rel, entries: listDir(abs, rel).filter(e => e.type === 'dir') }
   }, { query: spaceQ })
 
@@ -125,10 +126,10 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
   .post('/mkdir', ({ user, ip, body }) => {
     const a = need({ user, ip }, body.space, 'write')
     const dir = resolveIn(a.root, normRel(body.path))
-    if (!isDir(dir)) throw notFound('ไม่พบโฟลเดอร์นี้')
+    if (!isDir(dir)) throw notFound('files.folder-not-found')
     const name = validName(body.name)
     const target = join(dir, name)
-    if (existsSync(target)) throw conflict('มีชื่อนี้อยู่แล้ว')
+    if (existsSync(target)) throw conflict('files.name-taken')
     mkdirSync(target)
     audit({ user: user?.username ?? 'guest', ip, action: 'mkdir', target: storagePath(target) })
     return { ok: true }
@@ -137,10 +138,10 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
   .post('/newfile', ({ user, ip, body }) => {
     const a = need({ user, ip }, body.space, 'write')
     const dir = resolveIn(a.root, normRel(body.path))
-    if (!isDir(dir)) throw notFound('ไม่พบโฟลเดอร์นี้')
+    if (!isDir(dir)) throw notFound('files.folder-not-found')
     const name = validName(body.name)
     const target = join(dir, name)
-    if (existsSync(target)) throw conflict('มีชื่อนี้อยู่แล้ว')
+    if (existsSync(target)) throw conflict('files.name-taken')
     writeFileSync(target, '')
     audit({ user: user?.username ?? 'guest', ip, action: 'create', target: storagePath(target) })
     return { ok: true }
@@ -151,7 +152,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     const abs = resolveIn(a.root, normRel(query.path))
     const st = existsSync(abs) ? statSync(abs) : null
     if (!st || !st.isFile()) throw notFound()
-    if (st.size > MAX_TEXT) throw new HttpError(413, 'ไฟล์ใหญ่เกินกว่าจะเปิดในหน้าเว็บ')
+    if (st.size > MAX_TEXT) throw new HttpError(413, 'files.too-big-to-open')
     return { content: await Bun.file(abs).text(), mtime: Math.round(st.mtimeMs) }
   }, { query: spaceQ })
 
@@ -160,7 +161,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     const rel = normRel(body.path)
     const abs = resolveIn(a.root, rel)
     if (!existsSync(abs) || !statSync(abs).isFile()) throw notFound()
-    if (Buffer.byteLength(body.content) > MAX_TEXT) throw new HttpError(413, 'ข้อความใหญ่เกินกำหนด')
+    if (Buffer.byteLength(body.content) > MAX_TEXT) throw new HttpError(413, 'files.text-too-big')
     await Bun.write(abs, body.content)
     audit({ user: user?.username ?? 'guest', ip, action: 'edit', target: storagePath(abs) })
     return { ok: true }
@@ -170,7 +171,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
   .post('/rename', ({ user, ip, body }) => {
     const a = need({ user, ip }, body.space, 'write')
     const rel = normRel(body.path)
-    if (rel === '/') throw bad('ไม่สามารถเปลี่ยนชื่อโฟลเดอร์หลักได้')
+    if (rel === '/') throw bad('files.rename-root')
     const from = resolveIn(a.root, rel)
     if (!existsSync(from)) throw notFound()
     guardSystemFolder(from)
@@ -178,20 +179,20 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     const to = join(dirname(from), name)
     if (to === from) return { ok: true }
     // "a.txt" -> "A.txt" is the same file on a case-insensitive disk, but a different one on Linux
-    if (existsSync(to) && !sameFile(from, to)) throw conflict('มีชื่อนี้อยู่แล้ว')
+    if (existsSync(to) && !sameFile(from, to)) throw conflict('files.name-taken')
     moveSync(from, to)
     audit({ user: user?.username ?? 'guest', ip, action: 'rename', target: storagePath(from), detail: name })
     return { ok: true }
   }, { body: t.Object({ space: t.String(), path: t.String(), name: t.String() }) })
 
-  .post('/copy', ({ user, ip, body }) => transfer('copy', user, ip, body), {
+  .post('/copy', ({ user, ip, body, request }) => transfer('copy', user, ip, body, langOf(request)), {
     body: t.Object({ space: t.String(), items: t.Array(t.String()), dest: t.String() }),
   })
-  .post('/move', ({ user, ip, body }) => transfer('move', user, ip, body), {
+  .post('/move', ({ user, ip, body, request }) => transfer('move', user, ip, body, langOf(request)), {
     body: t.Object({ space: t.String(), items: t.Array(t.String()), dest: t.String() }),
   })
 
-  .post('/delete', async ({ user, ip, body }) => {
+  .post('/delete', async ({ user, ip, body, request }) => {
     const a = need({ user, ip }, body.space, 'write')
     const failed: { path: string; error: string }[] = []
     let done = 0
@@ -204,7 +205,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
         done++
         audit({ user: user?.username ?? 'guest', ip, action: 'delete', target: storagePath(abs) })
       } catch (e) {
-        failed.push({ path: rel, error: itemError(e, 'ลบไม่สำเร็จ') })
+        failed.push({ path: rel, error: itemError(e, 'files.delete-failed', langOf(request)) })
       }
     }
     return { done, failed }
@@ -217,7 +218,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     const dir = resolveIn(a.root, dirRel)
     if (!isDir(dir)) throw notFound()
     const names = body.items.map(validName)
-    for (const n of names) if (!existsSync(join(dir, n))) throw notFound(`ไม่พบ ${n}`)
+    for (const n of names) if (!existsSync(join(dir, n))) throw notFound('files.item-missing', { name: n })
     let archive = validName(body.name || 'archive.zip')
     if (!archive.toLowerCase().endsWith('.zip')) archive += '.zip'
     const target = uniquePath(join(dir, archive))
@@ -239,7 +240,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     const a = need({ user, ip }, body.space, 'zip', 'write')
     const rel = normRel(body.path)
     const abs = resolveIn(a.root, rel)
-    if (!existsSync(abs) || !statSync(abs).isFile() || extname(abs).toLowerCase() !== '.zip') throw bad('ต้องเป็นไฟล์ .zip')
+    if (!existsSync(abs) || !statSync(abs).isFile() || extname(abs).toLowerCase() !== '.zip') throw bad('zip.not-zip')
     const folderName = basename(abs, extname(abs))
     const dest = uniquePath(join(dirname(abs), folderName))
     // never extract more than the disk can take while keeping the configured reserve free
@@ -253,7 +254,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     } catch (err) {
       // a half-extracted folder is useless; keeping it in the trash would only hold the disk space for weeks
       rmSync(dest, { recursive: true, force: true })
-      throw err instanceof HttpError ? err : bad('แตกไฟล์ไม่สำเร็จ ไฟล์ zip อาจเสียหายหรือไม่รองรับ')
+      throw err instanceof HttpError ? err : bad('zip.extract-failed')
     }
   }, { body: t.Object({ space: t.String(), path: t.String() }) })
 
@@ -276,7 +277,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     const dir = resolveIn(a.root, dirRel)
     if (!isDir(dir)) throw notFound()
     const names = body.items.map(validName)
-    for (const n of names) if (!existsSync(join(dir, n))) throw notFound(`ไม่พบ ${n}`)
+    for (const n of names) if (!existsSync(join(dir, n))) throw notFound('files.item-missing', { name: n })
     const token = randomBytes(18).toString('base64url')
     const now = Date.now()
     for (const [k, v] of batches) if (v.expires < now) batches.delete(k)
@@ -286,11 +287,11 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
 
   .get('/batch/:token', ({ user, ip, params }) => {
     const b = batches.get(params.token)
-    if (!b || b.expires < Date.now()) throw notFound('ลิงก์ดาวน์โหลดหมดอายุแล้ว')
-    if (b.owner !== (user?.username ?? 'guest')) throw new HttpError(403, 'ไม่มีสิทธิ์ดาวน์โหลด')
+    if (!b || b.expires < Date.now()) throw notFound('files.link-expired')
+    if (b.owner !== (user?.username ?? 'guest')) throw new HttpError(403, 'files.download-forbidden')
     // rights, the public page or the user's folder may have changed since the link was made
     const a = need({ user, ip }, b.space, 'download', 'batchdownload')
-    if (a.root !== b.root) throw new HttpError(403, 'ไม่มีสิทธิ์ดาวน์โหลด')
+    if (a.root !== b.root) throw new HttpError(403, 'files.download-forbidden')
     const dir = resolveIn(b.root, b.dir)
     const list = collectZipItems(dir, b.names)
     audit({ user: b.owner, ip, action: 'download-zip', target: storagePath(dir), detail: `${b.names.length} รายการ` })
@@ -309,18 +310,18 @@ function lstatExists(abs: string) {
   try { lstatSync(abs); return true } catch { return false }
 }
 
-/** what to tell the user about one failed item of a batch, never a raw error with server paths */
-function itemError(e: unknown, fallback: string) {
+/** what to tell the user (in their language) about one failed item of a batch, never a raw error with server paths */
+function itemError(e: unknown, fallback: MessageCode, lang: Lang) {
   const known = fromFsError(e)
   if (!known) log.error('file-item-failed', e)
-  return known?.message ?? fallback
+  return known ? text(lang, known.code, known.params) : text(lang, fallback)
 }
 
-async function transfer(kind: 'copy' | 'move', user: any, ip: string, body: { space: string; items: string[]; dest: string }) {
+async function transfer(kind: 'copy' | 'move', user: any, ip: string, body: { space: string; items: string[]; dest: string }, lang: Lang) {
   const a = need({ user, ip }, body.space, 'write')
   const destRel = normRel(body.dest)
   const destAbs = resolveIn(a.root, destRel)
-  if (!isDir(destAbs)) throw notFound('ไม่พบโฟลเดอร์ปลายทาง')
+  if (!isDir(destAbs)) throw notFound('files.dest-not-found')
   const failed: { path: string; error: string }[] = []
   let done = 0
   for (const rel of items(body.items)) {
@@ -330,9 +331,9 @@ async function transfer(kind: 'copy' | 'move', user: any, ip: string, body: { sp
       const to = join(destAbs, basename(from))
       if (kind === 'move') {
         guardSystemFolder(from)
-        if (to === from) throw conflict('ปลายทางเป็นโฟลเดอร์เดียวกัน')
-        if (isDir(from) && within(from, destAbs)) throw bad('ไม่สามารถย้ายโฟลเดอร์เข้าไปในตัวมันเองได้')
-        if (existsSync(to)) throw conflict('มีชื่อเดียวกันอยู่ในปลายทางแล้ว')
+        if (to === from) throw conflict('files.same-folder')
+        if (isDir(from) && within(from, destAbs)) throw bad('files.move-into-self')
+        if (existsSync(to)) throw conflict('files.dest-name-taken')
         moveSync(from, to)
       } else {
         // counting a big folder takes a while: other requests are answered meanwhile
@@ -342,7 +343,7 @@ async function transfer(kind: 'copy' | 'move', user: any, ip: string, body: { sp
       done++
       audit({ user: user?.username ?? 'guest', ip, action: kind, target: storagePath(from), detail: storagePath(destAbs) })
     } catch (e) {
-      failed.push({ path: rel, error: itemError(e, 'ทำรายการไม่สำเร็จ') })
+      failed.push({ path: rel, error: itemError(e, 'files.transfer-failed', lang) })
     }
   }
   return { done, failed }

@@ -51,9 +51,9 @@ function createdAtOf(name: string): string {
 
 /** the zip of a backup by its name; names with anything else in them (paths) are refused */
 export function backupPath(name: unknown): string {
-  if (typeof name !== 'string' || !BACKUP_NAME_RE.test(name)) throw bad('ชื่อไฟล์สำรองข้อมูลไม่ถูกต้อง')
+  if (typeof name !== 'string' || !BACKUP_NAME_RE.test(name)) throw bad('backup.bad-name')
   const abs = join(config.backupDir, name)
-  if (!existsSync(abs)) throw notFound('ไม่พบไฟล์สำรองข้อมูลนี้')
+  if (!existsSync(abs)) throw notFound('backup.not-found')
   return abs
 }
 
@@ -113,7 +113,7 @@ let busy = false
 export const backupRunning = () => busy
 
 async function exclusive<T>(fn: () => Promise<T>): Promise<T> {
-  if (busy) throw conflict('กำลังสำรองหรือกู้คืนข้อมูลอยู่ กรุณารอให้เสร็จก่อน')
+  if (busy) throw conflict('backup.busy')
   busy = true
   try { return await fn() } finally { busy = false }
 }
@@ -198,7 +198,7 @@ async function extractData(zipAbs: string, dest: string) {
         await entry.getData(new WritableStream<Uint8Array>({
           write(chunk) {
             total += chunk.length
-            if (total > RESTORE_MAX_BYTES) throw bad('ไฟล์สำรองข้อมูลนี้ใหญ่ผิดปกติ ยกเลิกการกู้คืน')
+            if (total > RESTORE_MAX_BYTES) throw bad('backup.too-big')
             for (let at = 0; at < chunk.length;) at += writeSync(fd, chunk, at)
           },
         }), { checkSignature: true })
@@ -207,7 +207,7 @@ async function extractData(zipAbs: string, dest: string) {
       }
     }
   } catch (err) {
-    throw fromFsError(err) ?? bad('อ่านไฟล์สำรองข้อมูลไม่ได้ (ไฟล์เสียหาย)')
+    throw fromFsError(err) ?? bad('backup.unreadable')
   } finally {
     await reader.close().catch(() => {})
   }
@@ -218,10 +218,10 @@ function checkData(dir: string) {
   const parse = (file: string) => { try { return JSON.parse(readFileSync(file, 'utf8')) } catch { return undefined } }
   const users = parse(join(dir, 'users.json'))?.users
   const admins = Array.isArray(users) ? users.filter(u => u?.role === 'admin' && typeof u.username === 'string' && typeof u.passwordHash === 'string') : []
-  if (!admins.length) throw bad('ไฟล์สำรองนี้ไม่มีข้อมูลผู้ใช้ที่ถูกต้อง หรือไม่มีผู้ดูแลระบบ จึงไม่กู้คืน')
+  if (!admins.length) throw bad('backup.no-admin')
   if (existsSync(join(dir, 'settings.json'))) {
     const s = parse(join(dir, 'settings.json'))
-    if (!s || typeof s !== 'object' || Array.isArray(s)) throw bad('ไฟล์ตั้งค่าในไฟล์สำรองเสียหาย จึงไม่กู้คืน')
+    if (!s || typeof s !== 'object' || Array.isArray(s)) throw bad('backup.bad-settings')
   }
 }
 

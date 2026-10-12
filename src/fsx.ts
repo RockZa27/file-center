@@ -4,17 +4,22 @@ import {
 import { lstat, readdir } from 'node:fs/promises'
 import { basename, dirname, extname, join, relative, sep } from 'node:path'
 import { config } from './config'
+import { type MessageCode, type Params, text } from './messages'
 
+/**
+ * An answer for the visitor: a code from the catalog in messages.ts and its params. The text is picked in the
+ * request's language when the answer is written; `message` is the Thai text, for logs.
+ */
 export class HttpError extends Error {
-  constructor(public status: number, message: string, public code?: string) {
-    super(message)
+  constructor(public status: number, public code: MessageCode, public params: Params = {}) {
+    super(text('th', code, params))
   }
 }
 
-export const bad = (m: string) => new HttpError(400, m)
-export const forbidden = (m = 'ไม่มีสิทธิ์ทำรายการนี้') => new HttpError(403, m)
-export const notFound = (m = 'ไม่พบรายการที่ระบุ') => new HttpError(404, m)
-export const conflict = (m: string) => new HttpError(409, m)
+export const bad = (code: MessageCode, params?: Params) => new HttpError(400, code, params)
+export const forbidden = (code: MessageCode = 'auth.forbidden', params?: Params) => new HttpError(403, code, params)
+export const notFound = (code: MessageCode = 'request.not-found', params?: Params) => new HttpError(404, code, params)
+export const conflict = (code: MessageCode, params?: Params) => new HttpError(409, code, params)
 
 const BAD_NAME_CHARS = /[<>:"|?*\\/\u0000-\u001f]/
 // file systems count bytes, not letters: a Thai letter takes 3, so a Thai name fits about 85 of them
@@ -29,11 +34,11 @@ function fit(stem: string, tail: string): string {
 }
 
 export function validName(name: unknown): string {
-  if (typeof name !== 'string') throw bad('ชื่อไม่ถูกต้อง')
+  if (typeof name !== 'string') throw bad('fs.bad-name')
   const n = name.trim()
-  if (!n || n === '.' || n === '..') throw bad('ชื่อไม่ถูกต้อง')
-  if (bytes(n) > NAME_MAX) throw bad('ชื่อยาวเกินไป (ภาษาไทยได้ประมาณ 85 ตัวอักษร ภาษาอังกฤษ 255 ตัวอักษร)')
-  if (BAD_NAME_CHARS.test(n)) throw bad('ชื่อห้ามมีอักขระ \\ / : * ? " < > |')
+  if (!n || n === '.' || n === '..') throw bad('fs.bad-name')
+  if (bytes(n) > NAME_MAX) throw bad('fs.name-too-long')
+  if (BAD_NAME_CHARS.test(n)) throw bad('fs.name-bad-chars')
   return n
 }
 
@@ -47,26 +52,26 @@ export function cleanName(name: string): string {
   return n === '' || n === '.' || n === '..' ? '_' : n
 }
 
-const FS_ERRORS: Record<string, [number, string]> = {
-  ENOENT: [404, 'ไม่พบรายการที่ระบุ'],
-  ENOTDIR: [404, 'ไม่พบโฟลเดอร์นี้'],
-  EISDIR: [400, 'รายการนี้เป็นโฟลเดอร์'],
-  EEXIST: [409, 'มีชื่อนี้อยู่แล้ว'],
-  ENOTEMPTY: [409, 'มีชื่อนี้อยู่แล้ว'],
-  ENAMETOOLONG: [400, 'ชื่อหรือพาธยาวเกินไป'],
-  ENOSPC: [507, 'พื้นที่จัดเก็บบนเซิร์ฟเวอร์เต็ม กรุณาติดต่อผู้ดูแลระบบ'],
-  EDQUOT: [507, 'พื้นที่จัดเก็บบนเซิร์ฟเวอร์เต็ม กรุณาติดต่อผู้ดูแลระบบ'],
-  EACCES: [403, 'เซิร์ฟเวอร์ไม่มีสิทธิ์เข้าถึงรายการนี้'],
-  EPERM: [403, 'เซิร์ฟเวอร์ไม่มีสิทธิ์เข้าถึงรายการนี้'],
-  EROFS: [403, 'พื้นที่จัดเก็บเป็นแบบอ่านอย่างเดียว'],
-  EBUSY: [409, 'รายการนี้กำลังถูกใช้งานอยู่'],
+const FS_ERRORS: Record<string, [number, MessageCode]> = {
+  ENOENT: [404, 'fs.not-found'],
+  ENOTDIR: [404, 'fs.not-a-folder'],
+  EISDIR: [400, 'fs.is-a-folder'],
+  EEXIST: [409, 'fs.exists'],
+  ENOTEMPTY: [409, 'fs.exists'],
+  ENAMETOOLONG: [400, 'fs.path-too-long'],
+  ENOSPC: [507, 'disk-full'],
+  EDQUOT: [507, 'disk-full'],
+  EACCES: [403, 'fs.no-access'],
+  EPERM: [403, 'fs.no-access'],
+  EROFS: [403, 'fs.read-only'],
+  EBUSY: [409, 'fs.busy'],
 }
 
 /** a clear HttpError for a file-system error (whose own message would show server paths), or null */
 export function fromFsError(err: unknown): HttpError | null {
   if (err instanceof HttpError) return err
   const known = FS_ERRORS[(err as any)?.code]
-  return known ? new HttpError(known[0], known[1], known[0] === 507 ? 'disk-full' : undefined) : null
+  return known ? new HttpError(known[0], known[1]) : null
 }
 
 /** "/users/bob/report.pdf": where an absolute path sits inside the storage, for logs and the trash */
@@ -86,11 +91,11 @@ export function sameFile(a: string, b: string) {
 /** "/a//b/./c" -> "/a/b/c". Rejects ".." and NUL. */
 export function normRel(input: unknown): string {
   if (input === undefined || input === null || input === '') return '/'
-  if (typeof input !== 'string' || input.includes('\u0000')) throw bad('พาธไม่ถูกต้อง')
+  if (typeof input !== 'string' || input.includes('\u0000')) throw bad('fs.bad-path')
   const parts: string[] = []
   for (const seg of input.replaceAll('\\', '/').split('/')) {
     if (!seg || seg === '.') continue
-    if (seg === '..') throw bad('พาธไม่ถูกต้อง')
+    if (seg === '..') throw bad('fs.bad-path')
     parts.push(seg)
   }
   return '/' + parts.join('/')
@@ -110,7 +115,7 @@ const within = (root: string, abs: string) => abs === root || abs.startsWith(roo
  */
 export function resolveIn(root: string, rel: string): string {
   const abs = join(root, ...rel.split('/').filter(Boolean))
-  if (!within(root, abs)) throw bad('พาธไม่ถูกต้อง')
+  if (!within(root, abs)) throw bad('fs.bad-path')
   let probe = abs
   while (!existsSync(probe)) {
     const up = dirname(probe)
@@ -166,7 +171,7 @@ export function uniquePath(abs: string): string {
     const candidate = join(dir, fit(stem, ` (${i})${ext}`))
     if (!existsSync(candidate)) return candidate
   }
-  throw conflict('ไม่สามารถตั้งชื่อใหม่ได้')
+  throw conflict('fs.no-free-name')
 }
 
 export function moveSync(from: string, to: string) {
@@ -183,7 +188,7 @@ export function copySync(from: string, to: string) {
   if (isDir(from)) {
     const rel = relative(from, to)
     if (!rel.startsWith('..') && !rel.startsWith(sep) && rel !== '') {
-      if (within(from, to)) throw bad('ไม่สามารถคัดลอกโฟลเดอร์เข้าไปในตัวมันเองได้')
+      if (within(from, to)) throw bad('files.copy-into-self')
     }
   }
   cpSync(from, to, { recursive: true, errorOnExist: true, force: false, dereference: false })
@@ -207,7 +212,7 @@ export function freeSpace(abs: string): number | null {
 export function ensureSpace(abs: string, size: number) {
   const free = freeSpace(abs)
   if (free !== null && free - size < config.minFreeSpace) {
-    throw new HttpError(507, 'พื้นที่จัดเก็บบนเซิร์ฟเวอร์ไม่พอ กรุณาติดต่อผู้ดูแลระบบ', 'disk-full')
+    throw new HttpError(507, 'disk-full')
   }
 }
 

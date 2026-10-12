@@ -158,7 +158,7 @@ describe('logs API', () => {
     expect(n).toBeGreaterThan(0)
     expect(logger.errorsSince(Date.now() + 60_000)).toBe(0)
     const status = await admin.json('GET', '/api/admin/status')
-    expect(status.data.warnings).toContainEqual({ level: 'warning', code: 'errors', message: `มี error ${n} รายการใน 24 ชั่วโมงที่ผ่านมา` })
+    expect(status.data.warnings).toContainEqual({ level: 'warning', code: 'errors', message: `มี error ${n} รายการใน 24 ชั่วโมงที่ผ่านมา`, params: { count: n } })
   })
 
   test('download: one zip with the system, launcher and activity logs', async () => {
