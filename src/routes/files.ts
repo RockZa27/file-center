@@ -6,7 +6,7 @@ import { audit } from '../audit'
 import { config, paths } from '../config'
 import { context, need } from '../context'
 import {
-  bad, conflict, copyTree, ensureSpace, forbidden, freeSpace, fromFsError, HttpError, isDir, joinRel, listDir, moveSync,
+  bad, conflict, copyTree, ensureSpace, forbidden, freeSpace, fromFsError, HttpError, isDir, joinRel, listDir, moveTree,
   normRel, notFound, resolveIn, sameFile, searchTree, storagePath, treeStats, uniquePath, validName, within,
 } from '../fsx'
 import { log } from '../logger'
@@ -154,7 +154,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
   }, { body: t.Object({ space: t.String(), path: t.String(), content: t.String() }) })
 
   // ───────────── rename / copy / move / delete ─────────────
-  .post('/rename', ({ user, ip, body }) => {
+  .post('/rename', async ({ user, ip, body }) => {
     const a = need({ user, ip }, body.space, 'write')
     const rel = normRel(body.path)
     if (rel === '/') throw bad('files.rename-root')
@@ -166,7 +166,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     if (to === from) return { ok: true }
     // "a.txt" -> "A.txt" is the same file on a case-insensitive disk, but a different one on Linux
     if (existsSync(to) && !sameFile(from, to)) throw conflict('files.name-taken')
-    moveSync(from, to)
+    await moveTree(from, to)
     audit({ user: user?.username ?? 'guest', ip, action: 'rename', target: storagePath(from), detail: name })
     return { ok: true }
   }, { body: t.Object({ space: t.String(), path: t.String(), name: t.String() }) })
@@ -320,7 +320,7 @@ async function transfer(kind: 'copy' | 'move', user: any, ip: string, body: { sp
         if (to === from) throw conflict('files.same-folder')
         if (isDir(from) && within(from, destAbs)) throw bad('files.move-into-self')
         if (existsSync(to)) throw conflict('files.dest-name-taken')
-        moveSync(from, to)
+        await moveTree(from, to)
       } else {
         // counting a big folder takes a while: other requests are answered meanwhile
         ensureSpace(destAbs, isDir(from) ? (await treeStats(from)).size : lstatSync(from).size)

@@ -41,7 +41,10 @@ const ERROR_PAGE_HEADERS = {
   'Cache-Control': 'no-store',
 }
 
-/** a small page for a failed download link: the message in the visitor's language, the code, and a way back */
+/**
+ * a small page for a failed download link: the message in the visitor's language, the status number and a way
+ * back. The internal code is for tools, not readers: it goes in the X-Error-Code header.
+ */
 export function errorPage(status: number, lang: Lang, code: MessageCode, params: Params): Response {
   const message = escapeHtml(text(lang, code, params))
   const html = `<!doctype html>
@@ -54,12 +57,12 @@ export function errorPage(status: number, lang: Lang, code: MessageCode, params:
 </head>
 <body>
 <h1>${message}</h1>
-<p><small>${escapeHtml(code)} (${status})</small></p>
+<p><small>${status}</small></p>
 <p><a href="/">${escapeHtml(text(lang, 'request.back-to-app'))}</a></p>
 </body>
 </html>
 `
-  return new Response(html, { status, headers: ERROR_PAGE_HEADERS })
+  return new Response(html, { status, headers: { ...ERROR_PAGE_HEADERS, 'X-Error-Code': code } })
 }
 
 /** Per-request context: who is calling, their session, and uniform JSON errors (a small page for download links). */

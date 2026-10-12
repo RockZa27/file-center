@@ -20,8 +20,8 @@ let paths: typeof import('../src/config').paths
 class Client {
   cookie = ''
   csrf = ''
-  async raw(method: string, path: string, body?: any) {
-    const h: Record<string, string> = {}
+  async raw(method: string, path: string, body?: any, headers: Record<string, string> = {}) {
+    const h: Record<string, string> = { ...headers }
     if (this.cookie) h.cookie = this.cookie
     if (this.csrf) h['x-csrf-token'] = this.csrf
     if (body !== undefined) h['content-type'] = 'application/json'
@@ -30,8 +30,8 @@ class Client {
     if (set) this.cookie = set.split(';')[0]
     return res
   }
-  async json(method: string, path: string, body?: any) {
-    const res = await this.raw(method, path, body)
+  async json(method: string, path: string, body?: any, headers: Record<string, string> = {}) {
+    const res = await this.raw(method, path, body, headers)
     return { status: res.status, data: (await res.json().catch(() => null)) as any }
   }
   async login(username: string, password: string) {
@@ -222,6 +222,45 @@ describe('backups (API)', () => {
       rmSync(join(config.storageDir, 'backup-me.txt'), { force: true })
     }
     expect((await admin.json('POST', '/api/admin/backups')).status).toBe(200)
+  })
+
+  test('the status message is in the language of the request; an old status file keeps its own', async () => {
+    const EN = { 'x-lang': 'en' }
+    const TH = { 'x-lang': 'th' }
+    const status = async (headers: Record<string, string>) => (await admin.json('GET', '/api/admin/backups', undefined, headers)).data.status
+    const saved = readFileSync(paths.backupStatus, 'utf8')
+    try {
+      expect((await admin.json('POST', '/api/admin/backups')).status).toBe(200)
+      // (the dashboard gives the same status: messages.test.ts, which runs after the storage tests count files)
+      expect((await status(EN)).message).toBe('The backup was made.')
+      expect((await status(TH)).message).toBe('สำรองข้อมูลสำเร็จ')
+      // the file keeps the code, and Thai for whoever opens it
+      expect(JSON.parse(readFileSync(paths.backupStatus, 'utf8'))).toMatchObject({ code: 'backup.done', message: 'สำรองข้อมูลสำเร็จ' })
+
+      // a failure: the reason is shown in the reader's language too
+      const keep = { files: config.backupIncludeFiles, free: config.minFreeSpace }
+      config.backupIncludeFiles = true
+      config.minFreeSpace = Number.MAX_SAFE_INTEGER
+      try {
+        expect((await admin.json('POST', '/api/admin/backups')).status).toBe(507)
+      } finally {
+        config.backupIncludeFiles = keep.files
+        config.minFreeSpace = keep.free
+      }
+      expect((await status(EN)).message).toBe('The backup failed: There is not enough storage space on the server. Please contact the administrator.')
+      expect((await status(TH)).message).toBe('สำรองข้อมูลไม่สำเร็จ: พื้นที่จัดเก็บบนเซิร์ฟเวอร์ไม่พอ กรุณาติดต่อผู้ดูแลระบบ')
+      const file = JSON.parse(readFileSync(paths.backupStatus, 'utf8'))
+      expect(file).toMatchObject({ status: 'failed', code: 'backup.failed', params: { reasonCode: 'disk-full' } })
+      expect(file.message).toBe('สำรองข้อมูลไม่สำเร็จ: พื้นที่จัดเก็บบนเซิร์ฟเวอร์ไม่พอ กรุณาติดต่อผู้ดูแลระบบ')
+
+      // written by a version before the codes: shown as it was stored, in either language
+      const old = { status: 'failed', lastSuccess: null, lastAttempt: new Date().toISOString(), message: 'สำรองข้อมูลไม่สำเร็จ: ข้อความเดิม', file: null, size: null }
+      writeFileSync(paths.backupStatus, JSON.stringify(old))
+      expect(await status(EN)).toEqual(old)
+      expect(await status(TH)).toEqual(old)
+    } finally {
+      writeFileSync(paths.backupStatus, saved)
+    }
   })
 
   test('the hourly schedule: once a day at BACKUP_HOUR, or when the last one is over 2 days old', async () => {

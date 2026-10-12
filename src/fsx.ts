@@ -1,10 +1,9 @@
-import {
-  cpSync, existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, renameSync, rmSync, statfsSync, statSync,
-} from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, statfsSync, statSync } from 'node:fs'
 import { constants as FS, type Stats } from 'node:fs'
-import { copyFile, lstat, mkdir, readdir, rm } from 'node:fs/promises'
+import { copyFile, lstat, mkdir, readdir, readlink, rename, rm, rmdir, symlink, unlink } from 'node:fs/promises'
 import { basename, dirname, extname, join, relative, sep } from 'node:path'
 import { config } from './config'
+import { log } from './logger'
 import { type MessageCode, type Params, text } from './messages'
 
 /**
@@ -178,26 +177,72 @@ export function uniquePath(abs: string): string {
   throw conflict('fs.no-free-name')
 }
 
-export function moveSync(from: string, to: string) {
+/**
+ * move a file, folder or link to `to`. One rename when both sit on the same disk. Across disks (EXDEV) the tree is
+ * copied with copyTree, without holding up other requests, and the source goes only once the copy is complete:
+ * a failed copy removes what it wrote and leaves the source as it was. Links move as links, never followed.
+ * `renameStep` is there for the tests: one disk can not produce EXDEV.
+ */
+export async function moveTree(from: string, to: string, renameStep: (from: string, to: string) => Promise<void> = rename) {
   try {
-    renameSync(from, to)
+    return await renameStep(from, to)
   } catch (err: any) {
     if (err?.code !== 'EXDEV') throw err
-    cpSync(from, to, { recursive: true, errorOnExist: true, force: false })
-    rmSync(from, { recursive: true, force: true })
+  }
+  await copyTree(from, to, { links: true })
+  // the move has happened: what is left in the source is a leftover, never a reason to undo the copy
+  if (!(await removeCopied(from, to))) log.warn('move-source-left', { from, to })
+}
+
+/**
+ * remove from `src` what `copy` holds a copy of, deepest first. The copy ran while other requests went on (the
+ * sync copy before it could not be interrupted): whatever was added to or changed in `src` meanwhile stays there.
+ * True when `src` is gone.
+ */
+async function removeCopied(src: string, copy: string): Promise<boolean> {
+  const [s, c] = await Promise.all([lstat(src).catch(() => null), lstat(copy).catch(() => null)])
+  if (!s) return true
+  if (!c) return false
+  try {
+    if (!s.isDirectory()) {
+      // sockets and pipes are not copied: they stay
+      const same = s.isFile() ? c.isFile() && c.size === s.size : s.isSymbolicLink() && c.isSymbolicLink()
+      if (same) await unlink(src)
+      return same
+    }
+    if (!c.isDirectory()) return false
+    let all = true
+    const names = await readdir(src)
+    const dirs: string[] = []
+    for (let i = 0; i < names.length; i += COPY_BATCH) {
+      const done = await Promise.all(names.slice(i, i + COPY_BATCH).map(async n => {
+        if ((await lstat(join(src, n)).catch(() => null))?.isDirectory()) return dirs.push(n) > 0
+        return removeCopied(join(src, n), join(copy, n))
+      }))
+      if (done.includes(false)) all = false
+    }
+    // one folder at a time, like copyTree: a deep tree must not open a folder handle per entry at once
+    for (const n of dirs) if (!(await removeCopied(join(src, n), join(copy, n)))) all = false
+    if (all) await rmdir(src) // fails when something arrived after readdir: it stays
+    return all
+  } catch {
+    return false
   }
 }
 
 /**
  * copy a file or a folder tree to `to`, which must not exist yet. Asynchronous, in batches like treeStats, so a
- * folder of 20,000 files does not hold up everyone else. Links are skipped (never followed, never copied), and a
- * copy that fails half way removes what it wrote.
+ * folder of 20,000 files does not hold up everyone else. Links are never followed: skipped, or with `links: true`
+ * (a move) made again as the same link. A copy that fails half way removes what it wrote.
  */
-export async function copyTree(from: string, to: string) {
+export async function copyTree(from: string, to: string, { links = false } = {}) {
   // compare whole path segments: a folder may be called "..a", so a relative path starting with ".." proves nothing
   if (isDir(from) && within(from, to)) throw bad('files.copy-into-self')
   const st = await lstat(from)
-  if (st.isSymbolicLink()) throw notFound()
+  if (st.isSymbolicLink()) {
+    if (!links) throw notFound()
+    return await symlink(await readlink(from), to) // fails when `to` exists
+  }
   if (!st.isDirectory()) {
     // EXCL: never overwrite, and never write through a link put where the copy goes
     try { await copyFile(from, to, FS.COPYFILE_EXCL) } catch (err: any) {
@@ -221,7 +266,8 @@ export async function copyTree(from: string, to: string) {
           const st = await lstat(s)
           if (st.isDirectory()) { await mkdir(d); stack.push([s, d]) }
           else if (st.isFile()) await copyFile(s, d, FS.COPYFILE_EXCL)
-          // links, sockets and pipes are left out
+          else if (st.isSymbolicLink() && links) await symlink(await readlink(s), d)
+          // other links, sockets and pipes are left out
         }))
         const failed = done.find(r => r.status === 'rejected')
         if (failed) throw (failed as PromiseRejectedResult).reason

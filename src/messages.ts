@@ -118,6 +118,13 @@ export const MESSAGES = {
   'admin.disk-critical': { th: 'พื้นที่ดิสก์เหลือเพียง {percent}%', en: 'Only {percent}% of the disk is free.' },
   'admin.disk-low': { th: 'พื้นที่ดิสก์เหลือน้อย ({percent}%)', en: 'Disk space is running low ({percent}% free).' },
   'admin.default-password': { th: 'ยังมีบัญชีที่ใช้รหัสผ่านเริ่มต้น กรุณาเปลี่ยนรหัสผ่าน', en: 'Some accounts still use their initial password. Please change it.' },
+  // standard texts of the public page, used while the admin leaves the setting empty
+  'admin.default-welcome-title': { th: 'ศูนย์รวมไฟล์', en: 'File Center' },
+  'admin.default-welcome-text': {
+    th: 'ดาวน์โหลดไฟล์ที่เผยแพร่ได้จากที่นี่ หากต้องการอัปโหลดหรือจัดการไฟล์ กรุณาเข้าสู่ระบบ',
+    en: 'Download the published files here. To upload or manage files, please sign in.',
+  },
+  'admin.default-public-empty': { th: 'ยังไม่มีไฟล์เผยแพร่ในขณะนี้', en: 'No files have been published yet.' },
 
   // ───────────── share links ─────────────
   // one answer for every link that does not work (unknown, expired, revoked, used up, item or owner gone): a guesser learns nothing
@@ -136,6 +143,9 @@ export const MESSAGES = {
   'backup.unreadable': { th: 'อ่านไฟล์สำรองข้อมูลไม่ได้ (ไฟล์เสียหาย)', en: 'The backup file could not be read (it is damaged).' },
   'backup.no-admin': { th: 'ไฟล์สำรองนี้ไม่มีข้อมูลผู้ใช้ที่ถูกต้อง หรือไม่มีผู้ดูแลระบบ จึงไม่กู้คืน', en: 'This backup has no valid users or no administrator, so it was not restored.' },
   'backup.bad-settings': { th: 'ไฟล์ตั้งค่าในไฟล์สำรองเสียหาย จึงไม่กู้คืน', en: 'The settings in this backup are damaged, so it was not restored.' },
+  // the outcome of the last backup (backup-status.json)
+  'backup.done': { th: 'สำรองข้อมูลสำเร็จ', en: 'The backup was made.' },
+  'backup.failed': { th: 'สำรองข้อมูลไม่สำเร็จ: {reason}', en: 'The backup failed: {reason}' },
   // dashboard warnings
   'backup.never': { th: 'ยังไม่มีบันทึกการสำรองข้อมูล', en: 'No backup has been recorded yet.' },
   'backup.last-failed': { th: 'การสำรองข้อมูลครั้งล่าสุดล้มเหลว', en: 'The last backup failed.' },

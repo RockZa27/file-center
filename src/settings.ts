@@ -1,4 +1,5 @@
 import { paths } from './config'
+import { type Lang, type MessageCode, text } from './messages'
 import { JsonStore } from './store'
 
 /** `share` (hand out a link to someone without an account) also needs `download` on the same space */
@@ -8,6 +9,7 @@ export type Perm = (typeof PERMISSIONS)[number]
 export type Settings = {
   appName: string
   primaryColor: string
+  /** the three texts of the public page: '' shows the standard text in the visitor's language */
   welcomeTitle: string
   welcomeText: string
   publicEmptyText: string
@@ -21,9 +23,9 @@ export type Settings = {
 const defaults = (): Settings => ({
   appName: 'File Center',
   primaryColor: '#2563eb',
-  welcomeTitle: 'ศูนย์รวมไฟล์',
-  welcomeText: 'ดาวน์โหลดไฟล์ที่เผยแพร่ได้จากที่นี่ หากต้องการอัปโหลดหรือจัดการไฟล์ กรุณาเข้าสู่ระบบ',
-  publicEmptyText: 'ยังไม่มีไฟล์เผยแพร่ในขณะนี้',
+  welcomeTitle: '',
+  welcomeText: '',
+  publicEmptyText: '',
   publicEnabled: true,
   guestPermissions: ['read', 'download', 'batchdownload'],
   logo: null,
@@ -41,6 +43,26 @@ export const settings = {
     store.update(s => Object.assign(s, patch))
   },
   idle: () => store.idle(),
+}
+
+type PageText = 'welcomeTitle' | 'welcomeText' | 'publicEmptyText'
+const STANDARD_TEXT: Record<PageText, MessageCode> = {
+  welcomeTitle: 'admin.default-welcome-title',
+  welcomeText: 'admin.default-welcome-text',
+  publicEmptyText: 'admin.default-public-empty',
+}
+// what older versions stored as the default: a settings.json still holding exactly this follows the language as well
+const OLD_DEFAULT: Record<PageText, string> = {
+  welcomeTitle: 'ศูนย์รวมไฟล์',
+  welcomeText: 'ดาวน์โหลดไฟล์ที่เผยแพร่ได้จากที่นี่ หากต้องการอัปโหลดหรือจัดการไฟล์ กรุณาเข้าสู่ระบบ',
+  publicEmptyText: 'ยังไม่มีไฟล์เผยแพร่ในขณะนี้',
+}
+
+/** the public page's texts for a visitor: what the admin typed, exactly; otherwise the standard text in `lang` */
+export function pageTexts(lang: Lang): Record<PageText, string> {
+  const s = store.value
+  const pick = (key: PageText) => (s[key] && s[key] !== OLD_DEFAULT[key] ? s[key] : text(lang, STANDARD_TEXT[key]))
+  return { welcomeTitle: pick('welcomeTitle'), welcomeText: pick('welcomeText'), publicEmptyText: pick('publicEmptyText') }
 }
 
 export const isPerm = (p: unknown): p is Perm => typeof p === 'string' && (PERMISSIONS as readonly string[]).includes(p)

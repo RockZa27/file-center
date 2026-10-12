@@ -20,6 +20,7 @@ services:
     env_file:
       - path: .env
         required: false
+    # แอปทำงานเป็นผู้ใช้ bun (uid 1000) ไม่ใช่ root ถ้าจำเป็นต้องใช้ root ให้ตั้ง FC_RUN_AS_ROOT=true ใน .env (ดู README)
     environment:
       # PORT ใน .env คือพอร์ตฝั่งเครื่อง host ส่วนในคอนเทนเนอร์ใช้ 3000 เสมอ
       PORT: "3000"
