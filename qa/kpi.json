@@ -1672,6 +1672,409 @@
           "toolUses": 45
         }
       }
+    },
+    "r5": {
+      "at": "2026-10-12T11:31:13.581Z",
+      "check": {
+        "runId": "r5-final",
+        "ok": true,
+        "passed": 252,
+        "total": 253,
+        "lines": 94.16
+      },
+      "suite": {
+        "mutationScore": 1,
+        "missed": []
+      },
+      "agents": {
+        "security-auditor": {
+          "evidence": 1,
+          "review": 1,
+          "composite": 1,
+          "kpis": [
+            {
+              "name": "precision (findings that are real)",
+              "value": 1,
+              "target": 0.7,
+              "weight": 2,
+              "pass": true,
+              "note": "7/7"
+            },
+            {
+              "name": "recall on planted bugs",
+              "value": 1,
+              "target": 0.8,
+              "weight": 3,
+              "pass": true,
+              "note": "7/7 (easy 2/2, subtle 3/3); missed: -"
+            },
+            {
+              "name": "ignores decoys",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true
+            },
+            {
+              "name": "severity within one level of the truth",
+              "value": 1,
+              "target": 0.8,
+              "weight": 1,
+              "pass": true
+            },
+            {
+              "name": "every finding has file, line, evidence",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true
+            }
+          ]
+        },
+        "verifier": {
+          "evidence": 1,
+          "review": 1,
+          "composite": 1,
+          "kpis": [
+            {
+              "name": "confirms the planted bugs",
+              "value": 1,
+              "target": 0.9,
+              "weight": 3,
+              "pass": true,
+              "note": "7/7"
+            },
+            {
+              "name": "refutes findings on decoys",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "no decoy was reported"
+            },
+            {
+              "name": "every finding gets a verdict",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true
+            },
+            {
+              "name": "repro commands reproduce (run twice)",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "7/7"
+            },
+            {
+              "name": "repro does not trigger on clean code",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "7/7"
+            },
+            {
+              "name": "unplanted findings reproduce on the real code",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "none to check"
+            },
+            {
+              "name": "CONFIRMED verdicts carry a repro",
+              "value": 1,
+              "target": 0.9,
+              "weight": 1,
+              "pass": true
+            }
+          ]
+        },
+        "backend-dev": {
+          "evidence": 0.8974358974358975,
+          "review": 1,
+          "composite": 0.9282051282051282,
+          "kpis": [
+            {
+              "name": "[backlog] green the first time it said \"done\"",
+              "value": 0,
+              "target": 1,
+              "weight": 2,
+              "pass": false
+            },
+            {
+              "name": "[backlog] green at the end (no regression)",
+              "value": 1,
+              "target": 1,
+              "weight": 3,
+              "pass": true
+            },
+            {
+              "name": "[backlog] added at least one test",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true,
+              "note": "23 added"
+            },
+            {
+              "name": "[backlog] no removed tests, no skips",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[backlog] stayed inside its allowed paths",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[backlog] needed at most one fix round",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true,
+              "note": "2 qa run(s)"
+            },
+            {
+              "name": "[backlog] test files with new tests fail on the code before the change",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "4/4"
+            },
+            {
+              "name": "[source] green the first time it said \"done\"",
+              "value": 0,
+              "target": 1,
+              "weight": 2,
+              "pass": false
+            },
+            {
+              "name": "[source] green at the end (no regression)",
+              "value": 1,
+              "target": 1,
+              "weight": 3,
+              "pass": true
+            },
+            {
+              "name": "[source] added at least one test",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true,
+              "note": "26 added"
+            },
+            {
+              "name": "[source] no removed tests, no skips",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[source] stayed inside its allowed paths",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[source] needed at most one fix round",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true,
+              "note": "2 qa run(s)"
+            },
+            {
+              "name": "[source] test files with new tests fail on the code before the change",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "3/3"
+            },
+            {
+              "name": "[share] green the first time it said \"done\"",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[share] green at the end (no regression)",
+              "value": 1,
+              "target": 1,
+              "weight": 3,
+              "pass": true
+            },
+            {
+              "name": "[share] added at least one test",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true,
+              "note": "20 added"
+            },
+            {
+              "name": "[share] no removed tests, no skips",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[share] stayed inside its allowed paths",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[share] needed at most one fix round",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true,
+              "note": "2 qa run(s)"
+            },
+            {
+              "name": "[share] test files with new tests fail on the code before the change",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "1/1"
+            }
+          ]
+        },
+        "frontend-dev": {
+          "evidence": 0.9711538461538461,
+          "review": 0.8,
+          "composite": 0.9198076923076922,
+          "kpis": [
+            {
+              "name": "green the first time it said \"done\"",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "green at the end (no regression)",
+              "value": 1,
+              "target": 1,
+              "weight": 3,
+              "pass": true
+            },
+            {
+              "name": "ux-tester flows pass on its page",
+              "value": 0.875,
+              "target": 1,
+              "weight": 3,
+              "pass": false
+            },
+            {
+              "name": "no removed tests, no skips",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "stayed inside its allowed paths",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "needed at most one fix round",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true,
+              "note": "2 qa run(s)"
+            }
+          ]
+        },
+        "ux-tester": {
+          "evidence": 1,
+          "review": 1,
+          "composite": 1,
+          "kpis": [
+            {
+              "name": "every flow has a screenshot",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "every failure explains its cause",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "1 failing flow(s)"
+            },
+            {
+              "name": "flows without unexplained console errors",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true
+            }
+          ]
+        }
+      },
+      "usage": {
+        "backend-dev.share": {
+          "tokens": 172300,
+          "ms": 778598,
+          "toolUses": 45
+        },
+        "backend-dev.source": {
+          "tokens": 172693,
+          "ms": 896484,
+          "toolUses": 79
+        },
+        "backend-dev.backlog": {
+          "tokens": 159523,
+          "ms": 950365,
+          "toolUses": 60
+        },
+        "security-auditor": {
+          "tokens": 163669,
+          "ms": 193733,
+          "toolUses": 45
+        },
+        "_notes": "frontend-dev and verifier were cut off by the session usage limit (resets 07:30 UTC) and resumed with their own context; not counted against them",
+        "verifier": {
+          "tokens": 79038,
+          "ms": 142269,
+          "toolUses": 9,
+          "note": "second part after resume; first part lost to the usage limit"
+        },
+        "frontend-dev": {
+          "tokens": 274325,
+          "ms": 1149046,
+          "toolUses": 99,
+          "note": "after resume; part before the usage limit not counted"
+        },
+        "ux-tester": {
+          "tokens": 143465,
+          "ms": 851738,
+          "toolUses": 72
+        }
+      }
     }
   }
 }

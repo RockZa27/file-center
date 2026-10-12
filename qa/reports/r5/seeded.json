@@ -16,7 +16,7 @@
     "share-password-no-lockout": [
       {
         "file": "src/routes/shares.ts",
-        "line": 1
+        "line": 162
       }
     ],
     "update-fetch-no-sha": [

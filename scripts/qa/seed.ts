@@ -41,18 +41,21 @@ async function copyTree(dir: string, blind: boolean) {
 /** apply patches in order; returns the line where each one starts in the patched file */
 function apply(dir: string, id: string, patches: Patch[]) {
   const where: { file: string; line: number }[] = []
+  const at: number[] = []
   for (const pt of patches) {
     const path = join(dir, pt.file)
     const src = readFileSync(path, 'utf8')
     if (src.split(pt.find).length !== 2) throw new Error(`${id}: the code to replace is not in ${pt.file} exactly once (the code moved: update qa/seeded/)`)
+    at.push(src.indexOf(pt.find))
     writeFileSync(path, src.replace(pt.find, () => pt.replace))
   }
-  // lines are read after every patch of this item, so earlier patches in the same file are accounted for
-  for (const pt of patches) {
+  // lines are read after every patch of this item, so earlier patches in the same file are accounted for. A patch that
+  // only deletes code has no text to look for afterwards: it is placed where the deleted code began
+  patches.forEach((pt, k) => {
     const src = readFileSync(join(dir, pt.file), 'utf8')
-    const i = src.indexOf(pt.replace)
+    const i = pt.replace.trim() ? src.indexOf(pt.replace) : at[k]
     where.push({ file: pt.file, line: src.slice(0, i).split('\n').length })
-  }
+  })
   return where
 }
 
