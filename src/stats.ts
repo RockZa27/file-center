@@ -1,3 +1,4 @@
+import { statfsSync } from 'node:fs'
 import { join } from 'node:path'
 import { config, paths } from './config'
 import { treeStats } from './fsx'
@@ -44,4 +45,21 @@ export function storageStats(): { storage: StorageStats | null; stale: boolean }
   const fresh = age >= 0 && age < MAX_AGE_MS
   if (!fresh) void recountStorage()
   return { storage: last, stale: !fresh || counting !== null }
+}
+
+/** below this much free disk (percent) the dashboard warns as critical and an alert goes out (alerts.ts) */
+export const DISK_CRITICAL_PERCENT = 5
+/** below this the dashboard warns */
+export const DISK_LOW_PERCENT = 10
+
+/** size and free space of the disk the storage is on, or null when it can not be read */
+export function diskInfo(): { total: number; free: number; used: number } | null {
+  try {
+    const s = statfsSync(config.storageDir)
+    const total = Number(s.blocks) * Number(s.bsize)
+    const free = Number(s.bavail) * Number(s.bsize)
+    return { total, free, used: total - free }
+  } catch {
+    return null
+  }
 }

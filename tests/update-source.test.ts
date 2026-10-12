@@ -331,6 +331,85 @@ describe('update source: fetch', () => {
   })
 })
 
+describe('update source: fetch and apply in one step', () => {
+  const PASSWORD = () => process.env.ADMIN_PASSWORD!
+  const staged = () => { try { return readdirSync(join(paths.app, 'staging')) } catch { return [] } }
+  const lastAudit = async (action: string) => (await admin.json('GET', `/api/admin/activity?action=${action}`)).data.items[0]
+
+  test('a wrong password downloads nothing, not even latest.json', async () => {
+    publish('9.1.0', makePackage('9.1.0'))
+    const r = await admin.json('POST', '/api/admin/update/fetch-and-apply', { password: 'wrong-password' })
+    expect([r.status, r.data.code]).toEqual([403, 'auth.wrong-password'])
+    expect(requests).toEqual([])
+    expect((await lastAudit('update-denied')).user).toBe('admin')
+    // and it is the step-up of /apply: the right one clears the count again (the source is down here: nothing to fetch)
+    files.clear()
+    expect((await admin.json('POST', '/api/admin/update/fetch-and-apply', { password: PASSWORD() })).data.params.step).toBe('check')
+  })
+
+  test('a version that is not newer stops at the check', async () => {
+    publish(config.version, makePackage(config.version))
+    const r = await admin.json('POST', '/api/admin/update/fetch-and-apply', { password: PASSWORD() }, EN)
+    expect([r.status, r.data.code, r.data.params]).toEqual([400, 'update.source-not-newer', { version: config.version, running: config.version, step: 'check' }])
+    expect(r.data.error).toBe(MESSAGES['update.source-not-newer'].en.replace('{version}', config.version).replace('{running}', config.version))
+    expect(requests).toEqual(['/fc/updates/latest.json'])
+  })
+
+  test('without a source it says so at the check', async () => {
+    config.updateSource = ''
+    const r = await admin.json('POST', '/api/admin/update/fetch-and-apply', { password: PASSWORD() })
+    expect([r.status, r.data.code, r.data.params]).toEqual([409, 'update.source-off', { step: 'check' }])
+  })
+
+  test('a download that does not match latest.json stops at fetch and leaves nothing behind', async () => {
+    const zip = makePackage('9.1.0')
+    publish('9.1.0', zip, { sha256: sha(enc.encode('something else')) })
+    const r = await admin.json('POST', '/api/admin/update/fetch-and-apply', { password: PASSWORD() })
+    expect([r.status, r.data.code, r.data.params]).toEqual([502, 'update.source-mismatch', { step: 'fetch' }])
+    expect(incoming()).toEqual([])
+    expect(staged()).toEqual([])
+  })
+
+  test('a package the static checks refuse stops at stage', async () => {
+    config.updatePublicKey = generateKeyPairSync('ed25519').publicKey.export({ type: 'spki', format: 'der' }).toString('base64')
+    publish('9.1.0', makePackage('9.1.0'))
+    const before = (await lastAudit('update-fetch'))?.ts
+    const r = await admin.json('POST', '/api/admin/update/fetch-and-apply', { password: PASSWORD() })
+    expect([r.status, r.data.code, r.data.params]).toEqual([400, 'update.unsigned', { step: 'stage' }])
+    expect(incoming()).toEqual([])
+    expect(staged()).toEqual([])
+    expect((await lastAudit('update-fetch'))?.ts).toBe(before)
+  })
+
+  test('a package whose server does not start stops at apply: nothing installed, nothing left staged', async () => {
+    // the server of makePackage only prints a line and exits: the test run catches it
+    publish('9.1.0', makePackage('9.1.0'))
+    const r = await admin.json('POST', '/api/admin/update/fetch-and-apply', { password: PASSWORD() })
+    expect([r.status, r.data.code, r.data.params.step]).toEqual([400, 'update.start-failed', 'apply'])
+    expect(requests).toEqual(['/fc/updates/latest.json', '/fc/updates/latest.json', '/fc/updates/file-center-9.1.0.zip'])
+    expect(incoming()).toEqual([])
+    expect(staged()).toEqual([])
+    expect(existsSync(join(paths.app, 'releases'))).toBe(false)
+    // fetched and staged like /fetch does it, but never installed
+    expect(await lastAudit('update-fetch')).toMatchObject({ user: 'admin', detail: '9.1.0' })
+    expect((await admin.json('GET', '/api/admin/update')).data.pending).toBeNull()
+  }, 30_000)
+
+  test('only admins, and only with the CSRF token', async () => {
+    publish('9.1.0', makePackage('9.1.0'))
+    const user = new Client()
+    await user.login('src-user', 'quiet-river-stone-8')
+    expect((await user.json('POST', '/api/admin/update/fetch-and-apply', { password: 'quiet-river-stone-8' })).status).toBe(403)
+    const guest = new Client()
+    guest.csrf = (await guest.json('GET', '/api/session')).data.csrf
+    expect((await guest.json('POST', '/api/admin/update/fetch-and-apply', { password: 'x' })).status).toBe(401)
+    const forged = new Client()
+    forged.cookie = admin.cookie
+    expect((await forged.json('POST', '/api/admin/update/fetch-and-apply', { password: PASSWORD() })).data.code).toBe('csrf')
+    expect(requests).toEqual([])
+  })
+})
+
 describe('result of the last update in the page language', () => {
   const stateFile = () => join(paths.app, 'state.json')
   const writeLast = (last: Record<string, unknown>) => {

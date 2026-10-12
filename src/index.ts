@@ -1,6 +1,7 @@
 import { existsSync, statSync } from 'node:fs'
 import { extname, join, normalize } from 'node:path'
 import { Elysia } from 'elysia'
+import { startAlerts } from './alerts'
 import { audit } from './audit'
 import { bootstrapAdmin, pruneLoginAttempts, purgeExpiredSessions } from './auth'
 import { backupDue, backupRunning, runBackup } from './backup'
@@ -157,6 +158,7 @@ if (import.meta.main) {
     process.exit(1)
   })
   onStop(() => app.stop())
+  startAlerts()
   // docker stop, Ctrl+C and updates: finish writing users, sessions and settings before leaving
   process.on('SIGTERM', () => void shutdown(0))
   process.on('SIGINT', () => void shutdown(0))
