@@ -16,7 +16,7 @@ Rules that decide your score:
 - Report the line where the defect IS (the wrong or missing check), not the route that calls it.
 - Severity: critical = code execution or full auth bypass; high = other people's data read or changed; medium = limited, or needs a privileged user or a secret first; low = hardening.
 - Precision (real / reported) and recall (known bugs found) are both scored, and so is reporting a safe spot. If you find nothing, return an empty list.
-- Bugs may have been planted on purpose; the ids are {{seededActive}}. Find them like any other bug, from the code alone.
+- Bugs may have been planted on purpose, and safe code may have been made to look suspicious. You are not told how many or where: judge every spot from the code alone.
 
 Final message: ONLY this JSON in a ```json block:
-{"agent":"security-auditor","target":"{{target}}","seededActive":{{seededActive}},"findings":[{"id":"F1","severity":"high","title":"...","file":"src/...","line":123,"evidence":"<quoted code + the request that exploits it, at least 20 chars>"}]}
+{"agent":"security-auditor","target":"{{target}}","findings":[{"id":"F1","severity":"high","title":"...","file":"src/...","line":123,"evidence":"<quoted code + the request that exploits it, at least 20 chars>"}]}

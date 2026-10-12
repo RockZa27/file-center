@@ -21,7 +21,7 @@ export type Severity = 'critical' | 'high' | 'medium' | 'low'
 export const SEVERITIES: Severity[] = ['low', 'medium', 'high', 'critical']
 
 export type Finding = { id: string; severity: Severity; title: string; file: string; line: number; evidence: string }
-export type AuditorReport = { agent: 'security-auditor'; target: string; seededActive: string[]; findings: Finding[] }
+export type AuditorReport = { agent: 'security-auditor'; target: string; seededActive?: string[]; findings: Finding[] }
 export type Verdict = {
   findingId: string
   verdict: 'CONFIRMED' | 'REFUTED'

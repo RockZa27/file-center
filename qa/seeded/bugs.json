@@ -376,12 +376,7 @@
       {
         "file": "src/fsx.ts",
         "find": "const st = await lstat(s)",
-        "replace": "const st = await stat(s)"
-      },
-      {
-        "file": "src/fsx.ts",
-        "find": "import { copyFile, lstat, mkdir, readdir, rm } from 'node:fs/promises'",
-        "replace": "import { copyFile, lstat, mkdir, readdir, rm, stat } from 'node:fs/promises'"
+        "replace": "const st = statSync(s)"
       }
     ]
   },
