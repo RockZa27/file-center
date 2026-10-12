@@ -136,6 +136,10 @@ export const paths = {
   shares: join(config.dataDir, 'shares.json'),
   /** signs the links the office document server opens (office.ts); made on first use, never leaves this server */
   officeKey: join(config.dataDir, 'office-links.key'),
+  /** AES key for secrets kept in users.json (secret-box.ts); made on first use */
+  secretKey: join(config.dataDir, 'secret.key'),
+  /** touched by the command line tool (cli.ts) after it changed users or sessions, so a running app re-reads them */
+  cliChanged: join(config.dataDir, 'cli-changed'),
   /** saved office versions while they download (office.ts) */
   officeTmp: join(config.dataDir, 'office-tmp'),
   publicDir: join(config.storageDir, config.publicDirName),

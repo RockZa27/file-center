@@ -2,16 +2,19 @@ import { Elysia, t } from 'elysia'
 import { alert } from '../alerts'
 import { audit } from '../audit'
 import {
-  accessFor, checkPasswordStrength, clearFailures, createSession, destroySession, destroyUserSessions,
-  findUser, hashPassword, lockedFor, PASSWORD_MIN_LENGTH, publicUser, recordFailure, saveUsers, verifyLogin, type Session, type User,
+  accessFor, checkPasswordStrength, checkSecondFactor, clearFailures, confirmPassword, createLoginTicket, createSession,
+  destroySession, destroySessionById, destroyUserSessions, finishTwoFactorSetup, findUser, hasPendingSetup, hashPassword,
+  listUserSessions, lockedFor, newBackupCodes, PASSWORD_MIN_LENGTH, peekLoginTicket, publicUser, recordFailure, saveUsers,
+  startTwoFactorSetup, useLoginTicket, verifyLogin, type Session, type User,
 } from '../auth'
 import { config } from '../config'
 import { context, requireUser, SESSION_COOKIE } from '../context'
-import { HttpError } from '../fsx'
+import { HttpError, notFound } from '../fsx'
 import { type Lang, langOf } from '../messages'
 import { officeClientConfig } from '../office'
 import { pageTexts, settings } from '../settings'
 import { allowedShareDays } from '../shares'
+import { otpauthUri } from '../totp'
 
 /** cookies take whole seconds: SESSION_TTL_HOURS=0.0001 must not break every response */
 const cookieMaxAge = () => Math.max(1, Math.floor(config.sessionTtlMs / 1000))
@@ -37,6 +40,46 @@ function appConfig(user: User | null, lang: Lang) {
     trashRetentionDays: config.trashRetentionDays,
     passwordMinLength: PASSWORD_MIN_LENGTH,
   }
+}
+
+/** the browser behind a request, as far as it says (cut short: it is shown in the device list) */
+const userAgent = (request: Request) => (request.headers.get('user-agent') ?? '').slice(0, 200)
+
+/** what a successful sign-in does, with or without the second step */
+function signIn(user: User, { cookie, sid, ip, request }: { cookie: any; sid: string | undefined; ip: string; request: Request }) {
+  destroySession(sid) // new id on every login
+  const { sid: newSid, session } = createSession(user.username, { ip, ua: userAgent(request) })
+  cookie[SESSION_COOKIE].set({
+    value: newSid, httpOnly: true, sameSite: 'lax', path: '/',
+    secure: config.secureCookie, maxAge: cookieMaxAge(),
+  })
+  user.lastLogin = new Date().toISOString()
+  saveUsers()
+  audit({ user: user.username, ip, action: 'login' })
+  return snapshot(user, session, langOf(request))
+}
+
+/** wrong codes of the 2FA management calls share one counter per user and address, with the login limits */
+const codeKey = (ip: string, user: User) => `2fa-step-up|${ip}|${user.username.toLowerCase()}`
+
+function wrongCode(user: User, ip: string): never {
+  if (recordFailure(codeKey(ip, user))) alert('lockout', 'admin.alert-2fa-locked', { user: user.username, ip })
+  audit({ user: user.username, ip, action: '2fa-code-denied' })
+  throw new HttpError(403, 'auth.two-factor-bad-code')
+}
+
+function notLockedForCodes(user: User, ip: string) {
+  const wait = lockedFor(codeKey(ip, user))
+  if (wait) throw new HttpError(429, 'auth.confirm-locked', { seconds: wait })
+}
+
+/** password and a current code (or a backup code) of a user who has 2FA on */
+async function confirmWithCode(user: User, ip: string, password: string, code: string) {
+  if (!user.twoFactor) throw new HttpError(400, 'auth.two-factor-not-enabled')
+  notLockedForCodes(user, ip)
+  await confirmPassword(user, ip, password, '2fa-password-denied')
+  if (!checkSecondFactor(user, code)) wrongCode(user, ip)
+  clearFailures(codeKey(ip, user))
 }
 
 function snapshot(user: User | null, session: Session, lang: Lang) {
@@ -77,17 +120,96 @@ export const sessionRoutes = new Elysia({ prefix: '/api' })
       throw new HttpError(401, 'auth.bad-credentials')
     }
     clearFailures(key)
-    destroySession(sid) // new id on every login
-    const { sid: newSid, session } = createSession(user.username)
+    // the right password is not enough for an account with 2FA: no session until /login/2fa has the code
+    if (user.twoFactor) return { twoFactor: true, ticket: createLoginTicket(user.username, ip) }
+    return signIn(user, { cookie, sid, ip, request })
+  }, { body: t.Object({ username: t.String({ maxLength: 64 }), password: t.String({ maxLength: 1000 }) }) })
+
+  .post('/login/2fa', ({ cookie, sid, ip, body, request }) => {
+    const username = peekLoginTicket(body.ticket, ip)
+    const user = username ? findUser(username) : undefined
+    if (!username || !user?.twoFactor) throw new HttpError(401, 'auth.two-factor-bad-ticket')
+    const key = `2fa|${ip}|${user.username.toLowerCase()}`
+    const wait = lockedFor(key)
+    if (wait) throw new HttpError(429, 'auth.two-factor-locked', { seconds: wait })
+    if (!checkSecondFactor(user, body.code)) {
+      if (recordFailure(key)) alert('lockout', 'admin.alert-2fa-locked', { user: user.username, ip })
+      audit({ user: user.username, ip, action: 'login-2fa-failed' })
+      throw new HttpError(401, 'auth.two-factor-bad-code')
+    }
+    clearFailures(key)
+    useLoginTicket(body.ticket)
+    return signIn(user, { cookie, sid, ip, request })
+  }, { body: t.Object({ ticket: t.String({ maxLength: 200 }), code: t.String({ maxLength: 50 }) }) })
+
+  // ───────────── signed-in devices ─────────────
+  .get('/sessions', ({ user, ip, sid }) => {
+    const u = requireUser({ user, ip })
+    return { sessions: listUserSessions(u.username, sid) }
+  })
+
+  .post('/sessions/revoke-others', ({ user, ip, sid }) => {
+    const u = requireUser({ user, ip })
+    const revoked = destroyUserSessions(u.username, sid)
+    audit({ user: u.username, ip, action: 'sessions-revoke-others', detail: String(revoked) })
+    return { ok: true, revoked }
+  })
+
+  .delete('/sessions/:id', ({ cookie, sid, user, ip, params, request }) => {
+    const u = requireUser({ user, ip })
+    const gone = destroySessionById(u.username, params.id, sid)
+    if (!gone) throw notFound('auth.session-not-found')
+    audit({ user: u.username, ip, action: 'session-revoke' })
+    if (!gone.current) return { ok: true }
+    // it was this browser's own session: same as logging out
+    const { sid: newSid, session } = createSession(null)
     cookie[SESSION_COOKIE].set({
       value: newSid, httpOnly: true, sameSite: 'lax', path: '/',
       secure: config.secureCookie, maxAge: cookieMaxAge(),
     })
-    user.lastLogin = new Date().toISOString()
+    return snapshot(null, session, langOf(request))
+  })
+
+  // ───────────── two-factor sign-in ─────────────
+  .post('/2fa/setup', async ({ user, ip, body }) => {
+    const u = requireUser({ user, ip })
+    if (u.twoFactor) throw new HttpError(409, 'auth.two-factor-already-enabled')
+    await confirmPassword(u, ip, body.password, '2fa-password-denied')
+    const secret = startTwoFactorSetup(u)
+    return { secret, uri: otpauthUri(secret, u.username, settings.get().appName) }
+  }, { body: t.Object({ password: t.String({ maxLength: 1000 }) }) })
+
+  .post('/2fa/enable', ({ user, ip, sid, body }) => {
+    const u = requireUser({ user, ip })
+    if (u.twoFactor) throw new HttpError(409, 'auth.two-factor-already-enabled')
+    if (!hasPendingSetup(u)) throw new HttpError(400, 'auth.two-factor-no-setup')
+    notLockedForCodes(u, ip)
+    const backupCodes = finishTwoFactorSetup(u, body.code)
+    if (!backupCodes) wrongCode(u, ip)
+    clearFailures(codeKey(ip, u))
+    destroyUserSessions(u.username, sid) // other devices sign in again, now with the code
+    audit({ user: u.username, ip, action: '2fa-enable' })
+    return { backupCodes }
+  }, { body: t.Object({ code: t.String({ maxLength: 50 }) }) })
+
+  .post('/2fa/disable', async ({ user, ip, body }) => {
+    const u = requireUser({ user, ip })
+    await confirmWithCode(u, ip, body.password, body.code)
+    delete u.twoFactor
     saveUsers()
-    audit({ user: user.username, ip, action: 'login' })
-    return snapshot(user, session, langOf(request))
-  }, { body: t.Object({ username: t.String({ maxLength: 64 }), password: t.String({ maxLength: 1000 }) }) })
+    audit({ user: u.username, ip, action: '2fa-disable' })
+    return { ok: true }
+  }, { body: t.Object({ password: t.String({ maxLength: 1000 }), code: t.String({ maxLength: 50 }) }) })
+
+  .post('/2fa/backup-codes', async ({ user, ip, body }) => {
+    const u = requireUser({ user, ip })
+    await confirmWithCode(u, ip, body.password, body.code)
+    const { codes, hashes } = newBackupCodes()
+    u.twoFactor!.backup = hashes
+    saveUsers()
+    audit({ user: u.username, ip, action: '2fa-backup-codes' })
+    return { backupCodes: codes }
+  }, { body: t.Object({ password: t.String({ maxLength: 1000 }), code: t.String({ maxLength: 50 }) }) })
 
   .post('/logout', ({ cookie, sid, user, ip, request }) => {
     if (user) audit({ user: user.username, ip, action: 'logout' })

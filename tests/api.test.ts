@@ -683,6 +683,9 @@ describe('full system: permission matrix', () => {
       ['DELETE', '/api/admin/backups/:name'],
       ['POST', '/api/admin/backups/restore', { name: 'file-center-backup-20000101-000000.zip', password: 'x' }],
       ['GET', '/api/admin/shares'],
+      ['GET', '/api/admin/users/:username/sessions'],
+      ['POST', '/api/admin/users/:username/sessions/revoke'],
+      ['POST', '/api/admin/users/:username/2fa/reset', { password: 'x' }],
     ]
     const routes = app.routes.filter((r: any) => r.path.startsWith('/api/admin')).map((r: any) => `${r.method} ${r.path}`)
     expect(routes.filter((r: string) => !adminCalls.some(([m, p]) => `${m} ${p}` === r))).toEqual([])
@@ -706,6 +709,13 @@ describe('full system: CSRF', () => {
     const mutating: [string, string, any?][] = [
       ['POST', '/api/login', { username: 'admin', password: 'x' }],
       ['POST', '/api/logout'],
+      ['POST', '/api/login/2fa', { ticket: 'x', code: '000000' }],
+      ['DELETE', '/api/sessions/:id'],
+      ['POST', '/api/sessions/revoke-others'],
+      ['POST', '/api/2fa/setup', { password: 'test-admin-pass' }],
+      ['POST', '/api/2fa/enable', { code: '000000' }],
+      ['POST', '/api/2fa/disable', { password: 'test-admin-pass', code: '000000' }],
+      ['POST', '/api/2fa/backup-codes', { password: 'test-admin-pass', code: '000000' }],
       ['POST', '/api/password', { current: 'test-admin-pass', next: 'hijacked-password' }],
       ['POST', '/api/admin/users', { username: 'csrf-user', name: 'x', password: 'harbor-lamp-42', role: 'admin', permissions: [], publicPermissions: [] }],
       ['PUT', '/api/admin/users/:username', { role: 'admin' }],
@@ -726,6 +736,8 @@ describe('full system: CSRF', () => {
       ['POST', '/api/admin/backups'],
       ['DELETE', '/api/admin/backups/:name'],
       ['POST', '/api/admin/backups/restore', { name: 'file-center-backup-20000101-000000.zip', password: 'test-admin-pass' }],
+      ['POST', '/api/admin/users/:username/sessions/revoke'],
+      ['POST', '/api/admin/users/:username/2fa/reset', { password: 'test-admin-pass' }],
       ['POST', '/api/mkdir', { ...files, path: '/', name: 'csrf-dir' }],
       ['POST', '/api/newfile', { ...files, path: '/', name: 'csrf.txt' }],
       ['PUT', '/api/content', { ...files, path: '/matrix.txt', content: 'pwned' }],
