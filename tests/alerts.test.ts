@@ -14,6 +14,8 @@ let config: typeof import('../src/config').config
 let paths: typeof import('../src/config').paths
 let alerts: typeof import('../src/alerts')
 let MESSAGES: typeof import('../src/messages').MESSAGES
+/** every alert starts with the app name of the settings (other test files of the run may have changed it) */
+let prefix = ''
 
 class Client {
   cookie = ''
@@ -81,6 +83,7 @@ beforeAll(async () => {
     },
   })
   await admin.login('admin', process.env.ADMIN_PASSWORD!)
+  prefix = `[${(await import('../src/settings')).settings.get().appName}] `
 })
 
 afterEach(async () => {
@@ -172,7 +175,7 @@ describe('alerts: configuration', () => {
 
 describe('alerts: what is sent', () => {
   test('each kind gets the body its service expects', async () => {
-    const th = `[File Center] ${MESSAGES['admin.alert-test'].th}`
+    const th = `${prefix}${MESSAGES['admin.alert-test'].th}`
     useHook('discord')
     expect((await admin.json('POST', '/api/admin/alerts/test')).data).toEqual({ ok: true })
     useHook('slack')
@@ -182,7 +185,7 @@ describe('alerts: what is sent', () => {
     expect((await admin.json('POST', '/api/admin/alerts/test')).status).toBe(200)
     useHook('json', { alertLang: 'en' })
     expect((await admin.json('POST', '/api/admin/alerts/test')).status).toBe(200)
-    expect(got).toEqual([{ path: '/hook', body: { event: 'test', code: 'admin.alert-test', message: `[File Center] ${MESSAGES['admin.alert-test'].en}`, params: {}, lang: 'en', version: config.version, time: expect.any(String) } }])
+    expect(got).toEqual([{ path: '/hook', body: { event: 'test', code: 'admin.alert-test', message: `${prefix}${MESSAGES['admin.alert-test'].en}`, params: {}, lang: 'en', version: config.version, time: expect.any(String) } }])
     // the earlier three were cleared by useHook: send them again side by side
     const bodies: Record<string, any> = {}
     for (const [kind, extra] of [['discord', {}], ['slack', {}], ['telegram', { alertTelegramChatId: '-100123', alertWebhookUrl: hookUrl('/bot123:TOKEN/sendMessage') }]] as const) {
@@ -281,7 +284,7 @@ describe('alerts: events', () => {
     expect(r.status).toBeGreaterThanOrEqual(400)
     const [g] = await received(1)
     expect(g.body).toMatchObject({ event: 'backup-failed', code: 'backup.failed' })
-    expect(g.body.message).toStartWith('[File Center] The backup failed: ')
+    expect(g.body.message).toStartWith(`${prefix}The backup failed: `)
   })
 
   test('an account locked for wrong passwords sends one: sign-in and password confirmation', async () => {
