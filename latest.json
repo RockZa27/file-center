@@ -1,10 +1,10 @@
 {
-  "version": "1.3.0",
-  "file": "file-center-1.3.0.zip",
-  "sha256": "64786c86228fb6dcbf4254a56310235a595f9d51e1ab4bdd1d51ed32c6c458f6",
-  "size": 881695,
-  "builtAt": "2026-10-12T12:09:19.916Z",
-  "commit": "c624b73",
-  "notes": "ลิงก์แชร์, ปุ่มตรวจหาเวอร์ชันใหม่, Docker ไม่รันเป็น root, ข้อความตามภาษา, ย้ายไฟล์ข้ามดิสก์ไม่บล็อก",
+  "version": "1.4.0",
+  "file": "file-center-1.4.0.zip",
+  "sha256": "dac195eb9a0d3ce3e46558ca1f94f7d3f932ec7689f617cd7f2c78ba6464144d",
+  "size": 1659029,
+  "builtAt": "2026-10-12T17:09:42.318Z",
+  "commit": "65847a6",
+  "notes": "อัปเดตกดครั้งเดียว, แจ้งเตือนผ่าน webhook, ดูไฟล์ Office ในเบราว์เซอร์, แก้ Markdown/CSV/โค้ด, แก้ Office ผ่าน ONLYOFFICE",
   "signed": false
 }
