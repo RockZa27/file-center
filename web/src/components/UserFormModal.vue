@@ -28,6 +28,7 @@
         <n-form-item :label="t('users.ownPerms')"><perm-select v-model="f.permissions" /></n-form-item>
         <n-form-item :label="t('users.publicPerms')"><perm-select v-model="f.publicPermissions" /></n-form-item>
         <div class="muted hint">{{ t('users.publicHint') }}</div>
+        <div class="muted hint">{{ t('users.shareHint') }}</div>
       </template>
       <n-alert v-else type="info" :show-icon="true">{{ t('users.adminHint') }}</n-alert>
     </n-form>
@@ -50,7 +51,8 @@ import { parentPath } from '../utils'
 import FolderPicker from './FolderPicker.vue'
 import PasswordRules from './PasswordRules.vue'
 
-const PERMS = ['read', 'download', 'batchdownload', 'upload', 'write', 'zip']
+// `share` (hand out links to people without an account) works only together with `download`
+const PERMS = ['read', 'download', 'batchdownload', 'upload', 'write', 'zip', 'share']
 
 const PermSelect = defineComponent({
   props: { modelValue: { type: Array, default: () => [] } },

@@ -36,7 +36,17 @@ export function useDownload() {
       busy.value = null
     }
   }
-  return { busy, save }
+  /**
+   * click handler for an `<a href>` download button: the link stays a real link (middle-click, "copy link address",
+   * ctrl/cmd-click open it as the browser does), and a plain click checks the session first, like `save`.
+   * Answers null when the browser handles the click itself.
+   */
+  function follow(e, url, opts = {}) {
+    if (e.button !== 0 || e.ctrlKey || e.metaKey || e.shiftKey || e.altKey) return null
+    e.preventDefault()
+    return save(url, opts)
+  }
+  return { busy, save, follow }
 }
 
 /** message + confirm helpers shared by every screen */

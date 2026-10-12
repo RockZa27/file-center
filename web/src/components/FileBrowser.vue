@@ -43,6 +43,7 @@
         <span class="sel-count">{{ t('files.selected', { n: selected.length }) }}</span>
         <div class="sel-actions">
           <n-button v-if="can('download') && can('batchdownload')" size="small" secondary @click="downloadMany(selected)"><template #icon><n-icon :component="DownloadOutline" /></template>{{ t('common.download') }}</n-button>
+          <n-button v-if="canShare && selected.length === 1" size="small" secondary @click="openShare(selected[0])"><template #icon><n-icon :component="LinkOutline" /></template>{{ t('share.action') }}</n-button>
           <n-button v-if="can('write')" size="small" secondary @click="pick('copy', selected)"><template #icon><n-icon :component="CopyOutline" /></template>{{ t('files.copyTo') }}</n-button>
           <n-button v-if="can('write')" size="small" secondary @click="pick('move', selected)"><template #icon><n-icon :component="ReturnUpForwardOutline" /></template>{{ t('files.moveTo') }}</n-button>
           <n-button v-if="can('zip') && can('write')" size="small" secondary @click="askZip(selected)"><template #icon><n-icon :component="ArchiveOutline" /></template>{{ t('files.zip') }}</n-button>
@@ -104,6 +105,7 @@
     <upload-panel v-if="can('upload')" ref="uploader" :space="space" @uploaded="load(true)" />
     <search-modal v-model:show="searchOpen" :space="space" :start="location" @select="onSearchSelect" />
     <folder-picker v-model:show="picker.show" :space="space" :title="picker.title" :confirm-text="picker.confirm" :initial="location" @select="onPicked2" />
+    <share-modal v-if="canShare" v-model:show="share.show" :space="space" :item="share.item" />
     <preview-modal v-model:show="preview.show" :space="space" :item="preview.item" :siblings="visible" :can-edit="can('write')" :can-download="can('download')" @saved="load(true)" />
 
     <n-modal v-model:show="prompt.show" preset="card" :title="prompt.title" style="width: min(440px, 94vw)">
@@ -125,7 +127,7 @@ import {
 } from 'naive-ui'
 import {
   AddOutline, ArchiveOutline, ArrowBackOutline, CloudUploadOutline, CopyOutline, CreateOutline, DocumentTextOutline,
-  DownloadOutline, EllipsisHorizontal, EyeOffOutline, EyeOutline, FolderOpenOutline, GridOutline, HomeOutline, ListOutline,
+  DownloadOutline, EllipsisHorizontal, EyeOffOutline, EyeOutline, FolderOpenOutline, GridOutline, HomeOutline, LinkOutline, ListOutline,
   RefreshOutline, ReturnUpForwardOutline, SearchOutline, TrashOutline, FolderOutline, EyeOutline as ViewIcon, ExpandOutline,
 } from '@vicons/ionicons5'
 import { api } from '../api'
@@ -137,6 +139,7 @@ import FileIcon from './FileIcon.vue'
 import FolderPicker from './FolderPicker.vue'
 import PreviewModal from './PreviewModal.vue'
 import SearchModal from './SearchModal.vue'
+import ShareModal from './ShareModal.vue'
 import UploadPanel from './UploadPanel.vue'
 
 const props = defineProps({ space: { type: String, required: true }, emptyText: { type: String, default: '' } })
@@ -147,6 +150,8 @@ const router = useRouter()
 const fb = useFeedback()
 
 const can = p => app.can(props.space, p)
+// signed in with `share` and `download` here (visitors of the public page never make links)
+const canShare = computed(() => !!app.user && can('share') && can('download'))
 // the grid shows the original picture as its thumbnail, so leave out the big ones
 const THUMB_MAX = 5 * 1024 * 1024
 const hasThumb = it => it.type === 'file' && isImage(it.name) && it.size <= THUMB_MAX && can('download')
@@ -172,6 +177,7 @@ const folderInput = ref(null)
 const promptInput = ref(null)
 
 const preview = reactive({ show: false, item: null })
+const share = reactive({ show: false, item: null })
 const picker = reactive({ show: false, mode: 'copy', items: [], title: '', confirm: '' })
 const ctx = reactive({ show: false, x: 0, y: 0, item: null, options: [] })
 const prompt = reactive({ show: false, title: '', label: '', value: '', confirm: '', busy: false, action: null })
@@ -211,7 +217,11 @@ async function load(quiet = false) {
     items.value = res.entries
     checked.value = checked.value.filter(p => res.entries.some(e => e.path === p))
   } catch (e) {
-    if (e.status === 404 && location.value !== '/') return go('/', true)
+    // an old bookmark or a typed address: say why the page shows the top folder instead
+    if (e.status === 404 && location.value !== '/') {
+      fb.warn(t('files.folderNotFound', { path: location.value }))
+      return go('/', true)
+    }
     items.value = []
     error.value = e.message
   } finally {
@@ -327,6 +337,7 @@ function actionsFor(it) {
   else if (kindOf(it.name) !== 'other' && can('download')) list.push({ key: 'open', label: t('files.preview'), icon: ico(ViewIcon) })
   if (it.type === 'file' && can('download')) list.push({ key: 'download', label: t('common.download'), icon: ico(DownloadOutline) })
   if (it.type === 'dir' && can('download') && can('batchdownload')) list.push({ key: 'download', label: t('files.downloadZip'), icon: ico(DownloadOutline) })
+  if (canShare.value) list.push({ key: 'share', label: t('share.action'), icon: ico(LinkOutline) })
   if (can('write')) {
     list.push({ key: 'rename', label: t('common.rename'), icon: ico(CreateOutline) })
     list.push({ key: 'copy', label: t('files.copyTo'), icon: ico(CopyOutline) })
@@ -343,12 +354,18 @@ function actionsFor(it) {
 function run(key, it) {
   if (key === 'open') return open(it)
   if (key === 'download') return it.type === 'dir' ? downloadMany([it]) : triggerDownload(api.downloadUrl(props.space, it.path))
+  if (key === 'share') return openShare(it)
   if (key === 'rename') return rename(it)
   if (key === 'copy') return pick('copy', [it])
   if (key === 'move') return pick('move', [it])
   if (key === 'zip') return askZip([it])
   if (key === 'unzip') return unzip(it)
   if (key === 'delete') return remove([it])
+}
+
+function openShare(it) {
+  share.item = it
+  share.show = true
 }
 
 function openContext(e, it) {
@@ -438,7 +455,13 @@ function onSearchSelect(it) {
 .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .left, .right { display: flex; align-items: center; gap: 8px; }
 .crumbs { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; min-height: 28px; flex-wrap: wrap; }
-.crumb { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+.crumbs .n-breadcrumb { min-width: 0; }
+/* long Thai folder names have no spaces: the trail wraps inside the screen instead of pushing the page sideways */
+.crumbs :deep(.n-breadcrumb ul) { display: flex; flex-wrap: wrap; row-gap: 2px; }
+.crumbs :deep(.n-breadcrumb-item) { min-width: 0; white-space: normal; }
+.crumbs :deep(.n-breadcrumb-item__link) { overflow-wrap: anywhere; }
+.crumb { display: inline; cursor: pointer; overflow-wrap: anywhere; }
+.crumb .n-icon { vertical-align: -2px; margin-right: 4px; }
 .count { margin-left: auto; font-size: 13px; }
 .selection { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 14px; margin-bottom: 12px; border-radius: var(--radius); background: var(--primary-soft); border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent); }
 .sel-count { font-weight: 600; color: var(--primary); }

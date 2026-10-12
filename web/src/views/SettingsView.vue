@@ -32,9 +32,10 @@
         <h2>{{ t('settings.publicPage') }}</h2>
         <n-form label-placement="top">
           <n-form-item :label="t('settings.publicEnabled')"><n-switch v-model:value="f.publicEnabled" /></n-form-item>
-          <n-form-item :label="t('settings.welcomeTitle')"><n-input v-model:value="f.welcomeTitle" maxlength="120" /></n-form-item>
-          <n-form-item :label="t('settings.welcomeText')"><n-input v-model:value="f.welcomeText" type="textarea" :autosize="{ minRows: 2, maxRows: 5 }" maxlength="600" /></n-form-item>
-          <n-form-item :label="t('settings.emptyText')"><n-input v-model:value="f.publicEmptyText" maxlength="300" /></n-form-item>
+          <n-alert type="info" :show-icon="true" class="std">{{ t('settings.standardHint') }}</n-alert>
+          <n-form-item :label="t('settings.welcomeTitle')"><n-input v-model:value="f.welcomeTitle" maxlength="120" :placeholder="t('settings.stdWelcomeTitle')" clearable /></n-form-item>
+          <n-form-item :label="t('settings.welcomeText')"><n-input v-model:value="f.welcomeText" type="textarea" :autosize="{ minRows: 3, maxRows: 6 }" maxlength="600" :placeholder="t('settings.stdWelcomeText')" clearable /></n-form-item>
+          <n-form-item :label="t('settings.emptyText')"><n-input v-model:value="f.publicEmptyText" maxlength="300" :placeholder="t('settings.stdEmptyText')" clearable /></n-form-item>
           <n-form-item :label="t('settings.guestPerms')">
             <n-checkbox-group v-model:value="f.guestPermissions">
               <div class="perms"><n-checkbox v-for="k in PERMS" :key="k" :value="k" :label="t(`perm.${k}`)" /></div>
@@ -63,10 +64,12 @@ import { useI18n } from 'vue-i18n'
 import { NAlert, NButton, NCheckbox, NCheckboxGroup, NColorPicker, NForm, NFormItem, NIcon, NInput, NSpin, NSwitch, NUpload } from 'naive-ui'
 import { ImageOutline, SaveOutline } from '@vicons/ionicons5'
 import { api } from '../api'
+import { i18n } from '../i18n'
 import { useFeedback } from '../composables'
 import { useAppStore } from '../store'
 import { formatBytes } from '../utils'
 
+// what a visitor may be given: never `share`, the server refuses links from visitors whatever is set here
 const PERMS = ['read', 'download', 'batchdownload', 'upload', 'write', 'zip']
 const presets = ['#2563eb', '#7c3aed', '#db2777', '#dc2626', '#ea580c', '#16a34a', '#0d9488', '#475569']
 const { t } = useI18n()
@@ -76,18 +79,26 @@ const loading = ref(false)
 const saving = ref(false)
 const f = reactive({ appName: '', primaryColor: '#2563eb', welcomeTitle: '', welcomeText: '', publicEmptyText: '', publicEnabled: true, guestPermissions: [] })
 
+// older versions stored the Thai standard text itself; the server treats it as "standard" (it follows the language), so show it as empty
+const own = (v, key) => (v === i18n.global.getLocaleMessage('th').settings[key] ? '' : v || '')
+
 async function load() {
   loading.value = true
   try {
     const s = await api.settings()
-    Object.assign(f, { appName: s.appName, primaryColor: s.primaryColor, welcomeTitle: s.welcomeTitle, welcomeText: s.welcomeText, publicEmptyText: s.publicEmptyText, publicEnabled: s.publicEnabled, guestPermissions: [...s.guestPermissions] })
+    Object.assign(f, {
+      appName: s.appName, primaryColor: s.primaryColor,
+      welcomeTitle: own(s.welcomeTitle, 'stdWelcomeTitle'), welcomeText: own(s.welcomeText, 'stdWelcomeText'), publicEmptyText: own(s.publicEmptyText, 'stdEmptyText'),
+      publicEnabled: s.publicEnabled, guestPermissions: [...s.guestPermissions],
+    })
   } catch (e) { fb.fail(e) } finally { loading.value = false }
 }
 
 async function save() {
   saving.value = true
   try {
-    await api.saveSettings({ ...f })
+    // a cleared box is null: empty = the standard text
+    await api.saveSettings({ ...f, welcomeTitle: f.welcomeTitle ?? '', welcomeText: f.welcomeText ?? '', publicEmptyText: f.publicEmptyText ?? '' })
     await app.refresh()
     fb.ok(t('common.saved'))
   } catch (e) { fb.fail(e) } finally { saving.value = false }
@@ -116,6 +127,7 @@ onMounted(load)
 .logo-upload { width: auto; }
 .logo-prev { max-height: 48px; max-width: 180px; min-width: 48px; min-height: 32px; object-fit: contain; padding: 4px; border: 1px solid var(--border); border-radius: 8px; background: #fff; }
 .hint { font-size: 12.5px; }
+.std { margin-bottom: 16px; }
 .perms { display: flex; flex-wrap: wrap; gap: 8px 18px; }
 .actions { display: flex; justify-content: flex-end; margin-bottom: 20px; }
 .kv { display: flex; justify-content: space-between; padding: 8px 0; border-top: 1px solid var(--border); font-size: 14px; }

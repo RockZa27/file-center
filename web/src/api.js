@@ -110,12 +110,26 @@ export const api = {
   updateDiscard: id => call('DELETE', `/api/admin/update/staged/${id}`),
   updateApply: (id, password) => post('/api/admin/update/apply', { id, password }),
   updateRollback: (dir, password) => post('/api/admin/update/rollback', { dir, password }),
+  /** is there a newer version at UPDATE_SOURCE ({ current, latest, newer }) */
+  updateCheck: () => get('/api/admin/update/check'),
+  /** download it and check it: the same answer as updateStage */
+  updateFetch: () => post('/api/admin/update/fetch'),
 
   backups: () => get('/api/admin/backups'),
   backupNow: () => post('/api/admin/backups'),
   backupDelete: name => call('DELETE', `/api/admin/backups/${encodeURIComponent(name)}`),
   backupRestore: (name, password) => post('/api/admin/backups/restore', { name, password }),
   backupUrl: name => `/api/admin/backups/${encodeURIComponent(name)}/download`,
+
+  /** { space, path, days, password?, maxDownloads? } -> { share, token, url }: the token is told this once only */
+  createShare: body => post('/api/shares', body),
+  myShares: () => get('/api/shares'),
+  allShares: () => get('/api/admin/shares'),
+  revokeShare: id => call('DELETE', `/api/shares/${encodeURIComponent(id)}`),
+  // whoever holds the link, no account needed
+  shareInfo: (token, path) => get(`/api/s/${encodeURIComponent(token)}`, path && path !== '/' ? { path } : undefined),
+  shareUnlock: (token, password) => post(`/api/s/${encodeURIComponent(token)}/unlock`, { password }),
+  shareDownloadUrl: (token, path) => `/api/s/${encodeURIComponent(token)}/download${path && path !== '/' ? `?${qs({ path })}` : ''}`,
 }
 
 /** PUT one chunk with progress; resolves when the server has stored it */

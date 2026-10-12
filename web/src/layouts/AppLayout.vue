@@ -45,7 +45,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { NAvatar, NBadge, NButton, NDropdown, NIcon } from 'naive-ui'
 import {
-  ArchiveOutline, CloudUploadOutline, DocumentTextOutline, FolderOutline, GlobeOutline, KeyOutline, LogOutOutline, MenuOutline, PeopleOutline, SettingsOutline,
+  ArchiveOutline, CloudUploadOutline, DocumentTextOutline, FolderOutline, GlobeOutline, KeyOutline, LinkOutline, LogOutOutline, MenuOutline, PeopleOutline, SettingsOutline,
   SpeedometerOutline, TimeOutline, TrashOutline,
 } from '@vicons/ionicons5'
 import { api } from '../api'
@@ -70,6 +70,7 @@ const critical = computed(() => warnings.value.some(w => w.level === 'critical')
 const navItems = computed(() => {
   const items = [{ name: 'files', label: t('nav.files'), icon: FolderOutline }]
   if (!app.isAdmin && app.hasSpace('public')) items.push({ name: 'shared', label: t('nav.publicFolder'), icon: GlobeOutline })
+  if (app.canShare) items.push({ name: 'links', label: t('nav.shareLinks'), icon: LinkOutline })
   if (app.isAdmin) {
     items.push(
       { name: 'dashboard', label: t('nav.dashboard'), icon: SpeedometerOutline, badge: alertCount.value, badgeType: critical.value ? 'error' : 'warning' },
