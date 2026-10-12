@@ -261,6 +261,8 @@ export function savedFileUrl(raw: unknown): string | null {
   if (typeof raw !== 'string') return null
   let u: URL
   try { u = new URL(raw) } catch { return null }
+  // http(s) only, on its own as well: Bun's fetch would read a file: URL from this machine
+  if (u.protocol !== 'https:' && u.protocol !== 'http:') return null
   if (!c.origins.includes(u.origin) || u.username || u.password) return null
   const pub = new URL(c.url).origin
   const server = new URL(c.serverUrl)
