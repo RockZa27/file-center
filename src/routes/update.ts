@@ -6,6 +6,8 @@ import { config, paths } from '../config'
 import { context, requireAdmin } from '../context'
 import { ensureDir, forbidden, HttpError } from '../fsx'
 import { restartSoon, supervised } from '../lifecycle'
+import { langOf } from '../messages'
+import { checkSource, fetchPackage, sourceStatus } from '../update-source'
 import { applyStaged, discardStaged, rollbackTo, stagePackage, updateStatus } from '../updater'
 import { completeUpload, initUpload, uploadsInProgress } from '../uploads'
 
@@ -21,9 +23,29 @@ function enabled() {
 export const updateRoutes = new Elysia({ prefix: '/api/admin/update' })
   .use(context)
 
-  .get('/', ({ user, ip }) => {
+  .get('/', ({ user, ip, request }) => {
     requireAdmin({ user, ip })
-    return { ...updateStatus(), uploadsInProgress: uploadsInProgress() }
+    return { ...updateStatus(langOf(request)), source: sourceStatus(), uploadsInProgress: uploadsInProgress() }
+  })
+
+  // is there a newer version at UPDATE_SOURCE? Asked only when the admin presses the button
+  .get('/check', ({ user, ip }) => {
+    requireAdmin({ user, ip })
+    return checkSource()
+  })
+
+  // download the newest package from UPDATE_SOURCE and stage it exactly like an uploaded one (same answer as /stage)
+  .post('/fetch', async ({ user, ip }) => {
+    const admin = requireAdmin({ user, ip })
+    enabled()
+    const got = await fetchPackage()
+    try {
+      const staged = await stagePackage(got.path, got.size)
+      audit({ user: admin.username, ip, action: 'update-fetch', detail: staged.version })
+      return staged
+    } finally {
+      rmSync(got.path, { force: true })
+    }
   })
 
   // 1) announce the package, 2) PUT its chunks to /api/upload/:id/:n, 3) stage it

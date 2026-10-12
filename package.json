@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "bun test",
     "package": "bun scripts/package.ts",
+    "release": "bun scripts/release.ts",
     "qa": "bun scripts/qa/run-checks.ts",
     "qa:seed": "bun scripts/qa/seed.ts check",
     "qa:score": "bun scripts/qa/score.ts"

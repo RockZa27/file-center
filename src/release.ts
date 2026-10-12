@@ -32,8 +32,15 @@ export type ReleaseState = {
   history: string[]
   /** an update that has not proven itself yet; if it fails to start the launcher goes back to `previous` */
   pending: { dir: string; previous: string | null; at: string } | null
-  /** what happened to the last switch, for the update page */
-  last: { dir: string | null; version: string; ok: boolean; message: string; at: string } | null
+  /**
+   * what happened to the last switch, for the update page. `message` is the Thai text and is always written: an
+   * older app reads only that. `code` + `params` (a code of messages.ts) let a newer app answer in the page's
+   * language; a launcher before 1.3.0 does not write them.
+   */
+  last: {
+    dir: string | null; version: string; ok: boolean; message: string; at: string
+    code?: string; params?: Record<string, string | number>
+  } | null
 }
 
 export const RELEASE_NAME = /^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$/

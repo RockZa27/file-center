@@ -94,6 +94,34 @@ bun run package --notes "สิ่งที่เปลี่ยน"     # ไ�
 
 ถ้าไม่ตั้ง `UPDATE_PUBLIC_KEY` ระบบรับทั้งแพ็กเกจที่เซ็นและไม่เซ็น (แต่ตรวจลายเซ็นไม่ได้เพราะไม่มีกุญแจ)
 
+### เผยแพร่อัปเดตใน git และให้ server ตรวจหาเอง
+
+**เผยแพร่** (บนเครื่องที่มีโค้ด ทุกครั้งที่ออกเวอร์ชันใหม่):
+
+```bash
+# เพิ่ม "version" ใน package.json แล้ว commit ให้เรียบร้อยก่อน
+bun run release --sign ~/file-center-keys/update-signing.key --notes "สิ่งที่เปลี่ยน" --push
+```
+
+- สร้างแพ็กเกจด้วย `scripts/package.ts` แล้ว commit ลง branch `updates` (branch ที่มีแต่แพ็กเกจ ไม่มีโค้ด สร้างให้เองถ้ายังไม่มี) พร้อม `SHA256SUMS`, แถวใหม่ในตารางของ `README.md` และ `latest.json` (เวอร์ชันล่าสุด ที่ server อ่าน)
+- ไม่ยอมทำงานถ้ามีไฟล์ที่ยังไม่ได้ commit (แพ็กเกจต้องตรงกับ commit ที่ระบุ) หรือ version ไม่ใหม่กว่าทุกเวอร์ชันที่มีใน `updates` แล้ว
+- ไม่ใส่ `--push` = commit ไว้ในเครื่องเท่านั้น ตรวจแล้วค่อย `git push origin updates` เอง ใช้ `--skip-web` ถ้า build หน้าเว็บไว้แล้ว
+- branch ปัจจุบันที่ทำงานอยู่ไม่ถูกแตะต้อง (ทำใน git worktree ชั่วคราวแล้วลบทิ้งเสมอ)
+
+**เปิดให้ server ตรวจหาอัปเดต:** ตั้งใน `.env` แล้วรีสตาร์ต (`docker compose up -d`):
+
+```env
+UPDATE_SOURCE=https://raw.githubusercontent.com/<owner>/<repo>/updates
+```
+
+หน้าอัปเดตจะมีปุ่มตรวจหาเวอร์ชันใหม่ (server อ่าน `latest.json` เฉพาะตอนกดปุ่ม ไม่มีการตรวจเองเบื้องหลัง) ถ้ามีเวอร์ชันใหม่กว่า กดดาวน์โหลดแล้ว server
+ดึงไฟล์มาเอง ตรวจ SHA-256 กับ `latest.json` แล้วตรวจแพ็กเกจแบบเดียวกับไฟล์ที่ลากมาวางทุกอย่าง การติดตั้งยังต้องใส่รหัสผ่านซ้ำเหมือนเดิม
+
+- ใช้ได้กับ **repo สาธารณะ** เท่านั้น (server ดาวน์โหลดโดยไม่มีรหัสผ่านหรือ token) repo ส่วนตัวให้ดาวน์โหลดไฟล์ .zip เองแล้วลากมาวางแทน
+- รับเฉพาะ `https://` (ยกเว้น `http://127.0.0.1` / `localhost` สำหรับทดสอบ) และไม่ตามการ redirect ค่าอื่นระบบยังเปิดได้ แต่จะเตือนใน log และปิดการตรวจหาอัปเดตไว้
+- **แนะนำให้เซ็นแพ็กเกจและตั้ง `UPDATE_PUBLIC_KEY` ด้วย:** server จะติดตั้งโค้ดที่ดึงมาจากอินเทอร์เน็ต SHA-256 ใน `latest.json` บอกได้แค่ว่าไฟล์ไม่เสียระหว่างทาง
+  แต่บอกไม่ได้ว่าใครสร้าง ใครที่แก้ branch `updates` ได้ (หรือบัญชี GitHub ถูกยึด) ก็เปลี่ยนทั้งแพ็กเกจและ `latest.json` ได้ มีแต่ลายเซ็นที่กันกรณีนี้
+
 ## ใช้งานผ่านโดเมนด้วย Cloudflare Tunnel
 
 Cloudflare Tunnel ให้คนภายนอกเข้าผ่านโดเมน (เช่น `https://files.example.com`) ได้โดย **ไม่ต้องเปิดพอร์ตที่เราเตอร์และไม่ต้องมี IP จริง**
@@ -156,6 +184,7 @@ Cloudflare Tunnel ให้คนภายนอกเข้าผ่านโ�
 | `WEB_UPDATE` | `true` | `false` = ปิดการอัปเดตจากหน้าเว็บ |
 | `UPDATE_MAX_SIZE` | 200 MB | ขนาดสูงสุดของแพ็กเกจอัปเดต (ไบต์) |
 | `UPDATE_PUBLIC_KEY` | ว่าง | public key จาก `bun run package --gen-key` ตั้งแล้วรับเฉพาะแพ็กเกจที่เซ็นด้วยกุญแจคู่กัน (ดู เซ็นแพ็กเกจ) |
+| `UPDATE_SOURCE` | ว่าง (ปิด) | URL ของ branch `updates` ที่ `bun run release` เผยแพร่ไว้ เช่น `https://raw.githubusercontent.com/<owner>/<repo>/updates` (https เท่านั้น repo สาธารณะเท่านั้น) |
 | `BACKUP_DIR` | โฟลเดอร์ `backups` ข้าง `DATA_DIR` (Docker: `/data/backups`) | ที่เก็บไฟล์สำรองข้อมูลระบบ ควรอยู่คนละดิสก์กับข้อมูล |
 | `BACKUP_KEEP` | 7 | เก็บไฟล์สำรองล่าสุดกี่ไฟล์ |
 | `BACKUP_HOUR` | 3 | สำรองอัตโนมัติทุกวันชั่วโมงไหน (0-23 ตามเวลาเครื่อง) `off` = ปิดการสำรองอัตโนมัติ |
@@ -230,6 +259,7 @@ src/
   index.ts          ประกอบแอป, เสิร์ฟหน้าเว็บ, งานเบื้องหลังรายชั่วโมง
   launcher.ts       ตัวรันแอป: รีสตาร์ตหลังอัปเดต และย้อนกลับเวอร์ชันเองถ้าเวอร์ชันใหม่เปิดไม่ขึ้น
   updater.ts, release.ts, routes/update.ts   ตรวจ/ติดตั้ง/ย้อนกลับแพ็กเกจอัปเดตจากหน้าเว็บ
+  update-source.ts  ตรวจหาและดาวน์โหลดแพ็กเกจจาก UPDATE_SOURCE (latest.json)
   backup.ts, routes/backup.ts               สำรองข้อมูลระบบอัตโนมัติ และกู้คืน
   config.ts         ค่าตั้งต้นและตำแหน่งโฟลเดอร์
   auth.ts           ผู้ใช้, session, ล็อกการเข้าสู่ระบบ, การแปลงสิทธิ์เป็นพื้นที่ที่เข้าถึงได้
@@ -244,12 +274,14 @@ src/
   trash.ts, audit.ts, settings.ts, store.ts, common-passwords.ts
   routes/           session, files, upload, admin, update, backup, logs, shares
 scripts/package.ts  สร้างแพ็กเกจอัปเดต (bun run package)
+scripts/release.ts  เผยแพร่แพ็กเกจลง branch updates (bun run release)
 web/                Vue 3 + Naive UI (build ไปที่ web/dist)
 tests/api.test.ts   ทดสอบ API
 tests/shares.test.ts  ลิงก์แชร์: สิทธิ์ รหัสผ่าน หมดอายุ จำนวนครั้ง และไม่ออกนอกโฟลเดอร์ที่แชร์
 tests/logs.test.ts  ทดสอบ log ของระบบ การหมุนไฟล์ การส่งออก และว่าไม่มีความลับหลุดลง log
 tests/messages.test.ts  ทุกรหัสที่ใช้ใน src/ มีในรายการข้อความ ทั้งสองภาษามีตัวแปรตรงกัน error ตอบตามภาษาของคำขอ และลิงก์ดาวน์โหลดที่ล้มเหลวได้หน้า HTML
 tests/update.test.ts, tests/backup.test.ts   ทดสอบอัปเดตและกู้คืนข้อมูลกับ launcher จริง
+tests/update-source.test.ts, tests/release.test.ts   ตรวจหา/ดาวน์โหลดอัปเดตจาก server ทดสอบในเครื่อง และ bun run release กับ repo ชั่วคราว
 tests/perf.test.ts  การนับไฟล์ 50,000 ไฟล์ การคัดลอก 20,000 ไฟล์ และการค้นหาต้องไม่ทำให้คำขออื่นช้า (โหมด `dashboard` ใน scripts/loadtest.ts ใช้ลองกับ server จริง)
 ```
 
@@ -305,7 +337,8 @@ tests/perf.test.ts  การนับไฟล์ 50,000 ไฟล์ การ
 | `GET /api/admin/logs` (`level=info\|warn\|error`, `q`, `page`, `pageSize`) | log ของระบบ ใหม่สุดก่อน อ่านต่อไปยังไฟล์ที่หมุนแล้ว ตอบ `{ items, hasMore }` (เฉพาะ admin) |
 | `GET /api/admin/logs/download` | zip ของ `system.log`, `launcher.log`, `audit.log` (รวมไฟล์ที่หมุนแล้ว) (เฉพาะ admin) |
 | `GET /api/admin/activity/export?format=csv` | ส่งออกประวัติการใช้งานเป็น CSV ตามตัวกรองเดียวกับหน้าประวัติ (`user`, `action`, `q`) เป็น UTF-8 มี BOM ให้ Excel แสดงภาษาไทยได้ ช่องที่ขึ้นต้นด้วย `=` `+` `-` `@` tab หรือ CR จะมี `'` นำหน้ากันสูตร Excel (เฉพาะ admin) |
-| `/api/admin/update/*` | อัปเดตระบบ: อัปโหลดแพ็กเกจ (ส่งชิ้นส่วนด้วย `PUT /api/upload/:id/:n`), ตรวจ, ติดตั้ง, ย้อนกลับ (เฉพาะ admin) |
+| `/api/admin/update/*` | อัปเดตระบบ: อัปโหลดแพ็กเกจ (ส่งชิ้นส่วนด้วย `PUT /api/upload/:id/:n`), ตรวจ, ติดตั้ง, ย้อนกลับ (เฉพาะ admin) `GET /api/admin/update` มี `source: { enabled, url }` และ `last.message` ตามภาษาของคำขอ |
+| `GET /api/admin/update/check` · `POST /api/admin/update/fetch` | ถาม `latest.json` ของ `UPDATE_SOURCE` → `{ enabled, current, latest: { version, notes, size, signed, builtAt }, newer }` · ดาวน์โหลดแพ็กเกจล่าสุดแล้วตรวจแบบเดียวกับ `/stage` (ตอบเหมือนกัน) ติดตั้งต่อด้วย `/apply` (เฉพาะ admin) |
 | `GET /api/health` | ตรวจสุขภาพ (ใช้กับ Docker healthcheck) ผู้เยี่ยมชมได้แค่ `status` เครื่อง server เองและ admin ได้เวอร์ชันด้วย |
 
 ## ต่างจาก FileGator ต้นแบบอย่างไร

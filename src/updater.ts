@@ -17,10 +17,10 @@ import {
 import { join, relative, sep } from 'node:path'
 import { config, paths } from './config'
 import { bad, conflict, ensureSpace, freeSpace, HttpError, notFound } from './fsx'
-import type { MessageCode, Params } from './messages'
+import { MESSAGES, text, type Lang, type MessageCode, type Params } from './messages'
 import {
   compareVersions, isVersion, readManifest, readState, releasePath, releasesDir, releaseUsable, RELEASE_NAME, SERVER_FILE,
-  stagingDir, writeState, type Manifest,
+  stagingDir, writeState, type Manifest, type ReleaseState,
 } from './release'
 import { unzipTo } from './zip'
 
@@ -344,7 +344,18 @@ export function rollbackTo(target: string | null): Promise<{ version: string }> 
   })
 }
 
-export function updateStatus() {
+/**
+ * The text of `last` in the page's language. A launcher before 1.3.0 wrote only the Thai `message`, and a newer one
+ * may write a code this version does not know: both keep the message as written.
+ */
+function lastMessage(last: NonNullable<ReleaseState['last']>, lang: Lang): string {
+  const { code, params } = last
+  if (typeof code !== 'string' || !Object.hasOwn(MESSAGES, code)) return String(last.message ?? '')
+  const safe = params && typeof params === 'object' && !Array.isArray(params) ? params : {}
+  return text(lang, code as MessageCode, safe)
+}
+
+export function updateStatus(lang: Lang = 'th') {
   const state = readState(config.dataDir)
   const describe = (dir: string) => {
     const m = readManifest(releasePath(config.dataDir, dir))
@@ -357,7 +368,7 @@ export function updateStatus() {
     runningRelease: process.env.FC_RELEASE || null,
     builtinVersion: process.env.FC_BUILTIN_VERSION ?? config.version,
     pending: state.pending,
-    last: state.last,
+    last: state.last && { ...state.last, message: lastMessage(state.last, lang) },
     history: state.history.map(describe).filter(Boolean),
     maxPackageSize: config.updateMaxSize,
     signatureRequired: signatureRequired(),

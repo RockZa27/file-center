@@ -10,6 +10,7 @@ import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { config, paths } from './config'
 import { appendLine } from './logger'
+import { text, type MessageCode, type Params } from './messages'
 import {
   EXIT_RESTART, readManifest, readState, releasePath, releaseUsable, SERVER_FILE, writeState, compareVersions,
   type ReleaseState,
@@ -24,6 +25,8 @@ function log(event: string, m: string, level: 'info' | 'warn' | 'error' = 'info'
   appendLine(paths.launcherLog, JSON.stringify({ ts: new Date().toISOString(), level, event, detail: m }))
 }
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
+/** `last.message` stays Thai text for apps before 1.3.0; code + params let a newer app answer in the page's language */
+const outcome = (code: MessageCode, params: Params = {}) => ({ message: text('th', code, params), code, params })
 
 type Target = { name: string | null; version: string; cmd: string[]; env: Record<string, string> }
 
@@ -61,7 +64,7 @@ async function healthy(target: Target): Promise<boolean> {
 }
 
 /** an update that failed: go back to what ran before and remember why */
-function rollBack(state: ReleaseState, name: string, why: string) {
+function rollBack(state: ReleaseState, name: string, why: ReturnType<typeof outcome>) {
   const previous = state.pending?.dir === name ? state.pending.previous : null
   const version = readManifest(releasePath(config.dataDir, name))?.version ?? name
   writeState(config.dataDir, {
@@ -69,10 +72,10 @@ function rollBack(state: ReleaseState, name: string, why: string) {
     current: previous && releaseUsable(config.dataDir, previous) ? previous : null,
     history: state.history.filter(h => h !== name && h !== previous),
     pending: null,
-    last: { dir: name, version, ok: false, message: why, at: new Date().toISOString() },
+    last: { dir: name, version, ok: false, ...why, at: new Date().toISOString() },
   })
   rmSync(releasePath(config.dataDir, name), { recursive: true, force: true })
-  log('rollback', `อัปเดต ${version} ใช้งานไม่ได้ (${why}) ย้อนกลับแล้ว`, 'error')
+  log('rollback', `อัปเดต ${version} ใช้งานไม่ได้ (${why.message}) ย้อนกลับแล้ว`, 'error')
 }
 
 let child: ReturnType<typeof Bun.spawn> | null = null
@@ -98,7 +101,7 @@ async function main() {
           const state = readState(config.dataDir)
           if (state.pending?.dir === target.name) {
             const version = readManifest(releasePath(config.dataDir, target.name))?.version ?? target.version
-            writeState(config.dataDir, { ...state, pending: null, last: { dir: target.name, version, ok: true, message: 'ติดตั้งสำเร็จ', at: new Date().toISOString() } })
+            writeState(config.dataDir, { ...state, pending: null, last: { dir: target.name, version, ok: true, ...outcome('update.installed'), at: new Date().toISOString() } })
             log('update-ok', `อัปเดต ${version} ทำงานปกติแล้ว`)
           }
           return
@@ -125,7 +128,7 @@ async function main() {
     }
     if (pendingNow) {
       // never answered, or fell over before it was confirmed
-      rollBack(state, target.name!, `โปรเซสหยุดทำงาน (code ${code}) ก่อนยืนยันการติดตั้ง`)
+      rollBack(state, target.name!, outcome('update.exited-unconfirmed', { exit: code }))
       continue
     }
     // a running version that crashes later is restarted as it is: rolling back could hide a mistake in .env or the disk
