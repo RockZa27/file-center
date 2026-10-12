@@ -1,8 +1,61 @@
-{"agent":"ux-tester","flows":[
-{"name":"english-errors","passed":false,"consoleErrors":0,"expectedHttpErrors":11,"screenshot":"qa/reports/r4/screenshots/english-errors.png","notes":"The four required checks pass in both languages (wrong password, 'a:b' folder, fake update zip, vanished file in preview), Thai and English, with the browser locale set to the other language. FAIL because of one more case: on the English page, the row menu 'Download' for a file that no longer exists sends the whole tab to /api/download?space=home&path=%2Fgone2.txt; the user leaves the app and sees raw JSON in the BROWSER's language ({\"error\":\"ไม่พบรายการที่ระบุ\",\"code\":\"request.not-found\"}) because a plain link carries no x-lang. Screenshot english-errors-download-vanished-file.png. Notes: /files?path=/no-such-folder quietly goes back to Home with no message; a synthetic DataTransfer drop is not picked up by n-upload-dragger so the chooser was used."},
-{"name":"dashboard-language","passed":true,"consoleErrors":0,"expectedHttpErrors":0,"screenshot":"qa/reports/r4/screenshots/dashboard-language.png","notes":"Low-disk warning switched th -> en -> th without a page reload (window marker survived, 0 main-frame navigations)."},
-{"name":"download-after-expiry","passed":true,"consoleErrors":0,"expectedHttpErrors":0,"screenshot":"qa/reports/r4/screenshots/download-after-expiry.png","notes":"After deleting fc_sid, logs/CSV/backup downloads saved no file and each tab went to sign-in (the sign-in page does not say the session ended). Access log: no download request while signed out. After signing in: logs zip 1166 B, CSV 1523 B with BOM, backup zip 2445 B; none contained JSON."},
-{"name":"trash-1200","passed":true,"consoleErrors":0,"expectedHttpErrors":0,"screenshot":"qa/reports/r4/screenshots/trash-1200.png","notes":"80-letter Thai name wraps fully over 2 lines in the ~390 px column; last cell ends at 1175 px; no horizontal scroll. 375 px cards: no overflow."},
-{"name":"busy-server","passed":true,"consoleErrors":0,"expectedHttpErrors":0,"screenshot":"qa/reports/r4/screenshots/busy-server.png","notes":"5,000 files copied 3 times (1.7-3.4 s each). Slowest folder open in the page during a copy 356 ms; /api/list every 50 ms during a copy max 16 ms (29 samples); a search during the copy 1023 ms in the UI (~80-100 ms server). Search for a name inside the copy found it."},
-{"name":"copy-into-self","passed":true,"consoleErrors":0,"expectedHttpErrors":0,"screenshot":"qa/reports/r4/screenshots/copy-into-self.png","notes":"Copy '..a' into '..a/..b' refused: 'สำเร็จ 0 รายการ ไม่สำเร็จ 1 รายการ (ไม่สามารถคัดลอกโฟลเดอร์เข้าไปในตัวมันเองได้)', English '0 succeeded, 1 failed (A folder cannot be copied into itself.)'; ..a/..b still empty."}
-]}
+{
+ "agent": "ux-tester",
+ "flows": [
+  {
+   "name": "english-errors",
+   "passed": false,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 11,
+   "screenshot": "qa/reports/r4/screenshots/english-errors.png",
+   "notes": "The four required checks pass in both languages (wrong password, 'a:b' folder, fake update zip, vanished file in preview), Thai and English, with the browser locale set to the other language. FAIL because of one more case: on the English page, the row menu 'Download' for a file that no longer exists sends the whole tab to /api/download?space=home&path=%2Fgone2.txt; the user leaves the app and sees raw JSON in the BROWSER's language ({\"error\":\"ไม่พบรายการที่ระบุ\",\"code\":\"request.not-found\"}) because a plain link carries no x-lang. Screenshot english-errors-download-vanished-file.png. Notes: /files?path=/no-such-folder quietly goes back to Home with no message; a synthetic DataTransfer drop is not picked up by n-upload-dragger so the chooser was used."
+  },
+  {
+   "name": "dashboard-language",
+   "passed": true,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 0,
+   "screenshot": "qa/reports/r4/screenshots/dashboard-language.png",
+   "notes": "Low-disk warning switched th -> en -> th without a page reload (window marker survived, 0 main-frame navigations)."
+  },
+  {
+   "name": "download-after-expiry",
+   "passed": true,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 0,
+   "screenshot": "qa/reports/r4/screenshots/download-after-expiry.png",
+   "notes": "After deleting fc_sid, logs/CSV/backup downloads saved no file and each tab went to sign-in (the sign-in page does not say the session ended). Access log: no download request while signed out. After signing in: logs zip 1166 B, CSV 1523 B with BOM, backup zip 2445 B; none contained JSON."
+  },
+  {
+   "name": "trash-1200",
+   "passed": true,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 0,
+   "screenshot": "qa/reports/r4/screenshots/trash-1200.png",
+   "notes": "80-letter Thai name wraps fully over 2 lines in the ~390 px column; last cell ends at 1175 px; no horizontal scroll. 375 px cards: no overflow."
+  },
+  {
+   "name": "busy-server",
+   "passed": true,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 0,
+   "screenshot": "qa/reports/r4/screenshots/busy-server.png",
+   "notes": "5,000 files copied 3 times (1.7-3.4 s each). Slowest folder open in the page during a copy 356 ms; /api/list every 50 ms during a copy max 16 ms (29 samples); a search during the copy 1023 ms in the UI (~80-100 ms server). Search for a name inside the copy found it."
+  },
+  {
+   "name": "copy-into-self",
+   "passed": true,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 0,
+   "screenshot": "qa/reports/r4/screenshots/copy-into-self.png",
+   "notes": "Copy '..a' into '..a/..b' refused: 'สำเร็จ 0 รายการ ไม่สำเร็จ 1 รายการ (ไม่สามารถคัดลอกโฟลเดอร์เข้าไปในตัวมันเองได้)', English '0 succeeded, 1 failed (A folder cannot be copied into itself.)'; ..a/..b still empty."
+  },
+  {
+   "name": "english-errors-retest",
+   "passed": true,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 8,
+   "screenshot": "qa/reports/r4/screenshots/english-errors-retest.png",
+   "notes": "After the download-errors fix: the 4 errors in English with a th-TH browser; row 'Download' on a file deleted on disk opens a text/html page (lang=en) 'The item was not found. / request.not-found (404) / Back to the home page', link works; signed out in another tab: 'Please sign in.' page, no file saved; Thai page: same two cases in Thai with working link; signed in: real 10-byte file with the right bytes. Notes: the error page shows the internal code under the message; on the English public page the title and empty-list text stay Thai (admin-editable defaults in src/settings.ts)."
+  }
+ ]
+}
