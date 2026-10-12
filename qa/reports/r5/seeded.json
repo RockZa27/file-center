@@ -1,0 +1,80 @@
+{
+  "dir": "/tmp/fc-audit-r5",
+  "bugs": {
+    "share-owner-perms": [
+      {
+        "file": "src/shares.ts",
+        "line": 95
+      }
+    ],
+    "share-link-in-folder": [
+      {
+        "file": "src/routes/shares.ts",
+        "line": 29
+      }
+    ],
+    "share-password-no-lockout": [
+      {
+        "file": "src/routes/shares.ts",
+        "line": 1
+      }
+    ],
+    "update-fetch-no-sha": [
+      {
+        "file": "src/update-source.ts",
+        "line": 211
+      }
+    ],
+    "update-source-any-http": [
+      {
+        "file": "src/update-source.ts",
+        "line": 53
+      }
+    ],
+    "upload-owner": [
+      {
+        "file": "src/uploads.ts",
+        "line": 33
+      }
+    ],
+    "backup-name-traversal": [
+      {
+        "file": "src/backup.ts",
+        "line": 24
+      }
+    ]
+  },
+  "decoys": {
+    "decoy-todo-download": [
+      {
+        "file": "src/routes/files.ts",
+        "line": 248
+      }
+    ],
+    "decoy-legacy-join": [
+      {
+        "file": "src/fsx.ts",
+        "line": 282
+      }
+    ],
+    "decoy-csrf-note": [
+      {
+        "file": "src/context.ts",
+        "line": 98
+      }
+    ],
+    "decoy-backup-name": [
+      {
+        "file": "src/backup.ts",
+        "line": 59
+      }
+    ],
+    "decoy-access-url": [
+      {
+        "file": "src/logger.ts",
+        "line": 145
+      }
+    ]
+  },
+  "cleanDir": "/tmp/fc-audit-r5-clean"
+}
