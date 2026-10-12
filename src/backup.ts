@@ -17,6 +17,7 @@ import { config, paths } from './config'
 import { bad, cleanName, conflict, ensureSpace, fromFsError, HttpError, notFound, within } from './fsx'
 import { restartSoon } from './lifecycle'
 import { log } from './logger'
+import { type Lang, MESSAGES, type MessageCode, type Params, text } from './messages'
 import { JsonStore } from './store'
 import { collectZipItems, zipStream, type ZipItem } from './zip'
 
@@ -27,7 +28,12 @@ export type BackupStatus = {
   status: 'ok' | 'failed'
   lastSuccess: string | null
   lastAttempt: string
+  /** Thai, for whoever reads the file; the API answers with `code` + `params` in the reader's language */
   message: string
+  /** missing in a status written before there were codes: then `message` is shown as it is */
+  code?: MessageCode
+  /** a failure's reason (`reason`, and `reasonCode` when it is a catalog message) */
+  params?: Params
   file: string | null
   size: number | null
 }
@@ -72,9 +78,18 @@ export function readStatus(): BackupStatus | null {
   try { return JSON.parse(readFileSync(paths.backupStatus, 'utf8')) } catch { return null }
 }
 
-function writeStatus(s: BackupStatus) {
+/** the status as the API answers it: `message` in `lang`; an old file without a code keeps its stored message */
+export function statusIn(lang: Lang): BackupStatus | null {
+  const s = readStatus()
+  if (!s || typeof s.code !== 'string' || !(s.code in MESSAGES)) return s
+  const params: Params = { ...(s.params && typeof s.params === 'object' ? s.params : {}) }
+  if (typeof params.reasonCode === 'string' && params.reasonCode in MESSAGES) params.reason = text(lang, params.reasonCode as MessageCode)
+  return { ...s, message: text(lang, s.code, params) }
+}
+
+function writeStatus(s: Omit<BackupStatus, 'message'> & { code: MessageCode; params: Params }) {
   try {
-    writeFileSync(`${paths.backupStatus}.tmp`, JSON.stringify(s, null, 2))
+    writeFileSync(`${paths.backupStatus}.tmp`, JSON.stringify({ ...s, message: text('th', s.code, s.params) }, null, 2))
     renameSync(`${paths.backupStatus}.tmp`, paths.backupStatus)
   } catch (err) {
     log.error('backup-status-write-failed', err)
@@ -168,12 +183,15 @@ async function writeBackup(protect?: string): Promise<BackupItem> {
       if (old.name !== protect) rmSync(join(config.backupDir, old.name), { force: true })
     }
     const size = statSync(target).size
-    writeStatus({ status: 'ok', lastSuccess: attempt, lastAttempt: attempt, message: 'สำรองข้อมูลสำเร็จ', file: name, size })
+    writeStatus({ status: 'ok', lastSuccess: attempt, lastAttempt: attempt, code: 'backup.done', params: {}, file: name, size })
     return { name, size, createdAt: createdAtOf(name) }
   } catch (err) {
-    const why = fromFsError(err)?.message ?? (err as Error).message
+    const known = fromFsError(err)
+    const why = known?.message ?? (err as Error).message
     log.error('backup-failed', err instanceof HttpError ? why : err)
-    writeStatus({ status: 'failed', lastSuccess: readStatus()?.lastSuccess ?? null, lastAttempt: attempt, message: `สำรองข้อมูลไม่สำเร็จ: ${why}`, file: null, size: null })
+    // a known reason (disk full...) is shown in the reader's language too; anything else as it was said
+    const params: Params = known && !Object.keys(known.params).length ? { reason: why, reasonCode: known.code } : { reason: why }
+    writeStatus({ status: 'failed', lastSuccess: readStatus()?.lastSuccess ?? null, lastAttempt: attempt, code: 'backup.failed', params, file: null, size: null })
     throw err
   }
 }

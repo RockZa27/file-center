@@ -3,7 +3,7 @@ import { existsSync, lstatSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { basename, dirname, join } from 'node:path'
 import { config, paths } from './config'
 import {
-  conflict, ensureDir, moveSync, notFound, parentRel, resolveIn, storagePath, treeStats, uniquePath,
+  conflict, ensureDir, moveTree, notFound, parentRel, resolveIn, storagePath, treeStats, uniquePath,
 } from './fsx'
 
 export type TrashMeta = {
@@ -40,7 +40,7 @@ export async function moveToTrash(abs: string, deletedBy: string): Promise<Trash
   }
   ensureDir(itemDir(id))
   try {
-    moveSync(abs, join(itemDir(id), 'item'))
+    await moveTree(abs, join(itemDir(id), 'item'))
   } catch (err) {
     // e.g. another request moved or deleted it while we counted: leave no empty trash entry behind
     rmSync(itemDir(id), { recursive: true, force: true })
@@ -66,7 +66,7 @@ export function trashSummary() {
   return { count: items.length, size: items.reduce((s, i) => s + i.size, 0) }
 }
 
-export function restore(idRaw: unknown): { meta: TrashMeta; restoredTo: string } {
+export async function restore(idRaw: unknown): Promise<{ meta: TrashMeta; restoredTo: string }> {
   const id = safeId(idRaw)
   const dir = itemDir(id)
   if (!existsSync(join(dir, 'meta.json'))) throw notFound()
@@ -75,7 +75,7 @@ export function restore(idRaw: unknown): { meta: TrashMeta; restoredTo: string }
   ensureDir(dirname(target))
   const finalPath = uniquePath(target)
   if (existsSync(finalPath)) throw conflict('admin.trash-name-taken')
-  moveSync(join(dir, 'item'), finalPath)
+  await moveTree(join(dir, 'item'), finalPath)
   rmSync(dir, { recursive: true, force: true })
   return { meta, restoredTo: storagePath(finalPath) }
 }

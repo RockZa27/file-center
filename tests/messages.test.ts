@@ -6,7 +6,8 @@
  */
 import { beforeAll, describe, expect, test } from 'bun:test'
 import { generateKeyPairSync } from 'node:crypto'
-import { readdirSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { zipSync } from 'fflate'
 import './in-process-env'
@@ -285,7 +286,10 @@ describe('a failed download link opened in the tab', () => {
       const html = await res.text()
       expect(html).toContain(`<html lang="${lang}">`)
       expect(html).toContain(`<h1>${MESSAGES['request.not-found'][lang]}</h1>`)
-      expect(html).toContain('request.not-found')
+      // the reader sees the message and the status number; the internal code is only in the header
+      expect(res.headers.get('x-error-code')).toBe('request.not-found')
+      expect(html).not.toContain('request.not-found')
+      expect(html).toContain('<small>404</small>')
       expect(html).toContain(`<a href="/">${MESSAGES['request.back-to-app'][lang]}</a>`)
       expect(html).not.toContain('<script')
       expect(html).not.toContain('"error"')
@@ -320,7 +324,9 @@ describe('a failed download link opened in the tab', () => {
     expect(res.status).toBe(401)
     const html = await res.text()
     expect(html).toContain(`<h1>${MESSAGES['auth.required'].en}</h1>`)
-    expect(html).toContain('auth.required')
+    expect(res.headers.get('x-error-code')).toBe('auth.required')
+    expect(html).not.toContain('auth.required')
+    expect(html).toContain('<small>401</small>')
     for (const path of ['/api/batch/no-such-token', '/api/admin/logs/download', '/api/admin/activity/export', '/api/admin/backups/x.zip/download']) {
       const r = await open(path, { ...NAV, cookie: 'fc_lang=th' })
       expect(`${path} ${r.status >= 400} ${r.headers.get('content-type')}`).toBe(`${path} true text/html; charset=utf-8`)
@@ -349,6 +355,96 @@ describe('a failed download link opened in the tab', () => {
   })
 })
 
+describe('texts of the public page', () => {
+  const STANDARD = {
+    en: { welcomeTitle: 'File Center', welcomeText: 'Download the published files here. To upload or manage files, please sign in.', publicEmptyText: 'No files have been published yet.' },
+    th: {
+      welcomeTitle: 'ศูนย์รวมไฟล์',
+      welcomeText: 'ดาวน์โหลดไฟล์ที่เผยแพร่ได้จากที่นี่ หากต้องการอัปโหลดหรือจัดการไฟล์ กรุณาเข้าสู่ระบบ',
+      publicEmptyText: 'ยังไม่มีไฟล์เผยแพร่ในขณะนี้',
+    },
+  }
+  const pageTexts = async (headers: Record<string, string>) => {
+    const c = (await new Client().json('GET', '/api/session', undefined, headers)).data.config
+    return { welcomeTitle: c.welcomeTitle, welcomeText: c.welcomeText, publicEmptyText: c.publicEmptyText }
+  }
+  const put = async (texts: Record<string, string>) => expect((await admin.json('PUT', '/api/admin/settings', texts)).status).toBe(200)
+  const EMPTY = { welcomeTitle: '', welcomeText: '', publicEmptyText: '' }
+  /** the settings and page texts a server starting on `settingsFile` (or none) would have, in a separate process */
+  const startWith = (settingsFile?: object) => {
+    const dir = mkdtempSync(join(tmpdir(), 'fc-settings-'))
+    try {
+      mkdirSync(join(dir, 'data'))
+      if (settingsFile) writeFileSync(join(dir, 'data', 'settings.json'), JSON.stringify(settingsFile))
+      const code = `const m = await import(${JSON.stringify(join(SRC, 'settings.ts'))}); console.log(JSON.stringify({ stored: m.settings.get(), en: m.pageTexts('en'), th: m.pageTexts('th') }))`
+      const p = Bun.spawnSync([process.execPath, '-e', code], { env: { ...process.env, DATA_DIR: join(dir, 'data'), STORAGE_DIR: join(dir, 'storage') } })
+      expect(p.exitCode).toBe(0)
+      return JSON.parse(p.stdout.toString())
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  }
+
+  test('are empty by default, and empty means the standard text in the visitor\'s language', async () => {
+    const { settings } = await import('../src/settings')
+    // a new install starts with them empty
+    const fresh = startWith()
+    expect(fresh.stored).toMatchObject(EMPTY)
+    expect(fresh.en).toEqual(STANDARD.en)
+    expect(fresh.th).toEqual(STANDARD.th)
+    try {
+      await put(EMPTY)
+      expect(await pageTexts(EN)).toEqual(STANDARD.en)
+      expect(await pageTexts({ 'x-lang': 'th' })).toEqual(STANDARD.th)
+      expect(await pageTexts({ 'accept-language': 'en-US,en;q=0.9' })).toEqual(STANDARD.en)
+      expect(await pageTexts({})).toEqual(STANDARD.th)
+      // the admin's settings keep the empty value: the page fills it in, the setting is not overwritten
+      expect((await admin.json('GET', '/api/admin/settings')).data).toMatchObject(EMPTY)
+      expect(settings.get()).toMatchObject(EMPTY)
+      // the login and logout answers carry the same config
+      const guest = new Client()
+      await guest.start()
+      expect((await guest.login('admin', process.env.ADMIN_PASSWORD!, EN)).data.config.welcomeTitle).toBe('File Center')
+      expect((await guest.json('POST', '/api/logout', undefined, EN)).data.config.publicEmptyText).toBe(STANDARD.en.publicEmptyText)
+    } finally {
+      await put(EMPTY)
+    }
+  })
+
+  test('a settings file still holding the old Thai defaults follows the language too', async () => {
+    // a settings.json written by an earlier version, read at start: left as it is, shown as the standard text
+    const old = startWith({ appName: 'File Center', ...STANDARD.th })
+    expect(old.stored).toMatchObject(STANDARD.th)
+    expect(old.en).toEqual(STANDARD.en)
+    expect(old.th).toEqual(STANDARD.th)
+    // only an exact match: anything else is the admin's own text
+    const near = startWith({ ...STANDARD.th, welcomeTitle: 'ศูนย์รวมไฟล์ ' })
+    expect(near.en).toEqual({ ...STANDARD.en, welcomeTitle: 'ศูนย์รวมไฟล์ ' })
+    try {
+      await put(STANDARD.th) // exactly what earlier versions wrote as their default
+      expect(await pageTexts(EN)).toEqual(STANDARD.en)
+      expect(await pageTexts({ 'x-lang': 'th' })).toEqual(STANDARD.th)
+    } finally {
+      await put(EMPTY)
+    }
+  })
+
+  test('a text the admin typed is shown exactly as typed, in every language', async () => {
+    const typed = { welcomeTitle: 'ศูนย์รวมไฟล์ของโรงเรียน', welcomeText: 'Files of the school <b>only</b>', publicEmptyText: 'ยังไม่มีไฟล์เผยแพร่ในขณะนี้ครับ' }
+    try {
+      await put(typed)
+      expect(await pageTexts(EN)).toEqual(typed)
+      expect(await pageTexts({ 'x-lang': 'th' })).toEqual(typed)
+      // one typed, two left empty
+      await put({ ...EMPTY, welcomeTitle: 'Downloads' })
+      expect(await pageTexts(EN)).toEqual({ ...STANDARD.en, welcomeTitle: 'Downloads' })
+      expect(await pageTexts({ 'x-lang': 'th' })).toEqual({ ...STANDARD.th, welcomeTitle: 'Downloads' })
+    } finally {
+      await put(EMPTY)
+    }
+  })
+})
+
 describe('dashboard warnings', () => {
   test('have a code per message, params, and the text in the request language', async () => {
     logger.log.error('messages-test-dashboard', 'forced')
@@ -362,6 +458,36 @@ describe('dashboard warnings', () => {
         expect(w.code in MESSAGES).toBe(true)
         expect(w.message).toBe(text(lang, w.code as MessageCode, w.params))
       }
+    }
+  })
+
+  test('the backup status is in the request language; an old status file keeps its own message', async () => {
+    const { paths } = await import('../src/config')
+    const backupOf = async (headers: Record<string, string>) => (await admin.json('GET', '/api/admin/status', undefined, headers)).data.backup
+    const saved = existsSync(paths.backupStatus) ? readFileSync(paths.backupStatus, 'utf8') : null
+    const at = new Date().toISOString()
+    try {
+      const failed = {
+        status: 'failed', lastSuccess: at, lastAttempt: at, message: 'สำรองข้อมูลไม่สำเร็จ: พื้นที่จัดเก็บบนเซิร์ฟเวอร์ไม่พอ กรุณาติดต่อผู้ดูแลระบบ',
+        code: 'backup.failed', params: { reason: 'พื้นที่จัดเก็บบนเซิร์ฟเวอร์ไม่พอ กรุณาติดต่อผู้ดูแลระบบ', reasonCode: 'disk-full' }, file: null, size: null,
+      }
+      writeFileSync(paths.backupStatus, JSON.stringify(failed))
+      expect(await backupOf(EN)).toEqual({ ...failed, message: `The backup failed: ${MESSAGES['disk-full'].en}` })
+      expect(await backupOf({ 'x-lang': 'th' })).toEqual(failed)
+      // a reason that is not a catalog message is shown as it was said
+      writeFileSync(paths.backupStatus, JSON.stringify({ ...failed, params: { reason: 'EIO 5' } }))
+      expect((await backupOf(EN)).message).toBe('The backup failed: EIO 5')
+      writeFileSync(paths.backupStatus, JSON.stringify({ ...failed, status: 'ok', code: 'backup.done', params: {} }))
+      expect((await backupOf(EN)).message).toBe('The backup was made.')
+      expect((await backupOf({ 'x-lang': 'th' })).message).toBe('สำรองข้อมูลสำเร็จ')
+      // written before there were codes
+      const old = { status: 'failed', lastSuccess: null, lastAttempt: at, message: 'สำรองข้อมูลไม่สำเร็จ: ข้อความเดิม', file: null, size: null }
+      writeFileSync(paths.backupStatus, JSON.stringify(old))
+      expect(await backupOf(EN)).toEqual(old)
+      expect(await backupOf({ 'x-lang': 'th' })).toEqual(old)
+    } finally {
+      if (saved === null) rmSync(paths.backupStatus, { force: true })
+      else writeFileSync(paths.backupStatus, saved)
     }
   })
 

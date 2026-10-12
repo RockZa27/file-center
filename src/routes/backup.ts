@@ -3,18 +3,19 @@ import { Elysia, t } from 'elysia'
 import { audit } from '../audit'
 import { confirmPassword } from '../auth'
 import {
-  backupPath, backupSettings, BACKUP_NAME_RE, listBackups, readStatus, restoreBackup, runBackup,
+  backupPath, backupSettings, BACKUP_NAME_RE, listBackups, restoreBackup, runBackup, statusIn,
 } from '../backup'
 import { context, requireAdmin } from '../context'
 import { bad, HttpError } from '../fsx'
 import { restartSoon, supervised } from '../lifecycle'
+import { langOf } from '../messages'
 
 export const backupRoutes = new Elysia({ prefix: '/api/admin' })
   .use(context)
 
-  .get('/backups', ({ user, ip }) => {
+  .get('/backups', ({ user, ip, request }) => {
     requireAdmin({ user, ip })
-    return { items: listBackups(), status: readStatus(), settings: backupSettings() }
+    return { items: listBackups(), status: statusIn(langOf(request)), settings: backupSettings() }
   })
 
   .post('/backups', async ({ user, ip }) => {

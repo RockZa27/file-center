@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, rmSync, statfsSync } from 'node:fs'
+import { rmSync, statfsSync } from 'node:fs'
 import { join } from 'node:path'
 import { Elysia, t } from 'elysia'
 import { audit, queryAudit } from '../audit'
@@ -6,6 +6,7 @@ import {
   allUsers, checkPasswordStrength, cleanHomedir, cleanPerms, destroyUserSessions, findUser, hashPassword,
   isReservedUsername, publicUser, saveUsers, USERNAME_RE,
 } from '../auth'
+import { statusIn } from '../backup'
 import { config, paths } from '../config'
 import { context, requireAdmin } from '../context'
 import { bad, conflict, ensureDir, forbidden, HttpError, isDir, listDir, normRel, notFound, resolveIn } from '../fsx'
@@ -26,15 +27,6 @@ function diskInfo() {
     const total = Number(s.blocks) * Number(s.bsize)
     const free = Number(s.bavail) * Number(s.bsize)
     return { total, free, used: total - free }
-  } catch {
-    return null
-  }
-}
-
-function backupInfo() {
-  try {
-    if (!existsSync(paths.backupStatus)) return null
-    return JSON.parse(readFileSync(paths.backupStatus, 'utf8'))
   } catch {
     return null
   }
@@ -165,10 +157,10 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
   .get('/admin/status', ({ user, ip, request }) => {
     requireAdmin({ user, ip })
     const disk = diskInfo()
-    const backup = backupInfo()
-    const trash = trashSummary()
     // one code per message, the text in the admin's language
     const lang = langOf(request)
+    const backup = statusIn(lang)
+    const trash = trashSummary()
     const warnings: { level: 'info' | 'warning' | 'critical'; code: MessageCode; message: string; params: Params }[] = []
     const warn = (level: 'info' | 'warning' | 'critical', code: MessageCode, params: Params = {}) =>
       warnings.push({ level, code, message: text(lang, code, params), params })
@@ -219,9 +211,9 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     return { items: listTrash(), retentionDays: config.trashRetentionDays }
   })
 
-  .post('/admin/trash/restore', ({ user, ip, body }) => {
+  .post('/admin/trash/restore', async ({ user, ip, body }) => {
     const admin = requireAdmin({ user, ip })
-    const r = restore(body.id)
+    const r = await restore(body.id)
     audit({ user: admin.username, ip, action: 'restore', target: r.restoredTo })
     return { ok: true, restoredTo: r.restoredTo }
   }, { body: t.Object({ id: t.String() }) })
