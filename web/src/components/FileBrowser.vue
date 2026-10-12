@@ -106,7 +106,8 @@
     <search-modal v-model:show="searchOpen" :space="space" :start="location" @select="onSearchSelect" />
     <folder-picker v-model:show="picker.show" :space="space" :title="picker.title" :confirm-text="picker.confirm" :initial="location" @select="onPicked2" />
     <share-modal v-if="canShare" v-model:show="share.show" :space="space" :item="share.item" />
-    <preview-modal v-model:show="preview.show" :space="space" :item="preview.item" :siblings="visible" :can-edit="can('write')" :can-download="can('download')" @saved="load(true)" />
+    <preview-modal v-model:show="preview.show" :space="space" :item="preview.item" :siblings="visible" :can-edit="can('write')" :can-download="can('download')" :office-mode-of="officeModeOf" @saved="load(true)" @office="openOffice" />
+    <office-editor v-model:show="office.show" :space="space" :item="office.item" :mode="office.mode" @closed="onOfficeClosed" />
 
     <n-modal v-model:show="prompt.show" preset="card" :title="prompt.title" style="width: min(440px, 94vw)">
       <n-input ref="promptInput" v-model:value="prompt.value" :placeholder="prompt.label" @keyup.enter="submitPrompt" />
@@ -118,7 +119,7 @@
 </template>
 
 <script setup>
-import { computed, h, nextTick, reactive, ref, watch } from 'vue'
+import { computed, h, nextTick, onBeforeUnmount, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import {
@@ -128,15 +129,16 @@ import {
 import {
   AddOutline, ArchiveOutline, ArrowBackOutline, CloudUploadOutline, CopyOutline, CreateOutline, DocumentTextOutline,
   DownloadOutline, EllipsisHorizontal, EyeOffOutline, EyeOutline, FolderOpenOutline, GridOutline, HomeOutline, LinkOutline, ListOutline,
-  RefreshOutline, ReturnUpForwardOutline, SearchOutline, TrashOutline, FolderOutline, EyeOutline as ViewIcon, ExpandOutline,
+  OpenOutline, RefreshOutline, ReturnUpForwardOutline, SearchOutline, TrashOutline, FolderOutline, EyeOutline as ViewIcon, ExpandOutline,
 } from '@vicons/ionicons5'
 import { api } from '../api'
 import { useFeedback } from '../composables'
 import { useAppStore } from '../store'
 import { collectDropped, fromInput } from '../upload-utils'
-import { baseName, extOf, formatBytes, formatDate, isImage, joinPath, kindOf, parentPath } from '../utils'
+import { baseName, extOf, formatBytes, formatDate, isImage, joinPath, kindOf, officeModeFor, parentPath } from '../utils'
 import FileIcon from './FileIcon.vue'
 import FolderPicker from './FolderPicker.vue'
+import OfficeEditor from './OfficeEditor.vue'
 import PreviewModal from './PreviewModal.vue'
 import SearchModal from './SearchModal.vue'
 import ShareModal from './ShareModal.vue'
@@ -177,6 +179,9 @@ const folderInput = ref(null)
 const promptInput = ref(null)
 
 const preview = reactive({ show: false, item: null })
+const office = reactive({ show: false, item: null, mode: 'view' })
+/** stops waiting for the office editor's save (see onOfficeClosed) */
+let officeWait = null
 const share = reactive({ show: false, item: null })
 const picker = reactive({ show: false, mode: 'copy', items: [], title: '', confirm: '' })
 const ctx = reactive({ show: false, x: 0, y: 0, item: null, options: [] })
@@ -236,7 +241,7 @@ function go(path, replace = false) {
   return replace ? router.replace(target) : router.push(target)
 }
 
-watch(() => [props.space, location.value], () => { items.value = []; load() }, { immediate: true })
+watch(() => [props.space, location.value], () => { items.value = []; office.show = false; officeWait?.(); load() }, { immediate: true })
 // a folder that could not be read shows the server's text: read it again so the text follows the language switch
 watch(locale, () => { if (error.value) load(true) })
 
@@ -253,8 +258,45 @@ function triggerDownload(url) {
 function open(it) {
   if (it.type === 'dir') return go(it.path)
   if (kindOf(it.name) !== 'other' && can('download')) { preview.item = it; preview.show = true; return }
+  // no viewer in the page (doc, xls, ppt ...): the office editor reads it when it is set up
+  const mode = officeModeOf(it.name)
+  if (mode) return openOffice(it, mode)
   if (can('download')) triggerDownload(api.downloadUrl(props.space, it.path))
 }
+
+// ───── ONLYOFFICE ─────
+const officeModeOf = name => officeModeFor(app.config.office, can, name)
+function openOffice(it, mode) {
+  Object.assign(office, { item: it, mode, show: true })
+}
+/**
+ * The document server hands the saved file over a few seconds after the editor closes: say so, and read the
+ * folder again until the file has changed (or give up after half a minute; the next refresh shows it).
+ */
+async function onOfficeClosed({ item, edited }) {
+  await load(true)
+  if (!edited) return
+  // closing another file meanwhile: only the newest wait goes on
+  officeWait?.()
+  const done = fb.busy(t('office.saving', { name: item.name }))
+  let stopped = false
+  const stop = () => { stopped = true; done(); if (officeWait === stop) officeWait = null }
+  officeWait = stop
+  for (let i = 0; i < 15; i++) {
+    await new Promise(r => setTimeout(r, 2000))
+    if (stopped) return
+    await load(true)
+    if (stopped) return
+    const now = items.value.find(e => e.path === item.path)
+    if (now && now.mtime !== item.mtime) {
+      stop()
+      return fb.ok(t('office.saved', { name: item.name }))
+    }
+  }
+  stop()
+  fb.warn(t('office.savePending', { name: item.name }))
+}
+onBeforeUnmount(() => officeWait?.())
 
 async function downloadMany(list) {
   try {
@@ -335,6 +377,8 @@ function actionsFor(it) {
   const isZip = it.type === 'file' && extOf(it.name) === 'zip'
   if (it.type === 'dir') list.push({ key: 'open', label: t('common.open'), icon: ico(FolderOpenOutline) })
   else if (kindOf(it.name) !== 'other' && can('download')) list.push({ key: 'open', label: t('files.preview'), icon: ico(ViewIcon) })
+  const officeMode = it.type === 'file' ? officeModeOf(it.name) : null
+  if (officeMode) list.push({ key: 'office', label: officeMode === 'edit' ? t('office.edit') : t('office.open'), icon: ico(officeMode === 'edit' ? CreateOutline : OpenOutline) })
   if (it.type === 'file' && can('download')) list.push({ key: 'download', label: t('common.download'), icon: ico(DownloadOutline) })
   if (it.type === 'dir' && can('download') && can('batchdownload')) list.push({ key: 'download', label: t('files.downloadZip'), icon: ico(DownloadOutline) })
   if (canShare.value) list.push({ key: 'share', label: t('share.action'), icon: ico(LinkOutline) })
@@ -353,6 +397,7 @@ function actionsFor(it) {
 
 function run(key, it) {
   if (key === 'open') return open(it)
+  if (key === 'office') return openOffice(it, officeModeOf(it.name))
   if (key === 'download') return it.type === 'dir' ? downloadMany([it]) : triggerDownload(api.downloadUrl(props.space, it.path))
   if (key === 'share') return openShare(it)
   if (key === 'rename') return rename(it)
@@ -489,4 +534,8 @@ function onSearchSelect(it) {
 :deep(.name-cell) { all: unset; display: flex; align-items: center; gap: 10px; cursor: pointer; max-width: 100%; }
 :deep(.name-cell:hover .name-text) { color: var(--primary); text-decoration: underline; }
 :deep(.name-text) { min-width: 0; }
+/* phones cannot hover for the title: long names wrap onto more lines instead of ending in "…" */
+@media (max-width: 640px) {
+  :deep(.name-text), .card-name { white-space: normal; overflow-wrap: anywhere; }
+}
 </style>
