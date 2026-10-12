@@ -155,6 +155,12 @@ describe('async copy and search', () => {
     expect(into).toBeInstanceOf(HttpError)
     expect(into.status).toBe(400)
     expect(existsSync(join(src, 'a', 'inside'))).toBe(false)
+    // names that start with ".." are ordinary names: "..a" into "..a/..b" is still a copy into itself
+    mkdirSync(join(dir, '..a', '..b'), { recursive: true })
+    const dots = await copyTree(join(dir, '..a'), join(dir, '..a', '..b', '..a')).catch(e => e)
+    expect(dots).toBeInstanceOf(HttpError)
+    expect(dots.code).toBe('files.copy-into-self')
+    expect(existsSync(join(dir, '..a', '..b', '..a'))).toBe(false)
   })
 
   test('a copy that fails half way leaves nothing behind', async () => {

@@ -194,12 +194,8 @@ export function moveSync(from: string, to: string) {
  * copy that fails half way removes what it wrote.
  */
 export async function copyTree(from: string, to: string) {
-  if (isDir(from)) {
-    const rel = relative(from, to)
-    if (!rel.startsWith('..') && !rel.startsWith(sep) && rel !== '') {
-      if (within(from, to)) throw bad('files.copy-into-self')
-    }
-  }
+  // compare whole path segments: a folder may be called "..a", so a relative path starting with ".." proves nothing
+  if (isDir(from) && within(from, to)) throw bad('files.copy-into-self')
   const st = await lstat(from)
   if (st.isSymbolicLink()) throw notFound()
   if (!st.isDirectory()) {
