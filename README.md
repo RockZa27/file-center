@@ -226,7 +226,7 @@ scripts/package.ts  สร้างแพ็กเกจอัปเดต (bun 
 web/                Vue 3 + Naive UI (build ไปที่ web/dist)
 tests/api.test.ts   ทดสอบ API
 tests/logs.test.ts  ทดสอบ log ของระบบ การหมุนไฟล์ การส่งออก และว่าไม่มีความลับหลุดลง log
-tests/messages.test.ts  ทุกรหัสที่ใช้ใน src/ มีในรายการข้อความ ทั้งสองภาษามีตัวแปรตรงกัน และ error ตอบตามภาษาของคำขอ
+tests/messages.test.ts  ทุกรหัสที่ใช้ใน src/ มีในรายการข้อความ ทั้งสองภาษามีตัวแปรตรงกัน error ตอบตามภาษาของคำขอ และลิงก์ดาวน์โหลดที่ล้มเหลวได้หน้า HTML
 tests/update.test.ts, tests/backup.test.ts   ทดสอบอัปเดตและกู้คืนข้อมูลกับ launcher จริง
 tests/perf.test.ts  การนับไฟล์ 50,000 ไฟล์ การคัดลอก 20,000 ไฟล์ และการค้นหาต้องไม่ทำให้คำขออื่นช้า (โหมด `dashboard` ใน scripts/loadtest.ts ใช้ลองกับ server จริง)
 ```
@@ -261,8 +261,12 @@ tests/perf.test.ts  การนับไฟล์ 50,000 ไฟล์ การ
 ทุกคำสั่งที่เปลี่ยนข้อมูลต้องส่งหัว `X-CSRF-Token` ที่ได้จาก `GET /api/session` ผิดพลาดตอบเป็น `{ "error": "ข้อความ", "code": "fs.bad-name", "params": {} }`
 
 - `code` คงที่ไม่เปลี่ยนตามภาษา (รายการทั้งหมดอยู่ใน `src/messages.ts` แบ่งตามหมวด เช่น `auth.locked`, `files.name-taken`) ส่วน `params` คือค่าที่เติมในข้อความ เช่น `{ "seconds": 30 }`
-- `error` เป็นภาษาไทยหรืออังกฤษตามคำขอ: หัว `X-Lang: th` หรือ `en` ก่อน ถ้าไม่มีใช้ `Accept-Language` ของเบราว์เซอร์ ถ้าไม่ระบุทั้งสองอย่างเป็นภาษาไทย
+- `error` เป็นภาษาไทยหรืออังกฤษตามคำขอ: หัว `X-Lang: th` หรือ `en` ก่อน ถ้าไม่มีใช้คุกกี้ `fc_lang` (`th`/`en` ที่หน้าเว็บตั้งตามภาษาที่เลือก)
+  ถ้าไม่มีใช้ `Accept-Language` ของเบราว์เซอร์ ถ้าไม่ระบุเลยเป็นภาษาไทย
   คำเตือนในหน้าภาพรวม (`warnings` ของ `GET /api/admin/status`) มี `code`, `message` และ `params` แบบเดียวกัน ส่วน log และประวัติการใช้งานยังเป็นภาษาไทยเสมอ
+- ลิงก์ดาวน์โหลดที่เบราว์เซอร์เปิดในแท็บ (`/api/download`, `/api/batch/:token`, `/api/admin/logs/download`, `/api/admin/activity/export`,
+  `/api/admin/backups/:name/download`) ถ้าล้มเหลวจะได้หน้า HTML สั้น ๆ แทน JSON: รหัสสถานะเดิม ข้อความตามภาษา รหัส และลิงก์กลับหน้าหลัก
+  (นับเป็นการเปิดในแท็บเมื่อมี `Sec-Fetch-Mode: navigate` หรือ `Accept` มี `text/html` และไม่มีหัว `X-Lang`) การเรียกด้วย fetch ยังได้ JSON เหมือนเดิม
 - รหัสเดิมที่หน้าเว็บใช้อยู่ไม่เปลี่ยน: `csrf`, `must-change-password`, `disk-full`, `not-supervised` และคำเตือน `errors`
 
 | | |

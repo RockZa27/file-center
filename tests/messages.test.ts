@@ -1,6 +1,7 @@
 /**
  * Server messages in Thai and English: every error and dashboard warning has a stable code from src/messages.ts,
- * and its text follows the language of the request (x-lang, else Accept-Language, else Thai).
+ * and its text follows the language of the request (x-lang, else the fc_lang cookie, else Accept-Language, else Thai).
+ * A download link that fails in the tab gets a small HTML page instead of JSON.
  * Runs in-process on the same app as api.test.ts (see in-process-env.ts).
  */
 import { beforeAll, describe, expect, test } from 'bun:test'
@@ -151,6 +152,21 @@ describe('language of a request', () => {
     expect(langOf(req({ 'accept-language': 'fr-FR,de;q=0.9' }))).toBe('th')
     expect(langOf(req({ 'accept-language': 'en;q=0' }))).toBe('th')
   })
+
+  test('the page cookie fc_lang counts when there is no x-lang', () => {
+    expect(langOf(req({ cookie: 'fc_lang=en' }))).toBe('en')
+    expect(langOf(req({ cookie: 'fc_sid=abc; fc_lang=en', 'accept-language': 'th-TH,th' }))).toBe('en')
+    expect(langOf(req({ cookie: 'fc_lang=th', 'accept-language': 'en-US,en;q=0.9' }))).toBe('th')
+    // x-lang still wins
+    expect(langOf(req({ 'x-lang': 'th', cookie: 'fc_lang=en' }))).toBe('th')
+    expect(langOf(req({ 'x-lang': 'en', cookie: 'fc_lang=th' }))).toBe('en')
+    // only th or en, exactly: anything else is ignored and the browser's language decides
+    for (const bad of ['fr', 'EN', 'en-US', 'english', '<script>', '']) {
+      expect(langOf(req({ cookie: `fc_lang=${bad}`, 'accept-language': 'en-US' }))).toBe('en')
+      expect(langOf(req({ cookie: `fc_lang=${bad}` }))).toBe('th')
+    }
+    expect(langOf(req({ cookie: 'xfc_lang=en' }))).toBe('th')
+  })
 })
 
 describe('errors follow the language of the request', () => {
@@ -246,6 +262,89 @@ describe('errors follow the language of the request', () => {
       config.minFreeSpace = keep.minFree
       if (keep.supervised === undefined) delete process.env.FC_SUPERVISED
       else process.env.FC_SUPERVISED = keep.supervised
+    }
+  })
+})
+
+describe('a failed download link opened in the tab', () => {
+  // what a browser sends when the tab follows a link: no x-lang, Sec-Fetch-Mode navigate, Accept with text/html
+  const NAV = { 'sec-fetch-mode': 'navigate', accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8' }
+  // what the page's fetch sends
+  const FETCH = { 'sec-fetch-mode': 'cors', accept: '*/*' }
+  const open = (path: string, headers: Record<string, string>) => app.handle(new Request('http://localhost' + path, { headers })) as Promise<Response>
+  const missing = '/api/download?space=home&path=' + encodeURIComponent('/no-such-file-nav.txt')
+
+  test('is a page in the language of the fc_lang cookie, with the code and a link back', async () => {
+    for (const [lang, headers] of [['en', NAV], ['en', { accept: NAV.accept }], ['th', NAV]] as const) {
+      const res = await open(missing, { ...headers, cookie: `${admin.cookie}; fc_lang=${lang}`, 'accept-language': lang === 'en' ? 'th-TH' : 'en-US' })
+      expect(res.status).toBe(404)
+      expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8')
+      expect(res.headers.get('content-security-policy')).toContain("default-src 'none'")
+      expect(res.headers.get('content-security-policy')).not.toContain('script-src')
+      expect(res.headers.get('x-content-type-options')).toBe('nosniff')
+      const html = await res.text()
+      expect(html).toContain(`<html lang="${lang}">`)
+      expect(html).toContain(`<h1>${MESSAGES['request.not-found'][lang]}</h1>`)
+      expect(html).toContain('request.not-found')
+      expect(html).toContain(`<a href="/">${MESSAGES['request.back-to-app'][lang]}</a>`)
+      expect(html).not.toContain('<script')
+      expect(html).not.toContain('"error"')
+    }
+  })
+
+  test('the message is HTML-escaped', async () => {
+    const { errorPage } = await import('../src/context')
+    const chars = await errorPage(400, 'en', 'fs.name-bad-chars', {}).text()
+    expect(chars).toContain('<h1>A name may not contain \\ / : * ? &#34; &#60; &#62; |</h1>')
+    // a param filled into the text is escaped with it
+    const param = await errorPage(404, 'th', 'files.item-missing', { name: '<img src=x onerror=alert(1)>' }).text()
+    expect(param).toContain('&#60;img src=x onerror=alert(1)&#62;')
+    expect(param).not.toContain('<img')
+  })
+
+  test('the page fetching the same URL still gets JSON', async () => {
+    const res = await open(missing, { ...FETCH, cookie: `${admin.cookie}; fc_lang=th`, 'x-lang': 'en' })
+    expect(res.status).toBe(404)
+    expect(res.headers.get('content-type')).toContain('application/json')
+    expect(await res.json()).toEqual({ error: 'The item was not found.', code: 'request.not-found', params: {} })
+    // x-lang marks the page's own call even when it accepts html
+    const html = await open(missing, { accept: 'text/html', cookie: admin.cookie, 'x-lang': 'en' })
+    expect(await html.json()).toEqual({ error: 'The item was not found.', code: 'request.not-found', params: {} })
+    // and other routes are not pages
+    const list = await open('/api/list?space=home&path=/no-such-folder-nav', { ...NAV, cookie: admin.cookie })
+    expect(list.headers.get('content-type')).toContain('application/json')
+  })
+
+  test('without a session it is a 401 page', async () => {
+    const res = await open(missing, { ...NAV, cookie: 'fc_lang=en' })
+    expect(res.status).toBe(401)
+    const html = await res.text()
+    expect(html).toContain(`<h1>${MESSAGES['auth.required'].en}</h1>`)
+    expect(html).toContain('auth.required')
+    for (const path of ['/api/batch/no-such-token', '/api/admin/logs/download', '/api/admin/activity/export', '/api/admin/backups/x.zip/download']) {
+      const r = await open(path, { ...NAV, cookie: 'fc_lang=th' })
+      expect(`${path} ${r.status >= 400} ${r.headers.get('content-type')}`).toBe(`${path} true text/html; charset=utf-8`)
+      expect(await r.text()).toContain('<a href="/">กลับไปหน้าหลัก</a>')
+    }
+  })
+
+  test('nothing from the request is written into the page', async () => {
+    const evil = '<script>alert(1)</script>'
+    const paths = [
+      '/api/download?space=home&path=' + encodeURIComponent(`/${evil}.txt`),
+      '/api/download?space=' + encodeURIComponent(evil) + '&path=/x',
+      '/api/batch/' + encodeURIComponent(evil),
+    ]
+    for (const path of paths) {
+      for (const cookie of [`${admin.cookie}; fc_lang=${encodeURIComponent(evil)}`, `fc_lang=${evil}`]) {
+        const res = await open(path, { ...NAV, cookie, 'accept-language': evil })
+        expect(res.status).toBeGreaterThanOrEqual(400)
+        const html = await res.text()
+        expect(html).toContain('<a href="/">')
+        expect(html).not.toContain('script')
+        expect(html).not.toContain('alert')
+        expect(html).not.toContain('no-such')
+      }
     }
   })
 })

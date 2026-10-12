@@ -1,3 +1,4 @@
+import { watch } from 'vue'
 import { createI18n } from 'vue-i18n'
 
 const th = {
@@ -350,3 +351,12 @@ export const i18n = createI18n({
   missingWarn: false,
   fallbackWarn: false,
 })
+
+// A download link opens in the tab without the x-lang header, so the server reads the language from this cookie
+// to answer a failed download in it. Set at startup and every time the language changes (the store saves it there).
+function langCookie(locale) {
+  if (locale !== 'th' && locale !== 'en') return
+  const secure = location.protocol === 'https:' ? '; Secure' : ''
+  document.cookie = `fc_lang=${locale}; path=/; max-age=31536000; SameSite=Lax${secure}`
+}
+watch(i18n.global.locale, langCookie, { immediate: true })
