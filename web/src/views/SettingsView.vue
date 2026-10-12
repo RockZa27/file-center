@@ -48,6 +48,8 @@
       <div class="actions"><n-button type="primary" size="large" :loading="saving" @click="save"><template #icon><n-icon :component="SaveOutline" /></template>{{ t('common.save') }}</n-button></div>
     </n-spin>
 
+    <alerts-card />
+
     <div class="surface block info">
       <h2>{{ t('settings.about') }}</h2>
       <div class="kv"><span class="muted">{{ t('dash.system') }}</span><span>v{{ app.config.version }}</span></div>
@@ -64,6 +66,7 @@ import { useI18n } from 'vue-i18n'
 import { NAlert, NButton, NCheckbox, NCheckboxGroup, NColorPicker, NForm, NFormItem, NIcon, NInput, NSpin, NSwitch, NUpload } from 'naive-ui'
 import { ImageOutline, SaveOutline } from '@vicons/ionicons5'
 import { api } from '../api'
+import AlertsCard from '../components/AlertsCard.vue'
 import { i18n } from '../i18n'
 import { useFeedback } from '../composables'
 import { useAppStore } from '../store'

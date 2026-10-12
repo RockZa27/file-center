@@ -11,6 +11,10 @@
         <span class="warn-row">
           <span>{{ w.message }}</span>
           <router-link v-if="w.code === 'errors'" :to="{ name: 'logs', query: { level: 'error' } }" class="warn-link">{{ t('dash.viewLogs') }} →</router-link>
+          <!-- the update page checks again and opens its dialog (go=1) -->
+          <n-button v-else-if="w.code === 'update.available'" size="small" type="primary" class="warn-btn" @click="router.push({ name: 'update', query: { go: '1' } })">
+            <template #icon><n-icon :component="CloudDownloadOutline" /></template>{{ t('update.goUpdate') }}
+          </n-button>
         </span>
       </n-alert>
     </div>
@@ -69,11 +73,13 @@
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NAlert, NButton, NIcon, NProgress, NSpin, NTag } from 'naive-ui'
-import { RefreshOutline, SyncOutline } from '@vicons/ionicons5'
+import { useRouter } from 'vue-router'
+import { CloudDownloadOutline, RefreshOutline, SyncOutline } from '@vicons/ionicons5'
 import { api } from '../api'
 import { formatBytes, formatDate, formatDuration } from '../utils'
 
 const { t, locale } = useI18n()
+const router = useRouter()
 const s = ref(null)
 const loading = ref(false)
 const error = ref('')
@@ -128,6 +134,7 @@ onBeforeUnmount(() => { clearInterval(timer); clearTimeout(recheck) })
 @keyframes turn { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .turning { animation: none; } }
 .warn-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+.warn-btn { align-self: center; }
 .warn-link { color: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; white-space: nowrap; }
 @media (max-width: 600px) { .card.wide { grid-column: auto; } }
 </style>

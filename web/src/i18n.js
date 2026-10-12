@@ -101,6 +101,7 @@ const th = {
     'backup-restore': 'กู้คืนข้อมูลจากไฟล์สำรอง', 'backup-restore-denied': 'ยืนยันกู้คืนไม่สำเร็จ',
     'logs-download': 'ดาวน์โหลดบันทึกระบบ', 'activity-export': 'ส่งออกประวัติการใช้งาน', 'update-fetch': 'ดาวน์โหลดอัปเดตจากเว็บ',
     'share-create': 'สร้างลิงก์แชร์', 'share-download': 'ดาวน์โหลดผ่านลิงก์แชร์', 'share-revoke': 'ยกเลิกลิงก์แชร์',
+    'alert-test': 'ทดสอบการแจ้งเตือน',
   },
   logs: {
     subtitle: 'ข้อผิดพลาดและเหตุการณ์ของเซิร์ฟเวอร์ ดูได้จากที่นี่โดยไม่ต้องเข้าเครื่อง server', search: 'ค้นหาเหตุการณ์หรือรายละเอียด',
@@ -142,7 +143,7 @@ const th = {
     empty: 'โฟลเดอร์นี้ว่างอยู่', folderNotFound: 'ไม่พบโฟลเดอร์นี้ในลิงก์ จึงกลับไปที่โฟลเดอร์บนสุด',
   },
   update: {
-    subtitle: 'อัปเดตระบบโดยโยนไฟล์แพ็กเกจ (.zip) ลงในหน้านี้ ไม่ต้อง FTP และไม่ต้องเข้าเครื่อง server',
+    subtitle: 'อัปเดตระบบด้วยปุ่มเดียว หรือโยนไฟล์แพ็กเกจ (.zip) ลงในหน้านี้ ไม่ต้อง FTP',
     current: 'เวอร์ชันที่ใช้อยู่', source: 'ที่มา', sourceBuiltin: 'เวอร์ชันที่มากับระบบ', sourceUpdate: 'อัปเดตผ่านเว็บ',
     signing: 'ลายเซ็นแพ็กเกจ', signingRequired: 'บังคับ: รับเฉพาะแพ็กเกจที่ลงนามด้วยกุญแจของคุณ',
     signingOptional: 'ไม่บังคับ (ยังไม่ได้ตั้ง UPDATE_PUBLIC_KEY)',
@@ -167,13 +168,15 @@ const th = {
     versions: 'เวอร์ชันที่ย้อนกลับได้', none: 'ยังไม่มีเวอร์ชันเก่าให้ย้อนกลับ (ระบบเก็บไว้ 2 เวอร์ชันล่าสุด)',
     builtin: 'เวอร์ชันที่มากับระบบ', rollback: 'ย้อนกลับ', rollbackTitle: 'ย้อนกลับเป็นเวอร์ชัน {v}?',
     rollbackBody: 'ระบบจะรีสตาร์ตเป็นเวอร์ชัน {v} ข้อมูลและไฟล์ไม่ถูกแตะต้อง',
-    web: 'อัปเดตจากเว็บ', webFrom: 'แหล่งอัปเดต', check: 'ตรวจหาเวอร์ชันใหม่', latest: 'เวอร์ชันล่าสุด',
-    newer: 'มีเวอร์ชันใหม่ v{v}', upToDate: 'ใช้เวอร์ชันล่าสุดอยู่แล้ว (v{v})', fetch: 'ดาวน์โหลดและเตรียมติดตั้ง',
-    fetching: 'กำลังดาวน์โหลดแพ็กเกจและตรวจไฟล์ (ยังไม่รันโค้ดใด ๆ ของแพ็กเกจ)…', size: 'ขนาด',
+    web: 'อัปเดตจากเว็บ', webFrom: 'แหล่งอัปเดต', newer: 'มีเวอร์ชันใหม่ v{v}', size: 'ขนาด',
     latestSigned: 'ลงนามแล้ว (ตรวจลายเซ็นหลังดาวน์โหลด)', latestUnsigned: 'ไม่ได้ลงนาม',
-    checkFailed: 'ตรวจหาเวอร์ชันใหม่ไม่สำเร็จ', fetchFailed: 'ดาวน์โหลดแพ็กเกจไม่สำเร็จ', fromWeb: 'ดาวน์โหลดจาก {url}',
+    checkFailed: 'ตรวจหาเวอร์ชันใหม่ไม่สำเร็จ',
     unsignedWebTitle: 'แพ็กเกจนี้มาจากอินเทอร์เน็ตและไม่ได้ลงนาม',
     unsignedWebBody: 'ระบบตรวจได้แค่ว่าไฟล์ครบตามที่ latest.json ของแหล่งอัปเดตบอก แต่ตรวจไม่ได้ว่าใครสร้าง ถ้ามีผู้อื่นแก้ไขแหล่งอัปเดตได้ เขาจะส่งโค้ดอะไรมาติดตั้งบนเครื่องนี้ก็ได้ ติดตั้งเฉพาะเมื่อแน่ใจว่าแหล่งนี้เป็นของคุณ และควรตั้ง UPDATE_PUBLIC_KEY เพื่อรับเฉพาะแพ็กเกจที่ลงนามแล้ว',
+    checkAndUpdate: 'ตรวจและอัปเดต', latestAlready: 'เป็นเวอร์ชันล่าสุดแล้ว', oneTitle: 'อัปเดตเป็นเวอร์ชันใหม่',
+    updateNow: 'อัปเดตเลย', goUpdate: 'อัปเดต', stepsLabel: 'ขั้นตอนการอัปเดต',
+    step: { check: 'ตรวจหาเวอร์ชันใหม่', fetch: 'ดาวน์โหลดแพ็กเกจ', stage: 'ตรวจไฟล์และลายเซ็น', apply: 'ติดตั้งและทดลองเปิดเวอร์ชันใหม่', restart: 'รีสตาร์ตระบบ' },
+    failedAt: 'อัปเดตไม่สำเร็จที่ขั้นตอน: {step}', oneFailed: 'อัปเดตไม่สำเร็จ',
     how: 'วิธีสร้างแพ็กเกจ', howBody: 'บนเครื่องที่มีโค้ด: เพิ่มเลข "version" ใน package.json แล้วรัน bun run package --sign ~/file-center-keys/update-signing.key จะได้ไฟล์ที่ลงนามแล้วใน dist-update/ (ไม่ใส่ --sign จะได้แพ็กเกจที่ไม่ได้ลงนาม ซึ่งระบบรับเฉพาะเมื่อไม่ได้ตั้ง UPDATE_PUBLIC_KEY)',
   },
   backup: {
@@ -207,6 +210,18 @@ const th = {
     stdEmptyText: 'ยังไม่มีไฟล์เผยแพร่ในขณะนี้',
     guestWarn: 'คำเตือน: ผู้เยี่ยมชมทุกคนจะอัปโหลดหรือแก้ไขไฟล์ได้โดยไม่ต้องเข้าสู่ระบบ ควรเปิดเฉพาะเมื่อจำเป็นจริง ๆ',
     about: 'ข้อมูลระบบ', uploadLimit: 'ขนาดไฟล์สูงสุดต่อไฟล์', chunk: 'ขนาดชิ้นอัปโหลด × จำนวนพร้อมกัน', retention: 'เก็บถังขยะไว้',
+  },
+  alerts: {
+    title: 'การแจ้งเตือน', on: 'เปิดอยู่', off: 'ปิดอยู่', kind: 'ช่องทาง', host: 'ส่งไปที่', lastSent: 'ส่งล่าสุด',
+    webhooks: { discord: 'Discord', slack: 'Slack', telegram: 'Telegram', json: 'Webhook (JSON)' },
+    kinds: {
+      test: 'ข้อความทดสอบ', 'backup-failed': 'สำรองข้อมูลไม่สำเร็จ', errors: 'error มากผิดปกติ', lockout: 'ล็อกเพราะรหัสผ่านผิดซ้ำ',
+      'disk-critical': 'ดิสก์ใกล้เต็ม', 'update-available': 'มีเวอร์ชันใหม่',
+    },
+    test: 'ส่งข้อความทดสอบ', testOk: 'ส่งข้อความทดสอบแล้ว ตรวจดูที่ช่องทางของคุณ', testFailed: 'ส่งข้อความทดสอบไม่สำเร็จ',
+    hint: 'ยังไม่ได้ตั้งการแจ้งเตือน ใส่ ALERT_WEBHOOK_URL (และ ALERT_WEBHOOK_KIND) ในไฟล์ .env แล้วรีสตาร์ต ระบบจะส่งข้อความถึง Discord, Slack, Telegram หรือ webhook เมื่อสำรองข้อมูลไม่สำเร็จ ดิสก์ใกล้เต็ม มีการเดารหัสผ่าน หรือมีเวอร์ชันใหม่ ดูวิธีตั้งในหัวข้อ "การแจ้งเตือน" ของ README',
+    invalid: 'ตั้ง ALERT_WEBHOOK_URL ไว้ ({host}) แต่ค่าใช้ไม่ได้ ระบบจึงปิดการแจ้งเตือนไว้ สาเหตุอยู่ในคำเตือน alerts-invalid ตอนเริ่มระบบ ดูหัวข้อ "การแจ้งเตือน" ของ README',
+    viewLog: 'ดูบันทึกระบบ',
   },
 }
 
@@ -309,6 +324,7 @@ const en = {
     'backup-restore': 'Restore from backup', 'backup-restore-denied': 'Restore confirmation failed',
     'logs-download': 'Download system logs', 'activity-export': 'Export activity', 'update-fetch': 'Download update from the web',
     'share-create': 'Create share link', 'share-download': 'Download via share link', 'share-revoke': 'Revoke share link',
+    'alert-test': 'Test alert',
   },
   logs: {
     subtitle: 'Errors and events of the server, readable here without logging into the server', search: 'Search events or details',
@@ -349,7 +365,7 @@ const en = {
     empty: 'This folder is empty', folderNotFound: 'This folder is not in the link any more. Showing the top folder instead.',
   },
   update: {
-    subtitle: 'Update the system by dropping a package (.zip) on this page: no FTP, no access to the server',
+    subtitle: 'Update with one button, or drop a package (.zip) on this page: no FTP needed',
     current: 'Running version', source: 'Source', sourceBuiltin: 'Shipped with the system', sourceUpdate: 'Web update',
     signing: 'Package signatures', signingRequired: 'Required: only packages signed with your key are accepted',
     signingOptional: 'Not required (UPDATE_PUBLIC_KEY is not set)',
@@ -374,13 +390,15 @@ const en = {
     versions: 'Versions you can go back to', none: 'No older version to go back to yet (the last 2 are kept)',
     builtin: 'Shipped with the system', rollback: 'Roll back', rollbackTitle: 'Go back to version {v}?',
     rollbackBody: 'The system restarts as version {v}. Data and files are not touched.',
-    web: 'Updates from the web', webFrom: 'Update source', check: 'Check for updates', latest: 'Latest version',
-    newer: 'Version {v} is available', upToDate: 'You already run the latest version (v{v})', fetch: 'Download and prepare',
-    fetching: 'Downloading the package and checking its files (none of its code runs yet)…', size: 'Size',
+    web: 'Updates from the web', webFrom: 'Update source', newer: 'Version {v} is available', size: 'Size',
     latestSigned: 'Signed (the signature is checked after the download)', latestUnsigned: 'Not signed',
-    checkFailed: 'Could not check for updates', fetchFailed: 'Could not download the package', fromWeb: 'Downloaded from {url}',
+    checkFailed: 'Could not check for updates',
     unsignedWebTitle: 'This package comes from the internet and is not signed',
     unsignedWebBody: 'The system can only check that the file is complete as the latest.json of the update source says; it can not tell who built it. Anyone who can change the update source can send any code to install on this machine. Install it only if you are sure the source is yours, and set UPDATE_PUBLIC_KEY to accept signed packages only.',
+    checkAndUpdate: 'Check and update', latestAlready: 'You have the latest version', oneTitle: 'Update to the new version',
+    updateNow: 'Update now', goUpdate: 'Update', stepsLabel: 'Update steps',
+    step: { check: 'Checking', fetch: 'Downloading', stage: 'Verifying', apply: 'Installing and test-starting', restart: 'Restarting' },
+    failedAt: 'The update failed at: {step}', oneFailed: 'The update failed',
     how: 'Building a package', howBody: 'On a machine with the code: raise "version" in package.json and run bun run package --sign ~/file-center-keys/update-signing.key. The signed file appears in dist-update/ (without --sign the package is unsigned, which is accepted only when UPDATE_PUBLIC_KEY is not set)',
   },
   backup: {
@@ -414,6 +432,18 @@ const en = {
     stdEmptyText: 'No files have been published yet.',
     guestWarn: 'Warning: every visitor will be able to upload or change files without signing in. Only enable this if you really need it.',
     about: 'About', uploadLimit: 'Maximum size per file', chunk: 'Upload chunk × parallel chunks', retention: 'Trash retention',
+  },
+  alerts: {
+    title: 'Alerts', on: 'On', off: 'Off', kind: 'Channel', host: 'Sent to', lastSent: 'Last sent',
+    webhooks: { discord: 'Discord', slack: 'Slack', telegram: 'Telegram', json: 'Webhook (JSON)' },
+    kinds: {
+      test: 'Test message', 'backup-failed': 'Backup failed', errors: 'Unusually many errors', lockout: 'Locked out after wrong passwords',
+      'disk-critical': 'Disk almost full', 'update-available': 'New version available',
+    },
+    test: 'Send a test', testOk: 'Test message sent. Check your channel.', testFailed: 'The test message was not delivered',
+    hint: 'Alerts are not set up. Put ALERT_WEBHOOK_URL (and ALERT_WEBHOOK_KIND) in the .env file and restart: the system then messages Discord, Slack, Telegram or a webhook when a backup fails, the disk is almost full, someone guesses passwords, or a new version is out. See the "การแจ้งเตือน" (Alerts) section of the README.',
+    invalid: 'ALERT_WEBHOOK_URL is set ({host}) but can not be used, so alerts are off. The reason is in the alerts-invalid warning logged at startup. See the "การแจ้งเตือน" (Alerts) section of the README.',
+    viewLog: 'View system log',
   },
 }
 
