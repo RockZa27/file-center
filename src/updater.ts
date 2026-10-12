@@ -17,6 +17,7 @@ import {
 import { join, relative, sep } from 'node:path'
 import { config, paths } from './config'
 import { bad, conflict, ensureSpace, freeSpace, HttpError, notFound } from './fsx'
+import type { MessageCode, Params } from './messages'
 import {
   compareVersions, isVersion, readManifest, readState, releasePath, releasesDir, releaseUsable, RELEASE_NAME, SERVER_FILE,
   stagingDir, writeState, type Manifest,
@@ -55,29 +56,33 @@ export const releases = () => releasesDir(config.dataDir)
 /** one install at a time: staging, installing and rolling back share files and a restart */
 let busy = false
 export async function exclusive<T>(fn: () => Promise<T> | T): Promise<T> {
-  if (busy) throw conflict('กำลังมีการอัปเดตอีกรายการหนึ่งอยู่ กรุณารอสักครู่')
+  if (busy) throw conflict('update.busy')
   busy = true
   try { return await fn() } finally { busy = false }
 }
 
-let parsedKey: { value: string; key: KeyObject | null; error: string | null } | undefined
+type KeyProblem = { code: MessageCode; params: Params }
+let parsedKey: { value: string; key: KeyObject | null; error: string | null; problem: KeyProblem | null } | undefined
 
-/** the key in UPDATE_PUBLIC_KEY, parsed once per value; `error` says why it is unusable */
-export function signingKey(): { key: KeyObject | null; error: string | null } {
+/** the key in UPDATE_PUBLIC_KEY, parsed once per value; `error` says why it is unusable (for the log), `problem` tells the admin */
+export function signingKey(): { key: KeyObject | null; error: string | null; problem: KeyProblem | null } {
   const value = config.updatePublicKey
   if (parsedKey?.value !== value) {
-    parsedKey = { value, key: null, error: null }
+    parsedKey = { value, key: null, error: null, problem: null }
     if (value) {
       try {
         const key = createPublicKey({ key: Buffer.from(value, 'base64'), format: 'der', type: 'spki' })
-        if (key.asymmetricKeyType !== 'ed25519') parsedKey.error = `ต้องเป็นกุญแจ Ed25519 (ได้ ${key.asymmetricKeyType})`
-        else parsedKey.key = key
+        if (key.asymmetricKeyType !== 'ed25519') {
+          parsedKey.error = `ต้องเป็นกุญแจ Ed25519 (ได้ ${key.asymmetricKeyType})`
+          parsedKey.problem = { code: 'update.key-wrong-type', params: { type: String(key.asymmetricKeyType) } }
+        } else parsedKey.key = key
       } catch {
         parsedKey.error = 'อ่านกุญแจไม่ได้ ต้องเป็น public key บรรทัดเดียวที่ได้จาก "bun run package --gen-key"'
+        parsedKey.problem = { code: 'update.key-unreadable', params: {} }
       }
     }
   }
-  return { key: parsedKey.key, error: parsedKey.error }
+  return { key: parsedKey.key, error: parsedKey.error, problem: parsedKey.problem }
 }
 
 /** a key is set (valid or not): every package must be signed */
@@ -88,16 +93,16 @@ function checkSignature(dir: string, manifestBytes: Buffer): { signed: boolean; 
   const sigFile = join(dir, SIGNATURE_FILE)
   const signed = existsSync(sigFile)
   if (!signatureRequired()) return { signed, signatureVerified: false }
-  const { key, error } = signingKey()
-  if (!key) throw bad(`ค่า UPDATE_PUBLIC_KEY ไม่ถูกต้อง (${error}) ระบบจึงไม่รับแพ็กเกจใด ๆ จนกว่าจะแก้ค่านี้แล้วรีสตาร์ตระบบ`)
+  const { key, problem } = signingKey()
+  if (!key) throw bad(problem!.code, problem!.params)
   if (!signed) {
-    throw bad('แพ็กเกจนี้ไม่มีลายเซ็น (manifest.sig) ระบบนี้รับเฉพาะแพ็กเกจที่เซ็นด้วยกุญแจของผู้ดูแล ให้สร้างด้วย "bun run package --sign <ไฟล์กุญแจ>"')
+    throw bad('update.unsigned')
   }
   let ok = false
   try {
     if (statSync(sigFile).size <= 1024) ok = verify(null, manifestBytes, key, Buffer.from(readFileSync(sigFile, 'utf8').trim(), 'base64'))
   } catch { /* unreadable signature = wrong signature */ }
-  if (!ok) throw bad('ลายเซ็นของแพ็กเกจไม่ถูกต้อง: แพ็กเกจไม่ได้เซ็นด้วยกุญแจที่ตรงกับ UPDATE_PUBLIC_KEY หรือถูกแก้ไขหลังจากเซ็น')
+  if (!ok) throw bad('update.bad-signature')
   return { signed: true, signatureVerified: true }
 }
 
@@ -113,8 +118,8 @@ function listFiles(root: string): string[] {
       const rel = relative(root, abs).split(sep).join('/')
       if (st.isDirectory()) visit(abs)
       else if (st.isFile()) out.push(rel)
-      else throw bad(`แพ็กเกจมีไฟล์ชนิดที่ไม่รองรับ: ${rel}`)
-      if (out.length > MAX_FILES) throw bad('แพ็กเกจมีไฟล์มากเกินไป')
+      else throw bad('update.odd-file', { file: rel })
+      if (out.length > MAX_FILES) throw bad('update.too-many-files')
     }
   }
   visit(root)
@@ -131,28 +136,28 @@ function verifyTree(dir: string): { manifest: Manifest; signed: boolean; signatu
     raw = readFileSync(join(dir, 'manifest.json'))
     if (raw.length > MAX_MANIFEST) throw new Error('too big')
   } catch {
-    throw bad('ไม่พบ manifest.json ในแพ็กเกจ หรืออ่านไม่ได้ (ต้องเป็นไฟล์ที่สร้างจาก "bun run package")')
+    throw bad('update.no-manifest')
   }
   const signature = checkSignature(dir, raw)
   let manifest: Manifest
   try {
     manifest = JSON.parse(raw.toString('utf8'))
   } catch {
-    throw bad('ไม่พบ manifest.json ในแพ็กเกจ หรืออ่านไม่ได้ (ต้องเป็นไฟล์ที่สร้างจาก "bun run package")')
+    throw bad('update.no-manifest')
   }
-  if (manifest?.name !== 'file-center') throw bad('แพ็กเกจนี้ไม่ใช่ของ File Center')
-  if (!isVersion(manifest.version)) throw bad('เวอร์ชันในแพ็กเกจต้องอยู่ในรูปแบบ x.y.z')
-  if (typeof manifest.files !== 'object' || manifest.files === null) throw bad('manifest ของแพ็กเกจไม่ถูกต้อง')
+  if (manifest?.name !== 'file-center') throw bad('update.not-file-center')
+  if (!isVersion(manifest.version)) throw bad('update.bad-version')
+  if (typeof manifest.files !== 'object' || manifest.files === null) throw bad('update.bad-manifest')
   const listed = Object.keys(manifest.files)
-  if (!listed.includes(SERVER_FILE) || !listed.includes('web/index.html')) throw bad('แพ็กเกจต้องมี server.js และ web/index.html')
+  if (!listed.includes(SERVER_FILE) || !listed.includes('web/index.html')) throw bad('update.missing-files')
 
   const actual = listFiles(dir).filter(f => f !== 'manifest.json' && f !== SIGNATURE_FILE && f !== VERIFIED).sort()
-  if (actual.join('\n') !== [...listed].sort().join('\n')) throw bad('ไฟล์ในแพ็กเกจไม่ตรงกับ manifest (มีไฟล์เกินหรือขาด)')
+  if (actual.join('\n') !== [...listed].sort().join('\n')) throw bad('update.files-mismatch')
   for (const rel of listed) {
-    if (!SAFE_PATH.test(rel) || (rel !== SERVER_FILE && !rel.startsWith('web/'))) throw bad(`ชื่อไฟล์ในแพ็กเกจไม่อนุญาต: ${rel}`)
+    if (!SAFE_PATH.test(rel) || (rel !== SERVER_FILE && !rel.startsWith('web/'))) throw bad('update.bad-file-name', { file: rel })
     const want = manifest.files[rel]
     const abs = join(dir, rel)
-    if (statSync(abs).size !== want?.size || sha256(abs) !== want.sha256) throw bad(`ไฟล์ ${rel} ในแพ็กเกจเสียหายหรือไม่ตรงกับ manifest`)
+    if (statSync(abs).size !== want?.size || sha256(abs) !== want.sha256) throw bad('update.file-corrupt', { file: rel })
   }
   return { manifest, ...signature }
 }
@@ -187,7 +192,7 @@ async function smokeTest(dir: string, manifest: Manifest) {
         const health = await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(1500) })
         if (health.ok && ((await health.json()) as { version?: string }).version === manifest.version) {
           const page = await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(1500) })
-          if (!page.ok) throw bad('เวอร์ชันใหม่เปิดหน้าเว็บไม่ได้')
+          if (!page.ok) throw bad('update.page-failed')
           return
         }
       } catch (e) {
@@ -199,7 +204,8 @@ async function smokeTest(dir: string, manifest: Manifest) {
     const log = await Promise.race([errors, Bun.sleep(1000).then(() => '')])
     // the first lines hold the message; the rest is a stack trace with server paths
     const detail = log.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('at ') && !l.startsWith('Bun v')).slice(0, 3).join(' ').replaceAll(dir, '.').slice(0, 300)
-    throw bad(`เวอร์ชันใหม่เริ่มทำงานไม่สำเร็จ${exited ? '' : ' (ไม่ตอบสนองใน 25 วินาที)'}${detail ? `: ${detail}` : ''}`)
+    if (exited) throw detail ? bad('update.start-failed-detail', { detail }) : bad('update.start-failed')
+    throw detail ? bad('update.start-timeout-detail', { seconds: 25, detail }) : bad('update.start-timeout', { seconds: 25 })
   } finally {
     proc.kill()
     await proc.exited
@@ -238,11 +244,11 @@ export function stagePackage(zipAbs: string, bytes: number): Promise<StagedInfo>
           maxFiles: MAX_FILES,
         })
       } catch (e) {
-        throw e instanceof HttpError ? e : bad('เปิดไฟล์ zip ไม่ได้ ไฟล์อาจเสียหาย')
+        throw e instanceof HttpError ? e : bad('update.bad-zip')
       }
       const { manifest, signed, signatureVerified } = verifyTree(dir)
       if (compareVersions(manifest.version, runningVersion()) <= 0) {
-        throw bad(`แพ็กเกจเป็นเวอร์ชัน ${manifest.version} ซึ่งไม่ใหม่กว่าเวอร์ชันที่ใช้อยู่ (${runningVersion()}) ต้องเพิ่มเลขเวอร์ชันก่อนสร้างแพ็กเกจ`)
+        throw bad('update.not-newer', { version: manifest.version, running: runningVersion() })
       }
       writeFileSync(join(dir, VERIFIED), manifest.files[SERVER_FILE].sha256)
       return {
@@ -285,11 +291,11 @@ function pruneReleases() {
 /** test-run and install a staged package. Call only after the password step-up; the caller restarts the app afterwards. */
 export function applyStaged(id: string): Promise<{ version: string; dir: string }> {
   return exclusive(async () => {
-    if (!STAGED_ID.test(id)) throw notFound('ไม่พบแพ็กเกจที่เตรียมไว้ กรุณาอัปโหลดใหม่')
+    if (!STAGED_ID.test(id)) throw notFound('update.staged-missing')
     const dir = join(staging(), id)
-    if (!existsSync(join(dir, VERIFIED))) throw notFound('ไม่พบแพ็กเกจที่เตรียมไว้ กรุณาอัปโหลดใหม่')
+    if (!existsSync(join(dir, VERIFIED))) throw notFound('update.staged-missing')
     const { manifest } = verifyTree(dir) // nothing changed since the check, signature included
-    if (compareVersions(manifest.version, runningVersion()) <= 0) throw bad('แพ็กเกจไม่ใหม่กว่าเวอร์ชันที่ใช้อยู่')
+    if (compareVersions(manifest.version, runningVersion()) <= 0) throw bad('update.staged-not-newer')
     try {
       await smokeTest(dir, manifest)
     } catch (e) {
@@ -322,9 +328,9 @@ export function rollbackTo(target: string | null): Promise<{ version: string }> 
   return exclusive(() => {
     const state = readState(config.dataDir)
     if (target !== null && (!RELEASE_NAME.test(target) || !state.history.includes(target) || !releaseUsable(config.dataDir, target))) {
-      throw notFound('ไม่พบเวอร์ชันที่ต้องการย้อนกลับ')
+      throw notFound('update.rollback-missing')
     }
-    if (target === state.current) throw bad('เวอร์ชันนี้กำลังใช้งานอยู่')
+    if (target === state.current) throw bad('update.version-in-use')
     const version = target ? readManifest(releasePath(config.dataDir, target))!.version : (process.env.FC_BUILTIN_VERSION ?? config.version)
     writeState(config.dataDir, {
       ...state,

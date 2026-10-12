@@ -3,6 +3,7 @@ import { accessFor, getSession, type Access, type Session, type User, findUser }
 import { config } from './config'
 import { forbidden, fromFsError, HttpError } from './fsx'
 import { log, safePath } from './logger'
+import { langOf, type MessageCode, type Params, text } from './messages'
 import type { Perm } from './settings'
 
 export const SESSION_COOKIE = 'fc_sid'
@@ -18,28 +19,22 @@ function clientIp(request: Request, socketIp: string): string {
 export const context = new Elysia({ name: 'context' })
   .error({ HTTP_ERROR: HttpError })
   .onError({ as: 'global' }, ({ error, code, set, request }) => {
+    // the text in the visitor's language; the code and params let the page tell cases apart without reading it
+    const answer = (status: number, c: MessageCode, params: Params = {}) => {
+      set.status = status
+      return { error: text(langOf(request), c, params), code: c, params }
+    }
     // file-system errors (disk full, name too long...) get a clear message instead of a 500 with server paths
     const known = fromFsError(error)
     if (known) {
       if (!(error instanceof HttpError)) log.warn('fs-error', { method: request.method, path: safePath(request.url), error: (error as Error).message.slice(0, 300) })
-      set.status = known.status
-      return { error: known.message, code: known.code }
+      return answer(known.status, known.code, known.params)
     }
-    if (code === 'VALIDATION') {
-      set.status = 422
-      return { error: 'ข้อมูลที่ส่งมาไม่ถูกต้อง' }
-    }
-    if (code === 'NOT_FOUND') {
-      set.status = 404
-      return { error: 'ไม่พบหน้าที่ต้องการ' }
-    }
-    if (code === 'PARSE') {
-      set.status = 400
-      return { error: 'อ่านข้อมูลที่ส่งมาไม่ได้' }
-    }
+    if (code === 'VALIDATION') return answer(422, 'request.invalid')
+    if (code === 'NOT_FOUND') return answer(404, 'request.no-route')
+    if (code === 'PARSE') return answer(400, 'request.unreadable')
     log.error('request-failed', { method: request.method, path: safePath(request.url), error })
-    set.status = 500
-    return { error: 'เกิดข้อผิดพลาดภายในระบบ' }
+    return answer(500, 'request.internal')
   })
   .derive({ as: 'global' }, ({ cookie, request, server }) => {
     const sid = cookie[SESSION_COOKIE]?.value as string | undefined
@@ -52,21 +47,21 @@ export const context = new Elysia({ name: 'context' })
     // CSRF: every state-changing call must carry the token issued with the session
     if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return
     const token = request.headers.get('x-csrf-token')
-    if (!session || !token || token !== session.csrf) throw new HttpError(403, 'โทเคนความปลอดภัยไม่ถูกต้อง กรุณารีเฟรชหน้าเว็บ', 'csrf')
+    if (!session || !token || token !== session.csrf) throw new HttpError(403, 'csrf')
   })
   .onBeforeHandle({ as: 'global' }, ({ request, user }) => {
     // an account with a handed-out password may only change it (or leave) before anything else
     if (!user?.mustChangePassword) return
     const { pathname } = new URL(request.url)
     if (pathname.startsWith('/api/') && !PASSWORD_CHANGE_ROUTES.has(pathname)) {
-      throw new HttpError(403, 'กรุณาเปลี่ยนรหัสผ่านก่อนใช้งาน', 'must-change-password')
+      throw new HttpError(403, 'must-change-password')
     }
   })
 
 export type Caller = { user: User | null; ip: string }
 
 export function requireUser(c: Caller): User {
-  if (!c.user) throw new HttpError(401, 'กรุณาเข้าสู่ระบบ')
+  if (!c.user) throw new HttpError(401, 'auth.required')
   return c.user
 }
 
@@ -80,7 +75,7 @@ export function requireAdmin(c: Caller): User {
 export function need(c: Caller, space: unknown, ...perms: Perm[]): Access {
   const access = accessFor(c.user, space)
   if (!access || perms.some(p => !access.perms.has(p))) {
-    throw c.user ? forbidden() : new HttpError(401, 'กรุณาเข้าสู่ระบบ')
+    throw c.user ? forbidden() : new HttpError(401, 'auth.required')
   }
   return access
 }

@@ -27,14 +27,14 @@ const dirOf = (id: string) => join(paths.tmp, id)
 const dataOf = (id: string) => join(dirOf(id), 'data')
 
 function loadMeta(id: unknown, owner: string): Meta {
-  if (typeof id !== 'string' || !/^[a-f0-9]{24}$/.test(id)) throw notFound('ไม่พบการอัปโหลดนี้')
+  if (typeof id !== 'string' || !/^[a-f0-9]{24}$/.test(id)) throw notFound('upload.not-found')
   try {
     const meta = JSON.parse(readFileSync(join(dirOf(id), 'meta.json'), 'utf8')) as Meta
     if (meta.owner !== owner) throw forbidden()
     return meta
   } catch (err) {
     if (err instanceof HttpError) throw err
-    throw notFound('ไม่พบการอัปโหลดนี้')
+    throw notFound('upload.not-found')
   }
 }
 
@@ -62,8 +62,8 @@ export function guestUploadUsage(): { day: string; used: number; limit: number }
 
 function reserveGuest(size: number): string {
   const { day, used, limit } = guestUploadUsage()
-  if (limit <= 0) throw new HttpError(429, 'ผู้เยี่ยมชมอัปโหลดไฟล์ไม่ได้ กรุณาเข้าสู่ระบบก่อน')
-  if (used + size > limit) throw new HttpError(429, 'ผู้เยี่ยมชมอัปโหลดครบปริมาณของวันนี้แล้ว กรุณาลองใหม่พรุ่งนี้หรือเข้าสู่ระบบ')
+  if (limit <= 0) throw new HttpError(429, 'upload.guest-disabled')
+  if (used + size > limit) throw new HttpError(429, 'upload.guest-quota')
   guestStore.replace({ day, bytes: used + size })
   return day
 }
@@ -91,8 +91,8 @@ export function initUpload(args: {
 }) {
   const name = validName(args.name)
   const size = Number(args.size)
-  if (!Number.isSafeInteger(size) || size < 0) throw bad('ขนาดไฟล์ไม่ถูกต้อง')
-  if (size > config.uploadMaxSize) throw new HttpError(413, 'ไฟล์ใหญ่เกินกำหนด')
+  if (!Number.isSafeInteger(size) || size < 0) throw bad('upload.bad-size')
+  if (size > config.uploadMaxSize) throw new HttpError(413, 'upload.too-big')
   ensureSpace(paths.tmp, size)
 
   const segments = args.relativeDir.map(validName)
@@ -125,9 +125,9 @@ export function receivedChunks(id: string, owner: string): { received: number[];
 
 export async function saveChunk(id: string, owner: string, index: number, data: ArrayBuffer) {
   const meta = loadMeta(id, owner)
-  if (!Number.isInteger(index) || index < 0 || index >= meta.total) throw bad('ลำดับชิ้นส่วนไม่ถูกต้อง')
+  if (!Number.isInteger(index) || index < 0 || index >= meta.total) throw bad('upload.bad-chunk-index')
   const expected = index === meta.total - 1 ? meta.size - meta.chunkSize * (meta.total - 1) : meta.chunkSize
-  if (data.byteLength !== expected) throw bad(`ขนาดชิ้นส่วนไม่ถูกต้อง (ต้องเป็น ${expected} ไบต์)`)
+  if (data.byteLength !== expected) throw bad('upload.bad-chunk-size', { bytes: expected })
   ensureSpace(paths.tmp, data.byteLength)
   const fh = await open(dataOf(id), 'r+')
   try {
@@ -143,10 +143,10 @@ export async function saveChunk(id: string, owner: string, index: number, data: 
 export async function completeUpload(id: string, owner: string) {
   const meta = loadMeta(id, owner)
   for (let i = 0; i < meta.total; i++) {
-    if (!existsSync(join(dirOf(id), String(i)))) throw bad(`ยังขาดชิ้นส่วนที่ ${i + 1}`)
+    if (!existsSync(join(dirOf(id), String(i)))) throw bad('upload.missing-chunk', { n: i + 1 })
   }
   const data = dataOf(id)
-  if (statSync(data).size !== meta.size) throw bad('ขนาดไฟล์หลังรวมไม่ตรงกับที่แจ้งไว้')
+  if (statSync(data).size !== meta.size) throw bad('upload.size-mismatch')
 
   ensureDir(meta.destDir)
   const finalPath = uniquePath(join(meta.destDir, meta.name))

@@ -52,12 +52,12 @@ export const PASSWORD_MIN_LENGTH = 10
 
 /** for new passwords only: passwords set before these rules keep working at login */
 export function checkPasswordStrength(pw: unknown, username: string): string {
-  if (typeof pw !== 'string' || pw.length < PASSWORD_MIN_LENGTH) throw bad(`รหัสผ่านต้องยาวอย่างน้อย ${PASSWORD_MIN_LENGTH} ตัวอักษร`)
-  if (pw.length > 200) throw bad('รหัสผ่านยาวเกินไป')
+  if (typeof pw !== 'string' || pw.length < PASSWORD_MIN_LENGTH) throw bad('auth.password-too-short', { min: PASSWORD_MIN_LENGTH })
+  if (pw.length > 200) throw bad('auth.password-too-long')
   const lower = pw.toLowerCase()
-  if (lower.includes(username.toLowerCase())) throw bad('รหัสผ่านต้องไม่มีชื่อผู้ใช้อยู่ในนั้น')
-  if (COMMON_PASSWORDS.has(lower)) throw bad('รหัสผ่านนี้ถูกใช้บ่อยเกินไปและเดาได้ง่าย กรุณาตั้งรหัสอื่น')
-  if (isRunOrRepeat(lower)) throw bad('รหัสผ่านต้องไม่เป็นตัวอักษรเดียวซ้ำกัน หรือเรียงตามแป้นพิมพ์/ตัวเลข/ตัวอักษร กรุณาตั้งรหัสอื่น')
+  if (lower.includes(username.toLowerCase())) throw bad('auth.password-has-username')
+  if (COMMON_PASSWORDS.has(lower)) throw bad('auth.password-common')
+  if (isRunOrRepeat(lower)) throw bad('auth.password-pattern')
   return pw
 }
 
@@ -108,7 +108,7 @@ export function cleanHomedir(input: unknown, username: string): string {
   const p = input === undefined || input === '' ? `/users/${username}` : normRel(input)
   // inside the public folder the user would get full rights there through their own space
   const pub = `/${config.publicDirName}`
-  if (p === pub || p.startsWith(`${pub}/`)) throw bad('โฟลเดอร์ของผู้ใช้ต้องไม่อยู่ในโฟลเดอร์สาธารณะ')
+  if (p === pub || p.startsWith(`${pub}/`)) throw bad('admin.home-in-public')
   return p
 }
 
@@ -227,11 +227,11 @@ export function pruneLoginAttempts(): number {
 export async function confirmPassword(user: User, ip: string, password: string, deniedAction: string) {
   const key = `step-up|${ip}|${user.username.toLowerCase()}`
   const wait = lockedFor(key)
-  if (wait) throw new HttpError(429, `ใส่รหัสผ่านผิดหลายครั้ง กรุณารอ ${wait} วินาทีแล้วลองใหม่`)
+  if (wait) throw new HttpError(429, 'auth.confirm-locked', { seconds: wait })
   if (!(await Bun.password.verify(password, user.passwordHash).catch(() => false))) {
     recordFailure(key)
     audit({ user: user.username, ip, action: deniedAction })
-    throw new HttpError(403, 'รหัสผ่านไม่ถูกต้อง')
+    throw new HttpError(403, 'auth.wrong-password')
   }
   clearFailures(key)
 }

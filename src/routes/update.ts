@@ -12,9 +12,9 @@ import { completeUpload, initUpload, uploadsInProgress } from '../uploads'
 const incoming = () => `${paths.app}/incoming`
 
 function enabled() {
-  if (!config.webUpdate) throw forbidden('ปิดการอัปเดตผ่านหน้าเว็บอยู่ (WEB_UPDATE=false)')
+  if (!config.webUpdate) throw forbidden('update.disabled')
   if (!supervised()) {
-    throw new HttpError(409, 'ระบบนี้ไม่ได้เริ่มผ่านตัวควบคุม (launcher) จึงรีสตาร์ตเองไม่ได้ ให้เริ่มด้วย "bun start" หรือ Docker', 'not-supervised')
+    throw new HttpError(409, 'not-supervised')
   }
 }
 
@@ -30,7 +30,7 @@ export const updateRoutes = new Elysia({ prefix: '/api/admin/update' })
   .post('/upload', ({ user, ip, body }) => {
     const admin = requireAdmin({ user, ip })
     enabled()
-    if (body.size > config.updateMaxSize) throw new HttpError(413, 'ไฟล์แพ็กเกจใหญ่เกินกำหนด')
+    if (body.size > config.updateMaxSize) throw new HttpError(413, 'update.too-big')
     ensureDir(incoming())
     return initUpload({ owner: admin.username, root: incoming(), dir: '/', relativeDir: [], name: 'update.zip', size: body.size })
   }, { body: t.Object({ size: t.Number() }) })

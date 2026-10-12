@@ -48,9 +48,9 @@ export const backupRoutes = new Elysia({ prefix: '/api/admin' })
   .post('/backups/restore', async ({ user, ip, body }) => {
     const admin = requireAdmin({ user, ip })
     if (!supervised()) {
-      throw new HttpError(409, 'ระบบนี้ไม่ได้เริ่มผ่านตัวควบคุม (launcher) จึงรีสตาร์ตเองไม่ได้ ให้เริ่มด้วย "bun start" หรือ Docker', 'not-supervised')
+      throw new HttpError(409, 'not-supervised')
     }
-    if (!BACKUP_NAME_RE.test(body.name)) throw bad('ชื่อไฟล์สำรองข้อมูลไม่ถูกต้อง')
+    if (!BACKUP_NAME_RE.test(body.name)) throw bad('backup.bad-name')
     await confirmPassword(admin, ip, body.password, 'backup-restore-denied')
     const { safety } = await restoreBackup(body.name)
     audit({ user: admin.username, ip, action: 'backup-restore', target: body.name, detail: `สำรองข้อมูลก่อนกู้คืนไว้ที่ ${safety.name}` })

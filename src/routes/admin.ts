@@ -10,6 +10,7 @@ import { config, paths } from '../config'
 import { context, requireAdmin } from '../context'
 import { bad, conflict, ensureDir, forbidden, HttpError, isDir, listDir, normRel, notFound, resolveIn } from '../fsx'
 import { errorsSince } from '../logger'
+import { langOf, type MessageCode, type Params, text } from '../messages'
 import { settings } from '../settings'
 import { storageStats } from '../stats'
 import { listTrash, purge, restore, trashSummary } from '../trash'
@@ -70,14 +71,14 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
   .post('/admin/users', async ({ user, ip, body }) => {
     const admin = requireAdmin({ user, ip })
     const username = body.username.trim()
-    if (!USERNAME_RE.test(username)) throw bad('ชื่อผู้ใช้ใช้ได้เฉพาะ a-z 0-9 . _ - ยาว 3-32 ตัว')
-    if (isReservedUsername(username)) throw bad('ชื่อผู้ใช้นี้สงวนไว้สำหรับผู้เยี่ยมชม กรุณาใช้ชื่ออื่น')
-    if (findUser(username)) throw conflict('มีชื่อผู้ใช้นี้อยู่แล้ว')
+    if (!USERNAME_RE.test(username)) throw bad('admin.bad-username')
+    if (isReservedUsername(username)) throw bad('admin.reserved-username')
+    if (findUser(username)) throw conflict('admin.username-taken')
     checkPasswordStrength(body.password, username)
     const name = body.name.trim()
-    if (!name || name.length > 60) throw bad('กรุณากรอกชื่อที่แสดง (ไม่เกิน 60 ตัวอักษร)')
+    if (!name || name.length > 60) throw bad('admin.display-name-required')
     const homedir = body.role === 'admin' ? '/' : cleanHomedir(body.homedir, username)
-    if (body.role !== 'admin' && homedir === '/') throw bad('ผู้ใช้ทั่วไปต้องมีโฟลเดอร์ของตัวเอง')
+    if (body.role !== 'admin' && homedir === '/') throw bad('admin.home-required')
     ensureDir(resolveIn(config.storageDir, homedir))
     allUsers().push({
       username, name, role: body.role, homedir,
@@ -99,18 +100,18 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
   .put('/admin/users/:username', async ({ user, ip, params, body }) => {
     const admin = requireAdmin({ user, ip })
     const target = findUser(params.username)
-    if (!target) throw notFound('ไม่พบผู้ใช้')
+    if (!target) throw notFound('admin.user-not-found')
     // check every field first: a refused request must not leave half of its changes behind
     if (body.role && body.role !== target.role && target.role === 'admin' && adminCount() <= 1) {
-      throw bad('ต้องมีผู้ดูแลระบบอย่างน้อยหนึ่งคน')
+      throw bad('admin.last-admin')
     }
     const name = body.name?.trim()
-    if (name !== undefined && (!name || name.length > 60)) throw bad('ชื่อที่แสดงไม่ถูกต้อง')
+    if (name !== undefined && (!name || name.length > 60)) throw bad('admin.bad-display-name')
     const role = body.role ?? target.role
     let homedir = role === 'admin' ? '/' : target.homedir
     if (role !== 'admin' && (body.homedir !== undefined || target.homedir === '/')) {
       homedir = cleanHomedir(body.homedir, target.username)
-      if (homedir === '/') throw bad('ผู้ใช้ทั่วไปต้องมีโฟลเดอร์ของตัวเอง')
+      if (homedir === '/') throw bad('admin.home-required')
     }
     const homeAbs = resolveIn(config.storageDir, homedir)
     if (body.password) checkPasswordStrength(body.password, target.username)
@@ -140,9 +141,9 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
   .delete('/admin/users/:username', ({ user, ip, params }) => {
     const admin = requireAdmin({ user, ip })
     const target = findUser(params.username)
-    if (!target) throw notFound('ไม่พบผู้ใช้')
-    if (target.username === admin.username) throw bad('ไม่สามารถลบบัญชีของตัวเองได้')
-    if (target.role === 'admin' && adminCount() <= 1) throw bad('ต้องมีผู้ดูแลระบบอย่างน้อยหนึ่งคน')
+    if (!target) throw notFound('admin.user-not-found')
+    if (target.username === admin.username) throw bad('admin.delete-self')
+    if (target.role === 'admin' && adminCount() <= 1) throw bad('admin.last-admin')
     const list = allUsers()
     list.splice(list.indexOf(target), 1)
     saveUsers()
@@ -161,27 +162,27 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
   }, { query: t.Object({ path: t.Optional(t.String()) }) })
 
   // ───────────── dashboard ─────────────
-  .get('/admin/status', ({ user, ip }) => {
+  .get('/admin/status', ({ user, ip, request }) => {
     requireAdmin({ user, ip })
     const disk = diskInfo()
     const backup = backupInfo()
     const trash = trashSummary()
-    const warnings: { level: 'info' | 'warning' | 'critical'; code: string; message: string }[] = []
+    // one code per message, the text in the admin's language
+    const lang = langOf(request)
+    const warnings: { level: 'info' | 'warning' | 'critical'; code: MessageCode; message: string; params: Params }[] = []
+    const warn = (level: 'info' | 'warning' | 'critical', code: MessageCode, params: Params = {}) =>
+      warnings.push({ level, code, message: text(lang, code, params), params })
     if (disk) {
       const freePct = (disk.free / disk.total) * 100
-      if (freePct < 5) warnings.push({ level: 'critical', code: 'disk', message: `พื้นที่ดิสก์เหลือเพียง ${freePct.toFixed(1)}%` })
-      else if (freePct < 10) warnings.push({ level: 'warning', code: 'disk', message: `พื้นที่ดิสก์เหลือน้อย (${freePct.toFixed(1)}%)` })
+      if (freePct < 5) warn('critical', 'admin.disk-critical', { percent: freePct.toFixed(1) })
+      else if (freePct < 10) warn('warning', 'admin.disk-low', { percent: freePct.toFixed(1) })
     }
-    if (!backup) warnings.push({ level: 'info', code: 'backup', message: 'ยังไม่มีบันทึกการสำรองข้อมูล' })
-    else if (backup.status === 'failed') warnings.push({ level: 'critical', code: 'backup', message: 'การสำรองข้อมูลครั้งล่าสุดล้มเหลว' })
-    else if (backup.lastSuccess && Date.now() - Date.parse(backup.lastSuccess) > 48 * 3600_000) {
-      warnings.push({ level: 'warning', code: 'backup', message: 'ไม่ได้สำรองข้อมูลมากกว่า 2 วันแล้ว' })
-    }
-    if (allUsers().some(u => u.mustChangePassword)) {
-      warnings.push({ level: 'warning', code: 'password', message: 'ยังมีบัญชีที่ใช้รหัสผ่านเริ่มต้น กรุณาเปลี่ยนรหัสผ่าน' })
-    }
+    if (!backup) warn('info', 'backup.never')
+    else if (backup.status === 'failed') warn('critical', 'backup.last-failed')
+    else if (backup.lastSuccess && Date.now() - Date.parse(backup.lastSuccess) > 48 * 3600_000) warn('warning', 'backup.stale', { days: 2 })
+    if (allUsers().some(u => u.mustChangePassword)) warn('warning', 'admin.default-password')
     const errors = errorsSince(Date.now() - 24 * 3600_000)
-    if (errors) warnings.push({ level: 'warning', code: 'errors', message: `มี error ${errors} รายการใน 24 ชั่วโมงที่ผ่านมา` })
+    if (errors) warn('warning', 'errors', { count: errors })
     return {
       version: config.version,
       uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),
@@ -245,7 +246,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
       const v = body[key]
       if (v === undefined) return
       const s = String(v).trim()
-      if (s.length < min || s.length > max) throw bad('ข้อความสั้นหรือยาวเกินไป')
+      if (s.length < min || s.length > max) throw bad('admin.text-length')
       patch[key] = s
     }
     text('appName', 60, 1)
@@ -253,7 +254,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     text('welcomeText', 600)
     text('publicEmptyText', 300)
     if (body.primaryColor !== undefined) {
-      if (!/^#[0-9a-fA-F]{6}$/.test(body.primaryColor)) throw bad('รหัสสีต้องอยู่ในรูปแบบ #RRGGBB')
+      if (!/^#[0-9a-fA-F]{6}$/.test(body.primaryColor)) throw bad('admin.bad-color')
       patch.primaryColor = body.primaryColor.toLowerCase()
     }
     if (body.publicEnabled !== undefined) patch.publicEnabled = body.publicEnabled
@@ -274,9 +275,9 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     const admin = requireAdmin({ user, ip })
     const type = (request.headers.get('content-type') ?? '').split(';')[0].trim()
     const ext = ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/svg+xml': 'svg' } as Record<string, string>)[type]
-    if (!ext) throw bad('รองรับเฉพาะ PNG, JPG, WebP หรือ SVG')
+    if (!ext) throw bad('admin.logo-type')
     const data = await request.arrayBuffer()
-    if (data.byteLength === 0 || data.byteLength > 1024 * 1024) throw bad('ไฟล์โลโก้ต้องไม่เกิน 1 MB')
+    if (data.byteLength === 0 || data.byteLength > 1024 * 1024) throw bad('admin.logo-size')
     const old = settings.get().logo
     if (old) rmSync(join(paths.branding, `logo.${old.split(':')[0]}`), { force: true })
     await Bun.write(join(paths.branding, `logo.${ext}`), data)

@@ -6,7 +6,7 @@ import { bootstrapAdmin, pruneLoginAttempts, purgeExpiredSessions } from './auth
 import { backupDue, backupRunning, runBackup } from './backup'
 import { config, ensureDirs } from './config'
 import { context } from './context'
-import { within } from './fsx'
+import { notFound, within } from './fsx'
 import { onStop, shutdown } from './lifecycle'
 import { accessLine, log } from './logger'
 import { adminRoutes } from './routes/admin'
@@ -123,12 +123,9 @@ export const app = new Elysia({ serve: { maxRequestBodySize: config.uploadChunkS
   .use(logRoutes)
   .use(fileRoutes)
   .use(uploadRoutes)
-  .get('/*', ({ request, set }) => {
+  .get('/*', ({ request }) => {
     const { pathname } = new URL(request.url)
-    if (pathname.startsWith('/api/')) {
-      set.status = 404
-      return { error: 'ไม่พบ API ที่เรียก' }
-    }
+    if (pathname.startsWith('/api/')) throw notFound('request.no-api')
     return serveStatic(pathname)
   })
 

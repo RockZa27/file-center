@@ -70,7 +70,7 @@ export const logRoutes = new Elysia({ prefix: '/api/admin' })
   .get('/logs', ({ user, ip, query }) => {
     requireAdmin({ user, ip })
     const level = query.level || undefined
-    if (level && !LOG_LEVELS.includes(level as LogLevel)) throw bad('ระดับของ log ต้องเป็น info, warn หรือ error')
+    if (level && !LOG_LEVELS.includes(level as LogLevel)) throw bad('logs.bad-level')
     return queryLogs({
       level: level as LogLevel | undefined,
       q: query.q || undefined,
@@ -95,7 +95,7 @@ export const logRoutes = new Elysia({ prefix: '/api/admin' })
   // the same filters as the activity page
   .get('/activity/export', ({ user, ip, query }) => {
     const admin = requireAdmin({ user, ip })
-    if ((query.format ?? 'csv') !== 'csv') throw bad('ส่งออกได้เฉพาะรูปแบบ CSV (format=csv)')
+    if ((query.format ?? 'csv') !== 'csv') throw bad('logs.csv-only')
     const filter = { user: query.user || undefined, action: query.action || undefined, q: query.q || undefined }
     const name = `file-center-activity-${stamp()}.csv`
     // the filters are left out: they came in the query string, and logs never keep those

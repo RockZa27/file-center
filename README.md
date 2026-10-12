@@ -214,6 +214,7 @@ src/
   config.ts         ค่าตั้งต้นและตำแหน่งโฟลเดอร์
   auth.ts           ผู้ใช้, session, ล็อกการเข้าสู่ระบบ, การแปลงสิทธิ์เป็นพื้นที่ที่เข้าถึงได้
   context.ts        ตรวจ session/CSRF, รูปแบบ error เดียวกันทุก API
+  messages.ts       ข้อความทุกข้อที่แสดงต่อผู้ใช้ ตามรหัส (code) เป็นภาษาไทยและอังกฤษ
   fsx.ts            จัดการพาธอย่างปลอดภัย (กัน ../ และ symlink), คัดลอก/ย้าย
   zip.ts            สร้างและแตก zip ด้วย zip.js (ZIP64 ไฟล์เกิน 4 GB, ตรวจ CRC, กัน zip-slip / zip bomb)
   uploads.ts        อัปโหลดแบบแบ่งชิ้น กลับมาต่อได้
@@ -225,6 +226,7 @@ scripts/package.ts  สร้างแพ็กเกจอัปเดต (bun 
 web/                Vue 3 + Naive UI (build ไปที่ web/dist)
 tests/api.test.ts   ทดสอบ API
 tests/logs.test.ts  ทดสอบ log ของระบบ การหมุนไฟล์ การส่งออก และว่าไม่มีความลับหลุดลง log
+tests/messages.test.ts  ทุกรหัสที่ใช้ใน src/ มีในรายการข้อความ ทั้งสองภาษามีตัวแปรตรงกัน และ error ตอบตามภาษาของคำขอ
 tests/update.test.ts, tests/backup.test.ts   ทดสอบอัปเดตและกู้คืนข้อมูลกับ launcher จริง
 tests/perf.test.ts  การนับไฟล์ 50,000 ไฟล์ การคัดลอก 20,000 ไฟล์ และการค้นหาต้องไม่ทำให้คำขออื่นช้า (โหมด `dashboard` ใน scripts/loadtest.ts ใช้ลองกับ server จริง)
 ```
@@ -256,7 +258,12 @@ tests/perf.test.ts  การนับไฟล์ 50,000 ไฟล์ การ
 
 ## API โดยสรุป
 
-ทุกคำสั่งที่เปลี่ยนข้อมูลต้องส่งหัว `X-CSRF-Token` ที่ได้จาก `GET /api/session` ผิดพลาดตอบเป็น `{ "error": "ข้อความ" }`
+ทุกคำสั่งที่เปลี่ยนข้อมูลต้องส่งหัว `X-CSRF-Token` ที่ได้จาก `GET /api/session` ผิดพลาดตอบเป็น `{ "error": "ข้อความ", "code": "fs.bad-name", "params": {} }`
+
+- `code` คงที่ไม่เปลี่ยนตามภาษา (รายการทั้งหมดอยู่ใน `src/messages.ts` แบ่งตามหมวด เช่น `auth.locked`, `files.name-taken`) ส่วน `params` คือค่าที่เติมในข้อความ เช่น `{ "seconds": 30 }`
+- `error` เป็นภาษาไทยหรืออังกฤษตามคำขอ: หัว `X-Lang: th` หรือ `en` ก่อน ถ้าไม่มีใช้ `Accept-Language` ของเบราว์เซอร์ ถ้าไม่ระบุทั้งสองอย่างเป็นภาษาไทย
+  คำเตือนในหน้าภาพรวม (`warnings` ของ `GET /api/admin/status`) มี `code`, `message` และ `params` แบบเดียวกัน ส่วน log และประวัติการใช้งานยังเป็นภาษาไทยเสมอ
+- รหัสเดิมที่หน้าเว็บใช้อยู่ไม่เปลี่ยน: `csrf`, `must-change-password`, `disk-full`, `not-supervised` และคำเตือน `errors`
 
 | | |
 |---|---|

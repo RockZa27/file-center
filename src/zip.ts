@@ -77,13 +77,13 @@ export function zipStream(items: ZipItem[]): ReadableStream<Uint8Array> {
  * refuse (":", "?", control characters...) into safe ones.
  */
 export async function unzipTo(zipAbs: string, destDir: string, limits: { maxBytes: number; maxFiles: number }): Promise<number> {
-  const tooBig = () => bad('ไฟล์ที่แตกออกมามีขนาดใหญ่เกินกำหนด หรือพื้นที่จัดเก็บไม่พอ')
-  const unsafe = () => bad('ไฟล์ zip มีพาธที่ไม่ปลอดภัย')
+  const tooBig = () => bad('zip.too-big')
+  const unsafe = () => bad('zip.unsafe-path')
   const reader = new ZipReader(new BlobReader(Bun.file(zipAbs)))
   try {
     const entries = await reader.getEntries()
     const files = entries.filter(e => !e.directory)
-    if (files.length > limits.maxFiles) throw bad(`ไฟล์ zip มีไฟล์มากกว่า ${limits.maxFiles.toLocaleString()} ไฟล์`)
+    if (files.length > limits.maxFiles) throw bad('zip.too-many-files', { max: limits.maxFiles.toLocaleString() })
     if (files.reduce((sum, e) => sum + e.uncompressedSize, 0) > limits.maxBytes) throw tooBig()
 
     let total = 0

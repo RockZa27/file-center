@@ -62,12 +62,12 @@ export const sessionRoutes = new Elysia({ prefix: '/api' })
     const username = body.username.trim()
     const key = `${ip}|${username.toLowerCase()}`
     const wait = lockedFor(key)
-    if (wait) throw new HttpError(429, `พยายามเข้าสู่ระบบผิดหลายครั้ง กรุณารอ ${wait} วินาทีแล้วลองใหม่`)
+    if (wait) throw new HttpError(429, 'auth.locked', { seconds: wait })
     const user = await verifyLogin(username, body.password)
     if (!user) {
       recordFailure(key)
       audit({ user: username || '-', ip, action: 'login-failed' })
-      throw new HttpError(401, 'ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง')
+      throw new HttpError(401, 'auth.bad-credentials')
     }
     clearFailures(key)
     destroySession(sid) // new id on every login
@@ -95,7 +95,7 @@ export const sessionRoutes = new Elysia({ prefix: '/api' })
 
   .post('/password', async ({ user, ip, sid, body }) => {
     const u = requireUser({ user, ip })
-    if (!(await Bun.password.verify(body.current, u.passwordHash))) throw new HttpError(400, 'รหัสผ่านปัจจุบันไม่ถูกต้อง')
+    if (!(await Bun.password.verify(body.current, u.passwordHash))) throw new HttpError(400, 'auth.wrong-current-password')
     checkPasswordStrength(body.next, u.username)
     u.passwordHash = await hashPassword(body.next)
     u.mustChangePassword = false
