@@ -439,7 +439,7 @@
     "id": "share-link-in-folder",
     "difficulty": "subtle",
     "category": "path-traversal",
-    "severity": "high",
+    "severity": "low",
     "tests": "tests/shares.test.ts",
     "description": "browsing inside a shared folder follows a symlink in it, so files elsewhere in the owner's space (or outside) are served",
     "patches": [
@@ -448,7 +448,8 @@
         "find": "    if (st.isSymbolicLink()) throw notFound()\n  }\n  return { rel, abs }",
         "replace": "    void st\n  }\n  return { rel, abs }"
       }
-    ]
+    ],
+    "severityNote": "resolveIn still refuses a link whose target is outside the shared folder (verified r5 F7), so only links pointing elsewhere inside the share are followed"
   },
   {
     "id": "share-password-no-lockout",
@@ -484,7 +485,7 @@
     "id": "update-fetch-no-sha",
     "difficulty": "medium",
     "category": "integrity",
-    "severity": "high",
+    "severity": "medium",
     "tests": "tests/update-source.test.ts",
     "description": "a fetched update package is staged without comparing its SHA-256 with latest.json",
     "patches": [
@@ -493,7 +494,8 @@
         "find": "if (size !== latest.size || hash.digest('hex') !== latest.sha256) throw mismatch",
         "replace": "if (size !== latest.size) throw mismatch"
       }
-    ]
+    ],
+    "severityNote": "signature check (when a key is set) and the password step-up still apply; it only lets a same-size changed package through (verified r5 F6)"
   },
   {
     "id": "update-source-any-http",

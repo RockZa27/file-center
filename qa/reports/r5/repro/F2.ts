@@ -1,0 +1,15 @@
+// F2: share link keeps working after owner loses share/download permission
+import { adminLogin, call, done, makeUser, putFile, share } from './helper'
+const admin = await adminLogin()
+const bob = await makeUser(admin, 'bob')
+await putFile(bob.sess, '/', 'doc.txt', 'bob data')
+const token = await share(bob.sess, '/doc.txt')
+const before = await call('GET', `/api/s/${token}/download`)
+console.log('before revoke of perms:', before.status, await before.text())
+if (before.status !== 200) throw new Error('setup: link should work first')
+const up = await call('PUT', '/api/admin/users/bob', admin, { permissions: ['read'] })
+if (up.status !== 200) throw new Error(`perm update ${up.status} ${await up.text()}`)
+const after = await call('GET', `/api/s/${token}/download`)
+const body = await after.text()
+console.log('after owner lost share+download:', after.status, JSON.stringify(body.slice(0, 80)))
+done(after.status === 200 && body === 'bob data', 'link still serves the file')
