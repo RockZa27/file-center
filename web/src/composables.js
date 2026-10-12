@@ -57,6 +57,8 @@ export function useFeedback() {
   return {
     ok: text => message.success(text),
     warn: text => message.warning(text, { duration: 6000 }),
+    /** a message that stays until the returned function is called (something finishing in the background) */
+    busy: text => { const m = message.loading(text, { duration: 0 }); return () => m.destroy() },
     fail: (e, fallback) => message.error(errorText(e, fallback || t('common.unknownError')), { duration: 6000 }),
     confirm: ({ title, content, positive, danger = false }) =>
       new Promise(resolve => {

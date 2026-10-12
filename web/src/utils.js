@@ -33,7 +33,18 @@ export const extOf = name => {
 export const IMAGE_EXT = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'avif']
 export const VIDEO_EXT = ['mp4', 'webm']
 export const AUDIO_EXT = ['mp3', 'wav', 'ogg', 'm4a']
-export const TEXT_EXT = ['txt', 'md', 'json', 'csv', 'log', 'xml', 'yml', 'yaml', 'ini', 'js', 'ts', 'css', 'html', 'vue', 'py', 'php', 'sh', 'sql', 'env']
+export const TEXT_EXT = [
+  'txt', 'json', 'log', 'xml', 'yml', 'yaml', 'ini', 'js', 'mjs', 'cjs', 'jsx', 'ts', 'tsx', 'css', 'html', 'vue', 'py', 'php',
+  'sh', 'sql', 'env', 'toml', 'conf',
+]
+export const MARKDOWN_EXT = ['md', 'markdown']
+export const CSV_EXT = ['csv', 'tsv']
+// drawn in the page by a viewer loaded only when such a file opens (PreviewModal → DocumentPreview)
+export const DOCX_EXT = ['docx']
+export const SHEET_EXT = ['xlsx', 'xlsm', 'xls', 'ods']
+export const SLIDES_EXT = ['pptx']
+/** bigger Office files are offered for download instead of being drawn in the page */
+export const DOCUMENT_PREVIEW_MAX = 20 * 1024 * 1024
 
 export const isImage = n => IMAGE_EXT.includes(extOf(n))
 export const kindOf = name => {
@@ -43,7 +54,28 @@ export const kindOf = name => {
   if (AUDIO_EXT.includes(e)) return 'audio'
   if (e === 'pdf') return 'pdf'
   if (TEXT_EXT.includes(e)) return 'text'
+  if (MARKDOWN_EXT.includes(e)) return 'markdown'
+  if (CSV_EXT.includes(e)) return 'csv'
+  if (DOCX_EXT.includes(e)) return 'docx'
+  if (SHEET_EXT.includes(e)) return 'sheet'
+  if (SLIDES_EXT.includes(e)) return 'slides'
   return 'other'
+}
+
+/** files whose text opens in the editor (TextEditor), the rest are shown as they are */
+export const isTextKind = k => k === 'text' || k === 'markdown' || k === 'csv'
+
+/**
+ * 'edit' or 'view' when ONLYOFFICE is set up (session config `office`) and takes this file type with the user's
+ * rights in `space` (editing needs read, download and write, like the server checks); null otherwise
+ */
+export function officeModeFor(office, can, name) {
+  if (!office?.enabled) return null
+  const e = extOf(name)
+  if (!can('read') || !can('download')) return null
+  if (office.edit?.includes(e) && can('write')) return 'edit'
+  if (office.view?.includes(e)) return 'view'
+  return null
 }
 
 export const joinPath = (dir, name) => (dir === '/' ? `/${name}` : `${dir}/${name}`)

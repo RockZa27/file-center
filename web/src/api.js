@@ -68,7 +68,26 @@ export const api = {
   mkdir: (space, path, name) => post('/api/mkdir', { space, path, name }),
   newFile: (space, path, name) => post('/api/newfile', { space, path, name }),
   getContent: (space, path) => get('/api/content', { space, path }),
-  putContent: (space, path, content) => call('PUT', '/api/content', { space, path, content }),
+  /** `expectedMtime` (the mtime getContent gave): the server answers 409 files.changed-elsewhere if someone saved since */
+  putContent: (space, path, content, expectedMtime) => call('PUT', '/api/content', { space, path, content, expectedMtime }),
+  /** the whole file as bytes, for the viewers that draw Office files in the page */
+  fileBytes: async (space, path) => {
+    let res
+    try {
+      res = await fetch(api.downloadUrl(space, path, true), { headers: { 'x-lang': lang() }, credentials: 'same-origin' })
+    } catch {
+      throw new ApiError(0, t('api.noConnection'))
+    }
+    if (!res.ok) {
+      let data = null
+      try { data = await res.json() } catch { /* not JSON */ }
+      if (res.status === 401 && hooks.onUnauthorized) hooks.onUnauthorized()
+      throw new ApiError(res.status, data?.error || t('api.failed', { status: res.status }), data?.code, data?.params)
+    }
+    return new Uint8Array(await res.arrayBuffer())
+  },
+  /** ONLYOFFICE: { apiUrl, config } for one file, mode 'edit' or 'view' */
+  officeConfig: (space, path, mode) => post('/api/office/config', { space, path, mode }),
   rename: (space, path, name) => post('/api/rename', { space, path, name }),
   copy: (space, items, dest) => post('/api/copy', { space, items, dest }),
   move: (space, items, dest) => post('/api/move', { space, items, dest }),
