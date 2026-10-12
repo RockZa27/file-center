@@ -295,7 +295,9 @@ describe('share links: a shared folder', () => {
     const r = await download('A'.repeat(43), '', { 'sec-fetch-mode': 'navigate', accept: 'text/html' })
     expect(r.status).toBe(404)
     expect(r.headers.get('content-type')).toContain('text/html')
-    expect(await r.text()).toContain('share.not-found')
+    // the internal code goes in a header, the page shows only the message and the status
+    expect(r.headers.get('x-error-code')).toBe('share.not-found')
+    expect(await r.text()).not.toContain('share.not-found')
   })
 })
 
