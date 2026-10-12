@@ -112,8 +112,12 @@ export const api = {
   updateRollback: (dir, password) => post('/api/admin/update/rollback', { dir, password }),
   /** is there a newer version at UPDATE_SOURCE ({ current, latest, newer }) */
   updateCheck: () => get('/api/admin/update/check'),
-  /** download it and check it: the same answer as updateStage */
-  updateFetch: () => post('/api/admin/update/fetch'),
+  /** check, download, verify and install the newest version in one go; a failure names its step in params.step */
+  updateFetchAndApply: password => post('/api/admin/update/fetch-and-apply', { password }),
+
+  /** { enabled, kind, host, lastSent: { <kind>: ISO time } }: never the webhook URL itself */
+  alerts: () => get('/api/admin/alerts'),
+  alertTest: () => post('/api/admin/alerts/test'),
 
   backups: () => get('/api/admin/backups'),
   backupNow: () => post('/api/admin/backups'),

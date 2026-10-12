@@ -47,9 +47,7 @@
             </n-tag>
             <n-tag v-else type="warning" :bordered="false" class="sig"><template #icon><n-icon :component="WarningOutline" /></template>{{ t('update.unsigned') }}</n-tag>
           </div>
-          <div v-if="staged.fromWeb" class="kv"><span class="muted">{{ t('update.source') }}</span><span class="mono small url">{{ t('update.fromWeb', { url: staged.fromWeb }) }}</span></div>
-          <n-alert v-if="!staged.signed && staged.fromWeb" type="error" :title="t('update.unsignedWebTitle')" class="gap top">{{ t('update.unsignedWebBody') }}</n-alert>
-          <n-alert v-else-if="!staged.signed" type="warning" class="gap top">{{ t('update.unsignedBody') }}</n-alert>
+          <n-alert v-if="!staged.signed" type="warning" class="gap top">{{ t('update.unsignedBody') }}</n-alert>
           <n-alert type="success" class="gap" :class="{ top: staged.signed }">{{ t('update.checked') }}</n-alert>
           <n-alert type="info" class="gap">{{ t('update.restartNote') }}</n-alert>
           <n-alert v-if="st.uploadsInProgress" type="warning" class="gap">{{ t('update.uploadsWarn', { n: st.uploadsInProgress }) }}</n-alert>
@@ -65,30 +63,16 @@
         </div>
 
         <!-- a newer version published at UPDATE_SOURCE: asked only when the admin presses the button -->
-        <div v-if="st.source?.enabled && (phase === 'idle' || phase === 'fetching')" class="surface block">
+        <div v-if="st.source?.enabled && phase === 'idle'" class="surface block">
           <h2>{{ t('update.web') }}</h2>
           <div class="kv"><span class="muted label">{{ t('update.webFrom') }}</span><span class="mono small url">{{ st.source.url }}</span></div>
-          <template v-if="check">
-            <div class="kv"><span class="muted">{{ t('update.current') }}</span><span class="strong">v{{ check.current }}</span></div>
-            <div class="kv"><span class="muted">{{ t('update.latest') }}</span><span class="strong">v{{ check.latest.version }}</span></div>
-            <div v-if="check.latest.builtAt" class="kv"><span class="muted">{{ t('update.builtAt') }}</span><span>{{ formatDate(check.latest.builtAt) }}</span></div>
-            <div class="kv"><span class="muted">{{ t('update.size') }}</span><span>{{ formatBytes(check.latest.size) }}</span></div>
-            <div class="kv">
-              <span class="muted">{{ t('update.signature') }}</span>
-              <n-tag v-if="check.latest.signed" type="success" :bordered="false" class="sig"><template #icon><n-icon :component="ShieldCheckmarkOutline" /></template>{{ t('update.latestSigned') }}</n-tag>
-              <n-tag v-else type="warning" :bordered="false" class="sig"><template #icon><n-icon :component="WarningOutline" /></template>{{ t('update.latestUnsigned') }}</n-tag>
-            </div>
-            <div v-if="check.latest.notes" class="kv"><span class="muted">{{ t('update.notes') }}</span><span class="notes">{{ check.latest.notes }}</span></div>
-            <n-alert v-if="check.newer" type="info" class="gap top">{{ t('update.newer', { v: check.latest.version }) }}</n-alert>
-            <n-alert v-else type="success" class="gap top">{{ t('update.upToDate', { v: check.current }) }}</n-alert>
-          </template>
-          <!-- stays until the next try: unreachable, not newer, checksum mismatch... -->
-          <n-alert v-if="sourceError" type="error" :title="t(sourceError.kind === 'check' ? 'update.checkFailed' : 'update.fetchFailed')" closable class="gap top refused" @close="sourceError = null">{{ sourceError.message }}</n-alert>
-          <div v-if="phase === 'fetching'" class="fetching"><n-spin size="small" /><span>{{ t('update.fetching') }}</span></div>
+          <n-alert v-if="check && !check.newer" type="success" class="gap top">{{ t('update.latestAlready') }} (v{{ check.current }})</n-alert>
+          <n-alert v-else-if="check?.newer" type="info" class="gap top">{{ t('update.newer', { v: check.latest.version }) }}</n-alert>
+          <!-- stays until the next try: unreachable, latest.json broken... -->
+          <n-alert v-if="checkError" type="error" :title="t('update.checkFailed')" closable class="gap top refused" @close="checkError = ''">{{ checkError }}</n-alert>
           <div class="actions">
-            <n-button :loading="checking" :disabled="busy" @click="checkSource"><template #icon><n-icon :component="SearchOutline" /></template>{{ t('update.check') }}</n-button>
-            <n-button v-if="check?.newer" type="primary" :loading="phase === 'fetching'" :disabled="!canUpdate || (busy && phase !== 'fetching')" @click="fetchPackage">
-              <template #icon><n-icon :component="CloudDownloadOutline" /></template>{{ t('update.fetch') }}
+            <n-button type="primary" :loading="checking" :disabled="!canUpdate || busy" @click="checkAndUpdate">
+              <template #icon><n-icon :component="CloudDownloadOutline" /></template>{{ t('update.checkAndUpdate') }}
             </n-button>
           </div>
         </div>
@@ -146,15 +130,64 @@
         <n-button type="primary" :disabled="!password" :loading="working" @click="rollback">{{ t('update.rollback') }}</n-button>
       </div>
     </n-modal>
+
+    <!-- "check and update": what will be installed, the password, then the steps while the server works -->
+    <n-modal v-model:show="oneOpen" preset="card" :title="t('update.oneTitle')" style="max-width: 520px" :closable="!oneRunning" :mask-closable="!oneRunning" :close-on-esc="!oneRunning">
+      <template v-if="check?.latest">
+        <div class="kv"><span class="muted">{{ t('update.newVersion') }}</span><span class="strong">v{{ check.current }} → v{{ check.latest.version }}</span></div>
+        <template v-if="!oneRunning">
+          <div v-if="check.latest.builtAt" class="kv"><span class="muted">{{ t('update.builtAt') }}</span><span>{{ formatDate(check.latest.builtAt) }}</span></div>
+          <div class="kv"><span class="muted">{{ t('update.size') }}</span><span>{{ formatBytes(check.latest.size) }}</span></div>
+          <div class="kv">
+            <span class="muted">{{ t('update.signature') }}</span>
+            <n-tag v-if="check.latest.signed" type="success" :bordered="false" class="sig"><template #icon><n-icon :component="ShieldCheckmarkOutline" /></template>{{ t('update.latestSigned') }}</n-tag>
+            <n-tag v-else type="warning" :bordered="false" class="sig"><template #icon><n-icon :component="WarningOutline" /></template>{{ t('update.latestUnsigned') }}</n-tag>
+          </div>
+          <div v-if="check.latest.notes" class="kv"><span class="muted">{{ t('update.notes') }}</span><span class="notes">{{ check.latest.notes }}</span></div>
+          <n-alert v-if="!check.latest.signed" type="error" :title="t('update.unsignedWebTitle')" class="gap top">{{ t('update.unsignedWebBody') }}</n-alert>
+        </template>
+      </template>
+
+      <ol v-if="oneRunning || oneFailed?.step >= 0" class="steps" :aria-label="t('update.stepsLabel')">
+        <li v-for="(s, i) in STEPS" :key="s" :class="stepState(i)" :aria-current="stepState(i) === 'active' ? 'step' : undefined">
+          <n-icon class="step-icon" :component="stepIcon(i)" :color="stepState(i) === 'done' ? theme.successColor : undefined" />
+          <span>{{ t(`update.step.${s}`) }}</span>
+        </li>
+      </ol>
+      <p v-if="oneStep === STEPS.length - 1" class="muted small">{{ t('update.waiting') }}</p>
+
+      <!-- kept until the next try; the step name is the page's own text, the reason is the server's -->
+      <n-alert v-if="oneFailed" ref="failRef" type="error" :title="oneFailed.step >= 0 ? t('update.failedAt', { step: t(`update.step.${STEPS[oneFailed.step]}`) }) : t('update.oneFailed')" class="gap top refused">
+        {{ oneFailed.message }}
+      </n-alert>
+
+      <template v-if="!oneRunning">
+        <n-alert type="info" class="gap top">{{ t('update.restartNote') }}</n-alert>
+        <n-alert v-if="st?.uploadsInProgress" type="warning" class="gap">{{ t('update.uploadsWarn', { n: st.uploadsInProgress }) }}</n-alert>
+        <n-form label-placement="top" @submit.prevent="updateNow">
+          <n-form-item :label="t('update.password')" :validation-status="onePwError ? 'error' : undefined" :feedback="onePwError || undefined">
+            <n-input v-model:value="onePassword" type="password" show-password-on="click" autocomplete="current-password" :input-props="{ name: 'confirm-password' }" @keyup.enter="updateNow" @update:value="onePwError = ''" />
+          </n-form-item>
+        </n-form>
+      </template>
+      <div class="actions">
+        <n-button :disabled="oneRunning" @click="oneOpen = false">{{ t('common.cancel') }}</n-button>
+        <n-button type="primary" :disabled="!onePassword && !oneRunning" :loading="oneRunning" @click="updateNow">
+          <template #icon><n-icon :component="CloudDownloadOutline" /></template>{{ oneFailed ? t('common.retry') : t('update.updateNow') }}
+        </n-button>
+      </div>
+    </n-modal>
   </div>
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NAlert, NButton, NForm, NFormItem, NIcon, NInput, NModal, NProgress, NSpin, NTag, NUpload, NUploadDragger } from 'naive-ui'
+import { useRoute, useRouter } from 'vue-router'
+import { NAlert, NButton, NForm, NFormItem, NIcon, NInput, NModal, NProgress, NSpin, NTag, NUpload, NUploadDragger, useThemeVars } from 'naive-ui'
 import {
-  ArrowUndoOutline, CloudDownloadOutline, CloudUploadOutline, RefreshOutline, SearchOutline, ShieldCheckmarkOutline, ShieldOutline, WarningOutline,
+  ArrowUndoOutline, CheckmarkCircle, CloseCircle, CloudDownloadOutline, CloudUploadOutline, EllipseOutline, RefreshOutline,
+  ShieldCheckmarkOutline, ShieldOutline, SyncOutline, WarningOutline,
 } from '@vicons/ionicons5'
 import { api, ApiError, putChunk } from '../api'
 import { errorText, useFeedback } from '../composables'
@@ -163,10 +196,13 @@ import { formatBytes, formatDate } from '../utils'
 
 const { t, locale } = useI18n()
 const fb = useFeedback()
+const route = useRoute()
+const router = useRouter()
+const theme = useThemeVars()
 const st = ref(null)
 const loading = ref(false)
 const working = ref(false)
-// idle -> uploading -> checking -> ready -> installing (page reloads when done); idle -> fetching -> ready from UPDATE_SOURCE
+// idle -> uploading -> checking -> ready -> installing (page reloads when done); the one-step update goes idle -> installing
 const phase = ref('idle')
 const progress = ref(0)
 const staged = ref(null)
@@ -175,10 +211,21 @@ const refused = ref(null)
 const password = ref('')
 const rollbackOpen = ref(false)
 const rollbackTarget = ref(null)
-// the answer of "check for updates" ({ current, latest, newer }), and why checking or fetching failed ({ kind: 'check' | 'fetch', message })
+// the answer of "check and update" ({ current, latest, newer }), and why the check failed (the server's text)
 const check = ref(null)
 const checking = ref(false)
-const sourceError = ref(null)
+const checkError = ref('')
+// the one-step update dialog: the steps of POST /fetch-and-apply (params.step names them on a failure), then the restart
+const STEPS = ['check', 'fetch', 'stage', 'apply', 'restart']
+const oneOpen = ref(false)
+const oneRunning = ref(false)
+const onePassword = ref('')
+// the highlighted step (-1 = none); why it failed ({ step: index or -1, message }); a wrong password, shown at the field
+const oneStep = ref(-1)
+const oneFailed = ref(null)
+const onePwError = ref('')
+const failRef = ref(null)
+let stepTimers = []
 let poll = null
 
 const busy = computed(() => phase.value !== 'idle')
@@ -238,44 +285,97 @@ async function onFile({ file }) {
   return false
 }
 
-async function checkSource() {
+/** read latest.json at the source; with `open`, a newer version opens the update dialog */
+async function checkSource(open) {
   checking.value = true
-  sourceError.value = null
+  checkError.value = ''
   try {
     const r = await api.updateCheck()
     check.value = r.latest ? r : null
+    if (open && r.newer) openOne()
   } catch (e) {
     check.value = null
-    sourceError.value = { kind: 'check', message: errorText(e, t('common.unknownError')) }
+    checkError.value = errorText(e, t('common.unknownError'))
   } finally { checking.value = false }
+}
+const checkAndUpdate = () => !busy.value && !checking.value && checkSource(true)
+
+function openOne() {
+  onePassword.value = ''
+  oneFailed.value = null
+  onePwError.value = ''
+  oneStep.value = -1
+  oneOpen.value = true
+}
+
+const stepState = i => {
+  const failed = oneFailed.value?.step ?? -1
+  if (failed >= 0) return i < failed ? 'done' : i === failed ? 'failed' : 'todo'
+  return i < oneStep.value ? 'done' : i === oneStep.value ? 'active' : 'todo'
+}
+const stepIcon = i => ({ done: CheckmarkCircle, failed: CloseCircle, active: SyncOutline, todo: EllipseOutline })[stepState(i)]
+
+function clearStepTimers() {
+  stepTimers.forEach(clearTimeout)
+  stepTimers = []
+}
+// the server answers once, at the end: move the highlight along at a likely pace (download ~3 MB/s, checking the files
+// ~30 MB/s), and stay on "installing" until the answer; a failure names the real step (params.step)
+function guessSteps(size) {
+  const download = Math.max(2000, (size / 3e6) * 1000)
+  const verify = Math.max(1500, (size / 30e6) * 1000)
+  const at = (ms, i) => stepTimers.push(setTimeout(() => { if (oneRunning.value && oneStep.value < i) oneStep.value = i }, ms))
+  at(1200, 1)
+  at(1200 + download, 2)
+  at(1200 + download + verify, 3)
+}
+
+async function updateNow() {
+  if (!onePassword.value || oneRunning.value || !check.value?.latest) return
+  const target = check.value.latest.version
+  oneRunning.value = true
+  oneFailed.value = null
+  onePwError.value = ''
+  oneStep.value = 0
+  guessSteps(check.value.latest.size)
+  let before
+  try {
+    before = await bootId()
+    await api.updateFetchAndApply(onePassword.value)
+  } catch (e) {
+    clearStepTimers()
+    oneRunning.value = false
+    oneStep.value = -1
+    const step = e instanceof ApiError ? e.params?.step : undefined
+    const message = errorText(e, t('common.unknownError'))
+    // wrong or locked password: nothing was fetched, say it at the field
+    if (!step && (e?.code === 'auth.wrong-password' || e?.code === 'auth.confirm-locked')) onePwError.value = message
+    else {
+      oneFailed.value = { step: STEPS.indexOf(step), message }
+      // on a phone the reason is below the steps, out of sight
+      await nextTick()
+      failRef.value?.$el?.scrollIntoView?.({ block: 'nearest' })
+    }
+    return
+  }
+  clearStepTimers()
+  onePassword.value = ''
+  oneStep.value = STEPS.length - 1
+  if (await afterRestart(before, target)) return
+  // still here: the wait timed out or the new version did not come up (afterRestart said which)
+  oneRunning.value = false
+  oneOpen.value = false
+  check.value = null
 }
 
 // the server wrote these messages in the old language: ask again for a failed check (it only reads latest.json), and drop
-// the others rather than show them next to labels in the new language
+// the others rather than show them next to labels in the new language (a failed step keeps its name, the page's own text)
 watch(locale, () => {
-  if (sourceError.value?.kind === 'check') checkSource()
-  else sourceError.value = null
+  if (checkError.value && !busy.value) checkSource(false)
+  if (oneFailed.value) oneFailed.value = { ...oneFailed.value, message: '' }
+  onePwError.value = ''
   refused.value = null
 })
-
-// the server downloads and checks the package; its answer is the same as after an upload, so the same next step
-async function fetchPackage() {
-  if (busy.value) return
-  sourceError.value = null
-  refused.value = null
-  phase.value = 'fetching'
-  try {
-    const from = st.value?.source?.url || ''
-    staged.value = { ...(await api.updateFetch()), fromWeb: from }
-    password.value = ''
-    check.value = null
-    await load()
-    phase.value = 'ready'
-  } catch (e) {
-    phase.value = 'idle'
-    sourceError.value = { kind: 'fetch', message: errorText(e, t('common.unknownError')) }
-  }
-}
 
 async function discard() {
   const id = staged.value?.id
@@ -285,6 +385,7 @@ async function discard() {
   if (id) { try { await api.updateDiscard(id) } catch { /* it is cleaned up later anyway */ } }
 }
 
+/** answers true when the page is reloading on the new version */
 async function afterRestart(before, expectedVersion) {
   phase.value = 'installing'
   const h = await waitForRestart(before)
@@ -295,6 +396,7 @@ async function afterRestart(before, expectedVersion) {
     fb.ok(t('update.done', { v: h.version }))
     await sleep(800)
     location.reload()
+    return true
   } else {
     phase.value = 'idle'
     staged.value = null
@@ -327,8 +429,17 @@ function askRollback(option) {
 }
 const rollback = () => password.value && run(() => api.updateRollback(rollbackTarget.value.dir, password.value), rollbackTarget.value.version)
 
-onMounted(() => { load(); poll = setInterval(() => { if (!busy.value && !rollbackOpen.value) load() }, 15_000) })
-onBeforeUnmount(() => clearInterval(poll))
+onMounted(async () => {
+  poll = setInterval(() => { if (!busy.value && !rollbackOpen.value && !oneOpen.value) load() }, 15_000)
+  await load()
+  // from the dashboard's "update" button: check right away, and open the dialog when there is a newer version
+  if (route.query.go) {
+    const { go, ...rest } = route.query
+    router.replace({ query: rest })
+    if (st.value?.source?.enabled && canUpdate.value) checkAndUpdate()
+  }
+})
+onBeforeUnmount(() => { clearInterval(poll); clearStepTimers() })
 </script>
 
 <style scoped>
@@ -339,12 +450,20 @@ onBeforeUnmount(() => clearInterval(poll))
 .gap.top { margin-top: 14px; }
 .refused { overflow-wrap: anywhere; }
 .url { overflow-wrap: anywhere; text-align: right; min-width: 0; }
-.fetching { display: flex; align-items: center; gap: 10px; margin-top: 12px; font-size: 14px; }
+.steps { list-style: none; margin: 14px 0 6px; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.steps li { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 8px; font-size: 14px; color: var(--muted); }
+.steps .step-icon { flex: none; font-size: 18px; }
+.steps li.done { color: var(--text); }
+.steps li.active { color: var(--primary); background: var(--primary-soft); font-weight: 600; }
+.steps li.active .step-icon { animation: turn 1.4s linear infinite; }
+.steps li.failed { color: var(--danger); font-weight: 600; }
+@keyframes turn { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .steps li.active .step-icon { animation: none; } }
 .kv { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 9px 0; border-top: 1px solid var(--border); font-size: 14px; }
 .kv:first-of-type { border-top: 0; }
 .strong { font-weight: 600; }
 .small { font-size: 12.5px; }
-.notes { white-space: pre-wrap; text-align: right; max-width: 70%; }
+.notes { white-space: pre-wrap; text-align: right; max-width: 70%; overflow-wrap: anywhere; }
 .center { display: flex; flex-direction: column; align-items: center; text-align: center; padding: 40px 22px; }
 .center h2 { margin-top: 18px; }
 .drop { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 18px 8px; text-align: center; }
