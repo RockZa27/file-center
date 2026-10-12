@@ -186,6 +186,31 @@ export const MESSAGES = {
   'update.staged-missing': { th: 'ไม่พบแพ็กเกจที่เตรียมไว้ กรุณาอัปโหลดใหม่', en: 'The prepared package was not found. Please upload it again.' },
   'update.rollback-missing': { th: 'ไม่พบเวอร์ชันที่ต้องการย้อนกลับ', en: 'The version to roll back to was not found.' },
   'update.version-in-use': { th: 'เวอร์ชันนี้กำลังใช้งานอยู่', en: 'This version is already running.' },
+  // the result of the last switch, written to state.json by the launcher
+  'update.installed': { th: 'ติดตั้งสำเร็จ', en: 'Installed successfully.' },
+  'update.exited-unconfirmed': {
+    th: 'โปรเซสหยุดทำงาน (code {exit}) ก่อนยืนยันการติดตั้ง',
+    en: 'The process stopped (code {exit}) before the update was confirmed.',
+  },
+  // updates published on the web (UPDATE_SOURCE)
+  'update.source-off': { th: 'ยังไม่ได้ตั้งแหล่งอัปเดต (UPDATE_SOURCE)', en: 'No update source is set (UPDATE_SOURCE).' },
+  'update.source-unreachable': { th: 'ติดต่อแหล่งอัปเดตไม่ได้', en: 'The update source could not be reached.' },
+  'update.source-timeout': { th: 'แหล่งอัปเดตไม่ตอบสนองภายในเวลาที่กำหนด', en: 'The update source did not answer in time.' },
+  'update.source-status': { th: 'แหล่งอัปเดตตอบกลับ HTTP {status}', en: 'The update source answered HTTP {status}.' },
+  'update.source-latest-too-big': { th: 'latest.json ของแหล่งอัปเดตใหญ่เกินกำหนด', en: 'The latest.json of the update source is too big.' },
+  'update.source-latest-invalid': { th: 'latest.json ของแหล่งอัปเดตไม่ถูกต้อง', en: 'The latest.json of the update source is not valid.' },
+  'update.source-bad-file': {
+    th: 'ชื่อไฟล์แพ็กเกจใน latest.json ไม่ถูกต้อง (ต้องเป็น file-center-x.y.z.zip)',
+    en: 'The package file name in latest.json is not valid (it must be file-center-x.y.z.zip).',
+  },
+  'update.source-not-newer': {
+    th: 'เวอร์ชันล่าสุดที่แหล่งอัปเดต ({version}) ไม่ใหม่กว่าเวอร์ชันที่ใช้อยู่ ({running})',
+    en: 'The latest version at the update source ({version}) is not newer than the running version ({running}).',
+  },
+  'update.source-mismatch': {
+    th: 'ไฟล์ที่ดาวน์โหลดไม่ตรงกับ SHA-256 หรือขนาดใน latest.json ไฟล์อาจเสียหายหรือถูกแก้ไข',
+    en: 'The downloaded file does not match the SHA-256 or size in latest.json. It may be damaged or altered.',
+  },
 } as const satisfies Record<string, { th: string; en: string }>
 
 export type MessageCode = keyof typeof MESSAGES

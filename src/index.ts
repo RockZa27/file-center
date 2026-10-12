@@ -19,6 +19,7 @@ import { uploadRoutes } from './routes/upload'
 import { purgeExpired } from './trash'
 import { cleanStaleUploads } from './uploads'
 import { cleanStaging, signingKey } from './updater'
+import { sourceConfig } from './update-source'
 
 ensureDirs()
 await bootstrapAdmin()
@@ -26,6 +27,9 @@ await bootstrapAdmin()
 // a bad key must not stop the app (the admin could not reach the update page to see why); packages are refused instead
 const keyError = signingKey().error
 if (keyError) log.error('update-key-invalid', `UPDATE_PUBLIC_KEY ไม่ถูกต้อง: ${keyError} ระบบจะไม่รับแพ็กเกจอัปเดตใด ๆ จนกว่าจะแก้ค่านี้`)
+// the same for UPDATE_SOURCE: the app starts, checking for updates stays off
+const source = sourceConfig()
+if (source.error) log.warn('update-source-invalid', `UPDATE_SOURCE ${source.shown ?? ''} ไม่ถูกต้อง: ${source.error} ปิดการตรวจหาอัปเดตไว้จนกว่าจะแก้ค่านี้`)
 
 function housekeeping() {
   try {

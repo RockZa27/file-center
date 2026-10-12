@@ -70,6 +70,12 @@ export const config = {
    * Empty = packages are not signed-checked. Parsed in updater.ts, so a bad value refuses packages instead of crashing the app.
    */
   updatePublicKey: env('UPDATE_PUBLIC_KEY', '').trim(),
+  /**
+   * base URL of published updates (the `updates` branch made by "bun run release"), e.g.
+   * https://raw.githubusercontent.com/<owner>/<repo>/updates. Empty = off. Checked in update-source.ts: anything but
+   * https (or http to this machine, for tests) is refused at startup with a warning and stays off.
+   */
+  updateSource: env('UPDATE_SOURCE', '').trim(),
   /** where backups are written; best on another disk, a dead disk takes the backups on it along */
   backupDir: resolve(env('BACKUP_DIR', join(dirname(dataDir), 'backups'))),
   /** after a successful backup the oldest beyond this many are deleted */

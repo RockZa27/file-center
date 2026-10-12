@@ -20,14 +20,24 @@ let port = 0
 let launcher: ReturnType<typeof Bun.spawn> | undefined
 const url = (p: string) => `http://127.0.0.1:${port}${p}`
 
+/** UPDATE_SOURCE of the launcher: plays the `updates` branch, serving whatever is in `published` */
+const published = new Map<string, Uint8Array | string>()
+const source = Bun.serve({
+  port: 0, hostname: '127.0.0.1',
+  fetch: req => {
+    const body = published.get(new URL(req.url).pathname)
+    return body === undefined ? new Response('not found', { status: 404 }) : new Response(body)
+  },
+})
+
 class Session {
   cookie = ''
   csrf = ''
 }
 const admin = new Session()
 
-async function api(method: string, path: string, body?: any, raw = false, who = admin) {
-  const headers: Record<string, string> = { cookie: who.cookie, 'x-csrf-token': who.csrf }
+async function api(method: string, path: string, body?: any, raw = false, who = admin, extra: Record<string, string> = {}) {
+  const headers: Record<string, string> = { ...extra, cookie: who.cookie, 'x-csrf-token': who.csrf }
   let payload: any = body
   if (body !== undefined && !(body instanceof Uint8Array)) {
     payload = JSON.stringify(body)
@@ -67,6 +77,7 @@ async function startLauncher() {
       PORT: String(port), HOST: '127.0.0.1', STORAGE_DIR: dirs.storage, DATA_DIR: dirs.data,
       ADMIN_PASSWORD: PASSWORD, UPLOAD_CHUNK_SIZE: String(1024 * 1024), MIN_FREE_SPACE: '0',
       FC_STABLE_MS: '1500', FC_HEALTH_TIMEOUT_MS: '15000', LOGIN_MAX_ATTEMPTS: '3', LOGIN_LOCKOUT_SECONDS: '3',
+      UPDATE_SOURCE: `http://127.0.0.1:${source.port}/updates`,
     },
   })
   await until(async () => (await health())?.status === 'ok', 30_000, 'app start')
@@ -129,6 +140,7 @@ suite('update from the web', () => {
   afterAll(async () => {
     launcher?.kill('SIGTERM')
     await Promise.race([launcher?.exited, Bun.sleep(15_000)])
+    source.stop(true)
     rmSync(base, { recursive: true, force: true })
   })
 
@@ -296,7 +308,46 @@ suite('update from the web', () => {
     }, 60_000, 'rollback by the launcher')
     expect(s.last.version).toBe('9.9.8')
     expect(s.last.message).toContain('code 3')
+    // the launcher wrote a code, so the page gets it in its own language
+    const en = (await api('GET', '/api/admin/update', undefined, false, admin, { 'x-lang': 'en' })).data.last
+    expect(en.message).toBe('The process stopped (code 3) before the update was confirmed.')
     expect(s.runningVersion).toBe(BUILTIN)
     expect(existsSync(dir)).toBe(false)
+  }, 90_000)
+
+  test('a package published at UPDATE_SOURCE is fetched, staged and installed', async () => {
+    const zip = new Uint8Array(readFileSync(join(dirs.pkgs, 'real', 'file-center-9.9.9.zip')))
+    published.set('/updates/file-center-9.9.9.zip', zip)
+    published.set('/updates/latest.json', JSON.stringify({
+      version: '9.9.9', file: 'file-center-9.9.9.zip', sha256: createHash('sha256').update(zip).digest('hex'), size: zip.length,
+      builtAt: new Date().toISOString(), commit: 'abc1234', notes: 'e2e', signed: false,
+    }))
+    const status = (await api('GET', '/api/admin/update')).data
+    expect(status.source).toEqual({ enabled: true, url: `http://127.0.0.1:${source.port}/updates` })
+    const check = await api('GET', '/api/admin/update/check')
+    expect(check.data).toMatchObject({ enabled: true, current: BUILTIN, latest: { version: '9.9.9', signed: false }, newer: true })
+
+    const staged = await api('POST', '/api/admin/update/fetch')
+    expect(staged.status).toBe(200)
+    expect(staged.data).toMatchObject({ version: '9.9.9', runningVersion: BUILTIN, tested: false })
+    const before = (await health()).boot
+    // installing is the same as for an uploaded package: the password again
+    expect((await api('POST', '/api/admin/update/apply', { id: staged.data.id, password: 'wrong-password' })).status).toBe(403)
+    const r = await api('POST', '/api/admin/update/apply', { id: staged.data.id, password: PASSWORD })
+    expect(r.status).toBe(200)
+    const after = await until(async () => {
+      const h = await health()
+      return h && h.boot !== before && h.version === '9.9.9' ? h : null
+    }, 40_000, 'restart onto the fetched version')
+    expect(after.release).toMatch(/^9\.9\.9-/)
+    // confirmed by the launcher, and told in the page's language
+    const done = await until(async () => {
+      const s = await api('GET', '/api/admin/update', undefined, false, admin, { 'x-lang': 'en' })
+      return s.data?.last?.ok ? s.data : null
+    }, 20_000, 'confirmation')
+    expect(done.last).toMatchObject({ version: '9.9.9', ok: true, code: 'update.installed', message: 'Installed successfully.' })
+    expect((await api('GET', '/api/admin/update', undefined, false, admin, { 'x-lang': 'th' })).data.last.message).toBe('ติดตั้งสำเร็จ')
+    // nothing newer is left to fetch
+    expect((await api('GET', '/api/admin/update/check')).data).toMatchObject({ current: '9.9.9', newer: false })
   }, 90_000)
 })
