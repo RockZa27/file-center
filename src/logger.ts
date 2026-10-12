@@ -75,6 +75,8 @@ export function scrub(s: string): string {
     // share links too: the API (/api/s/<token>/...) and the page (/s/<token>, a 43-character token)
     .replace(/(\/api\/s\/)[^/\s?#"'`]+/g, `$1${HIDDEN}`)
     .replace(/(\/s\/)[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/g, `$1${HIDDEN}`)
+    // the links the office document server opens and reports to (/api/office/file/<token>, /callback/<token>)
+    .replace(/(\/api\/office\/(?:file|callback)\/)[^/\s?#"'`]+/g, `$1${HIDDEN}`)
     // query strings (paths, searches, names of files)
     .replace(/(\/[^\s?#"'`]*)\?[^\s#"'`]*/g, '$1')
     // "password": "...", x-csrf-token: ..., cookie: fc_sid=...

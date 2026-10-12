@@ -86,6 +86,18 @@ export const config = {
   backupHour: backupHour(env('BACKUP_HOUR', '3')),
   /** "true" also puts the uploaded files (storage) in every backup; off by default because it can be huge */
   backupIncludeFiles: env('BACKUP_INCLUDE_FILES', 'false') === 'true',
+  /**
+   * ONLYOFFICE Docs (office.ts), off while empty: OFFICE_URL is the document server as the browser reaches it,
+   * OFFICE_INTERNAL_URL is File Center as the document server reaches it, OFFICE_SERVER_INTERNAL_URL the document
+   * server as File Center reaches it (default OFFICE_URL). Checked in office.ts: a bad value keeps it off with a warning.
+   */
+  officeUrl: env('OFFICE_URL', '').trim(),
+  officeInternalUrl: env('OFFICE_INTERNAL_URL', '').trim(),
+  officeServerInternalUrl: env('OFFICE_SERVER_INTERNAL_URL', '').trim(),
+  /** shared with the document server (its JWT_SECRET); at least 32 characters or office editing stays off */
+  officeJwtSecret: env('OFFICE_JWT_SECRET', '').trim(),
+  /** biggest file that opens in the office editor (and biggest saved version taken back) */
+  officeMaxSize: num('OFFICE_MAX_SIZE', 100 * 1024 ** 2), // 100 MB
 }
 
 export const paths = {
@@ -109,6 +121,10 @@ export const paths = {
   guestUploads: join(config.dataDir, 'guest-uploads.json'),
   /** share links (only the SHA-256 of each token, never the token itself) */
   shares: join(config.dataDir, 'shares.json'),
+  /** signs the links the office document server opens (office.ts); made on first use, never leaves this server */
+  officeKey: join(config.dataDir, 'office-links.key'),
+  /** saved office versions while they download (office.ts) */
+  officeTmp: join(config.dataDir, 'office-tmp'),
   publicDir: join(config.storageDir, config.publicDirName),
   /** parent of the default user folders (/users/<name>) */
   usersDir: join(config.storageDir, 'users'),

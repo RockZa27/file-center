@@ -8,6 +8,7 @@ import { config } from '../config'
 import { context, requireUser, SESSION_COOKIE } from '../context'
 import { HttpError } from '../fsx'
 import { type Lang, langOf } from '../messages'
+import { officeClientConfig } from '../office'
 import { pageTexts, settings } from '../settings'
 import { allowedShareDays } from '../shares'
 
@@ -21,6 +22,8 @@ function appConfig(user: User | null, lang: Lang) {
     ...(user ? { version: config.version } : {}),
     // the expiry choices of the share dialog (SHARE_MAX_DAYS may leave out the longer ones); visitors cannot share
     ...(user ? { shareDays: allowedShareDays() } : {}),
+    // whether the page shows "open in the office editor", and for which file types; visitors can not use it
+    ...(user ? { office: officeClientConfig() } : {}),
     appName: s.appName,
     primaryColor: s.primaryColor,
     // left empty by the admin: the standard text in the visitor's language

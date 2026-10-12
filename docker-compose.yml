@@ -44,3 +44,21 @@ services:
     depends_on:
       file-center:
         condition: service_healthy
+
+  # ONLYOFFICE Docs (Community) เปิด/แก้ไฟล์ docx xlsx pptx ในหน้าเว็บ ใช้ RAM ราว 2–4 GB
+  # ทำงานเมื่อ .env มี COMPOSE_PROFILES=office (หรือ tunnel,office) พร้อม OFFICE_URL, OFFICE_INTERNAL_URL และ OFFICE_JWT_SECRET (ดู README)
+  onlyoffice:
+    image: onlyoffice/documentserver:9.4.0
+    container_name: file-center-office
+    profiles: [office]
+    restart: unless-stopped
+    logging: *logging
+    ports:
+      # เบราว์เซอร์โหลดโปรแกรมแก้ไขจากที่นี่ (ผ่าน OFFICE_URL) เปิดเฉพาะเครื่องนี้ ภายนอกเข้าผ่าน Cloudflare Tunnel hostname ที่สอง
+      - "127.0.0.1:${OFFICE_PORT:-8080}:80"
+    environment:
+      # ทุกคำขอระหว่าง document server กับ File Center ต้องเซ็นด้วยความลับเดียวกัน
+      JWT_ENABLED: "true"
+      JWT_SECRET: ${OFFICE_JWT_SECRET:-}
+      # document server ดาวน์โหลดไฟล์จาก http://file-center:3000 ซึ่งเป็น IP ภายในของ Docker (ค่าเริ่มต้นของ ONLYOFFICE ห้าม)
+      ALLOW_PRIVATE_IP_ADDRESS: "true"

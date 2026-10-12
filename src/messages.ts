@@ -67,6 +67,11 @@ export const MESSAGES = {
   'files.name-taken': { th: 'มีชื่อนี้อยู่แล้ว', en: 'This name is already taken.' },
   'files.too-big-to-open': { th: 'ไฟล์ใหญ่เกินกว่าจะเปิดในหน้าเว็บ', en: 'The file is too big to open in the browser.' },
   'files.text-too-big': { th: 'ข้อความใหญ่เกินกำหนด', en: 'The text is too big.' },
+  // saving a text over a version someone else saved after it was opened
+  'files.changed-elsewhere': {
+    th: 'ไฟล์นี้ถูกแก้ไขจากที่อื่นหลังจากที่คุณเปิด จึงยังไม่บันทึก กรุณาเปิดไฟล์ใหม่แล้วแก้อีกครั้ง (คัดลอกข้อความของคุณเก็บไว้ก่อน)',
+    en: 'This file was changed elsewhere after you opened it, so it was not saved. Open it again and redo your changes (copy your text first).',
+  },
   'files.rename-root': { th: 'ไม่สามารถเปลี่ยนชื่อโฟลเดอร์หลักได้', en: 'The top folder cannot be renamed.' },
   'files.item-missing': { th: 'ไม่พบ {name}', en: '{name} was not found.' },
   'files.link-expired': { th: 'ลิงก์ดาวน์โหลดหมดอายุแล้ว', en: 'The download link has expired.' },
@@ -134,6 +139,14 @@ export const MESSAGES = {
   'share.password-too-short': { th: 'รหัสผ่านของลิงก์ต้องยาวอย่างน้อย {min} ตัวอักษร', en: 'The link password must be at least {min} characters long.' },
   'share.password-required': { th: 'ลิงก์นี้ต้องใส่รหัสผ่านก่อน', en: 'This link needs a password.' },
   'share.too-many': { th: 'มีลิงก์แชร์ครบ {max} ลิงก์แล้ว กรุณายกเลิกลิงก์เก่าก่อน', en: 'You already have {max} share links. Please revoke an old one first.' },
+
+  // ───────────── office documents (ONLYOFFICE) ─────────────
+  'office.disabled': { th: 'ยังไม่ได้เปิดใช้การแก้ไขเอกสาร office บนเซิร์ฟเวอร์นี้', en: 'Office document editing is not enabled on this server.' },
+  'office.bad-type': { th: 'เปิดไฟล์ชนิดนี้ในโปรแกรมแก้ไขเอกสารไม่ได้', en: 'This type of file cannot be opened in the document editor.' },
+  'office.too-big': { th: 'ไฟล์ใหญ่เกิน {mb} MB จึงเปิดในโปรแกรมแก้ไขเอกสารไม่ได้', en: 'The file is larger than {mb} MB, so it cannot be opened in the document editor.' },
+  'office.bad-token': { th: 'ลิงก์ของเอกสารไม่ถูกต้องหรือหมดอายุแล้ว', en: 'The document link is not valid or has expired.' },
+  'office.bad-jwt': { th: 'ลายเซ็นของ document server ไม่ถูกต้อง', en: 'The document server signature is not valid.' },
+  'office.bad-url': { th: 'ที่อยู่ของไฟล์ที่บันทึกไม่ได้มาจาก document server', en: 'The saved file does not come from the document server.' },
 
   // ───────────── backup ─────────────
   'backup.bad-name': { th: 'ชื่อไฟล์สำรองข้อมูลไม่ถูกต้อง', en: 'The backup file name is not valid.' },
