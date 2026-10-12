@@ -356,12 +356,7 @@
       {
         "file": "src/fsx.ts",
         "find": "const stats = await Promise.all(look.map(n => lstat(join(dir, n)).catch(() => null)))",
-        "replace": "const stats = await Promise.all(look.map(n => stat(join(dir, n)).catch(() => null)))"
-      },
-      {
-        "file": "src/fsx.ts",
-        "find": "import { copyFile, lstat, mkdir, readdir, rm } from 'node:fs/promises'",
-        "replace": "import { copyFile, lstat, mkdir, readdir, rm, stat } from 'node:fs/promises'"
+        "replace": "const stats = await Promise.all(look.map(n => Promise.resolve().then(() => statSync(join(dir, n))).catch(() => null)))"
       }
     ]
   },
@@ -407,6 +402,126 @@
         "file": "src/routes/files.ts",
         "find": "ensureSpace(destAbs, isDir(from) ? (await treeStats(from)).size : lstatSync(from).size)",
         "replace": "void treeStats"
+      }
+    ]
+  },
+  {
+    "id": "share-no-expiry",
+    "difficulty": "easy",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/shares.test.ts",
+    "description": "an expired share link keeps working: openShare no longer compares expiresAt",
+    "patches": [
+      {
+        "file": "src/shares.ts",
+        "find": "if (!share || share.revokedAt || Date.parse(share.expiresAt) <= Date.now()) throw gone()",
+        "replace": "if (!share || share.revokedAt) throw gone()"
+      }
+    ]
+  },
+  {
+    "id": "share-owner-perms",
+    "difficulty": "subtle",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/shares.test.ts",
+    "description": "a link keeps working after its owner lost the share/download permission on that space",
+    "patches": [
+      {
+        "file": "src/shares.ts",
+        "find": "if (!a || !a.perms.has('share') || !a.perms.has('download')) return null",
+        "replace": "if (!a) return null"
+      }
+    ]
+  },
+  {
+    "id": "share-link-in-folder",
+    "difficulty": "subtle",
+    "category": "path-traversal",
+    "severity": "high",
+    "tests": "tests/shares.test.ts",
+    "description": "browsing inside a shared folder follows a symlink in it, so files elsewhere in the owner's space (or outside) are served",
+    "patches": [
+      {
+        "file": "src/routes/shares.ts",
+        "find": "    if (st.isSymbolicLink()) throw notFound()\n  }\n  return { rel, abs }",
+        "replace": "    void st\n  }\n  return { rel, abs }"
+      }
+    ]
+  },
+  {
+    "id": "share-password-no-lockout",
+    "difficulty": "medium",
+    "category": "auth",
+    "severity": "medium",
+    "tests": "tests/shares.test.ts",
+    "description": "wrong share passwords are never counted, so a link password can be guessed without limit",
+    "patches": [
+      {
+        "file": "src/routes/shares.ts",
+        "find": "      recordFailure(key, SHARE_LOCKOUT)\n",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "share-token-in-log",
+    "difficulty": "medium",
+    "category": "secrets",
+    "severity": "medium",
+    "tests": "tests/shares.test.ts",
+    "description": "share tokens in /api/s/<token> and /s/<token> URLs are no longer scrubbed from the logs",
+    "patches": [
+      {
+        "file": "src/logger.ts",
+        "find": "    .replace(/(\\/api\\/s\\/)[^/\\s?#\"'`]+/g, `$1${HIDDEN}`)\n    .replace(/(\\/s\\/)[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/g, `$1${HIDDEN}`)\n",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "update-fetch-no-sha",
+    "difficulty": "medium",
+    "category": "integrity",
+    "severity": "high",
+    "tests": "tests/update-source.test.ts",
+    "description": "a fetched update package is staged without comparing its SHA-256 with latest.json",
+    "patches": [
+      {
+        "file": "src/update-source.ts",
+        "find": "if (size !== latest.size || hash.digest('hex') !== latest.sha256) throw mismatch",
+        "replace": "if (size !== latest.size) throw mismatch"
+      }
+    ]
+  },
+  {
+    "id": "update-source-any-http",
+    "difficulty": "easy",
+    "category": "integrity",
+    "severity": "medium",
+    "tests": "tests/update-source.test.ts",
+    "description": "UPDATE_SOURCE accepts plain http to any host, so anyone on the path can swap the package",
+    "patches": [
+      {
+        "file": "src/update-source.ts",
+        "find": "(u.protocol === 'http:' && LOCAL_HOSTS.has(u.hostname))",
+        "replace": "(u.protocol === 'http:')"
+      }
+    ]
+  },
+  {
+    "id": "update-check-no-admin",
+    "difficulty": "easy",
+    "category": "authz",
+    "severity": "low",
+    "tests": "tests/api.test.ts",
+    "description": "GET /api/admin/update/check answers anyone, telling visitors the version and making the server fetch on demand",
+    "patches": [
+      {
+        "file": "src/routes/update.ts",
+        "find": "  .get('/check', ({ user, ip }) => {\n    requireAdmin({ user, ip })\n",
+        "replace": "  .get('/check', ({ user, ip }) => {\n    void user; void ip\n"
       }
     ]
   }
