@@ -66,14 +66,14 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NAlert, NButton, NIcon, NProgress, NSpin, NTag } from 'naive-ui'
 import { RefreshOutline, SyncOutline } from '@vicons/ionicons5'
 import { api } from '../api'
 import { formatBytes, formatDate, formatDuration } from '../utils'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const s = ref(null)
 const loading = ref(false)
 const error = ref('')
@@ -89,15 +89,24 @@ const storageCards = computed(() => {
 const diskPct = computed(() => (s.value?.disk ? Math.round((s.value.disk.used / s.value.disk.total) * 100) : 0))
 
 let recheck = null
+let asked = 0
 async function load() {
+  // only the latest answer counts: one asked before a language switch may arrive after the one asked in the new language
+  const mine = ++asked
   loading.value = true
   error.value = ''
-  try { s.value = await api.status() } catch (e) { error.value = e.message } finally { loading.value = false }
+  let next = s.value
+  try { next = await api.status() } catch (e) { if (mine === asked) error.value = e.message }
+  if (mine !== asked) return
+  s.value = next
+  loading.value = false
   // while the files are being counted, ask again soon rather than at the next 30 s round
   clearTimeout(recheck)
   if (s.value?.stale) recheck = setTimeout(load, 5000)
 }
 onMounted(() => { load(); timer = setInterval(load, 30_000) })
+// the warnings (and any error) are written by the server in the page's language: ask again in the new one
+watch(locale, () => load())
 onBeforeUnmount(() => { clearInterval(timer); clearTimeout(recheck) })
 </script>
 

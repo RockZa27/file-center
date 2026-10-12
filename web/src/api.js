@@ -1,10 +1,19 @@
+import { i18n } from './i18n'
+
 let csrf = ''
 export const setCsrf = v => { csrf = v }
 
+const t = (key, params) => i18n.global.t(key, params)
+/** the server writes its texts in the language the page shows, not the browser's */
+const lang = () => i18n.global.locale.value
+
+/** `code` and `params` come from the server's answer ({ error, code, params }) so a page can tell cases apart */
 export class ApiError extends Error {
-  constructor(status, message) {
+  constructor(status, message, code = '', params = {}) {
     super(message)
     this.status = status
+    this.code = code || ''
+    this.params = params || {}
   }
 }
 
@@ -12,12 +21,12 @@ export class ApiError extends Error {
 export const hooks = { onUnauthorized: null }
 
 async function resync() {
-  const res = await fetch('/api/session', { credentials: 'same-origin' })
+  const res = await fetch('/api/session', { headers: { 'x-lang': lang() }, credentials: 'same-origin' })
   if (res.ok) setCsrf((await res.json()).csrf)
 }
 
 async function call(method, url, body, extraHeaders = {}, retried = false) {
-  const headers = { 'x-csrf-token': csrf, ...extraHeaders }
+  const headers = { 'x-csrf-token': csrf, 'x-lang': lang(), ...extraHeaders }
   let payload
   if (body !== undefined) {
     if (body instanceof Blob || body instanceof ArrayBuffer) payload = body
@@ -27,7 +36,7 @@ async function call(method, url, body, extraHeaders = {}, retried = false) {
   try {
     res = await fetch(url, { method, headers, body: payload, credentials: 'same-origin' })
   } catch {
-    throw new ApiError(0, 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้')
+    throw new ApiError(0, t('api.noConnection'))
   }
   let data = null
   try { data = await res.json() } catch { /* empty body */ }
@@ -38,7 +47,7 @@ async function call(method, url, body, extraHeaders = {}, retried = false) {
       return call(method, url, body, extraHeaders, true)
     }
     if (res.status === 401 && hooks.onUnauthorized) hooks.onUnauthorized()
-    throw new ApiError(res.status, data?.error || `เกิดข้อผิดพลาด (${res.status})`)
+    throw new ApiError(res.status, data?.error || t('api.failed', { status: res.status }), data?.code, data?.params)
   }
   return data
 }
@@ -115,19 +124,44 @@ export function putChunk(id, index, blob, onProgress, registerAbort) {
     const xhr = new XMLHttpRequest()
     xhr.open('PUT', `/api/upload/${id}/${index}`)
     xhr.setRequestHeader('x-csrf-token', csrf)
+    xhr.setRequestHeader('x-lang', lang())
     xhr.setRequestHeader('content-type', 'application/octet-stream')
     xhr.upload.onprogress = e => e.lengthComputable && onProgress(e.loaded)
     xhr.onload = () => {
       if (xhr.status >= 200 && xhr.status < 300) return resolve()
-      let msg = `อัปโหลดไม่สำเร็จ (${xhr.status})`
-      try { msg = JSON.parse(xhr.responseText).error || msg } catch { /* keep default */ }
-      const err = new ApiError(xhr.status, msg)
+      let data = null
+      try { data = JSON.parse(xhr.responseText) } catch { /* not JSON: the default text below */ }
+      const err = new ApiError(xhr.status, data?.error || t('api.uploadFailed', { status: xhr.status }), data?.code, data?.params)
       if (xhr.status === 401 && hooks.onUnauthorized) hooks.onUnauthorized()
       reject(err)
     }
-    xhr.onerror = () => reject(new ApiError(0, 'การเชื่อมต่อขัดข้อง'))
-    xhr.onabort = () => reject(new ApiError(-1, 'ยกเลิกแล้ว'))
+    xhr.onerror = () => reject(new ApiError(0, t('api.connectionLost')))
+    xhr.onabort = () => reject(new ApiError(-1, t('api.canceled')))
     registerAbort(() => xhr.abort())
     xhr.send(blob)
   })
+}
+
+/**
+ * Saves a file the server sends (log, CSV, backup) as a real browser download: the browser streams it to disk,
+ * nothing is held in memory here. A plain link saves the server's JSON error as the file once the session has
+ * expired, so ask who is signed in first; signed out, the app goes to the sign-in page the usual way and the
+ * caller shows the error. `admin` downloads also need an administrator.
+ */
+export async function download(url, { name = '', admin = false } = {}) {
+  const s = await call('GET', '/api/session')
+  if (s?.csrf) setCsrf(s.csrf)
+  if (!s?.user) {
+    if (hooks.onUnauthorized) hooks.onUnauthorized()
+    throw new ApiError(401, t('api.signedOut'), 'auth.required')
+  }
+  if (s.user.mustChangePassword) throw new ApiError(403, t('api.mustChangePassword'), 'must-change-password')
+  if (admin && s.user.role !== 'admin') throw new ApiError(403, t('api.forbidden'), 'auth.forbidden')
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  a.style.display = 'none'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
 }

@@ -2,7 +2,7 @@
   <div class="page">
     <div class="page-header">
       <div><h1>{{ t('nav.logs') }}</h1><p>{{ t('logs.subtitle') }}</p></div>
-      <n-button tag="a" :href="api.logsDownloadUrl()" download secondary>
+      <n-button secondary :loading="saving !== null" @click="save(api.logsDownloadUrl(), { admin: true })">
         <template #icon><n-icon :component="DownloadOutline" /></template>{{ t('logs.download') }}
       </n-button>
     </div>
@@ -30,13 +30,14 @@ import { useRoute } from 'vue-router'
 import { NButton, NDataTable, NEmpty, NIcon, NInput, NSelect, NTag } from 'naive-ui'
 import { DownloadOutline, RefreshOutline, SearchOutline } from '@vicons/ionicons5'
 import { api } from '../api'
-import { useFeedback } from '../composables'
+import { useDownload, useFeedback } from '../composables'
 import { formatDate } from '../utils'
 
 const LEVELS = ['info', 'warn', 'error']
 const PAGE_SIZE = 50
 const { t } = useI18n()
 const fb = useFeedback()
+const { busy: saving, save } = useDownload()
 const route = useRoute()
 const rows = ref([])
 const expanded = ref([])
