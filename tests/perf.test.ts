@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import {
-  existsSync, linkSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statfsSync, symlinkSync, truncateSync, writeFileSync,
+  existsSync, linkSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statfsSync, symlinkSync, truncateSync,
+  writeFileSync,
 } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -79,6 +80,124 @@ describe('async tree counter', () => {
     } finally {
       rmSync(own, { recursive: true, force: true })
     }
+  })
+})
+
+// ───────────── copy and search, in-process ─────────────
+
+/** every path under `dir` with its kind and content, to compare two trees */
+function snapshot(dir: string, rel = ''): string[] {
+  const out: string[] = []
+  for (const n of readdirSync(dir).sort()) {
+    const abs = join(dir, n)
+    const st = lstatSync(abs)
+    if (st.isSymbolicLink()) out.push(`${rel}/${n} -> link`)
+    else if (st.isDirectory()) out.push(`${rel}/${n}/`, ...snapshot(abs, `${rel}/${n}`))
+    else out.push(`${rel}/${n} = ${readFileSync(abs, 'utf8')}`)
+  }
+  return out
+}
+
+describe('async copy and search', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'fc-copy-'))
+  const outside = join(dir, 'outside')
+  const src = join(dir, 'src')
+  afterAll(() => rmSync(dir, { recursive: true, force: true }))
+
+  beforeAll(() => {
+    mkdirSync(join(outside, 'secret-dir'), { recursive: true })
+    writeFileSync(join(outside, 'secret.txt'), 'secret')
+    mkdirSync(join(src, 'a', 'b', 'c'), { recursive: true })
+    mkdirSync(join(src, 'empty'))
+    writeFileSync(join(src, 'top.txt'), 'top')
+    writeFileSync(join(src, 'a', 'one.txt'), 'one')
+    writeFileSync(join(src, 'a', 'b', 'two.txt'), 'two')
+    writeFileSync(join(src, 'a', 'b', 'c', 'three.txt'), 'สาม')
+    for (let i = 0; i < 300; i++) writeFileSync(join(src, 'a', `many-${i}.txt`), String(i))
+    // links to a folder and a file outside: neither followed nor copied
+    symlinkSync(outside, join(src, 'a', 'secret-link'))
+    symlinkSync(join(outside, 'secret.txt'), join(src, 'secret-file-link'))
+  })
+
+  test('a copy is identical, without the links, and other work runs meanwhile', async () => {
+    const { copyTree } = await import('../src/fsx')
+    let ticks = 0
+    const timer = setInterval(() => ticks++, 0)
+    const p = copyTree(src, join(dir, 'copy'))
+    expect(p).toBeInstanceOf(Promise)
+    await p
+    clearInterval(timer)
+    expect(ticks).toBeGreaterThan(0)
+    const want = snapshot(src).filter(l => !l.endsWith('-> link'))
+    expect(want.length).toBe(308)
+    expect(snapshot(join(dir, 'copy'))).toEqual(want)
+    // one file
+    await copyTree(join(src, 'a', 'b', 'c', 'three.txt'), join(dir, 'three.txt'))
+    expect(readFileSync(join(dir, 'three.txt'), 'utf8')).toBe('สาม')
+  })
+
+  test('a copy never overwrites, never writes through a link, never goes into itself', async () => {
+    const { copyTree, HttpError } = await import('../src/fsx')
+    mkdirSync(join(dir, 'taken'))
+    writeFileSync(join(dir, 'taken', 'keep.txt'), 'keep')
+    await expect(copyTree(src, join(dir, 'taken'))).rejects.toMatchObject({ code: 'EEXIST' })
+    expect(snapshot(join(dir, 'taken'))).toEqual(['/keep.txt = keep'])
+    await expect(copyTree(join(src, 'top.txt'), join(dir, 'taken', 'keep.txt'))).rejects.toMatchObject({ code: 'EEXIST' })
+    expect(readFileSync(join(dir, 'taken', 'keep.txt'), 'utf8')).toBe('keep')
+    // a link where the copy would go: the file it points to stays as it is
+    symlinkSync(join(outside, 'secret.txt'), join(dir, 'trap.txt'))
+    await expect(copyTree(join(src, 'top.txt'), join(dir, 'trap.txt'))).rejects.toMatchObject({ code: 'EEXIST' })
+    expect(readFileSync(join(outside, 'secret.txt'), 'utf8')).toBe('secret')
+    // a link as the source is not copied
+    await expect(copyTree(join(src, 'a', 'secret-link'), join(dir, 'via-link'))).rejects.toBeInstanceOf(HttpError)
+    expect(existsSync(join(dir, 'via-link'))).toBe(false)
+    const into = await copyTree(src, join(src, 'a', 'inside')).catch(e => e)
+    expect(into).toBeInstanceOf(HttpError)
+    expect(into.status).toBe(400)
+    expect(existsSync(join(src, 'a', 'inside'))).toBe(false)
+  })
+
+  test('a copy that fails half way leaves nothing behind', async () => {
+    const { copyTree } = await import('../src/fsx')
+    // a deep chain of folders: copied under a longer path, the deepest ones go past the 4,096 bytes a path may have
+    const deep = join(dir, 'deep')
+    mkdirSync(deep)
+    for (let i = 0; i < 50; i++) writeFileSync(join(deep, `early-${i}.txt`), 'x')
+    let p = deep
+    while (p.length < 3700) { p = join(p, 'n'.repeat(200)); mkdirSync(p) }
+    writeFileSync(join(p, 'last.txt'), 'x')
+    const parent = join(dir, 'd'.repeat(250))
+    mkdirSync(parent)
+    const to = join(parent, 'e'.repeat(250))
+    await expect(copyTree(deep, to)).rejects.toMatchObject({ code: 'ENAMETOOLONG' })
+    expect(readdirSync(parent)).toEqual([])
+  })
+
+  test('search finds the same entries, skips links, keeps its limits and lets other work run', async () => {
+    const { searchTree } = await import('../src/fsx')
+    let ticks = 0
+    const timer = setInterval(() => ticks++, 0)
+    const all = await searchTree(src, '/', 'secret')
+    clearInterval(timer)
+    // neither the links themselves nor what is behind them
+    expect(all).toEqual({ results: [], truncated: false })
+    expect(ticks).toBeGreaterThan(0)
+    const t = await searchTree(src, '/', 't', 50_000, 400)
+    expect(t.truncated).toBe(false)
+    expect(t.results.map(e => e.path).sort()).toEqual(
+      ['/a/b/c/three.txt', '/a/b/two.txt', '/a/one.txt', '/empty', '/top.txt', ...Array.from({ length: 300 }, (_, i) => `/a/many-${i}.txt`)].sort(),
+    )
+    const three = (await searchTree(join(src, 'a'), '/x', 'three')).results
+    expect(three).toEqual([{ name: 'three.txt', path: '/x/b/c/three.txt', type: 'file', size: 9, mtime: expect.any(Number) }])
+    expect((await searchTree(src, '/', 'b')).results).toEqual([expect.objectContaining({ name: 'b', path: '/a/b', type: 'dir', size: 0 })])
+    // 200 hits at most
+    const capped = await searchTree(src, '/', 'many-', 50_000, 200)
+    expect(capped.results.length).toBe(200)
+    expect(capped.truncated).toBe(true)
+    // entries looked at: the tree holds 308 real entries and 2 links
+    expect(await searchTree(src, '/', 'zzz', 310)).toEqual({ results: [], truncated: false })
+    expect(await searchTree(src, '/', 'zzz', 309)).toEqual({ results: [], truncated: true })
+    expect(await searchTree(join(src, 'missing'), '/missing', 'a')).toEqual({ results: [], truncated: false })
   })
 })
 
@@ -207,4 +326,46 @@ describe('dashboard counting does not hold up other requests', () => {
     expect(full.data).toEqual({ done: 0, failed: [{ path: '/space', error: expect.stringContaining('พื้นที่') }] })
     expect(existsSync(join(dirs.storage, 'big', 'space'))).toBe(false)
   }, 20_000)
+
+  test('/api/list stays under 100 ms while 20,000 files are copied and 50,000 entries searched', async () => {
+    const COPY_GROUPS = 20
+    // a file of its own: a file system allows only so many links to one file (65,000 on ext4)
+    writeFileSync(join(base, 'one-byte-2'), 'x')
+    for (let g = 0; g < COPY_GROUPS; g++) {
+      const d = join(dirs.storage, 'many', `g${g}`)
+      mkdirSync(d, { recursive: true })
+      for (let i = 0; i < PER_GROUP; i++) linkSync(join(base, 'one-byte-2'), join(d, `f${i}`))
+    }
+    const results: Record<string, Awaited<ReturnType<typeof api>>> = {}
+    const work = Promise.all([
+      api('POST', '/api/copy', { space: 'home', items: ['/many'], dest: '/' }).then(r => { results.copy = r }),
+      // /big holds 49,050 entries now: all of them are looked at, none matches
+      api('GET', '/api/search?space=home&path=/big&q=nothing-like-this').then(r => { results.search = r }),
+    ])
+    const latencies: number[] = []
+    const until = Date.now() + 30_000
+    while ((!results.copy || !results.search) && Date.now() < until) {
+      const list = await api('GET', '/api/list?space=home&path=/big')
+      expect(list.status).toBe(200)
+      latencies.push(list.ms)
+    }
+    await work
+    expect(results.copy.data).toEqual({ done: 1, failed: [] })
+    expect(results.search.data).toEqual({ results: [], truncated: false })
+    expect(latencies.length).toBeGreaterThan(2)
+    expect(Math.max(...latencies)).toBeLessThan(100)
+
+    // the copy is whole
+    const copied = join(dirs.storage, 'many (1)')
+    expect(readdirSync(copied).length).toBe(COPY_GROUPS)
+    for (let g = 0; g < COPY_GROUPS; g++) expect(readdirSync(join(copied, `g${g}`)).length).toBe(PER_GROUP)
+    expect(readFileSync(join(copied, 'g7', 'f123'), 'utf8')).toBe('x')
+    // and the search found what it should: one hit per group, over 50,000 entries from the top it stops
+    const hits = await api('GET', '/api/search?space=home&path=/big&q=F999')
+    expect(hits.data.truncated).toBe(false)
+    expect(hits.data.results.map((e: any) => e.path).sort()).toEqual(
+      Array.from({ length: GROUPS - 1 }, (_, g) => `/big/g${g + 1}/f999`).sort(),
+    )
+    expect((await api('GET', '/api/search?space=home&q=nothing-like-this')).data).toEqual({ results: [], truncated: true })
+  }, 60_000)
 })
