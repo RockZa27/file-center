@@ -3,7 +3,7 @@ import { accessFor, getSession, type Access, type Session, type User, findUser }
 import { config } from './config'
 import { forbidden, fromFsError, HttpError } from './fsx'
 import { log, safePath } from './logger'
-import { langOf, type MessageCode, type Params, text } from './messages'
+import { type Lang, langOf, type MessageCode, type Params, text } from './messages'
 import type { Perm } from './settings'
 
 export const SESSION_COOKIE = 'fc_sid'
@@ -15,12 +15,57 @@ function clientIp(request: Request, socketIp: string): string {
   return socketIp
 }
 
-/** Per-request context: who is calling, their session, and uniform JSON errors. */
+// GET routes the page opens as plain links: the browser takes the whole tab there, so a failure must read as a page
+const DOWNLOAD_ROUTES = [
+  /^\/api\/download$/, /^\/api\/batch\/[^/]+$/, /^\/api\/admin\/logs\/download$/, /^\/api\/admin\/activity\/export$/,
+  /^\/api\/admin\/backups\/[^/]+\/download$/,
+]
+
+/** the tab opening a download link, not the page's own fetch (which sends x-lang and reads the JSON) */
+function isDownloadNavigation(request: Request): boolean {
+  if (request.method !== 'GET') return false
+  const h = request.headers
+  const navigation = h.get('sec-fetch-mode') === 'navigate' || ((h.get('accept') ?? '').includes('text/html') && !h.has('x-lang'))
+  return navigation && DOWNLOAD_ROUTES.some(r => r.test(new URL(request.url).pathname))
+}
+
+const escapeHtml = (s: string) => s.replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`)
+
+// no script at all, and nothing from the request is written into the page except the catalog text, escaped
+const ERROR_PAGE_HEADERS = {
+  'Content-Type': 'text/html; charset=utf-8',
+  'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'self'",
+  'Cache-Control': 'no-store',
+}
+
+/** a small page for a failed download link: the message in the visitor's language, the code, and a way back */
+export function errorPage(status: number, lang: Lang, code: MessageCode, params: Params): Response {
+  const message = escapeHtml(text(lang, code, params))
+  const html = `<!doctype html>
+<html lang="${lang}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${message}</title>
+<style>body{font-family:system-ui,sans-serif;max-width:36rem;margin:12vh auto;padding:0 1rem;line-height:1.6}h1{font-size:1.3rem}small{color:#777}</style>
+</head>
+<body>
+<h1>${message}</h1>
+<p><small>${escapeHtml(code)} (${status})</small></p>
+<p><a href="/">${escapeHtml(text(lang, 'request.back-to-app'))}</a></p>
+</body>
+</html>
+`
+  return new Response(html, { status, headers: ERROR_PAGE_HEADERS })
+}
+
+/** Per-request context: who is calling, their session, and uniform JSON errors (a small page for download links). */
 export const context = new Elysia({ name: 'context' })
   .error({ HTTP_ERROR: HttpError })
   .onError({ as: 'global' }, ({ error, code, set, request }) => {
     // the text in the visitor's language; the code and params let the page tell cases apart without reading it
     const answer = (status: number, c: MessageCode, params: Params = {}) => {
+      if (isDownloadNavigation(request)) return errorPage(status, langOf(request), c, params)
       set.status = status
       return { error: text(langOf(request), c, params), code: c, params }
     }

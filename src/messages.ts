@@ -23,6 +23,8 @@ export const MESSAGES = {
   'request.no-api': { th: 'ไม่พบ API ที่เรียก', en: 'API not found.' },
   'request.not-found': { th: 'ไม่พบรายการที่ระบุ', en: 'The item was not found.' },
   'request.internal': { th: 'เกิดข้อผิดพลาดภายในระบบ', en: 'Something went wrong on the server.' },
+  // the link on the page a failed download link opens in the tab
+  'request.back-to-app': { th: 'กลับไปหน้าหลัก', en: 'Back to the home page' },
 
   // ───────────── auth ─────────────
   'auth.required': { th: 'กรุณาเข้าสู่ระบบ', en: 'Please sign in.' },
@@ -202,9 +204,23 @@ const asLang = (v: string | null | undefined): Lang | null => {
   return primary === 'th' || primary === 'en' ? primary : null
 }
 
-/** the language of a request: the page's `x-lang` (th/en), else the browser's Accept-Language, else Thai */
+/** the cookie the page keeps its language in, for requests that carry no `x-lang` (a download link the tab opens) */
+export const LANG_COOKIE = 'fc_lang'
+
+/** `fc_lang` when it is exactly th or en; any other value is ignored */
+function cookieLang(request: Request): Lang | null {
+  for (const part of (request.headers.get('cookie') ?? '').split(';')) {
+    const at = part.indexOf('=')
+    if (at < 0 || part.slice(0, at).trim() !== LANG_COOKIE) continue
+    const v = part.slice(at + 1).trim()
+    return v === 'th' || v === 'en' ? v : null
+  }
+  return null
+}
+
+/** the language of a request: the page's `x-lang` (th/en), else its `fc_lang` cookie, else the browser's Accept-Language, else Thai */
 export function langOf(request: Request): Lang {
-  const own = asLang(request.headers.get('x-lang'))
+  const own = asLang(request.headers.get('x-lang')) ?? cookieLang(request)
   if (own) return own
   let best: Lang = 'th'
   let bestQ = 0
