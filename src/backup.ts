@@ -40,7 +40,7 @@ export type BackupStatus = {
 }
 
 // top-level names in DATA_DIR that never go into a backup
-const SKIP = new Set(['tmp', 'trash', 'app', 'sessions.json', 'backup-status.json', 'stats-cache.json'])
+const SKIP = new Set(['tmp', 'trash', 'app', 'sessions.json', 'backup-status.json', 'stats-cache.json', 'cli-changed'])
 // of the logs only the current activity and system log go in: rotated ones, access.log and launcher.log stay out
 const LOGS_KEPT = new Set(['logs/', 'logs/audit.log', 'logs/system.log'])
 // users, settings and a logo are small: anything bigger in a backup is not ours

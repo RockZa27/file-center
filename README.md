@@ -299,6 +299,27 @@ OFFICE_SERVER_INTERNAL_URL=http://onlyoffice
   ระบบนับขนาดไฟล์ตั้งแต่ตอนเริ่มอัปโหลด (อัปโหลดพร้อมกันหลายไฟล์จึงเกินโควตาไม่ได้) และคืนให้เมื่อยกเลิกหรือไม่อัปโหลดจนเสร็จ (ถูกลบตาม `UPLOAD_STALE_HOURS`)
   เกินโควตาจะได้ 429 ยอดที่ใช้เก็บใน `guest-uploads.json` ใน `DATA_DIR` จึงไม่หายเมื่อรีสตาร์ต และเริ่มนับใหม่ทุกวัน (ตามเวลาเครื่อง) ผู้ที่เข้าสู่ระบบไม่ถูกจำกัด
 
+## อุปกรณ์ที่เข้าสู่ระบบและการยืนยันสองขั้นตอน (2FA)
+
+- **อุปกรณ์:** `GET /api/sessions` แสดงอุปกรณ์ที่เข้าสู่ระบบอยู่ของตัวเอง (`id`, `ip`, `ua`, `created`, `seen`, `current`) เรียงใหม่สุดก่อน session ที่สร้างก่อนมีรายการนี้แสดง `ip`/`ua` เป็น `unknown` และไม่มีใครถูกออกจากระบบเพราะการอัปเกรด
+  `DELETE /api/sessions/:id` ออกจากระบบอุปกรณ์นั้น (ถ้าเป็นเครื่องที่ใช้อยู่ก็เท่ากับออกจากระบบ), `POST /api/sessions/revoke-others` เก็บไว้เฉพาะเครื่องนี้ admin ดูและเพิกถอนทุกอุปกรณ์ของผู้ใช้ได้ที่ `GET /api/admin/users/:username/sessions` และ `POST .../sessions/revoke`
+- **เปิด 2FA (TOTP, RFC 6238):** ใช้กับแอป authenticator ทั่วไป (รหัส 6 หลัก เปลี่ยนทุก 30 วินาที ยอมรับรหัสก่อนและหลังหนึ่งช่วง)
+  `POST /api/2fa/setup { password }` ได้ `{ secret, uri }` (uri เป็น `otpauth://` ที่ใช้ชื่อแอปจากหน้าตั้งค่าเป็น issuer) → `POST /api/2fa/enable { code }` ได้ `{ backupCodes }` 10 รหัส (`xxxx-xxxx`) **แสดงครั้งเดียว** และอุปกรณ์อื่นของผู้ใช้จะถูกออกจากระบบ
+  ปิดด้วย `POST /api/2fa/disable { password, code }` ขอรหัสสำรองชุดใหม่ด้วย `POST /api/2fa/backup-codes { password, code }` (`code` เป็นรหัสจากแอปหรือรหัสสำรองก็ได้) ใส่รหัสผิดซ้ำจะถูกล็อกเหมือนการใส่รหัสผ่านผิด
+- **เข้าสู่ระบบ:** ผู้ใช้ที่เปิด 2FA ใส่รหัสผ่านถูกแล้วจะ **ยังไม่ได้ session** ได้เพียง `{ twoFactor: true, ticket }` (ticket ใช้ได้ครั้งเดียว 5 นาที ผูกกับผู้ใช้และ IP) แล้วส่ง `POST /api/login/2fa { ticket, code }` รหัสผิดซ้ำถูกล็อกตาม `LOGIN_MAX_ATTEMPTS` / `LOGIN_LOCKOUT_SECONDS` และแจ้งเตือนผู้ดูแล
+  รหัส TOTP ใช้ได้ครั้งเดียว (ใช้ซ้ำไม่ได้แม้ยังอยู่ในช่วงเวลา) รหัสสำรองใช้ได้ครั้งเดียวแล้วถูกลบ
+- **ความลับของ 2FA:** เก็บใน `users.json` แบบเข้ารหัส (AES-256-GCM) ด้วยกุญแจ `secret.key` ใน `DATA_DIR` (สร้างเองครั้งแรกที่ใช้ สิทธิ์ `0600`) ส่วนรหัสสำรองเก็บเฉพาะค่าแฮช
+  **ไฟล์สำรองข้อมูลมี `secret.key` ด้วย** (ไฟล์ระดับบนของ `DATA_DIR` ทุกไฟล์ถูกสำรอง) ดังนั้นไฟล์สำรองต้องเก็บเป็นความลับ แต่การกู้คืนจากหน้าเว็บคืนเฉพาะ `users.json`, `settings.json` และ `branding/`
+  **ถ้าติดตั้งเครื่องใหม่ ต้องแตก `secret.key` จากไฟล์สำรองมาไว้ใน `DATA_DIR` เองจึงจะใช้ 2FA เดิมได้** ถ้าไม่มีกุญแจนี้รหัส 2FA ของทุกคนใช้ไม่ได้ (ต้องให้ admin รีเซ็ต)
+- **ลืมโทรศัพท์และรหัสสำรอง:** admin รีเซ็ตให้ที่ `POST /api/admin/users/:username/2fa/reset { password }` (ใส่รหัสผ่านของ admin เอง) หรือที่เครื่อง server:
+  ```bash
+  bun src/cli.ts reset-2fa <ชื่อผู้ใช้>         # ปิด 2FA ของผู้ใช้และออกจากระบบทุกอุปกรณ์
+  bun src/cli.ts sessions-revoke <ชื่อผู้ใช้>   # ออกจากระบบทุกอุปกรณ์
+  docker compose exec file-center bun src/cli.ts reset-2fa admin   # แบบ Docker
+  ```
+  คำสั่งทำงานกับ `DATA_DIR` เดียวกับแอป เขียนประวัติการใช้งาน (ผู้ใช้ `cli`) และจบด้วยรหัส 1 ถ้าไม่พบผู้ใช้ **ไม่ต้องรีสตาร์ตแอป:** คำสั่งแตะไฟล์ `cli-changed` ใน `DATA_DIR` เมื่อเสร็จ แอปที่เปิดอยู่เห็นแล้วอ่าน `users.json` และ `sessions.json` ใหม่ในคำขอถัดไป
+  (ไฟล์นี้ไม่ถูกสำรอง)
+
 ## Log ของระบบ
 
 error และเหตุการณ์สำคัญของระบบเขียนลงไฟล์ ไม่หายไปพร้อมคอนเทนเนอร์ ผู้ดูแลดูได้จากหน้าเว็บโดยไม่ต้องเข้าเครื่อง server
@@ -385,7 +406,8 @@ src/
   alerts.ts, routes/alerts.ts               แจ้งเตือนผู้ดูแลทาง Discord/Slack/Telegram/webhook และงานตรวจเบื้องหลัง (error, ดิสก์, เวอร์ชันใหม่)
   backup.ts, routes/backup.ts               สำรองข้อมูลระบบอัตโนมัติ และกู้คืน
   config.ts         ค่าตั้งต้นและตำแหน่งโฟลเดอร์
-  auth.ts           ผู้ใช้, session, ล็อกการเข้าสู่ระบบ, การแปลงสิทธิ์เป็นพื้นที่ที่เข้าถึงได้
+  auth.ts           ผู้ใช้, session, ล็อกการเข้าสู่ระบบ, การแปลงสิทธิ์เป็นพื้นที่ที่เข้าถึงได้, ขั้นตอนที่สองของการเข้าสู่ระบบ (2FA)
+  totp.ts, secret-box.ts, cli.ts            รหัส TOTP, เข้ารหัสความลับด้วย secret.key, คำสั่งสำหรับผู้ดูแลที่เครื่อง server
   context.ts        ตรวจ session/CSRF, รูปแบบ error เดียวกันทุก API
   messages.ts       ข้อความทุกข้อที่แสดงต่อผู้ใช้ ตามรหัส (code) เป็นภาษาไทยและอังกฤษ
   fsx.ts            จัดการพาธอย่างปลอดภัย (กัน ../ และ symlink), คัดลอก/ย้าย
@@ -417,7 +439,7 @@ tests/perf.test.ts  การนับไฟล์ 50,000 ไฟล์ การ
 
 ถ้าดิสก์เสีย บัญชีผู้ใช้ รหัสผ่าน และการตั้งค่าจะหายทั้งหมด ระบบจึงสำรองข้อมูลระบบให้เองทุกวัน
 
-- **สำรองอะไรบ้าง:** หนึ่งครั้ง = ไฟล์เดียว `file-center-backup-YYYYMMDD-HHMMSS.zip` (เวลาของเครื่อง server) มี `users.json` (ผู้ใช้และรหัสผ่านที่เข้ารหัสแล้ว), `settings.json`, `branding/` (โลโก้), `logs/audit.log`, `logs/system.log` และ `backup.json` (`{ version, createdAt, includesFiles }`)
+- **สำรองอะไรบ้าง:** หนึ่งครั้ง = ไฟล์เดียว `file-center-backup-YYYYMMDD-HHMMSS.zip` (เวลาของเครื่อง server) มี `users.json` (ผู้ใช้และรหัสผ่านที่เข้ารหัสแล้ว), `settings.json`, `branding/` (โลโก้), `logs/audit.log`, `logs/system.log`, `secret.key` (กุญแจของ 2FA ถ้ามี: ต้องคืนเองด้วยมือ ดู อุปกรณ์ที่เข้าสู่ระบบและการยืนยันสองขั้นตอน) และ `backup.json` (`{ version, createdAt, includesFiles }`)
   ไม่รวม session, ถังขยะ, ไฟล์อัปโหลดที่ยังไม่เสร็จ, เวอร์ชันที่อัปเดตผ่านเว็บ log เก่าที่หมุนไฟล์แล้ว (`audit.log.N`, `system.log.N`), `access.log` และ `launcher.log`
   ไฟล์ที่ผู้ใช้อัปโหลด (`storage`) ไม่รวมโดยค่าเริ่มต้นเพราะอาจใหญ่มาก ตั้ง `BACKUP_INCLUDE_FILES=true` เพื่อรวมไว้ในโฟลเดอร์ `storage/` ของ zip (ระบบตรวจพื้นที่ว่างก่อนตาม `MIN_FREE_SPACE`)
 - **เมื่อไหร่:** ทุกวันในชั่วโมง `BACKUP_HOUR` (ค่าเริ่มต้นตี 3) และทันทีที่ครั้งล่าสุดที่สำเร็จเก่ากว่า 2 วัน (เช่น เปิดระบบครั้งแรก หรือเครื่องปิดอยู่ตอนตี 3) ตั้ง `BACKUP_HOUR=off` เพื่อปิดการสำรองอัตโนมัติ
@@ -451,7 +473,8 @@ tests/perf.test.ts  การนับไฟล์ 50,000 ไฟล์ การ
 
 | | |
 |---|---|
-| `GET /api/session` · `POST /api/login` · `POST /api/logout` · `POST /api/password` | เซสชัน |
+| `GET /api/session` · `POST /api/login` · `POST /api/login/2fa` · `POST /api/logout` · `POST /api/password` | เซสชัน |
+| `GET /api/sessions` · `DELETE /api/sessions/:id` · `POST /api/sessions/revoke-others` · `POST /api/2fa/setup\|enable\|disable\|backup-codes` | อุปกรณ์ที่เข้าสู่ระบบ และ 2FA (ดู อุปกรณ์ที่เข้าสู่ระบบและการยืนยันสองขั้นตอน) |
 | `GET /api/list` · `/api/folders` · `/api/search` | ดูรายการ ค้นหา (พารามิเตอร์ `space=home\|public`, `path`) |
 | `POST /api/mkdir` · `/newfile` · `/rename` · `/copy` · `/move` · `/delete` · `/zip` · `/unzip` | จัดการไฟล์ (ลบ = ย้ายไปถังขยะ) |
 | `GET/PUT /api/content` | อ่าน/บันทึกไฟล์ข้อความ (≤ 2 MB) `GET` ตอบ `mtime` ส่งกลับใน `PUT` เป็น `expectedMtime` ถ้าไฟล์ถูกแก้จากที่อื่นหลังจากเปิดจะได้ 409 `files.changed-elsewhere` และไม่บันทึก `PUT` ตอบ `mtime` ใหม่ |

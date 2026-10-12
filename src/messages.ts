@@ -43,6 +43,15 @@ export const MESSAGES = {
     en: 'The password must not be one repeated character or a keyboard, number or letter sequence. Please choose another one.',
   },
 
+  // devices and two-factor sign-in
+  'auth.session-not-found': { th: 'ไม่พบอุปกรณ์ที่ระบุ', en: 'The device was not found.' },
+  'auth.2fa-bad-code': { th: 'รหัสยืนยันไม่ถูกต้อง', en: 'The verification code is wrong.' },
+  'auth.2fa-bad-ticket': { th: 'หมดเวลาหรือขั้นตอนเข้าสู่ระบบไม่ถูกต้อง กรุณาใส่รหัสผ่านใหม่', en: 'The sign-in step expired or is not valid. Please enter your password again.' },
+  'auth.2fa-locked': { th: 'ใส่รหัสยืนยันผิดหลายครั้ง กรุณารอ {seconds} วินาทีแล้วลองใหม่', en: 'Too many wrong verification codes. Wait {seconds} seconds and try again.' },
+  'auth.2fa-already-enabled': { th: 'เปิดการยืนยันสองขั้นตอนไว้แล้ว', en: 'Two-factor sign-in is already on.' },
+  'auth.2fa-not-enabled': { th: 'ยังไม่ได้เปิดการยืนยันสองขั้นตอน', en: 'Two-factor sign-in is not on.' },
+  'auth.2fa-no-setup': { th: 'ยังไม่ได้เริ่มตั้งค่า หรือหมดเวลาแล้ว กรุณาเริ่มตั้งค่าใหม่', en: 'Setup was not started or has expired. Please start again.' },
+
   // ───────────── fs: what a file-system error means for the visitor ─────────────
   'fs.bad-name': { th: 'ชื่อไม่ถูกต้อง', en: 'The name is not valid.' },
   'fs.name-too-long': { th: 'ชื่อยาวเกินไป (ภาษาไทยได้ประมาณ 85 ตัวอักษร ภาษาอังกฤษ 255 ตัวอักษร)', en: 'The name is too long (about 85 Thai or 255 English characters).' },
@@ -133,6 +142,10 @@ export const MESSAGES = {
   'admin.alert-confirm-locked': {
     th: 'ล็อกการยืนยันรหัสผ่าน (ติดตั้งอัปเดต/กู้คืนข้อมูล) ของ {user} จาก IP {ip} ชั่วคราว เพราะใส่รหัสผ่านผิดหลายครั้ง',
     en: 'Password confirmation (update/restore) for {user} from IP {ip} is locked for a while after too many wrong passwords.',
+  },
+  'admin.alert-2fa-locked': {
+    th: 'ล็อกการยืนยันสองขั้นตอนของ {user} จาก IP {ip} ชั่วคราว เพราะใส่รหัสยืนยันผิดหลายครั้ง',
+    en: 'Two-factor sign-in for {user} from IP {ip} is locked for a while after too many wrong codes.',
   },
   'admin.alert-share-locked': {
     th: 'ล็อกลิงก์แชร์ {share} ของ {owner} สำหรับ IP {ip} ชั่วคราว เพราะใส่รหัสผ่านผิดหลายครั้ง',

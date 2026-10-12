@@ -3,8 +3,8 @@ import { join } from 'node:path'
 import { Elysia, t } from 'elysia'
 import { audit, queryAudit } from '../audit'
 import {
-  allUsers, checkPasswordStrength, cleanHomedir, cleanPerms, destroyUserSessions, findUser, hashPassword,
-  isReservedUsername, publicUser, saveUsers, USERNAME_RE,
+  allUsers, checkPasswordStrength, cleanHomedir, cleanPerms, confirmPassword, destroyUserSessions, dropLoginTickets,
+  findUser, hashPassword, isReservedUsername, listUserSessions, publicUser, saveUsers, USERNAME_RE,
 } from '../auth'
 import { statusIn } from '../backup'
 import { config, paths } from '../config'
@@ -138,6 +138,37 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     audit({ user: admin.username, ip, action: 'user-delete', target: target.username })
     return { ok: true }
   })
+
+  // a user's signed-in devices, and ending them all (a lost phone, a stolen cookie)
+  .get('/admin/users/:username/sessions', ({ user, ip, params }) => {
+    requireAdmin({ user, ip })
+    const target = findUser(params.username)
+    if (!target) throw notFound('admin.user-not-found')
+    return { sessions: listUserSessions(target.username) }
+  })
+
+  .post('/admin/users/:username/sessions/revoke', ({ user, ip, params }) => {
+    const admin = requireAdmin({ user, ip })
+    const target = findUser(params.username)
+    if (!target) throw notFound('admin.user-not-found')
+    const revoked = destroyUserSessions(target.username)
+    audit({ user: admin.username, ip, action: 'sessions-revoke', target: target.username, detail: String(revoked) })
+    return { ok: true, revoked }
+  })
+
+  // for a user who lost the phone and the backup codes; the admin proves it is them with their own password
+  .post('/admin/users/:username/2fa/reset', async ({ user, ip, params, body }) => {
+    const admin = requireAdmin({ user, ip })
+    const target = findUser(params.username)
+    if (!target) throw notFound('admin.user-not-found')
+    await confirmPassword(admin, ip, body.password, '2fa-reset-denied')
+    delete target.twoFactor
+    saveUsers()
+    dropLoginTickets(target.username)
+    destroyUserSessions(target.username)
+    audit({ user: admin.username, ip, action: '2fa-reset', target: target.username })
+    return { ok: true }
+  }, { body: t.Object({ password: t.String({ maxLength: 1000 }) }) })
 
   // folder tree for the "home folder" picker
   .get('/admin/folders', ({ user, ip, query }) => {

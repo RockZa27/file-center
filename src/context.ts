@@ -1,5 +1,5 @@
 import { Elysia } from 'elysia'
-import { accessFor, getSession, type Access, type Session, type User, findUser } from './auth'
+import { accessFor, getSession, reloadIfChangedByCli, type Access, type Session, type User, findUser } from './auth'
 import { config } from './config'
 import { forbidden, fromFsError, HttpError } from './fsx'
 import { log, safePath } from './logger'
@@ -90,6 +90,7 @@ export const context = new Elysia({ name: 'context' })
     return answer(500, 'request.internal')
   })
   .derive({ as: 'global' }, ({ cookie, request, server }) => {
+    reloadIfChangedByCli() // users or sessions changed by `bun src/cli.ts`
     const sid = cookie[SESSION_COOKIE]?.value as string | undefined
     const session: Session | null = getSession(sid)
     const user: User | null = session?.username ? findUser(session.username) ?? null : null

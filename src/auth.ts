@@ -1,12 +1,15 @@
 import { createHash, randomBytes } from 'node:crypto'
+import { existsSync, readFileSync, statSync } from 'node:fs'
 import { alert } from './alerts'
 import { audit } from './audit'
 import { COMMON_PASSWORDS, isRunOrRepeat } from './common-passwords'
 import { config, paths } from './config'
 import { bad, ensureDir, HttpError, normRel, resolveIn } from './fsx'
 import { log } from './logger'
+import { open, seal } from './secret-box'
 import { cleanPerms, PERMISSIONS, settings, type Perm } from './settings'
 import { JsonStore } from './store'
+import { newTotpSecret, verifyTotp } from './totp'
 
 export type Role = 'admin' | 'user'
 
@@ -23,6 +26,8 @@ export type User = {
   mustChangePassword?: boolean
   createdAt: string
   lastLogin?: string
+  /** optional second step of the sign-in; the secret is sealed (secret-box.ts) and never leaves the server */
+  twoFactor?: { secret: string; enabledAt: string; lastStep: number; backup: string[] }
 }
 
 const userStore = new JsonStore<{ users: User[] }>(paths.users, () => ({ users: [] }), { onCorrupt: 'fail' })
@@ -45,6 +50,7 @@ export const publicUser = (u: User) => ({
   mustChangePassword: !!u.mustChangePassword,
   createdAt: u.createdAt,
   lastLogin: u.lastLogin ?? null,
+  twoFactor: !!u.twoFactor,
 })
 
 export const hashPassword = (pw: string) => Bun.password.hash(pw)
@@ -115,20 +121,42 @@ export function cleanHomedir(input: unknown, username: string): string {
 
 // ───────────────────────────── sessions ─────────────────────────────
 
-export type Session = { csrf: string; username: string | null; created: number; seen: number }
+export type Session = {
+  /** shown in the device list and used to end that session; not the sid and not derived from it */
+  id: string
+  csrf: string
+  username: string | null
+  created: number
+  seen: number
+  ip?: string
+  ua?: string
+}
 
 // Signed-in sessions are saved to disk and survive restarts. Visitors only carry a CSRF token, so their
 // sessions stay in memory, expire quickly and are capped; bots can not fill the disk with them.
 const sessionStore = new JsonStore<Record<string, Session>>(paths.sessions, () => ({}))
+const newSessionId = () => randomBytes(16).toString('base64url')
+/** sessions saved before the device list have no id: they get one when read, nobody is signed out for it */
+function ensureSessionIds() {
+  let changed = false
+  for (const s of Object.values(sessionStore.value)) {
+    if (!s.id) { s.id = newSessionId(); changed = true }
+  }
+  if (changed) sessionStore.save()
+}
+ensureSessionIds()
 const anonymous = new Map<string, Session>()
 const ANON_TTL_MS = 6 * 3600_000
 const ANON_MAX = 5000
 const sidKey = (sid: string) => createHash('sha256').update(sid).digest('hex')
 const ttlOf = (s: Session) => (s.username ? config.sessionTtlMs : ANON_TTL_MS)
 
-export function createSession(username: string | null): { sid: string; session: Session } {
+export function createSession(username: string | null, meta: { ip?: string; ua?: string } = {}): { sid: string; session: Session } {
   const sid = randomBytes(32).toString('base64url')
-  const session: Session = { csrf: randomBytes(24).toString('base64url'), username, created: Date.now(), seen: Date.now() }
+  const session: Session = {
+    id: newSessionId(), csrf: randomBytes(24).toString('base64url'), username, created: Date.now(), seen: Date.now(),
+    ...(meta.ip ? { ip: meta.ip } : {}), ...(meta.ua ? { ua: meta.ua.slice(0, 200) } : {}),
+  }
   if (username) {
     sessionStore.update(d => { d[sidKey(sid)] = session })
   } else {
@@ -165,14 +193,50 @@ export function destroySession(sid: string | undefined) {
   if (sessionStore.value[key]) sessionStore.update(d => { delete d[key] })
 }
 
-/** drop every session of a user (password change, account deleted) except an optional kept one */
-export function destroyUserSessions(username: string, keepSid?: string) {
+/** drop every session of a user (password change, account deleted) except an optional kept one; how many went */
+export function destroyUserSessions(username: string, keepSid?: string): number {
   const keep = keepSid ? sidKey(keepSid) : null
+  let n = 0
   sessionStore.update(d => {
     for (const [k, s] of Object.entries(d)) {
-      if (s.username?.toLowerCase() === username.toLowerCase() && k !== keep) delete d[k]
+      if (s.username?.toLowerCase() === username.toLowerCase() && k !== keep) { delete d[k]; n++ }
     }
   })
+  return n
+}
+
+/** the signed-in sessions of a user, newest first, for the device list (never the sid) */
+export function listUserSessions(username: string, currentSid?: string) {
+  const cur = currentSid ? sidKey(currentSid) : null
+  return Object.entries(sessionStore.value)
+    .filter(([, s]) => s.username?.toLowerCase() === username.toLowerCase())
+    .sort((a, b) => b[1].created - a[1].created)
+    .map(([k, s]) => ({ id: s.id, ip: s.ip ?? 'unknown', ua: s.ua ?? 'unknown', created: s.created, seen: s.seen, current: k === cur }))
+}
+
+/** end one session of this user by its id; null when the user has none like it, else whether it was `currentSid` */
+export function destroySessionById(username: string, id: string, currentSid?: string): { current: boolean } | null {
+  const hit = Object.entries(sessionStore.value).find(([, s]) => s.id === id && s.username?.toLowerCase() === username.toLowerCase())
+  if (!hit) return null
+  sessionStore.update(d => { delete d[hit[0]] })
+  return { current: !!currentSid && hit[0] === sidKey(currentSid) }
+}
+
+// The command line tool (cli.ts) is another process: it changes users.json / sessions.json and then touches
+// cli-changed. The running app notices that on its next request and reads both files again.
+const markerStamp = () => { try { return String(statSync(paths.cliChanged).mtimeMs) } catch { return '' } }
+let seenMarker = markerStamp()
+export function reloadIfChangedByCli() {
+  const now = markerStamp()
+  if (now === seenMarker) return
+  seenMarker = now
+  try {
+    userStore.replace(JSON.parse(readFileSync(paths.users, 'utf8')))
+    sessionStore.replace(existsSync(paths.sessions) ? JSON.parse(readFileSync(paths.sessions, 'utf8')) : {})
+    ensureSessionIds()
+  } catch (err) {
+    log.error('cli-reload-failed', err)
+  }
 }
 
 export function purgeExpiredSessions() {
@@ -181,6 +245,104 @@ export function purgeExpiredSessions() {
     for (const [k, s] of Object.entries(d)) if (now - s.seen > config.sessionTtlMs) delete d[k]
   })
   for (const [k, s] of anonymous) if (now - s.seen > ANON_TTL_MS) anonymous.delete(k)
+}
+
+// ───────────────────────────── two-factor sign-in ─────────────────────────────
+
+const sha256 = (s: string) => createHash('sha256').update(s).digest('hex')
+const BACKUP_CODE_RE = /^[a-z0-9]{4}-[a-z0-9]{4}$/
+const BACKUP_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789'
+const BACKUP_CODES = 10
+
+/** 10 new backup codes: the plain codes (shown once) and what is kept (their hashes) */
+export function newBackupCodes() {
+  const part = () => Array.from(randomBytes(4), b => BACKUP_ALPHABET[b % BACKUP_ALPHABET.length]).join('')
+  const codes = Array.from({ length: BACKUP_CODES }, () => `${part()}-${part()}`)
+  return { codes, hashes: codes.map(sha256) }
+}
+
+/** a secret waiting for its first code, per user (memory only: an unfinished setup leaves nothing behind) */
+const pending = new Map<string, { secret: string; until: number }>()
+const PENDING_MS = 10 * 60_000
+
+export function startTwoFactorSetup(user: User): string {
+  const secret = newTotpSecret()
+  pending.set(user.username.toLowerCase(), { secret, until: Date.now() + PENDING_MS })
+  return secret
+}
+
+/** finishes the setup when the code fits the pending secret (null: no setup or wrong code); the backup codes are shown once */
+export function finishTwoFactorSetup(user: User, code: string): string[] | null {
+  const p = pending.get(user.username.toLowerCase())
+  if (!p || p.until < Date.now()) return null
+  const step = verifyTotp(p.secret, code.replace(/\s/g, ''))
+  if (step === null) return null
+  pending.delete(user.username.toLowerCase())
+  const { codes, hashes } = newBackupCodes()
+  user.twoFactor = { secret: seal(p.secret), enabledAt: new Date().toISOString(), lastStep: step, backup: hashes }
+  saveUsers()
+  return codes
+}
+
+export const hasPendingSetup = (user: User) => {
+  const p = pending.get(user.username.toLowerCase())
+  return !!p && p.until >= Date.now()
+}
+
+/**
+ * A TOTP code (once per step: nothing at or before the last used step) or a backup code (removed when used).
+ * Anything that can not be checked (a damaged secret) counts as wrong.
+ */
+export function checkSecondFactor(user: User, input: string): boolean {
+  const tf = user.twoFactor
+  if (!tf) return false
+  const code = input.trim().toLowerCase().replace(/\s/g, '')
+  if (BACKUP_CODE_RE.test(code)) {
+    const h = sha256(code)
+    if (!tf.backup.includes(h)) return false
+    tf.backup = tf.backup.filter(x => x !== h)
+    saveUsers()
+    return true
+  }
+  let secret: string
+  try { secret = open(tf.secret) } catch (err) { log.error('2fa-secret-unreadable', { user: user.username, error: (err as Error).message }); return false }
+  const step = verifyTotp(secret, code, tf.lastStep)
+  if (step === null) return false
+  tf.lastStep = step
+  saveUsers()
+  return true
+}
+
+// Between the password and the code of a sign-in: a ticket, kept only as a hash, for one user and one address
+type Ticket = { username: string; ip: string; until: number }
+const tickets = new Map<string, Ticket>()
+const TICKET_MS = 5 * 60_000
+const TICKETS_PER_USER = 5
+const TICKETS_MAX = 5000
+
+export function createLoginTicket(username: string, ip: string): string {
+  const now = Date.now()
+  for (const [k, t] of tickets) if (t.until < now) tickets.delete(k)
+  const mine = [...tickets.entries()].filter(([, t]) => t.username === username)
+  // Map keeps insertion order: the oldest of this user's tickets go first
+  for (const [k] of mine.slice(0, Math.max(0, mine.length - TICKETS_PER_USER + 1))) tickets.delete(k)
+  if (tickets.size >= TICKETS_MAX) tickets.delete(tickets.keys().next().value!)
+  const ticket = randomBytes(24).toString('base64url')
+  tickets.set(sha256(ticket), { username, ip, until: now + TICKET_MS })
+  return ticket
+}
+
+/** the username a ticket was made for, when it is still valid and asked for from the same address; does not use it up */
+export function peekLoginTicket(ticket: string, ip: string): string | null {
+  const t = tickets.get(sha256(ticket))
+  if (!t || t.until < Date.now() || t.ip !== ip) return null
+  return t.username
+}
+
+export const useLoginTicket = (ticket: string) => tickets.delete(sha256(ticket))
+
+export function dropLoginTickets(username: string) {
+  for (const [k, t] of tickets) if (t.username.toLowerCase() === username.toLowerCase()) tickets.delete(k)
 }
 
 // ───────────────────────────── login lockout ─────────────────────────────
