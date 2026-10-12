@@ -42,6 +42,8 @@ export const config = {
   trashRetentionDays: num('TRASH_RETENTION_DAYS', 30),
   loginMaxAttempts: num('LOGIN_MAX_ATTEMPTS', 5),
   loginLockoutMs: num('LOGIN_LOCKOUT_SECONDS', 60) * 1000,
+  /** longest a share link may last; a link is made for 1, 7 or 30 days, whichever of those is not above this */
+  shareMaxDays: num('SHARE_MAX_DAYS', 30),
   auditMaxBytes: 10 * 1024 * 1024,
   auditMaxFiles: 10,
   /** logs/system.log (and access.log) is rotated past this size; LOG_MAX_FILES counts the current file too */
@@ -99,6 +101,8 @@ export const paths = {
   backupStatus: join(config.dataDir, 'backup-status.json'),
   /** what visitors uploaded today, so a restart does not hand out a fresh daily allowance */
   guestUploads: join(config.dataDir, 'guest-uploads.json'),
+  /** share links (only the SHA-256 of each token, never the token itself) */
+  shares: join(config.dataDir, 'shares.json'),
   publicDir: join(config.storageDir, config.publicDirName),
   /** parent of the default user folders (/users/<name>) */
   usersDir: join(config.storageDir, 'users'),

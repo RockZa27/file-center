@@ -152,6 +152,7 @@ Cloudflare Tunnel ให้คนภายนอกเข้าผ่านโ�
 | `TRASH_RETENTION_DAYS` | 30 | เก็บถังขยะกี่วัน |
 | `SESSION_TTL_HOURS` | 168 | อายุ session ของผู้ที่เข้าสู่ระบบ (ไม่ได้ใช้งานเกินนี้จะหมดอายุ) |
 | `LOGIN_MAX_ATTEMPTS` / `LOGIN_LOCKOUT_SECONDS` | 5 / 60 | ล็อกการเข้าสู่ระบบผิดซ้ำ (นับแยกตาม IP + ชื่อผู้ใช้) |
+| `SHARE_MAX_DAYS` | 30 | อายุสูงสุดของลิงก์แชร์ (วัน) ลิงก์เลือกอายุได้ 1, 7 หรือ 30 วันเท่าที่ไม่เกินค่านี้ |
 | `WEB_UPDATE` | `true` | `false` = ปิดการอัปเดตจากหน้าเว็บ |
 | `UPDATE_MAX_SIZE` | 200 MB | ขนาดสูงสุดของแพ็กเกจอัปเดต (ไบต์) |
 | `UPDATE_PUBLIC_KEY` | ว่าง | public key จาก `bun run package --gen-key` ตั้งแล้วรับเฉพาะแพ็กเกจที่เซ็นด้วยกุญแจคู่กัน (ดู เซ็นแพ็กเกจ) |
@@ -186,7 +187,7 @@ error และเหตุการณ์สำคัญของระบบ�
 - `logs/launcher.log` เขียนโดย launcher: เริ่มระบบ, รีสตาร์ต, ย้อนกลับเวอร์ชัน, ระบบหยุดทำงาน (crash)
 - `logs/access.log` เฉพาะเมื่อตั้ง `ACCESS_LOG=true` (ปิดไว้โดยค่าเริ่มต้น)
 - ทุกไฟล์หมุนเมื่อใหญ่ถึง `LOG_MAX_BYTES` (`system.log` → `system.log.1` → ...) เก็บไว้ `LOG_MAX_FILES` ไฟล์ ส่วนประวัติการใช้งาน `audit.log` หมุนแบบเดียวกันที่ 10 MB × 10 ไฟล์
-- **ไม่มีความลับใน log:** ไม่บันทึกรหัสผ่าน, cookie, CSRF token, โทเคนใน `/api/batch/:token`, รหัสการอัปโหลด และ query string ของ URL (ตัดออกก่อนเขียน ทั้งในไฟล์และ stdout)
+- **ไม่มีความลับใน log:** ไม่บันทึกรหัสผ่าน, cookie, CSRF token, โทเคนใน `/api/batch/:token` และในลิงก์แชร์ (`/api/s/:token`, `/s/:token`), รหัสการอัปโหลด และ query string ของ URL (ตัดออกก่อนเขียน ทั้งในไฟล์และ stdout)
   ข้อยกเว้นเดียวคือรหัสผ่าน admin ที่สุ่มให้ตอนเริ่มครั้งแรก ซึ่งแสดงบน stdout เท่านั้น ไม่ลงไฟล์
 - หน้าภาพรวม (`GET /api/admin/status`) เตือน "มี error N รายการใน 24 ชั่วโมงที่ผ่านมา" เมื่อมี error
 - `system.log` ปัจจุบันรวมอยู่ในไฟล์สำรองข้อมูลด้วย
@@ -198,10 +199,29 @@ error และเหตุการณ์สำคัญของระบบ�
 ชื่อผู้ใช้ `guest` (ไม่สนตัวพิมพ์เล็ก/ใหญ่) สงวนไว้ เพราะไฟล์ที่ผู้เยี่ยมชมอัปโหลดและประวัติของผู้เยี่ยมชมใช้ชื่อนี้ สร้างบัญชีชื่อนี้ไม่ได้ (บัญชีเดิมที่ชื่อนี้อยู่แล้วไม่ถูกเปลี่ยนชื่อ)
 
 สิทธิ์ที่กำหนดได้: `read` ดูรายการ · `download` · `batchdownload` ดาวน์โหลดหลายไฟล์เป็น zip · `upload` ·
-`write` สร้าง/แก้ไข/เปลี่ยนชื่อ/คัดลอก/ย้าย/ลบ · `zip` บีบอัดและแตกไฟล์
+`write` สร้าง/แก้ไข/เปลี่ยนชื่อ/คัดลอก/ย้าย/ลบ · `zip` บีบอัดและแตกไฟล์ · `share` สร้างลิงก์แชร์ (ต้องมี `download` ในพื้นที่เดียวกันด้วย)
+
+`share` เป็นสิทธิ์ใหม่ บัญชีเดิมยังไม่มี ผู้ดูแลต้องให้เองที่หน้าผู้ใช้ (admin แชร์ได้เสมอ ผู้เยี่ยมชมแชร์ไม่ได้ไม่ว่าตั้งสิทธิ์ผู้เยี่ยมชมไว้อย่างไร)
 
 ผู้ใช้แต่ละคนมีชุดสิทธิ์ 2 ชุดแยกกัน คือในโฟลเดอร์ของตัวเอง และในโฟลเดอร์สาธารณะ ส่วนสิทธิ์ของผู้เยี่ยมชมตั้งที่หน้า "ตั้งค่า"
 สิทธิ์ถูกตรวจที่ server ทุกคำสั่ง ไม่ใช่แค่ซ่อนปุ่มในหน้าเว็บ
+
+## ลิงก์แชร์
+
+ผู้ที่เข้าสู่ระบบส่งลิงก์ให้คนที่ไม่มีบัญชีดาวน์โหลดไฟล์หรือโฟลเดอร์หนึ่งรายการได้ (ต้องมีสิทธิ์ `share` และ `download` ในพื้นที่ที่รายการนั้นอยู่)
+
+- สร้าง: `POST /api/shares` `{ space, path, days, password?, maxDownloads? }` อายุ `days` เป็น 1, 7 หรือ 30 วัน (ไม่เกิน `SHARE_MAX_DAYS`)
+  รหัสผ่านไม่บังคับ (อย่างน้อย 6 ตัวอักษร) `maxDownloads` ไม่ใส่ = ไม่จำกัด ตอบ `{ share, token, url }` **โทเคนแสดงครั้งเดียวตอนนี้เท่านั้น**
+  ระบบเก็บแค่ SHA-256 ของโทเคนใน `shares.json` (ใน `DATA_DIR`) ไฟล์นี้หลุดไปก็ใช้เปิดลิงก์ไม่ได้ รหัสผ่านเก็บแบบ hash เหมือนรหัสผ่านผู้ใช้
+- ลิงก์ของฉัน `GET /api/shares` · ยกเลิก `DELETE /api/shares/:id` (เจ้าของหรือ admin) · admin ดูทั้งหมดที่ `GET /api/admin/shares` (ไม่มี hash ในคำตอบ)
+- ใช้ลิงก์ (ไม่ต้องเข้าสู่ระบบ): `GET /api/s/:token` ตอบ `{ name, type, size, expiresAt, needsPassword, entries? }` (ลิงก์โฟลเดอร์ดูข้างในได้ด้วย `?path=`
+  ไม่มีทางออกนอกโฟลเดอร์ที่แชร์ และไม่แสดง/ไม่ตาม symlink) · `POST /api/s/:token/unlock` `{ password }` ตั้ง cookie อายุ 1 ชั่วโมงที่ใช้ได้กับลิงก์นั้นลิงก์เดียว
+  (ไม่ต้องมี CSRF token) ใส่ผิด 5 ครั้งล็อกลิงก์นั้นสำหรับ IP นั้น 15 นาที · `GET /api/s/:token/download?path=` ส่งไฟล์ (หัวเดียวกับ `/api/download`) หรือโฟลเดอร์/โฟลเดอร์ย่อยเป็น zip
+- `maxDownloads` นับเฉพาะการดาวน์โหลดที่ส่งครบ ครั้งละหนึ่ง ระหว่างดาวน์โหลดจองที่ไว้ (เริ่มพร้อมกันหลายครั้งก็เกินไม่ได้) ยกเลิกกลางทางไม่นับ
+  ลิงก์ที่จำกัดจำนวนครั้งส่งทั้งไฟล์เสมอ (ไม่รับ `Range`) ลิงก์ไม่จำกัดรับ `Range` ได้ และนับเฉพาะครั้งที่ได้ทั้งไฟล์
+- ลิงก์หยุดทำงานเมื่อ: หมดอายุ, ถูกยกเลิก, ดาวน์โหลดครบจำนวน, รายการถูกลบ/ย้าย/เปลี่ยนชนิด, เจ้าของถูกลบ (ลิงก์ถูกยกเลิกด้วย สร้างบัญชีชื่อเดิมใหม่ก็ไม่กลับมา)
+  หรือเจ้าของไม่มีสิทธิ์ `share`/`download` ในพื้นที่นั้นแล้ว ทุกกรณีตอบ 404 `share.not-found` แบบเดียวกัน ผู้เดาลิงก์จึงไม่ได้ข้อมูลอะไร
+- ประวัติการใช้งานบันทึก `share-create`, `share-download`, `share-revoke` พร้อมพาธ (ไม่บันทึกโทเคน) ลิงก์ที่หมดอายุถูกลบออกจาก `shares.json` ตอนเริ่มระบบและวันละครั้ง
 
 ## โครงสร้าง
 
@@ -220,11 +240,13 @@ src/
   uploads.ts        อัปโหลดแบบแบ่งชิ้น กลับมาต่อได้
   logger.ts         log ของระบบ (logs/system.log), หมุนไฟล์ log, ตัดความลับออกก่อนเขียน
   stats.ts          นับจำนวนและขนาดไฟล์ให้หน้าภาพรวม (เบื้องหลัง เก็บผลไว้ใน stats-cache.json)
+  shares.ts, routes/shares.ts               ลิงก์แชร์ให้คนที่ไม่มีบัญชีดาวน์โหลด
   trash.ts, audit.ts, settings.ts, store.ts, common-passwords.ts
-  routes/           session, files, upload, admin, update, backup, logs
+  routes/           session, files, upload, admin, update, backup, logs, shares
 scripts/package.ts  สร้างแพ็กเกจอัปเดต (bun run package)
 web/                Vue 3 + Naive UI (build ไปที่ web/dist)
 tests/api.test.ts   ทดสอบ API
+tests/shares.test.ts  ลิงก์แชร์: สิทธิ์ รหัสผ่าน หมดอายุ จำนวนครั้ง และไม่ออกนอกโฟลเดอร์ที่แชร์
 tests/logs.test.ts  ทดสอบ log ของระบบ การหมุนไฟล์ การส่งออก และว่าไม่มีความลับหลุดลง log
 tests/messages.test.ts  ทุกรหัสที่ใช้ใน src/ มีในรายการข้อความ ทั้งสองภาษามีตัวแปรตรงกัน error ตอบตามภาษาของคำขอ และลิงก์ดาวน์โหลดที่ล้มเหลวได้หน้า HTML
 tests/update.test.ts, tests/backup.test.ts   ทดสอบอัปเดตและกู้คืนข้อมูลกับ launcher จริง
@@ -265,7 +287,7 @@ tests/perf.test.ts  การนับไฟล์ 50,000 ไฟล์ การ
   ถ้าไม่มีใช้ `Accept-Language` ของเบราว์เซอร์ ถ้าไม่ระบุเลยเป็นภาษาไทย
   คำเตือนในหน้าภาพรวม (`warnings` ของ `GET /api/admin/status`) มี `code`, `message` และ `params` แบบเดียวกัน ส่วน log และประวัติการใช้งานยังเป็นภาษาไทยเสมอ
 - ลิงก์ดาวน์โหลดที่เบราว์เซอร์เปิดในแท็บ (`/api/download`, `/api/batch/:token`, `/api/admin/logs/download`, `/api/admin/activity/export`,
-  `/api/admin/backups/:name/download`) ถ้าล้มเหลวจะได้หน้า HTML สั้น ๆ แทน JSON: รหัสสถานะเดิม ข้อความตามภาษา รหัส และลิงก์กลับหน้าหลัก
+  `/api/admin/backups/:name/download`, `/api/s/:token/download`) ถ้าล้มเหลวจะได้หน้า HTML สั้น ๆ แทน JSON: รหัสสถานะเดิม ข้อความตามภาษา รหัส และลิงก์กลับหน้าหลัก
   (นับเป็นการเปิดในแท็บเมื่อมี `Sec-Fetch-Mode: navigate` หรือ `Accept` มี `text/html` และไม่มีหัว `X-Lang`) การเรียกด้วย fetch ยังได้ JSON เหมือนเดิม
 - รหัสเดิมที่หน้าเว็บใช้อยู่ไม่เปลี่ยน: `csrf`, `must-change-password`, `disk-full`, `not-supervised` และคำเตือน `errors`
 
@@ -276,6 +298,7 @@ tests/perf.test.ts  การนับไฟล์ 50,000 ไฟล์ การ
 | `POST /api/mkdir` · `/newfile` · `/rename` · `/copy` · `/move` · `/delete` · `/zip` · `/unzip` | จัดการไฟล์ (ลบ = ย้ายไปถังขยะ) |
 | `GET/PUT /api/content` | อ่าน/บันทึกไฟล์ข้อความ (≤ 2 MB) |
 | `GET /api/download` (รองรับ `Range`) · `POST /api/batch` + `GET /api/batch/:token` | ดาวน์โหลด |
+| `POST/GET /api/shares` · `DELETE /api/shares/:id` · `GET /api/s/:token` · `POST /api/s/:token/unlock` · `GET /api/s/:token/download` | ลิงก์แชร์ (ดู ลิงก์แชร์) |
 | `POST /api/upload` → `PUT /api/upload/:id/:n` → `POST /api/upload/:id/complete` | อัปโหลดแบบแบ่งชิ้น |
 | `/api/admin/*` | ผู้ใช้, ภาพรวม, ประวัติ, ถังขยะ, ตั้งค่า, โลโก้ (เฉพาะ admin) |
 | `GET/POST /api/admin/backups` · `GET /api/admin/backups/:name/download` · `DELETE /api/admin/backups/:name` · `POST /api/admin/backups/restore` | สำรองข้อมูลระบบ: รายการ, สำรองทันที, ดาวน์โหลด, ลบ, กู้คืน (ต้องใส่รหัสผ่าน `{ name, password }`) (เฉพาะ admin) |

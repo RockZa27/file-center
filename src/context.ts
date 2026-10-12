@@ -18,8 +18,11 @@ function clientIp(request: Request, socketIp: string): string {
 // GET routes the page opens as plain links: the browser takes the whole tab there, so a failure must read as a page
 const DOWNLOAD_ROUTES = [
   /^\/api\/download$/, /^\/api\/batch\/[^/]+$/, /^\/api\/admin\/logs\/download$/, /^\/api\/admin\/activity\/export$/,
-  /^\/api\/admin\/backups\/[^/]+\/download$/,
+  /^\/api\/admin\/backups\/[^/]+\/download$/, /^\/api\/s\/[^/]+\/download$/,
 ]
+
+// the password form of a share link: it works without an account or a session, and the cookie it sets opens only that link
+const CSRF_EXEMPT = /^\/api\/s\/[^/]+\/unlock$/
 
 /** the tab opening a download link, not the page's own fetch (which sends x-lang and reads the JSON) */
 function isDownloadNavigation(request: Request): boolean {
@@ -91,6 +94,7 @@ export const context = new Elysia({ name: 'context' })
   .onBeforeHandle({ as: 'global' }, ({ request, session }) => {
     // CSRF: every state-changing call must carry the token issued with the session
     if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return
+    if (request.method === 'POST' && CSRF_EXEMPT.test(new URL(request.url).pathname)) return
     const token = request.headers.get('x-csrf-token')
     if (!session || !token || token !== session.csrf) throw new HttpError(403, 'csrf')
   })

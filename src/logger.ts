@@ -3,7 +3,7 @@
  * went to stdout and were gone when the container was recreated; now each entry is also one JSON line in
  * logs/system.log, which admins read on the logs page and download as a zip.
  *
- * Nothing secret may end up here: passwords, cookies, CSRF tokens, download tokens in URLs and query strings are
+ * Nothing secret may end up here: passwords, cookies, CSRF tokens, download and share tokens in URLs and query strings are
  * cut out of every entry (scrub / clean below), on stdout too.
  */
 import { appendFileSync, existsSync, readFileSync, renameSync, statSync, unlinkSync } from 'node:fs'
@@ -72,6 +72,9 @@ export function scrub(s: string): string {
     // download links of a batch and upload ids work for whoever holds them
     .replace(/(\/api\/batch\/)[^/\s?#"'`]+/g, `$1${HIDDEN}`)
     .replace(/(\/api\/upload\/)[a-f0-9]{24}/g, `$1${HIDDEN}`)
+    // share links too: the API (/api/s/<token>/...) and the page (/s/<token>, a 43-character token)
+    .replace(/(\/api\/s\/)[^/\s?#"'`]+/g, `$1${HIDDEN}`)
+    .replace(/(\/s\/)[A-Za-z0-9_-]{43}(?![A-Za-z0-9_-])/g, `$1${HIDDEN}`)
     // query strings (paths, searches, names of files)
     .replace(/(\/[^\s?#"'`]*)\?[^\s#"'`]*/g, '$1')
     // "password": "...", x-csrf-token: ..., cookie: fc_sid=...

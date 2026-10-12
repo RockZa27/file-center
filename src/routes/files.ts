@@ -36,12 +36,13 @@ function items(input: string[], max = 2000): string[] {
   })
 }
 
-function contentDisposition(kind: 'inline' | 'attachment', name: string) {
+export function contentDisposition(kind: 'inline' | 'attachment', name: string) {
   const ascii = name.replace(/[^\x20-\x7e]/g, '_').replace(/["\\]/g, '_')
   return `${kind}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name).replace(/['()]/g, escape)}`
 }
 
-function fileResponse(abs: string, name: string, request: Request, wantInline: boolean) {
+/** `ranges: false` always sends the whole file (a share link with a download limit counts whole downloads only) */
+export function fileResponse(abs: string, name: string, request: Request, wantInline: boolean, ranges = true) {
   const st = statSync(abs)
   const ext = extname(name).toLowerCase()
   const inline = wantInline && SAFE_INLINE.has(ext)
@@ -49,13 +50,13 @@ function fileResponse(abs: string, name: string, request: Request, wantInline: b
   const headers: Record<string, string> = {
     'Content-Type': inline ? file.type : file.type.startsWith('text/') ? 'application/octet-stream' : file.type || 'application/octet-stream',
     'Content-Disposition': contentDisposition(inline ? 'inline' : 'attachment', name),
-    'Accept-Ranges': 'bytes',
+    'Accept-Ranges': ranges ? 'bytes' : 'none',
     'X-Content-Type-Options': 'nosniff',
     'Cache-Control': 'private, no-cache',
   }
   // the browser's PDF viewer does not work inside a CSP sandbox; everything else is locked down
   if (!(inline && ext === '.pdf')) headers['Content-Security-Policy'] = "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; sandbox"
-  const range = request.headers.get('range')?.match(/^bytes=(\d*)-(\d*)$/)
+  const range = ranges ? request.headers.get('range')?.match(/^bytes=(\d*)-(\d*)$/) : null
   // "bytes=-" names no range at all: send the whole file
   if (range && (range[1] || range[2]) && st.size > 0) {
     let start = range[1] ? Number(range[1]) : NaN
