@@ -1,0 +1,69 @@
+{
+ "agent": "ux-tester",
+ "flows": [
+  {
+   "name": "share-file",
+   "passed": true,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 0,
+   "screenshot": "qa/reports/r5/screenshots/share-file.png",
+   "notes": "share checkbox on users page stays after save; row-menu share 7 days, copied link exact; visitor sees name/size, download bytes identical; Shared links shows downloads 1, active."
+  },
+  {
+   "name": "share-folder-password",
+   "passed": true,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 8,
+   "screenshot": "qa/reports/r5/screenshots/share-folder-password.png",
+   "notes": "wrong password in page language; try 6 locked 15 min (per link+IP, so a second link was used for the right-password part); subfolder nav, Thai 82-letter file bytes match (headless Chromium names it 'download', header filename* correct via curl), folder zip complete; after limit 'not found or expired'; owner sees 2/2 used up."
+  },
+  {
+   "name": "share-revoke-expire",
+   "passed": true,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 3,
+   "screenshot": "qa/reports/r5/screenshots/share-revoke-expire.png",
+   "notes": "revoked link fails on the open page's next action and on reload; made-up 43-char link same message; admin all-links switch shows owner column."
+  },
+  {
+   "name": "update-check",
+   "passed": true,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 1,
+   "screenshot": "qa/reports/r5/screenshots/update-check.png",
+   "notes": "local UPDATE_SOURCE: check shows 1.3.0 unsigned warning; download -> ready -> password -> installed, page back on 1.3.0 with 1.2.0 as rollback; wrong sha256 for 1.4.0: clear error, nothing staged."
+  },
+  {
+   "name": "language-followups",
+   "passed": false,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 1,
+   "screenshot": "qa/reports/r5/screenshots/language-followups.png",
+   "notes": "dashboard backup status, public welcome texts and settings placeholders follow the switch. FAIL: on the update page the checksum error of 'Download and prepare' stays Thai after switching to English (title and body); cause UpdateView.vue:249/268 store already-translated text in sourceError."
+  },
+  {
+   "name": "downloads-and-missing-folder",
+   "passed": true,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 1,
+   "screenshot": "qa/reports/r5/screenshots/downloads-and-missing-folder.png",
+   "notes": "logs/activity/backup buttons are real <a href>, middle-click works, normal click downloads; /files?path=/no-such-folder toasts 'folder not found' then lists the top folder."
+  },
+  {
+   "name": "mobile",
+   "passed": true,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 0,
+   "screenshot": "qa/reports/r5/screenshots/mobile.png",
+   "notes": "375x812: share modal, Shared links cards, public file and folder pages with the 82-letter name: scroll width 375, no sideways scroll."
+  },
+  {
+   "name": "language-followups-retest",
+   "passed": true,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 1,
+   "screenshot": "qa/reports/r5/screenshots/language-followups.png",
+   "notes": "orchestrator re-test after its own fix in UpdateView.vue (title from a key; on a language switch a failed check is asked again and other server-written errors are dropped): Thai checksum error shown, after switching to EN the Thai error is gone, 0 page errors. Fix by the orchestrator, not counted as frontend-dev work."
+  }
+ ]
+}

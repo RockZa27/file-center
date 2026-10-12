@@ -83,7 +83,7 @@
             <n-alert v-else type="success" class="gap top">{{ t('update.upToDate', { v: check.current }) }}</n-alert>
           </template>
           <!-- stays until the next try: unreachable, not newer, checksum mismatch... -->
-          <n-alert v-if="sourceError" type="error" :title="sourceError.title" closable class="gap top refused" @close="sourceError = null">{{ sourceError.message }}</n-alert>
+          <n-alert v-if="sourceError" type="error" :title="t(sourceError.kind === 'check' ? 'update.checkFailed' : 'update.fetchFailed')" closable class="gap top refused" @close="sourceError = null">{{ sourceError.message }}</n-alert>
           <div v-if="phase === 'fetching'" class="fetching"><n-spin size="small" /><span>{{ t('update.fetching') }}</span></div>
           <div class="actions">
             <n-button :loading="checking" :disabled="busy" @click="checkSource"><template #icon><n-icon :component="SearchOutline" /></template>{{ t('update.check') }}</n-button>
@@ -150,7 +150,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NAlert, NButton, NForm, NFormItem, NIcon, NInput, NModal, NProgress, NSpin, NTag, NUpload, NUploadDragger } from 'naive-ui'
 import {
@@ -161,7 +161,7 @@ import { errorText, useFeedback } from '../composables'
 import { bootId, sleep, waitForRestart } from '../restart'
 import { formatBytes, formatDate } from '../utils'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const fb = useFeedback()
 const st = ref(null)
 const loading = ref(false)
@@ -175,7 +175,7 @@ const refused = ref(null)
 const password = ref('')
 const rollbackOpen = ref(false)
 const rollbackTarget = ref(null)
-// the answer of "check for updates" ({ current, latest, newer }), and why checking or fetching failed ({ title, message })
+// the answer of "check for updates" ({ current, latest, newer }), and why checking or fetching failed ({ kind: 'check' | 'fetch', message })
 const check = ref(null)
 const checking = ref(false)
 const sourceError = ref(null)
@@ -246,9 +246,17 @@ async function checkSource() {
     check.value = r.latest ? r : null
   } catch (e) {
     check.value = null
-    sourceError.value = { title: t('update.checkFailed'), message: errorText(e, t('common.unknownError')) }
+    sourceError.value = { kind: 'check', message: errorText(e, t('common.unknownError')) }
   } finally { checking.value = false }
 }
+
+// the server wrote these messages in the old language: ask again for a failed check (it only reads latest.json), and drop
+// the others rather than show them next to labels in the new language
+watch(locale, () => {
+  if (sourceError.value?.kind === 'check') checkSource()
+  else sourceError.value = null
+  refused.value = null
+})
 
 // the server downloads and checks the package; its answer is the same as after an upload, so the same next step
 async function fetchPackage() {
@@ -265,7 +273,7 @@ async function fetchPackage() {
     phase.value = 'ready'
   } catch (e) {
     phase.value = 'idle'
-    sourceError.value = { title: t('update.fetchFailed'), message: errorText(e, t('common.unknownError')) }
+    sourceError.value = { kind: 'fetch', message: errorText(e, t('common.unknownError')) }
   }
 }
 
