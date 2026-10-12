@@ -461,7 +461,7 @@
     "patches": [
       {
         "file": "src/routes/shares.ts",
-        "find": "      recordFailure(key, SHARE_LOCKOUT)\n",
+        "find": "      if (recordFailure(key, SHARE_LOCKOUT)) alert('lockout', 'admin.alert-share-locked', { share: share.id, owner: share.owner, ip })\n",
         "replace": ""
       }
     ]
@@ -524,6 +524,96 @@
         "file": "src/routes/update.ts",
         "find": "  .get('/check', ({ user, ip }) => {\n    requireAdmin({ user, ip })\n",
         "replace": "  .get('/check', ({ user, ip }) => {\n    void user; void ip\n"
+      }
+    ]
+  },
+  {
+    "id": "oneclick-no-password",
+    "difficulty": "easy",
+    "category": "auth",
+    "severity": "high",
+    "tests": "tests/update.test.ts",
+    "description": "the one-step update skips the password step-up, so a stolen admin session alone installs whatever the source serves",
+    "patches": [
+      {
+        "file": "src/routes/update.ts",
+        "find": "    // before anything is downloaded: a stolen session alone must not even make the server fetch a package\n    await confirmPassword(admin, ip, body.password, 'update-denied')\n",
+        "replace": "    // before anything is downloaded: a stolen session alone must not even make the server fetch a package\n    void body.password\n"
+      }
+    ]
+  },
+  {
+    "id": "office-token-no-expiry",
+    "difficulty": "medium",
+    "category": "auth",
+    "severity": "medium",
+    "tests": "tests/office.test.ts",
+    "description": "File Center's office link tokens never expire, so a leaked document.url or callbackUrl works forever",
+    "patches": [
+      {
+        "file": "src/office.ts",
+        "find": "if (!t || typeof t.e !== 'number' || t.e <= Date.now()) throw refuse()",
+        "replace": "if (!t || typeof t.e !== 'number') throw refuse()"
+      }
+    ]
+  },
+  {
+    "id": "office-callback-any-origin",
+    "difficulty": "subtle",
+    "category": "ssrf",
+    "severity": "high",
+    "tests": "tests/office.test.ts",
+    "description": "the office save callback downloads the saved file from any URL it is given, so a forged callback can make the server fetch internal addresses or write attacker bytes",
+    "patches": [
+      {
+        "file": "src/office.ts",
+        "find": "if (!c.origins.includes(u.origin) || u.username || u.password) return null",
+        "replace": "if (u.username || u.password) return null"
+      }
+    ]
+  },
+  {
+    "id": "office-callback-no-jwt",
+    "difficulty": "medium",
+    "category": "auth",
+    "severity": "high",
+    "tests": "tests/office.test.ts",
+    "description": "the callback trusts the plain body when the JWT does not verify, so anyone with a callback URL can save any content",
+    "patches": [
+      {
+        "file": "src/office.ts",
+        "find": "  if (!decoded) return null\n  // in the header ONLYOFFICE wraps",
+        "replace": "  if (!decoded) return body && typeof body === 'object' ? body as Record<string, unknown> : null\n  // in the header ONLYOFFICE wraps"
+      }
+    ]
+  },
+  {
+    "id": "alerts-unscrubbed",
+    "difficulty": "medium",
+    "category": "secrets",
+    "severity": "medium",
+    "tests": "tests/alerts.test.ts",
+    "description": "alert texts go out without scrub(), so tokens or passwords inside error details reach the webhook",
+    "patches": [
+      {
+        "file": "src/alerts.ts",
+        "find": "const message = scrub(`[${settings.get().appName}] ${text(config.alertLang, code, p)}`).slice(0, 1500)",
+        "replace": "const message = (`[${settings.get().appName}] ${text(config.alertLang, code, p)}`).slice(0, 1500)"
+      }
+    ]
+  },
+  {
+    "id": "text-save-no-mtime",
+    "difficulty": "easy",
+    "category": "integrity",
+    "severity": "low",
+    "tests": "tests/office.test.ts",
+    "description": "PUT /api/content ignores expectedMtime, so a save silently overwrites someone else's newer version",
+    "patches": [
+      {
+        "file": "src/routes/files.ts",
+        "find": "    if (body.expectedMtime !== undefined && Math.round(st.mtimeMs) !== body.expectedMtime) throw conflict('files.changed-elsewhere')\n",
+        "replace": ""
       }
     ]
   }
