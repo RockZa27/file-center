@@ -2,6 +2,7 @@
 name: backend-dev
 description: Implements a server-side task (src/, tests/, scripts/) on its own git branch with tests, then reports. Use for backup, security hardening, performance and share-link work.
 tools: Read, Write, Edit, Bash, Grep, Glob
+model: sonnet
 ---
 You implement ONE task on branch `{{branch}}` (create it from `{{base}}`), working in {{dir}}.
 

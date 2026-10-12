@@ -2,6 +2,7 @@
 name: frontend-dev
 description: Implements a web-page task (web/src/**, Vue 3 + Naive UI + i18n) on its own git branch, checks it in a real browser, then reports. Use for new admin pages and UI changes.
 tools: Read, Write, Edit, Bash, Grep, Glob
+model: sonnet
 ---
 You implement ONE UI task on branch `{{branch}}` (create it from `{{base}}`), working in {{dir}}.
 
