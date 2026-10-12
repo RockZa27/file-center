@@ -529,3 +529,26 @@ describe('text saving with expectedMtime', () => {
     expect(readFileSync(home('of-text', 'notes.txt'), 'utf8')).toBe('third')
   })
 })
+
+describe('office: saving counts against the quota', () => {
+  test('a saved version that makes the home bigger than its quota is refused; the old file stays', async () => {
+    enable()
+    const u = await userWith('of-quota', ['read', 'download', 'write'])
+    writeFileSync(home('of-quota', 'doc.docx'), 'old version')
+    // 11 bytes used, room for 39 more
+    expect((await admin.json('PUT', '/api/admin/users/of-quota', { quotaBytes: 50 })).status).toBe(200)
+    const r = await u.json('POST', '/api/office/config', { space: 'home', path: '/doc.docx', mode: 'edit' })
+    const cb = r.data.config.editorConfig.callbackUrl as string
+    const key = r.data.config.document.key as string
+
+    const tooBig = publishSaved(new TextEncoder().encode('x'.repeat(100)))
+    expect(await (await callback(cb, { key, status: 2, url: tooBig, filetype: 'docx' })).json()).toEqual({ error: 1 })
+    expect(readFileSync(home('of-quota', 'doc.docx'), 'utf8')).toBe('old version')
+    expect(trashOf('/users/of-quota/doc.docx').length).toBe(0)
+
+    // only the growth counts (the old version goes to the trash, outside the home)
+    const fits = publishSaved(new TextEncoder().encode('y'.repeat(45)))
+    expect(await (await callback(cb, { key, status: 2, url: fits, filetype: 'docx' })).json()).toEqual({ error: 0 })
+    expect(readFileSync(home('of-quota', 'doc.docx'), 'utf8')).toBe('y'.repeat(45))
+  })
+})

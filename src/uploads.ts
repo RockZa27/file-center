@@ -2,8 +2,10 @@ import { randomBytes } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { open } from 'node:fs/promises'
 import { join } from 'node:path'
+import type { User } from './auth'
 import { config, paths } from './config'
 import { bad, ensureDir, ensureSpace, forbidden, HttpError, notFound, resolveIn, uniquePath, validName } from './fsx'
+import { commitBytes, limitOf, releaseBytes, reserveBytes, restoreReservation } from './quota'
 import { JsonStore } from './store'
 
 type Meta = {
@@ -18,6 +20,11 @@ type Meta = {
   createdAt: number
   /** set for a visitor's upload: the day its size was counted against the visitors' allowance */
   guestDay?: string
+  /** set when the bytes count against this user's quota (quota.ts): the reservation is given back when the upload ends */
+  quotaUser?: string
+  /** set for an upload through an upload-request link, with the visitor's address (limits per link and per address) */
+  shareId?: string
+  ip?: string
 }
 
 // Every chunk is written straight to its offset in one "data" file, and an empty file named after the chunk
@@ -74,6 +81,44 @@ function releaseGuest(meta: Meta) {
   guestStore.update(d => { d.bytes = Math.max(0, d.bytes - meta.size) })
 }
 
+// ───────────── quota reservations ─────────────
+
+// Reservations live in memory. After a restart, the uploads still in tmp take their places again (once), so that
+// giving one back later does not take away the place of a newer one.
+let restored = false
+function restoreReservations() {
+  if (restored) return
+  restored = true
+  for (const meta of allMetas()) if (meta.quotaUser) restoreReservation(meta.quotaUser, meta.size)
+}
+
+function allMetas(): Meta[] {
+  const out: Meta[] = []
+  let ids: string[] = []
+  try { ids = readdirSync(paths.tmp) } catch { return out }
+  for (const id of ids) {
+    try { out.push(JSON.parse(readFileSync(join(paths.tmp, id, 'meta.json'), 'utf8')) as Meta) } catch { /* not an upload */ }
+  }
+  return out
+}
+
+/** what an upload-request link has in progress, and what this address has in progress on any link */
+export function shareUploadLoad(shareId: string, ip: string): { count: number; bytes: number; byIp: number } {
+  let count = 0
+  let bytes = 0
+  let byIp = 0
+  for (const m of allMetas()) {
+    if (!m.shareId) continue
+    if (m.shareId === shareId) { count++; bytes += m.size }
+    if (m.ip === ip) byIp++
+  }
+  return { count, bytes, byIp }
+}
+
+function releaseQuota(meta: Meta) {
+  if (meta.quotaUser) releaseBytes(meta.quotaUser, meta.size)
+}
+
 const touch = (id: string) => {
   const now = new Date()
   try { utimesSync(join(dirOf(id), 'meta.json'), now, now) } catch { /* ignore */ }
@@ -83,12 +128,17 @@ export function initUpload(args: {
   owner: string
   /** a visitor who is not signed in: counted against the visitors' daily allowance */
   guest?: boolean
+  /** the user whose quota the bytes count against; the caller has awaited quota.ready() for them */
+  quotaUser?: User
+  shareId?: string
+  ip?: string
   root: string
   dir: string
   relativeDir: string[]
   name: unknown
   size: unknown
 }) {
+  restoreReservations()
   const name = validName(args.name)
   const size = Number(args.size)
   if (!Number.isSafeInteger(size) || size < 0) throw bad('upload.bad-size')
@@ -105,12 +155,23 @@ export function initUpload(args: {
   const meta: Meta = { id, owner: args.owner, destDir, name, size, chunkSize, total, createdAt: Date.now() }
   // counted before anything is written and in the same tick as the check: nothing can slip in between
   if (args.guest) meta.guestDay = reserveGuest(size)
+  if (args.shareId) { meta.shareId = args.shareId; meta.ip = args.ip ?? '' }
+  if (args.quotaUser) {
+    try {
+      reserveBytes(args.quotaUser, size)
+    } catch (err) {
+      releaseGuest(meta)
+      throw err
+    }
+    if (size > 0 && limitOf(args.quotaUser)) meta.quotaUser = args.quotaUser.username
+  }
   try {
     ensureDir(dirOf(id))
     writeFileSync(dataOf(id), '')
     writeFileSync(join(dirOf(id), 'meta.json'), JSON.stringify(meta))
   } catch (err) {
     releaseGuest(meta)
+    releaseQuota(meta)
     rmSync(dirOf(id), { recursive: true, force: true })
     throw err
   }
@@ -141,6 +202,7 @@ export async function saveChunk(id: string, owner: string, index: number, data: 
 }
 
 export async function completeUpload(id: string, owner: string) {
+  restoreReservations()
   const meta = loadMeta(id, owner)
   for (let i = 0; i < meta.total; i++) {
     if (!existsSync(join(dirOf(id), String(i)))) throw bad('upload.missing-chunk', { n: i + 1 })
@@ -159,17 +221,22 @@ export async function completeUpload(id: string, owner: string) {
     await Bun.write(finalPath, Bun.file(data))
   }
   rmSync(dirOf(id), { recursive: true, force: true })
+  // the file is in the home now: the reservation turns into counted bytes
+  if (meta.quotaUser) commitBytes(meta.quotaUser, meta.size)
   return { path: finalPath, size: meta.size }
 }
 
 export function cancelUpload(id: string, owner: string) {
+  restoreReservations()
   const meta = loadMeta(id, owner)
   rmSync(dirOf(id), { recursive: true, force: true })
   releaseGuest(meta)
+  releaseQuota(meta)
 }
 
 /** remove uploads that did not receive anything new for a few hours */
 export function cleanStaleUploads(): number {
+  restoreReservations()
   let n = 0
   if (!existsSync(paths.tmp)) return 0
   for (const id of readdirSync(paths.tmp)) {
@@ -179,7 +246,7 @@ export function cleanStaleUploads(): number {
         let meta: Meta | null = null
         try { meta = JSON.parse(readFileSync(join(paths.tmp, id, 'meta.json'), 'utf8')) as Meta } catch { /* unreadable: nothing to give back */ }
         rmSync(join(paths.tmp, id), { recursive: true, force: true })
-        if (meta) releaseGuest(meta)
+        if (meta) { releaseGuest(meta); releaseQuota(meta) }
         n++
       }
     } catch {

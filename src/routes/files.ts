@@ -4,13 +4,14 @@ import { basename, dirname, extname, join } from 'node:path'
 import { Elysia, t } from 'elysia'
 import { audit } from '../audit'
 import { config, paths } from '../config'
-import { context, need } from '../context'
+import { context, need, requireUser } from '../context'
 import {
   bad, conflict, copyTree, ensureSpace, forbidden, freeSpace, fromFsError, HttpError, isDir, joinRel, listDir, moveTree,
   normRel, notFound, resolveIn, sameFile, searchTree, storagePath, treeStats, uniquePath, validName, within,
 } from '../fsx'
 import { log } from '../logger'
 import { type Lang, langOf, type MessageCode, text } from '../messages'
+import { exceeded, holdNow, markStale, ready, roomLeft, usage } from '../quota'
 import { moveToTrash } from '../trash'
 import { collectZipItems, unzipTo, zipStream } from '../zip'
 
@@ -80,6 +81,9 @@ const batches = new Map<string, Batch>()
 export const fileRoutes = new Elysia({ prefix: '/api' })
   .use(context)
 
+  // ───────────── quota ─────────────
+  .get('/me/usage', ({ user, ip }) => usage(requireUser({ user, ip })))
+
   // ───────────── browse ─────────────
   .get('/list', ({ user, query }) => {
     const a = need({ user, ip: '' }, query.space, 'read')
@@ -142,8 +146,11 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     return { content: await Bun.file(abs).text(), mtime: Math.round(st.mtimeMs) }
   }, { query: spaceQ })
 
-  .put('/content', ({ user, ip, body }) => {
+  .put('/content', async ({ user, ip, body }) => {
     const a = need({ user, ip }, body.space, 'write')
+    // the count is awaited first: from the check of the version to the write there is no await
+    const q = a.space === 'home' ? user : null
+    await ready(q)
     const rel = normRel(body.path)
     const abs = resolveIn(a.root, rel)
     const st = existsSync(abs) ? statSync(abs) : null
@@ -152,7 +159,17 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     // the mtime GET /api/content gave: someone else saved since then, and writing now would silently undo their work
     // check and write in one step, with no await between them: two saves of the same version can not both pass
     if (body.expectedMtime !== undefined && Math.round(st.mtimeMs) !== body.expectedMtime) throw conflict('files.changed-elsewhere')
-    writeFileSync(abs, body.content)
+    // only the growth counts against the quota
+    const grow = Buffer.byteLength(body.content) - st.size
+    const hold = holdNow(q, grow)
+    try {
+      writeFileSync(abs, body.content)
+    } catch (err) {
+      hold.release()
+      throw err
+    }
+    hold.commit(grow)
+    if (grow < 0 && q) markStale(q.username)
     audit({ user: user?.username ?? 'guest', ip, action: 'edit', target: storagePath(abs) })
     // the next save sends this one back
     return { ok: true, mtime: Math.round(statSync(abs).mtimeMs) }
@@ -199,12 +216,16 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
         failed.push({ path: rel, error: itemError(e, 'files.delete-failed', langOf(request)) })
       }
     }
+    // the trash is outside the home: the space is free again. An admin works in every home.
+    if (done && a.space === 'home') markStale(user?.role === 'admin' ? undefined : user?.username)
     return { done, failed }
   }, { body: t.Object({ space: t.String(), items: t.Array(t.String()) }) })
 
   // ───────────── zip / unzip ─────────────
   .post('/zip', async ({ user, ip, body }) => {
     const a = need({ user, ip }, body.space, 'zip', 'write')
+    const q = a.space === 'home' ? user : null
+    await ready(q)
     const dirRel = normRel(body.path)
     const dir = resolveIn(a.root, dirRel)
     if (!isDir(dir)) throw notFound()
@@ -216,19 +237,25 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     // do not put the archive inside itself
     const zipItems = collectZipItems(dir, names).filter(i => i.abs !== target)
     // the archive is at most about as big as what goes in
-    ensureSpace(dir, zipItems.reduce((sum, i) => sum + i.size, 0))
+    const upper = zipItems.reduce((sum, i) => sum + i.size, 0)
+    ensureSpace(dir, upper)
+    const hold = holdNow(q, upper)
     try {
       await Bun.write(target, new Response(zipStream(zipItems)))
     } catch (err) {
       rmSync(target, { force: true })
+      hold.release()
       throw err
     }
+    hold.commit(statSync(target).size)
     audit({ user: user?.username ?? 'guest', ip, action: 'zip', target: storagePath(target), detail: `${names.length} รายการ` })
     return { ok: true, name: basename(target) }
   }, { body: t.Object({ space: t.String(), path: t.String(), items: t.Array(t.String()), name: t.Optional(t.String()) }) })
 
   .post('/unzip', async ({ user, ip, body }) => {
     const a = need({ user, ip }, body.space, 'zip', 'write')
+    const q = a.space === 'home' ? user : null
+    await ready(q)
     const rel = normRel(body.path)
     const abs = resolveIn(a.root, rel)
     if (!existsSync(abs) || !statSync(abs).isFile() || extname(abs).toLowerCase() !== '.zip') throw bad('zip.not-zip')
@@ -236,15 +263,23 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     const dest = uniquePath(join(dirname(abs), folderName))
     // never extract more than the disk can take while keeping the configured reserve free
     const free = freeSpace(dirname(abs))
-    const maxBytes = Math.min(config.unzipMaxBytes, free === null ? Infinity : Math.max(0, free - config.minFreeSpace))
+    const otherMax = Math.min(config.unzipMaxBytes, free === null ? Infinity : Math.max(0, free - config.minFreeSpace))
+    // what the quota leaves is the budget when it is the smaller one; the budget is held while the files come out
+    const room = q ? roomLeft(q) : Infinity
+    const maxBytes = Math.min(otherMax, room)
+    const hold = holdNow(q, maxBytes)
     mkdirSync(dest)
     try {
       const count = await unzipTo(abs, dest, { maxBytes, maxFiles: config.unzipMaxFiles })
+      hold.commit((await treeStats(dest)).size)
       audit({ user: user?.username ?? 'guest', ip, action: 'unzip', target: storagePath(abs), detail: `${count} ไฟล์` })
       return { ok: true, folder: basename(dest), files: count }
     } catch (err) {
       // a half-extracted folder is useless; keeping it in the trash would only hold the disk space for weeks
       rmSync(dest, { recursive: true, force: true })
+      hold.release()
+      // too much for the quota is a full home, not a zip that is too big
+      if (q && room < otherMax && err instanceof HttpError && err.code === 'zip.too-big') throw exceeded(q)
       throw err instanceof HttpError ? err : bad('zip.extract-failed')
     }
   }, { body: t.Object({ space: t.String(), path: t.String() }) })
@@ -310,6 +345,9 @@ function itemError(e: unknown, fallback: MessageCode, lang: Lang) {
 
 async function transfer(kind: 'copy' | 'move', user: any, ip: string, body: { space: string; items: string[]; dest: string }, lang: Lang) {
   const a = need({ user, ip }, body.space, 'write')
+  // a move inside one space does not change what a home holds; a copy adds the size of what is copied
+  const q = a.space === 'home' ? user : null
+  if (kind === 'copy') await ready(q)
   const destRel = normRel(body.dest)
   const destAbs = resolveIn(a.root, destRel)
   if (!isDir(destAbs)) throw notFound('files.dest-not-found')
@@ -328,8 +366,16 @@ async function transfer(kind: 'copy' | 'move', user: any, ip: string, body: { sp
         await moveTree(from, to)
       } else {
         // counting a big folder takes a while: other requests are answered meanwhile
-        ensureSpace(destAbs, isDir(from) ? (await treeStats(from)).size : lstatSync(from).size)
-        await copyTree(from, uniquePath(to))
+        const size = isDir(from) ? (await treeStats(from)).size : lstatSync(from).size
+        ensureSpace(destAbs, size)
+        const hold = holdNow(q, size)
+        try {
+          await copyTree(from, uniquePath(to))
+        } catch (err) {
+          hold.release()
+          throw err
+        }
+        hold.commit()
       }
       done++
       audit({ user: user?.username ?? 'guest', ip, action: kind, target: storagePath(from), detail: storagePath(destAbs) })

@@ -21,6 +21,8 @@ export type User = {
   publicPermissions: Perm[]
   passwordHash: string
   mustChangePassword?: boolean
+  /** bytes the home space may hold; absent or 0 = no limit (quota.ts) */
+  quotaBytes?: number
   createdAt: string
   lastLogin?: string
 }
@@ -43,6 +45,7 @@ export const publicUser = (u: User) => ({
   permissions: u.permissions,
   publicPermissions: u.publicPermissions,
   mustChangePassword: !!u.mustChangePassword,
+  quotaBytes: u.quotaBytes ?? 0,
   createdAt: u.createdAt,
   lastLogin: u.lastLogin ?? null,
 })

@@ -29,7 +29,24 @@ export type Share = {
   downloads: number
   passwordHash?: string
   revokedAt?: string
+  /** absent = 'download', so every link made before upload links existed keeps working unchanged */
+  kind?: ShareKind
+  // ── upload-request links (kind 'upload'; the folder is `path`) ──
+  /** null/absent = only the server's own limits */
+  maxFileBytes?: number | null
+  maxFiles?: number | null
+  maxTotalBytes?: number | null
+  /** shown to the visitor as plain text */
+  note?: string
+  /** files that arrived through this link and their bytes */
+  uploadedFiles?: number
+  uploadedBytes?: number
+  /** what each visitor sent, by a hash of their visitor key (the key itself is never stored); oldest dropped past UPLOAD_LOG_MAX */
+  received?: { by: string; name: string; size: number; at: string }[]
 }
+
+export type ShareKind = 'download' | 'upload'
+export const kindOf = (s: Share): ShareKind => s.kind ?? 'download'
 
 export type ShareState = 'active' | 'expired' | 'revoked' | 'used-up' | 'unavailable'
 
@@ -38,6 +55,14 @@ export const SHARE_DAYS = [1, 7, 30]
 export const allowedShareDays = () => SHARE_DAYS.filter(d => d <= config.shareMaxDays)
 export const SHARE_PASSWORD_MIN = 6
 export const SHARE_MAX_DOWNLOADS = 100_000
+export const SHARE_NOTE_MAX = 500
+/** most files an upload link may be set to accept */
+export const SHARE_MAX_FILES = 100_000
+export const SHARE_MAX_TOTAL = 2 ** 50
+/** uploads in progress at one time, per link and per address (across links) */
+export const SHARE_UPLOADS_PER_LINK = 5
+export const SHARE_UPLOADS_PER_IP = 3
+const UPLOAD_LOG_MAX = 2000
 /** links one user may hold at a time (until they expire and are cleaned up) */
 export const SHARES_PER_USER = 500
 /** wrong passwords per link and address before it is locked, and for how long */
@@ -58,7 +83,7 @@ export const sharesOf = (username: string) =>
   store.value.shares.filter(s => s.owner.toLowerCase() === username.toLowerCase())
 export const findShare = (id: unknown) => store.value.shares.find(s => s.id === id)
 
-export function createShare(input: Omit<Share, 'id' | 'tokenHash' | 'createdAt' | 'downloads'>): { share: Share; token: string } {
+export function createShare(input: Omit<Share, 'id' | 'tokenHash' | 'createdAt' | 'downloads' | 'uploadedFiles' | 'uploadedBytes' | 'received'>): { share: Share; token: string } {
   const token = randomBytes(32).toString('base64url')
   const share: Share = {
     id: randomBytes(8).toString('hex'),
@@ -72,6 +97,16 @@ export function createShare(input: Omit<Share, 'id' | 'tokenHash' | 'createdAt' 
     maxDownloads: input.maxDownloads,
     downloads: 0,
     ...(input.passwordHash ? { passwordHash: input.passwordHash } : {}),
+    ...(input.kind === 'upload' ? {
+      kind: 'upload' as const,
+      maxFileBytes: input.maxFileBytes ?? null,
+      maxFiles: input.maxFiles ?? null,
+      maxTotalBytes: input.maxTotalBytes ?? null,
+      ...(input.note ? { note: input.note } : {}),
+      uploadedFiles: 0,
+      uploadedBytes: 0,
+      received: [],
+    } : {}),
   }
   store.update(d => { d.shares.push(share) })
   return { share, token }
@@ -89,12 +124,16 @@ export function revokeSharesOf(username: string) {
   store.save()
 }
 
-/** the shared file or folder as it is now, or null when the owner may no longer share it or it is gone or changed */
+/**
+ * the shared file or folder as it is now, or null when the owner may no longer share it or it is gone or changed.
+ * A download link needs `share` and `download`, an upload link `share` and `upload` (and only ever a folder).
+ */
 export function sharedItem(s: Share): string | null {
   const owner = findUser(s.owner)
   if (!owner) return null
   const a = accessFor(owner, s.space)
-  if (!a || !a.perms.has('share') || !a.perms.has('download')) return null
+  const need = kindOf(s) === 'upload' ? 'upload' : 'download'
+  if (!a || !a.perms.has('share') || !a.perms.has(need)) return null
   try {
     const abs = resolveIn(a.root, s.path)
     const st = lstatSync(abs)
@@ -112,6 +151,7 @@ export function stateOf(s: Share, now = Date.now()): ShareState {
   if (s.revokedAt) return 'revoked'
   if (Date.parse(s.expiresAt) <= now) return 'expired'
   if (s.maxDownloads !== null && s.downloads >= s.maxDownloads) return 'used-up'
+  if (kindOf(s) === 'upload' && uploadFull(s)) return 'used-up'
   return sharedItem(s) ? 'active' : 'unavailable'
 }
 
@@ -128,6 +168,11 @@ export const publicShare = (s: Share) => ({
   maxDownloads: s.maxDownloads,
   downloads: s.downloads,
   hasPassword: !!s.passwordHash,
+  kind: kindOf(s),
+  ...(kindOf(s) === 'upload' ? {
+    maxFileBytes: s.maxFileBytes ?? null, maxFiles: s.maxFiles ?? null, maxTotalBytes: s.maxTotalBytes ?? null,
+    note: s.note ?? '', uploadedFiles: s.uploadedFiles ?? 0, uploadedBytes: s.uploadedBytes ?? 0,
+  } : {}),
   revokedAt: s.revokedAt ?? null,
   state: stateOf(s),
 })
@@ -140,17 +185,45 @@ export function shareTarget(s: Share): string {
   return `${s.space}:${s.path}`
 }
 
-/** the link behind a token and the shared item, when the link works; one 404 for every other case */
-export function openShare(token: unknown): { share: Share; abs: string } {
+/**
+ * the link behind a token and the shared item, when the link works; one 404 for every other case.
+ * `kind` names the routes asking: a download link answers no upload route and the other way round.
+ */
+export function openShare(token: unknown, kind?: ShareKind): { share: Share; abs: string } {
   if (typeof token !== 'string' || !TOKEN_RE.test(token)) throw gone()
   const hash = hashToken(token)
   const share = store.value.shares.find(s => s.tokenHash === hash)
   if (!share || share.revokedAt || Date.parse(share.expiresAt) <= Date.now()) throw gone()
+  if (kind && kindOf(share) !== kind) throw gone()
   if (share.maxDownloads !== null && share.downloads >= share.maxDownloads) throw gone()
   const abs = sharedItem(share)
   if (!abs) throw gone()
   return { share, abs }
 }
+
+// ───────────── upload-request links ─────────────
+
+/** the link has taken all the files or bytes it was set to take */
+export function uploadFull(s: Share): boolean {
+  return (s.maxFiles != null && (s.uploadedFiles ?? 0) >= s.maxFiles) || (s.maxTotalBytes != null && (s.uploadedBytes ?? 0) >= s.maxTotalBytes)
+}
+
+/** the hash of a visitor's key: what the link remembers of them */
+export const visitorId = (key: string) => createHash('sha256').update(key).digest('hex').slice(0, 24)
+
+/** a finished upload through the link: counted, and remembered for the visitor who sent it */
+export function recordUpload(share: Share, key: string, name: string, size: number) {
+  share.uploadedFiles = (share.uploadedFiles ?? 0) + 1
+  share.uploadedBytes = (share.uploadedBytes ?? 0) + size
+  const log = (share.received ??= [])
+  log.push({ by: visitorId(key), name, size, at: new Date().toISOString() })
+  if (log.length > UPLOAD_LOG_MAX) log.splice(0, log.length - UPLOAD_LOG_MAX)
+  store.save()
+}
+
+/** what this visitor sent through the link, and nothing of anyone else's */
+export const uploadsBy = (share: Share, key: string) =>
+  (share.received ?? []).filter(r => r.by === visitorId(key)).map(({ name, size, at }) => ({ name, size, at }))
 
 /**
  * Hold a place for one download. `finish` counts it (once the last byte has been handed over), `release` gives the
