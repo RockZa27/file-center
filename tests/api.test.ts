@@ -142,7 +142,7 @@ describe('files', () => {
     expect(trash.data.items[0].originalPath).toBe('/b.txt')
     const res = await admin.json('POST', '/api/admin/trash/restore', { id: trash.data.items[0].id })
     expect(res.data.restoredTo).toBe('/b.txt')
-    expect((await admin.json('GET', '/api/admin/trash')).data.items.length).toBe(0)
+    expect((await admin.json('GET', '/api/admin/trash')).data.items.length).toBe(before)
   })
 })
 

@@ -181,10 +181,13 @@ describe('async copy and search', () => {
 
   test('search finds the same entries, skips links, keeps its limits and lets other work run', async () => {
     const { searchTree } = await import('../src/fsx')
+    // other work gets turns between the folder reads (setImmediate runs after each I/O step, however fast the machine)
     let ticks = 0
-    const timer = setInterval(() => ticks++, 0)
+    let on = true
+    const spin = () => { if (on) { ticks++; setImmediate(spin) } }
+    setImmediate(spin)
     const all = await searchTree(src, '/', 'secret')
-    clearInterval(timer)
+    on = false
     // neither the links themselves nor what is behind them
     expect(all).toEqual({ results: [], truncated: false })
     expect(ticks).toBeGreaterThan(0)
