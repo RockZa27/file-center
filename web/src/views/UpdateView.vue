@@ -53,7 +53,7 @@
           <n-alert v-if="st.uploadsInProgress" type="warning" class="gap">{{ t('update.uploadsWarn', { n: st.uploadsInProgress }) }}</n-alert>
           <n-form label-placement="top" @submit.prevent="install">
             <n-form-item :label="t('update.password')">
-              <n-input v-model:value="password" type="password" show-password-on="click" autocomplete="current-password" :input-props="{ name: 'confirm-password' }" @keyup.enter="install" />
+              <n-input :placeholder="t('update.password')" v-model:value="password" type="password" show-password-on="click" autocomplete="current-password" :input-props="{ name: 'confirm-password' }" @keyup.enter="install" />
             </n-form-item>
           </n-form>
           <div class="actions">
@@ -122,7 +122,7 @@
       <p>{{ t('update.rollbackBody', { v: rollbackTarget?.version }) }}</p>
       <n-form label-placement="top" @submit.prevent="rollback">
         <n-form-item :label="t('update.password')">
-          <n-input v-model:value="password" type="password" show-password-on="click" autocomplete="current-password" :input-props="{ name: 'confirm-password' }" @keyup.enter="rollback" />
+          <n-input :placeholder="t('update.password')" v-model:value="password" type="password" show-password-on="click" autocomplete="current-password" :input-props="{ name: 'confirm-password' }" @keyup.enter="rollback" />
         </n-form-item>
       </n-form>
       <div class="actions">
@@ -166,7 +166,7 @@
         <n-alert v-if="st?.uploadsInProgress" type="warning" class="gap">{{ t('update.uploadsWarn', { n: st.uploadsInProgress }) }}</n-alert>
         <n-form label-placement="top" @submit.prevent="updateNow">
           <n-form-item :label="t('update.password')" :validation-status="onePwError ? 'error' : undefined" :feedback="onePwError || undefined">
-            <n-input v-model:value="onePassword" type="password" show-password-on="click" autocomplete="current-password" :input-props="{ name: 'confirm-password' }" @keyup.enter="updateNow" @update:value="onePwError = ''" />
+            <n-input :placeholder="t('update.password')" v-model:value="onePassword" type="password" show-password-on="click" autocomplete="current-password" :input-props="{ name: 'confirm-password' }" @keyup.enter="updateNow" @update:value="onePwError = ''" />
           </n-form-item>
         </n-form>
       </template>

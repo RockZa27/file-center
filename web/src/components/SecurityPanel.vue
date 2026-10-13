@@ -27,7 +27,7 @@
         <div class="small muted">{{ t('security.typeSecret') }}</div>
         <div class="secret mono" data-testid="secret">{{ groupSecret(setup.secret) }}</div>
         <n-form-item :label="t('security.sixDigits')" :show-feedback="false" class="gap">
-          <n-input v-model:value="code" inputmode="numeric" maxlength="6" placeholder="123456" :input-props="codeProps" @keyup.enter="enable" />
+          <n-input :placeholder="t('security.codeOrBackup')" v-model:value="code" inputmode="numeric" maxlength="6" placeholder="123456" :input-props="codeProps" @keyup.enter="enable" />
         </n-form-item>
         <div class="actions">
           <n-button @click="cancel">{{ t('common.cancel') }}</n-button>
@@ -39,7 +39,7 @@
         <p class="small muted">{{ t('security.offHelp') }}</p>
         <template v-if="mode === 'ask'">
           <n-form-item :label="t('security.yourPassword')" :show-feedback="false" class="gap">
-            <n-input v-model:value="password" type="password" show-password-on="click" :input-props="{ autocomplete: 'current-password' }" @keyup.enter="start" />
+            <n-input :placeholder="t('security.yourPassword')" v-model:value="password" type="password" show-password-on="click" :input-props="{ autocomplete: 'current-password' }" @keyup.enter="start" />
           </n-form-item>
           <div class="actions">
             <n-button @click="cancel">{{ t('common.cancel') }}</n-button>
@@ -54,10 +54,10 @@
         <template v-if="mode === 'newcodes' || mode === 'off'">
           <p class="small muted">{{ mode === 'off' ? t('security.offConfirm') : t('security.newCodesConfirm') }}</p>
           <n-form-item :label="t('security.yourPassword')" :show-feedback="false" class="gap">
-            <n-input v-model:value="password" type="password" show-password-on="click" :input-props="{ autocomplete: 'current-password' }" />
+            <n-input :placeholder="t('security.yourPassword')" v-model:value="password" type="password" show-password-on="click" :input-props="{ autocomplete: 'current-password' }" />
           </n-form-item>
           <n-form-item :label="t('security.codeOrBackup')" :show-feedback="false" class="gap">
-            <n-input v-model:value="code" maxlength="20" :input-props="{ autocomplete: 'one-time-code', autocapitalize: 'off', spellcheck: false }" @keyup.enter="manage" />
+            <n-input :placeholder="t('security.codeOrBackup')" v-model:value="code" maxlength="20" :input-props="{ autocomplete: 'one-time-code', autocapitalize: 'off', spellcheck: false }" @keyup.enter="manage" />
           </n-form-item>
           <div class="actions">
             <n-button @click="cancel">{{ t('common.cancel') }}</n-button>

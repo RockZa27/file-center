@@ -7,16 +7,16 @@
       <!-- tells password managers which account the new password belongs to -->
       <input type="text" name="username" autocomplete="username" :value="app.user?.username || ''" readonly hidden>
       <n-form-item :label="t('profile.current')">
-        <n-input v-model:value="form.current" type="password" show-password-on="click" :input-props="{ autocomplete: 'current-password' }" />
+        <n-input :placeholder="t('profile.current')" v-model:value="form.current" type="password" show-password-on="click" :input-props="{ autocomplete: 'current-password' }" />
       </n-form-item>
       <n-form-item :label="t('profile.new')" :show-feedback="false" class="gap">
         <div class="field">
-          <n-input v-model:value="form.next" type="password" show-password-on="click" :input-props="{ autocomplete: 'new-password' }" />
+          <n-input :placeholder="t('profile.new')" v-model:value="form.next" type="password" show-password-on="click" :input-props="{ autocomplete: 'new-password' }" />
           <password-rules :password="form.next" :username="app.user?.username || ''" />
         </div>
       </n-form-item>
       <n-form-item :label="t('profile.confirm')" :validation-status="mismatch ? 'error' : undefined" :feedback="mismatch ? t('profile.mismatch') : undefined">
-        <n-input v-model:value="form.again" type="password" show-password-on="click" :input-props="{ autocomplete: 'new-password' }" @keyup.enter="save" />
+        <n-input :placeholder="t('profile.confirm')" v-model:value="form.again" type="password" show-password-on="click" :input-props="{ autocomplete: 'new-password' }" @keyup.enter="save" />
       </n-form-item>
     </n-form>
       </n-tab-pane>

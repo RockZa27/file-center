@@ -122,6 +122,12 @@ const th = {
   search: {
     title: 'ค้นหาไฟล์', placeholder: 'พิมพ์ชื่อไฟล์หรือโฟลเดอร์', noResults: 'ไม่พบรายการที่ตรงกัน',
     hint: 'ค้นหาจากชื่อในทุกโฟลเดอร์ย่อย', truncated: 'แสดงเฉพาะผลลัพธ์แรก ๆ ลองพิมพ์ให้เจาะจงขึ้น',
+    filters: 'ตัวกรอง', reset: 'ล้างตัวกรอง', scope: 'ขอบเขตการค้นหา', here: 'โฟลเดอร์นี้', whole: 'ทั้งพื้นที่', inFolder: 'ค้นใน {path}',
+    type: 'ประเภท', typeAll: 'ทั้งหมด', typeFile: 'เฉพาะไฟล์', typeDir: 'เฉพาะโฟลเดอร์',
+    ext: 'นามสกุล', extPlaceholder: 'พิมพ์ เช่น pdf แล้วกด Enter', from: 'แก้ไขตั้งแต่', to: 'แก้ไขถึง', pickDate: 'เลือกวันที่',
+    minSize: 'ขนาดอย่างน้อย', maxSize: 'ขนาดไม่เกิน', sizePlaceholder: 'ไม่จำกัด', unit: 'หน่วย',
+    sort: 'เรียงตาม', sortName: 'ชื่อ', sortMtime: 'วันที่แก้ไข', sortSize: 'ขนาด', order: 'ลำดับ', asc: 'น้อยไปมาก / เก่าไปใหม่ / ก-ฮ', desc: 'มากไปน้อย / ใหม่ไปเก่า / ฮ-ก',
+    building: 'กำลังสร้างดัชนีค้นหา — ผลลัพธ์อาจช้ากว่าปกติ',
   },
   dash: {
     subtitle: 'สถานะของเซิร์ฟเวอร์และพื้นที่เก็บไฟล์', disk: 'พื้นที่ดิสก์', free: 'ว่าง',
@@ -215,8 +221,8 @@ const th = {
     kindUploadHelp: 'คนที่มีลิงก์ส่งไฟล์เข้าโฟลเดอร์นี้ได้ โดยไม่ต้องมีบัญชีและไม่เห็นไฟล์อื่นในโฟลเดอร์',
     maxFileMb: 'ขนาดสูงสุดต่อไฟล์ (MB, ไม่บังคับ)', maxFiles: 'จำนวนไฟล์สูงสุด (ไม่บังคับ)', maxTotalMb: 'ขนาดรวมสูงสุด (MB, ไม่บังคับ)',
     note: 'ข้อความถึงผู้ส่ง (ไม่บังคับ)', notePlaceholder: 'เช่น กรุณาส่งสำเนาบัตรประชาชน',
-    createdUpload: 'สร้างลิงก์รับไฟล์แล้ว', limitFile: 'ไฟล์ละไม่เกิน {size}', limitFiles: 'ไม่เกิน {n} ไฟล์', limitTotal: 'รวมไม่เกิน {size}',
-    kindUploadShort: 'ลิงก์รับไฟล์', kindDownloadShort: 'ลิงก์ดาวน์โหลด', received: 'รับแล้ว {n} ไฟล์ ({size})',
+    createdUpload: 'สร้างลิงก์ขอไฟล์แล้ว', limitFile: 'ไฟล์ละไม่เกิน {size}', limitFiles: 'ไม่เกิน {n} ไฟล์', limitTotal: 'รวมไม่เกิน {size}',
+    kindUploadShort: 'ลิงก์ขอไฟล์', kindDownloadShort: 'ลิงก์ดาวน์โหลด', received: 'รับแล้ว {n} ไฟล์ ({size})',
     receivedCol: 'รับแล้ว', downloadsReceived: 'ดาวน์โหลด / รับไฟล์',
   },
   // the page a visitor opens from a share link
@@ -436,6 +442,12 @@ const en = {
   search: {
     title: 'Search files', placeholder: 'Type a file or folder name', noResults: 'Nothing found',
     hint: 'Searches names in all sub folders', truncated: 'Showing the first results only. Try a more specific term.',
+    filters: 'Filters', reset: 'Clear filters', scope: 'Search in', here: 'This folder', whole: 'Whole space', inFolder: 'Searching in {path}',
+    type: 'Type', typeAll: 'All', typeFile: 'Files only', typeDir: 'Folders only',
+    ext: 'Extensions', extPlaceholder: 'Type e.g. pdf and press Enter', from: 'Modified from', to: 'Modified to', pickDate: 'Pick a date',
+    minSize: 'Size at least', maxSize: 'Size at most', sizePlaceholder: 'No limit', unit: 'Unit',
+    sort: 'Sort by', sortName: 'Name', sortMtime: 'Date modified', sortSize: 'Size', order: 'Order', asc: 'Ascending (A-Z, oldest, smallest)', desc: 'Descending (Z-A, newest, largest)',
+    building: 'Index is being built — results may be slower',
   },
   dash: {
     subtitle: 'Server and storage status', disk: 'Disk space', free: 'free',

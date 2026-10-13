@@ -22,10 +22,10 @@
       </n-form>
       <n-form v-else @submit.prevent="submit">
         <n-form-item :label="t('login.username')" :show-feedback="false" class="field">
-          <n-input ref="userRef" v-model:value="form.username" size="large" :input-props="{ autocomplete: 'username', name: 'username' }" @keyup.enter="submit" />
+          <n-input :placeholder="t('login.username')" ref="userRef" v-model:value="form.username" size="large" :input-props="{ autocomplete: 'username', name: 'username' }" @keyup.enter="submit" />
         </n-form-item>
         <n-form-item :label="t('login.password')" :show-feedback="false" class="field">
-          <n-input v-model:value="form.password" type="password" size="large" show-password-on="click" :input-props="{ autocomplete: 'current-password', name: 'password' }" @keyup.enter="submit" />
+          <n-input :placeholder="t('login.password')" v-model:value="form.password" type="password" size="large" show-password-on="click" :input-props="{ autocomplete: 'current-password', name: 'password' }" @keyup.enter="submit" />
         </n-form-item>
         <n-button type="primary" size="large" block :loading="loading" :disabled="!form.username || !form.password" @click="submit">
           {{ t('login.submit') }}

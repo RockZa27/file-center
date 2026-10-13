@@ -14,7 +14,7 @@
     <n-modal v-model:show="reset.show" preset="card" :title="t('users.resetTitle')" style="width: min(440px, 94vw)">
       <p class="reset-text">{{ t('users.resetExplain', { name: reset.user?.name || '' }) }}</p>
       <n-form-item :label="t('users.adminPassword')" :show-feedback="false">
-        <n-input v-model:value="reset.password" type="password" show-password-on="click" :input-props="{ autocomplete: 'current-password' }" @keyup.enter="doReset" />
+        <n-input :placeholder="t('users.adminPassword')" v-model:value="reset.password" type="password" show-password-on="click" :input-props="{ autocomplete: 'current-password' }" @keyup.enter="doReset" />
       </n-form-item>
       <template #footer>
         <div class="reset-foot">

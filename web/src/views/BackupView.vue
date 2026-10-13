@@ -91,7 +91,7 @@
       <n-alert type="warning" class="gap">{{ t('backup.restoreRestart') }}</n-alert>
       <n-form label-placement="top" @submit.prevent="restore">
         <n-form-item :label="t('backup.password')">
-          <n-input v-model:value="password" type="password" show-password-on="click" autocomplete="current-password" :input-props="{ name: 'confirm-password' }" @keyup.enter="restore" />
+          <n-input :placeholder="t('backup.password')" v-model:value="password" type="password" show-password-on="click" autocomplete="current-password" :input-props="{ name: 'confirm-password' }" @keyup.enter="restore" />
         </n-form-item>
       </n-form>
       <div class="actions">
