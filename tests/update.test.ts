@@ -125,6 +125,8 @@ async function sendPackage(file: string) {
   return api('POST', '/api/admin/update/stage', { id })
 }
 
+// on CI a missing build is a broken setup, not a reason to skip: these tests guard the update path
+if (!hasWeb && process.env.CI) throw new Error('web/dist is missing: run `bun --bun run build` before the tests')
 const suite = hasWeb ? describe : describe.skip
 
 suite('update from the web', () => {

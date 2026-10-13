@@ -40,6 +40,8 @@ jobs:
         with:
           bun-version: 1.4.2
       - run: bun install --frozen-lockfile
+      # the update tests need the built page (web/dist); without it they would not run and their planted bugs go unnoticed
+      - run: bun --bun run build
       - run: bun run qa:seed check --run-id ci-seed
       - name: Keep the results
         if: always()
