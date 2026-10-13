@@ -29,7 +29,7 @@
           <div class="quota">
             <n-switch v-model:value="f.limited"><template #checked>{{ t('users.limited') }}</template><template #unchecked>{{ t('users.noLimit') }}</template></n-switch>
             <template v-if="f.limited">
-              <n-input-number v-model:value="f.quotaValue" :min="0.01" :precision="2" :show-button="false" class="qnum" :input-props="{ inputmode: 'decimal', 'aria-label': t('users.quota') }" />
+              <n-input-number v-model:value="f.quotaValue" :min="0.01" :precision="2" :show-button="false" placeholder="" class="qnum" :input-props="{ inputmode: 'decimal', 'aria-label': t('users.quota') }" />
               <n-select v-model:value="f.quotaUnit" :options="[{ label: 'MB', value: 'MB' }, { label: 'GB', value: 'GB' }]" class="qunit" />
             </template>
           </div>

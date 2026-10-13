@@ -1,6 +1,6 @@
 <template>
   <n-modal :show="show" preset="card" :title="title || t('files.chooseDestination')" style="width: min(520px, 94vw)" @update:show="v => emit('update:show', v)">
-    <div v-if="spaces.length > 1" class="spaces">
+    <div v-if="spaces.length > 1 || (spaces.length === 1 && spaces[0].value !== space)" class="spaces">
       <span class="muted">{{ t('files.destSpace') }}</span>
       <n-radio-group :value="cur" name="dest-space" @update:value="pickSpace">
         <n-radio-button v-for="s in spaces" :key="s.value" :value="s.value" :label="s.label" />
@@ -60,7 +60,13 @@ async function open(p) {
   } catch (e) { fb.fail(e) } finally { loading.value = false }
 }
 
-watch(() => props.show, v => { if (v) { cur.value = props.space; open(props.initial || '/') } })
+// the space being looked at may not be a place to put things (copying out of a read-only space): start in the first that is
+watch(() => props.show, v => {
+  if (!v) return
+  const here = !props.spaces.length || props.spaces.some(s => s.value === props.space)
+  cur.value = here ? props.space : props.spaces[0].value
+  open(here ? props.initial || '/' : '/')
+})
 function pickSpace(v) { cur.value = v; open('/') }
 
 function choose() {

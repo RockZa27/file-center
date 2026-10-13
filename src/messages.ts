@@ -190,7 +190,7 @@ export const MESSAGES = {
 
   // ───────────── quota ─────────────
   // the numbers are bytes
-  'quota.exceeded': { th: 'พื้นที่ของคุณเต็ม (ใช้ไป {usedText} จาก {quotaText}) กรุณาลบไฟล์ก่อนหรือติดต่อผู้ดูแลระบบ', en: 'Your storage is full ({usedText} of {quotaText} used). Delete some files or contact the administrator.' },
+  'quota.exceeded': { th: 'พื้นที่ของคุณไม่พอ (ใช้ไป {usedText} จาก {quotaText}) กรุณาลบไฟล์ก่อนหรือติดต่อผู้ดูแลระบบ', en: 'Not enough room in your storage ({usedText} of {quotaText} used). Delete some files or contact the administrator.' },
 
   // ───────────── office documents (ONLYOFFICE) ─────────────
   'office.disabled': { th: 'ยังไม่ได้เปิดใช้การแก้ไขเอกสาร office บนเซิร์ฟเวอร์นี้', en: 'Office document editing is not enabled on this server.' },

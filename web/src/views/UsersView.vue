@@ -94,7 +94,7 @@ const actions = u => h('div', { class: 'row-actions' }, [
   h(NButton, { quaternary: true, circle: true, size: 'small', title: t('common.edit'), 'aria-label': t('common.edit'), onClick: () => edit(u) }, { icon: () => h(NIcon, { component: CreateOutline }) }),
   h(NDropdown, { trigger: 'click', options: moreOptions(u), onSelect: k => more(u, k) }, () =>
     h(NButton, { quaternary: true, circle: true, size: 'small', title: t('users.more'), 'aria-label': t('users.more') }, { icon: () => h(NIcon, { component: EllipsisHorizontal }) })),
-  h(NButton, { quaternary: true, circle: true, size: 'small', type: 'error', disabled: u.username === app.user.username, title: t('common.delete'), 'aria-label': t('common.delete'), onClick: () => remove(u) }, { icon: () => h(NIcon, { component: TrashOutline }) }),
+  h(NButton, { quaternary: true, circle: true, size: 'small', type: 'error', disabled: u.username === app.user?.username, title: t('common.delete'), 'aria-label': t('common.delete'), onClick: () => remove(u) }, { icon: () => h(NIcon, { component: TrashOutline }) }),
 ])
 
 // on a phone the edit and delete buttons sat off screen to the right: one stacked card per account instead

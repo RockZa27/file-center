@@ -116,6 +116,8 @@ describe('the index', () => {
     expect(r.data.indexed).toBe(true)
     expect(r.data.results.length).toBe(5)
     expect(Object.keys(r.data).sort()).toEqual(['indexed', 'results', 'truncated'])
+    // the admin's home is the whole storage: a search from its root uses the index too
+    expect((await admin.json('GET', q({ space: 'home', q: 'report', path: '/' }))).data.indexed).toBe(true)
   })
 
   test('filters: type, ext, dates, sizes', async () => {

@@ -50,7 +50,7 @@
         <div class="sel-actions">
           <n-button v-if="can('download') && can('batchdownload')" size="small" secondary @click="downloadMany(selected)"><template #icon><n-icon :component="DownloadOutline" /></template>{{ t('common.download') }}</n-button>
           <n-button v-if="selected.length === 1 && canShareItem(selected[0])" size="small" secondary @click="openShare(selected[0])"><template #icon><n-icon :component="LinkOutline" /></template>{{ t('share.action') }}</n-button>
-          <n-button v-if="can('write')" size="small" secondary @click="pick('copy', selected)"><template #icon><n-icon :component="CopyOutline" /></template>{{ t('files.copyTo') }}</n-button>
+          <n-button v-if="can('write') || copyOut" size="small" secondary @click="pick('copy', selected)"><template #icon><n-icon :component="CopyOutline" /></template>{{ t('files.copyTo') }}</n-button>
           <n-button v-if="can('write')" size="small" secondary @click="pick('move', selected)"><template #icon><n-icon :component="ReturnUpForwardOutline" /></template>{{ t('files.moveTo') }}</n-button>
           <n-button v-if="can('zip') && can('write')" size="small" secondary @click="askZip(selected)"><template #icon><n-icon :component="ArchiveOutline" /></template>{{ t('files.zip') }}</n-button>
           <n-button v-if="can('write')" size="small" secondary type="error" @click="remove(selected)"><template #icon><n-icon :component="TrashOutline" /></template>{{ t('common.delete') }}</n-button>
@@ -201,7 +201,7 @@ const picker = reactive({ show: false, mode: 'copy', items: [], title: '', confi
 const ctx = reactive({ show: false, x: 0, y: 0, item: null, options: [] })
 const prompt = reactive({ show: false, title: '', label: '', value: '', confirm: '', busy: false, action: null })
 
-const selectable = computed(() => can('write') || can('zip') || (can('download') && can('batchdownload')))
+const selectable = computed(() => can('write') || can('zip') || copyOut.value || (can('download') && can('batchdownload')))
 const visible = computed(() => (showHidden.value ? items.value : items.value.filter(i => !i.name.startsWith('.'))))
 const hiddenCount = computed(() => items.value.length - items.value.filter(i => !i.name.startsWith('.')).length)
 const selected = computed(() => items.value.filter(i => checked.value.includes(i.path)))
@@ -417,10 +417,13 @@ function pick(mode, list) {
   Object.assign(picker, { show: true, mode, items: list.map(i => i.path), title: mode === 'copy' ? t('files.copyTo') : t('files.moveTo'), confirm: mode === 'copy' ? t('files.copyHere') : t('files.moveHere') })
 }
 /** where a copy or move may go: here, and another space only with write and upload there (the server checks again) */
+// another space where the user may put files: a copy out of this one needs only read + download here (the server's rule)
+const otherDest = s => s !== props.space && app.can(s, 'write') && app.can(s, 'upload')
+const copyOut = computed(() => can('read') && can('download') && ['home', 'public'].some(otherDest))
 const destSpaces = computed(() => {
   const label = s => (s === 'public' ? t('nav.publicFolder') : t('nav.files'))
   return ['home', 'public']
-    .filter(s => s === props.space || (app.can(s, 'write') && app.can(s, 'upload')))
+    .filter(s => (s === props.space && can('write')) || otherDest(s))
     .map(s => ({ value: s, label: label(s) }))
 })
 async function onPicked2(dest, destSpace) {
@@ -451,6 +454,7 @@ function actionsFor(it) {
     list.push({ key: 'copy', label: t('files.copyTo'), icon: ico(CopyOutline) })
     list.push({ key: 'move', label: t('files.moveTo'), icon: ico(ReturnUpForwardOutline) })
   }
+  else if (copyOut.value) list.push({ key: 'copy', label: t('files.copyTo'), icon: ico(CopyOutline) })
   if (can('zip') && can('write')) {
     list.push({ key: 'zip', label: t('files.zip'), icon: ico(ArchiveOutline) })
     if (isZip) list.push({ key: 'unzip', label: t('files.unzip'), icon: ico(ExpandOutline) })

@@ -299,7 +299,9 @@ function startInIndex(startAbs: string): { root: string; rel: string } | null {
   const at = locate(startAbs)
   if (!at) return null
   try {
-    return realpathSync(startAbs) === join(realpathSync(at.root), at.rel) ? at : null
+    // the root itself is rel '/': join() would leave a trailing slash that never equals the real path
+    const expected = at.rel === '/' ? realpathSync(at.root) : join(realpathSync(at.root), at.rel)
+    return realpathSync(startAbs) === expected ? at : null
   } catch {
     return null
   }

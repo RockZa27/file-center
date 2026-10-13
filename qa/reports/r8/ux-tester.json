@@ -1,0 +1,61 @@
+{
+ "agent": "ux-tester",
+ "flows": [
+  {
+   "name": "versions",
+   "passed": true,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 0,
+   "screenshot": "qa/reports/r8/screenshots/versions.png",
+   "notes": "3 saves listed with time/size/who; restore oldest (an empty first version) worked and kept the current text as a version; download matched; delete; read-only reader sees no buttons, read+download sees Download only"
+  },
+  {
+   "name": "office-version",
+   "passed": true,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 0,
+   "screenshot": "qa/reports/r8/screenshots/office-version.png",
+   "notes": "stub doc server, signed status-2 callback: file replaced, old copy listed as an office version and downloadable"
+  },
+  {
+   "name": "favorites-recent",
+   "passed": true,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 0,
+   "screenshot": "qa/reports/r8/screenshots/favorites-recent.png",
+   "notes": "star/unstar across folders, Recent newest first, favorite opens folder with row selected"
+  },
+  {
+   "name": "search",
+   "passed": false,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 0,
+   "screenshot": "qa/reports/r8/screenshots/search.png",
+   "notes": "20,000 files indexed: 535 ms Enter-to-rows, filters/sort/this-folder correct, other homes never shown; BUG: search from the storage root never used the index (trailing slash in startInIndex), so the 'index being built' note stayed (fixed after, with a test)"
+  },
+  {
+   "name": "cross-space",
+   "passed": false,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 0,
+   "screenshot": "qa/reports/r8/screenshots/cross-space.png",
+   "notes": "server rules right (2 MB refused with quota message, 100 KB ok, move 403); BUG: a user with read+download on public had no Copy to... in the page (fixed after: copy-out offered when another space accepts files); wording 'full' with 0 B used (fixed after: 'not enough room')"
+  },
+  {
+   "name": "leftovers",
+   "passed": false,
+   "consoleErrors": 4,
+   "expectedHttpErrors": 0,
+   "screenshot": "qa/reports/r8/screenshots/leftovers.png",
+   "notes": "'Please Input' on the quota number field (fixed after); 4 TypeErrors signing out from /admin/users (fixed after); request link label same everywhere; devices dialog ok at 375 px; 2FA since date shown"
+  },
+  {
+   "name": "language-and-mobile",
+   "passed": true,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 0,
+   "screenshot": "qa/reports/r8/screenshots/language-and-mobile.png",
+   "notes": "375x812 English: versions, favorites, search filters, copy dialog, no sideways scroll, all labels translated"
+  }
+ ]
+}
