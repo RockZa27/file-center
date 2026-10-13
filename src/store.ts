@@ -24,11 +24,11 @@ export class JsonStore<T> {
 
   private data: T
   private queue: Promise<void> = Promise.resolve()
+  private timer: ReturnType<typeof setTimeout> | null = null
 
   /**
    * onCorrupt: "reset" starts fresh (fine for data that can be rebuilt, like sessions),
-   * "fail" refuses to start so a broken users or settings file is never silently replaced
-   */
+   * "fail" refuses to start so a broken users or settings file is never silently replaced.   */
   constructor(private file: string, private fallback: () => T, options: { onCorrupt?: 'reset' | 'fail' } = {}) {
     JsonStore.all.add(this)
     if (existsSync(file)) {
@@ -61,12 +61,29 @@ export class JsonStore<T> {
     this.save()
   }
 
+  /**
+   * mutate now, persist within `ms`: for data changed on almost every request (recent files), where many changes
+   * become one write. A plain save()/update() in between writes everything at once; idle()/flushAll() (shutdown,
+   * backups) and flushSync() write what is waiting, so nothing is lost on a normal stop.
+   */
+  updateSoon(fn: (draft: T) => void, ms: number): void {
+    fn(this.data)
+    if (JsonStore.frozen) return
+    this.timer ??= setTimeout(() => this.writeNow(), ms).unref()
+  }
+
   replace(next: T): void {
     this.data = next
     this.save()
   }
 
   save(): void {
+    if (JsonStore.frozen) return
+    this.writeNow()
+  }
+
+  private writeNow(): void {
+    if (this.timer) { clearTimeout(this.timer); this.timer = null }
     if (JsonStore.frozen) return
     const snapshot = JSON.stringify(this.data, null, 2)
     this.queue = this.queue.then(async () => {
@@ -77,6 +94,7 @@ export class JsonStore<T> {
   }
 
   flushSync(): void {
+    if (this.timer) { clearTimeout(this.timer); this.timer = null }
     if (JsonStore.frozen) return
     const tmp = `${this.file}.tmp`
     writeFileSync(tmp, JSON.stringify(this.data, null, 2))
@@ -84,6 +102,7 @@ export class JsonStore<T> {
   }
 
   async idle(): Promise<void> {
+    if (this.timer) this.writeNow()
     await this.queue
   }
 }

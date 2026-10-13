@@ -47,10 +47,11 @@ export function recordRecent(user: User | null, space: string, path: string) {
   let ref: Ref
   try { ref = { space, path: normRel(path) } } catch { return }
   if (ref.path === '/') return
-  store.update(d => {
+  // every download lands here: one write a second at most (shutdown and backups write what is waiting)
+  store.updateSoon(d => {
     const s = stateOf(d, user.username)
     s.recent = [{ ...ref, at: new Date().toISOString() }, ...s.recent.filter(r => !same(r, ref))].slice(0, MAX_RECENT)
-  })
+  }, 1000)
 }
 
 export type PlaceEntry = Entry & { space: string; at?: string }

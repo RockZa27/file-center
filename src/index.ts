@@ -29,6 +29,7 @@ import { cleanStaleUploads } from './uploads'
 import { officeConfig, officeOrigin } from './office'
 import { cleanStaging, signingKey } from './updater'
 import { sourceConfig } from './update-source'
+import { compressedCopy, compressible, etagMatches, etagOf, pickEncoding } from './static'
 
 ensureDirs()
 await bootstrapAdmin()
@@ -96,16 +97,32 @@ function webHeaders(): Record<string, string> {
   }
 }
 
-function serveStatic(pathname: string): Response {
+/**
+ * One file of the page. Text files go out compressed (br or gzip, whatever the browser accepts; made once and kept),
+ * with `Vary: Accept-Encoding`. An ETag lets the browser ask "still the same?" and get a 304 without the body.
+ */
+async function sendStatic(abs: string, request: Request, headers: Record<string, string>): Promise<Response> {
+  const st = statSync(abs)
+  const file = Bun.file(abs)
+  const encoding = compressible(abs, st.size) ? pickEncoding(request.headers.get('accept-encoding')) : null
+  const out: Record<string, string> = { ...headers }
+  if (compressible(abs, st.size)) out.Vary = 'Accept-Encoding'
+  const etag = etagOf(st.size, st.mtimeMs, encoding)
+  out.ETag = etag
+  if (etagMatches(request.headers.get('if-none-match'), etag)) return new Response(null, { status: 304, headers: out })
+  if (!encoding) return new Response(file, { headers: out })
+  const body = await compressedCopy(abs, encoding)
+  return new Response(body, { headers: { ...out, 'Content-Encoding': encoding, 'Content-Type': file.type, 'Content-Length': String(body.length) } })
+}
+
+async function serveStatic(pathname: string, request: Request): Promise<Response> {
   const web = webHeaders()
   let decoded: string
   try { decoded = decodeURIComponent(pathname) } catch { return new Response('Bad request', { status: 400, headers: web }) }
   const abs = normalize(join(config.webDir, decoded))
   if (within(config.webDir, abs) && existsSync(abs) && statSync(abs).isFile()) {
     const immutable = decoded.startsWith('/assets/')
-    return new Response(Bun.file(abs), {
-      headers: { ...web, 'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache' },
-    })
+    return sendStatic(abs, request, { ...web, 'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'no-cache' })
   }
   // a missing asset must stay a 404, any other path is a client-side route
   if (extname(decoded) && decoded !== '/') return new Response('Not found', { status: 404, headers: web })
@@ -114,7 +131,7 @@ function serveStatic(pathname: string): Response {
       status: 503, headers: { ...web, 'Content-Type': 'text/plain; charset=utf-8' },
     })
   }
-  return new Response(Bun.file(indexHtml), { headers: { ...web, 'Cache-Control': 'no-cache', 'Content-Type': 'text/html; charset=utf-8' } })
+  return sendStatic(indexHtml, request, { ...web, 'Cache-Control': 'no-cache', 'Content-Type': 'text/html; charset=utf-8' })
 }
 
 // Only the socket address counts: X-Forwarded-For and CF-Connecting-IP are written by the client as much as by a
@@ -184,7 +201,7 @@ export const app = new Elysia({ serve: { maxRequestBodySize: config.uploadChunkS
   .get('/*', ({ request }) => {
     const { pathname } = new URL(request.url)
     if (pathname.startsWith('/api/')) throw notFound('request.no-api')
-    return serveStatic(pathname)
+    return serveStatic(pathname, request)
   })
 
 if (import.meta.main) {

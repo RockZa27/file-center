@@ -1,0 +1,111 @@
+{
+  "machine": {
+    "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+    "cores": 4,
+    "memGb": 15.7,
+    "os": "linux 6.18.44-fc-v114",
+    "bun": "1.4.2"
+  },
+  "date": "2026-10-13T08:49:46.469Z",
+  "mode": "full",
+  "settings": {
+    "concurrency": 8,
+    "durationSecs": 5,
+    "files": 20000,
+    "bigMb": 100
+  },
+  "coldStartMs": 749,
+  "rssMb": 174,
+  "rows": {
+    "session": {
+      "rps": 6440.8,
+      "p50": 1,
+      "p95": 2.7,
+      "p99": 4.6,
+      "errors": 0,
+      "requests": 32210,
+      "mbps": 8.3
+    },
+    "list-2000": {
+      "rps": 12.7,
+      "p50": 586.9,
+      "p95": 731.4,
+      "p99": 1231.9,
+      "errors": 0,
+      "requests": 71,
+      "mbps": 2.5
+    },
+    "search": {
+      "rps": 50.9,
+      "p50": 138.6,
+      "p95": 256.6,
+      "p99": 331.3,
+      "errors": 0,
+      "requests": 263,
+      "mbps": 0.1
+    },
+    "download-1mb": {
+      "rps": 672.8,
+      "p50": 10.8,
+      "p95": 21.2,
+      "p99": 27.2,
+      "errors": 0,
+      "requests": 3370,
+      "mbps": 672.8
+    },
+    "download-100mb": {
+      "rps": 7.3,
+      "p50": 251.3,
+      "p95": 624.7,
+      "p99": 794.8,
+      "errors": 0,
+      "requests": 38,
+      "mbps": 727.8
+    },
+    "static-page": {
+      "rps": 4552.3,
+      "p50": 1.5,
+      "p95": 3.6,
+      "p99": 6.3,
+      "errors": 0,
+      "requests": 22777,
+      "mbps": 3.4
+    },
+    "static-asset": {
+      "rps": 688,
+      "p50": 10.5,
+      "p95": 21.1,
+      "p99": 25.7,
+      "errors": 0,
+      "requests": 3444,
+      "mbps": 753.4,
+      "note": "slides-BQl3B2Tj.js 1121 KB, on the wire 1121 KB (identity)"
+    },
+    "zip-200": {
+      "rps": 8.1,
+      "p50": 237.6,
+      "p95": 319.7,
+      "p99": 462.2,
+      "errors": 0,
+      "requests": 42
+    },
+    "upload-100mb": {
+      "p50": 271.4,
+      "p95": 414.7,
+      "p99": 414.7,
+      "errors": 0,
+      "requests": 15,
+      "mbps": 75.4,
+      "rps": 9.8,
+      "note": "one upload; latency is per chunk"
+    },
+    "login": {
+      "rps": 8.2,
+      "p50": 237.3,
+      "p95": 337.1,
+      "p99": 364.9,
+      "errors": 0,
+      "requests": 42
+    }
+  }
+}
