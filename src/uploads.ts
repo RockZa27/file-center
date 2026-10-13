@@ -103,6 +103,15 @@ function allMetas(): Meta[] {
   return out
 }
 
+/** how long an upload may sit without a new chunk: upload-request links (strangers) get far less than the others */
+const idleLimit = (meta: Pick<Meta, 'shareId'>) => meta.shareId ? Math.min(config.uploadStaleMs, config.uploadRequestIdleMs) : config.uploadStaleMs
+
+/** the upload is gone (idle, or never finished): its folder, the visitors' allowance and the quota are given back */
+function dropUpload(id: string, meta: Meta | null) {
+  rmSync(dirOf(id), { recursive: true, force: true })
+  if (meta) { releaseGuest(meta); releaseQuota(meta) }
+}
+
 /** what an upload-request link has in progress, and what this address has in progress on any link */
 export function shareUploadLoad(shareId: string, ip: string): { count: number; bytes: number; byIp: number } {
   let count = 0
@@ -110,6 +119,10 @@ export function shareUploadLoad(shareId: string, ip: string): { count: number; b
   let byIp = 0
   for (const m of allMetas()) {
     if (!m.shareId) continue
+    // announced and then left alone: it does not keep a place (it is removed here, not only by the hourly cleaning)
+    try {
+      if (Date.now() - statSync(join(dirOf(m.id), 'meta.json')).mtimeMs > idleLimit(m)) { dropUpload(m.id, m); continue }
+    } catch { continue }
     if (m.shareId === shareId) { count++; bytes += m.size }
     if (m.ip === ip) byIp++
   }
@@ -244,9 +257,9 @@ export function cleanStaleUploads(): number {
   for (const id of readdirSync(paths.tmp)) {
     try {
       const stamp = statSync(join(paths.tmp, id, 'meta.json')).mtimeMs
-      if (Date.now() - stamp > config.uploadStaleMs) {
-        let meta: Meta | null = null
-        try { meta = JSON.parse(readFileSync(join(paths.tmp, id, 'meta.json'), 'utf8')) as Meta } catch { /* unreadable: nothing to give back */ }
+      let meta: Meta | null = null
+      try { meta = JSON.parse(readFileSync(join(paths.tmp, id, 'meta.json'), 'utf8')) as Meta } catch { /* unreadable: nothing to give back */ }
+      if (Date.now() - stamp > (meta ? idleLimit(meta) : config.uploadStaleMs)) {
         rmSync(join(paths.tmp, id), { recursive: true, force: true })
         if (meta) { releaseGuest(meta); releaseQuota(meta) }
         n++

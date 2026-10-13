@@ -88,7 +88,11 @@ export const context = new Elysia({ name: 'context' })
       if (!(error instanceof HttpError)) log.warn('fs-error', { method: request.method, path: safePath(request.url), error: (error as Error).message.slice(0, 300) })
       return answer(known.status, known.code, known.params)
     }
-    if (code === 'VALIDATION') return answer(422, 'request.invalid')
+    if (code === 'VALIDATION') {
+      // a list longer than its schema allows (maxItems) is a request for too many items, not a malformed one
+      const tooMany = (error as any).all?.some((e: any) => e?.schema?.type === 'array' && e.schema.maxItems !== undefined && e.summary !== undefined || e?.schema?.maxItems !== undefined)
+      return tooMany ? answer(400, 'files.bad-count') : answer(422, 'request.invalid')
+    }
     if (code === 'NOT_FOUND') return answer(404, 'request.no-route')
     if (code === 'PARSE') return answer(400, 'request.unreadable')
     log.error('request-failed', { method: request.method, path: safePath(request.url), error })

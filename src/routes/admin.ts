@@ -24,7 +24,7 @@ import { alertRoutes } from './alerts'
 
 const startedAt = Date.now()
 const roleT = t.Union([t.Literal('admin'), t.Literal('user')])
-const permsT = t.Array(t.String())
+const permsT = t.Array(t.String(), { maxItems: 50 })
 
 function adminCount() {
   return allUsers().filter(u => u.role === 'admin').length

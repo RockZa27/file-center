@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto'
+import { access } from 'node:fs/promises'
 import { existsSync, lstatSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
 import { Elysia, t } from 'elysia'
@@ -31,13 +32,28 @@ const SAFE_INLINE = new Set([
   '.mp4', '.webm', '.mp3', '.wav', '.ogg', '.m4a', '.txt',
 ])
 
-function items(input: string[], max = 2000): string[] {
+/** most names one request may carry; the schema (itemList) refuses more before any work, `items`/`names` check again */
+const MAX_ITEMS = 2000
+const itemList = t.Array(t.String(), { maxItems: MAX_ITEMS })
+
+function items(input: string[], max = MAX_ITEMS): string[] {
   if (!input.length || input.length > max) throw bad('files.bad-count')
-  return input.map(p => {
+  // the same name twice is one item, not two rounds of work
+  return [...new Set(input.map(p => {
     const n = normRel(p)
     if (n === '/') throw bad('files.root-item')
     return n
-  })
+  }))]
+}
+
+/** the names of a zip / batch request in a folder: counted, de-duplicated, and all of them checked without blocking */
+async function existingNames(dir: string, input: string[]): Promise<string[]> {
+  if (input.length > MAX_ITEMS) throw bad('files.bad-count')
+  const names = [...new Set(input.map(validName))]
+  const missing = await Promise.all(names.map(n => access(join(dir, n)).then(() => null, () => n)))
+  const first = missing.find(n => n !== null)
+  if (first) throw notFound('files.item-missing', { name: first })
+  return names
 }
 
 export function contentDisposition(kind: 'inline' | 'attachment', name: string) {
@@ -221,10 +237,10 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
   }, { body: t.Object({ space: t.String(), path: t.String(), name: t.String() }) })
 
   .post('/copy', ({ user, ip, body, request }) => transfer('copy', user, ip, body, langOf(request)), {
-    body: t.Object({ space: t.String(), items: t.Array(t.String()), dest: t.String(), destSpace: t.Optional(t.String()) }),
+    body: t.Object({ space: t.String(), items: itemList, dest: t.String(), destSpace: t.Optional(t.String()) }),
   })
   .post('/move', ({ user, ip, body, request }) => transfer('move', user, ip, body, langOf(request)), {
-    body: t.Object({ space: t.String(), items: t.Array(t.String()), dest: t.String(), destSpace: t.Optional(t.String()) }),
+    body: t.Object({ space: t.String(), items: itemList, dest: t.String(), destSpace: t.Optional(t.String()) }),
   })
 
   .post('/delete', async ({ user, ip, body, request }) => {
@@ -246,7 +262,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     // the trash is outside the home: the space is free again. An admin works in every home.
     if (done && a.space === 'home') markStale(user?.role === 'admin' ? undefined : user?.username)
     return { done, failed }
-  }, { body: t.Object({ space: t.String(), items: t.Array(t.String()) }) })
+  }, { body: t.Object({ space: t.String(), items: itemList }) })
 
   // ───────────── zip / unzip ─────────────
   .post('/zip', async ({ user, ip, body }) => {
@@ -256,8 +272,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     const dirRel = normRel(body.path)
     const dir = resolveIn(a.root, dirRel)
     if (!isDir(dir)) throw notFound()
-    const names = body.items.map(validName)
-    for (const n of names) if (!existsSync(join(dir, n))) throw notFound('files.item-missing', { name: n })
+    const names = await existingNames(dir, body.items)
     let archive = validName(body.name || 'archive.zip')
     if (!archive.toLowerCase().endsWith('.zip')) archive += '.zip'
     const target = uniquePath(join(dir, archive))
@@ -278,7 +293,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     indexTouched(target)
     audit({ user: user?.username ?? 'guest', ip, action: 'zip', target: storagePath(target), detail: `${names.length} รายการ` })
     return { ok: true, name: basename(target) }
-  }, { body: t.Object({ space: t.String(), path: t.String(), items: t.Array(t.String()), name: t.Optional(t.String()) }) })
+  }, { body: t.Object({ space: t.String(), path: t.String(), items: itemList, name: t.Optional(t.String()) }) })
 
   .post('/unzip', async ({ user, ip, body }) => {
     const a = need({ user, ip }, body.space, 'zip', 'write')
@@ -327,19 +342,18 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     return fileResponse(abs, basename(abs), request, query.inline === '1')
   }, { query: t.Object({ space: t.String(), path: t.String(), inline: t.Optional(t.String()) }) })
 
-  .post('/batch', ({ user, ip, body }) => {
+  .post('/batch', async ({ user, ip, body }) => {
     const a = need({ user, ip }, body.space, 'download', 'batchdownload')
     const dirRel = normRel(body.path)
     const dir = resolveIn(a.root, dirRel)
     if (!isDir(dir)) throw notFound()
-    const names = body.items.map(validName)
-    for (const n of names) if (!existsSync(join(dir, n))) throw notFound('files.item-missing', { name: n })
+    const names = await existingNames(dir, body.items)
     const token = randomBytes(18).toString('base64url')
     const now = Date.now()
     for (const [k, v] of batches) if (v.expires < now) batches.delete(k)
     batches.set(token, { owner: user?.username ?? 'guest', space: body.space, root: a.root, dir: dirRel, names, expires: now + 5 * 60_000 })
     return { token }
-  }, { body: t.Object({ space: t.String(), path: t.String(), items: t.Array(t.String()) }) })
+  }, { body: t.Object({ space: t.String(), path: t.String(), items: itemList }) })
 
   .get('/batch/:token', ({ user, ip, params }) => {
     const b = batches.get(params.token)

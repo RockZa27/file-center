@@ -22,6 +22,7 @@ export const MESSAGES = {
   'request.no-route': { th: 'ไม่พบหน้าที่ต้องการ', en: 'Page not found.' },
   'request.no-api': { th: 'ไม่พบ API ที่เรียก', en: 'API not found.' },
   'request.not-found': { th: 'ไม่พบรายการที่ระบุ', en: 'The item was not found.' },
+  'request.too-big': { th: 'ข้อมูลที่ส่งมามีขนาดใหญ่เกินไป', en: 'The data sent is too big.' },
   'request.internal': { th: 'เกิดข้อผิดพลาดภายในระบบ', en: 'Something went wrong on the server.' },
   // the link on the page a failed download link opens in the tab
   'request.back-to-app': { th: 'กลับไปหน้าหลัก', en: 'Back to the home page' },
@@ -144,6 +145,14 @@ export const MESSAGES = {
   'admin.alert-login-locked': {
     th: 'ล็อกการเข้าสู่ระบบของ {user} จาก IP {ip} ชั่วคราว เพราะใส่รหัสผ่านผิดหลายครั้ง',
     en: 'Sign-in for {user} from IP {ip} is locked for a while after too many wrong passwords.',
+  },
+  'admin.alert-account-locked': {
+    th: 'ล็อกการเข้าสู่ระบบของบัญชี {user} ชั่วคราว เพราะมีการใส่รหัสผ่านผิดหลายครั้งจากหลาย IP (ล่าสุดจาก {ip})',
+    en: 'Sign-in for account {user} is locked for a while after too many wrong passwords from all addresses (latest from IP {ip}).',
+  },
+  'admin.alert-address-locked': {
+    th: 'ล็อกการเข้าสู่ระบบจาก IP {ip} ชั่วคราว เพราะลองหลายชื่อผู้ใช้ด้วยรหัสผ่านผิดหลายครั้ง',
+    en: 'Sign-in from IP {ip} is locked for a while after too many wrong passwords across usernames.',
   },
   'admin.alert-confirm-locked': {
     th: 'ล็อกการยืนยันรหัสผ่าน (ติดตั้งอัปเดต/กู้คืนข้อมูล) ของ {user} จาก IP {ip} ชั่วคราว เพราะใส่รหัสผ่านผิดหลายครั้ง',
