@@ -63,6 +63,26 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bash scripts/ci-docker.sh
 
+  # the speed numbers (scripts/bench.ts, quick mode). Never fails on the numbers: runners differ; the file is for looking at.
+  bench:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun --bun run build
+      - run: bun run bench --quick --json bench.json
+      - name: Keep the results
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: bench-results
+          path: bench.json
+          if-no-files-found: warn
+
   # known vulnerabilities, leaked secrets and Dockerfile mistakes (README: "ตรวจช่องโหว่ใน CI"). Fails only for HIGH or
   # CRITICAL that has a fix available; every scan also leaves a SARIF file (all severities) in the artifact security-results.
   security:
