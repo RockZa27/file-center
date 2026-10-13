@@ -616,5 +616,110 @@
         "replace": ""
       }
     ]
+  },
+  {
+    "id": "totp-replay",
+    "difficulty": "medium",
+    "category": "auth",
+    "severity": "high",
+    "tests": "tests/account.test.ts",
+    "description": "a TOTP code is accepted again within its window: the last-used step is not compared, so a code seen once (shoulder, phishing proxy) signs in again",
+    "patches": [
+      {
+        "file": "src/totp.ts",
+        "find": "Buffer.from(code)) && step > lastStep) found = step",
+        "replace": "Buffer.from(code))) found = step"
+      }
+    ]
+  },
+  {
+    "id": "backup-code-reuse",
+    "difficulty": "easy",
+    "category": "auth",
+    "severity": "medium",
+    "tests": "tests/account.test.ts",
+    "description": "a used backup code is not removed, so each of the 10 codes works forever",
+    "patches": [
+      {
+        "file": "src/auth.ts",
+        "find": "    tf.backup = tf.backup.filter(x => x !== h)\n",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "login-ticket-any-ip",
+    "difficulty": "medium",
+    "category": "auth",
+    "severity": "medium",
+    "tests": "tests/account.test.ts",
+    "description": "the sign-in ticket between password and code is not bound to the address it was issued to, so a leaked ticket can be finished from anywhere",
+    "patches": [
+      {
+        "file": "src/auth.ts",
+        "find": "t.until < Date.now() || t.ip !== ip) return null",
+        "replace": "t.until < Date.now()) return null"
+      }
+    ]
+  },
+  {
+    "id": "session-delete-any-user",
+    "difficulty": "medium",
+    "category": "authz",
+    "severity": "medium",
+    "tests": "tests/account.test.ts",
+    "description": "DELETE /api/sessions/:id ends a session of any user whose id is known, not only the caller's own",
+    "patches": [
+      {
+        "file": "src/auth.ts",
+        "find": "s.id === id && s.username?.toLowerCase() === username.toLowerCase())",
+        "replace": "s.id === id)"
+      }
+    ]
+  },
+  {
+    "id": "quota-unzip-ignored",
+    "difficulty": "medium",
+    "category": "dos",
+    "severity": "medium",
+    "tests": "tests/quota.test.ts",
+    "description": "unzip takes only the disk/zip budget, not what the quota leaves, so a user can grow past the quota by extracting archives",
+    "patches": [
+      {
+        "file": "src/routes/files.ts",
+        "find": "const maxBytes = Math.min(otherMax, room)",
+        "replace": "const maxBytes = otherMax"
+      }
+    ]
+  },
+  {
+    "id": "upload-overwrites",
+    "difficulty": "easy",
+    "category": "integrity",
+    "severity": "high",
+    "tests": "tests/upload-links.test.ts",
+    "description": "a finished upload replaces a file of the same name instead of getting a new name; through an upload-request link an outsider overwrites the owner's files",
+    "patches": [
+      {
+        "file": "src/uploads.ts",
+        "find": "const finalPath = uniquePath(join(meta.destDir, meta.name))",
+        "replace": "const finalPath = join(meta.destDir, meta.name)"
+      }
+    ]
+  },
+  {
+    "id": "upload-link-no-upload-perm",
+    "difficulty": "hard",
+    "category": "authz",
+    "severity": "medium",
+    "tests": "tests/upload-links.test.ts",
+    "description": "an upload-request link keeps working (and can be made) when the owner has no upload permission in that space: the re-check asks for download instead",
+    "patches": [
+      {
+        "file": "src/shares.ts",
+        "find": "const need = kindOf(s) === 'upload' ? 'upload' : 'download'",
+        "replace": "const need = 'download'"
+      }
+    ]
   }
 ]
