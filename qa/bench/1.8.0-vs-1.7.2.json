@@ -1,0 +1,453 @@
+{
+  "note": "main 1.7.2 vs feature/1.8.0, same machine, full mode, alternated main,1.8,main,1.8",
+  "runs": {
+    "main": [
+      {
+        "machine": {
+          "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+          "cores": 4,
+          "memGb": 15.7,
+          "os": "linux 6.18.44-fc-v114",
+          "bun": "1.4.2"
+        },
+        "date": "2026-10-13T23:52:39.729Z",
+        "mode": "full",
+        "settings": {
+          "concurrency": 8,
+          "durationSecs": 5,
+          "files": 20000,
+          "bigMb": 100
+        },
+        "coldStartMs": 618,
+        "rssMb": 263.6,
+        "rows": {
+          "session": {
+            "rps": 11853.5,
+            "p50": 0.5,
+            "p95": 1.4,
+            "p99": 2.5,
+            "errors": 0,
+            "requests": 59275,
+            "mbps": 15.3
+          },
+          "list-2000": {
+            "rps": 67.9,
+            "p50": 108.4,
+            "p95": 183.8,
+            "p99": 233.7,
+            "errors": 0,
+            "requests": 346,
+            "mbps": 13.1
+          },
+          "search": {
+            "rps": 73,
+            "p50": 94.3,
+            "p95": 187.3,
+            "p99": 206.8,
+            "errors": 0,
+            "requests": 372,
+            "mbps": 0.1
+          },
+          "download-1mb": {
+            "rps": 1257.2,
+            "p50": 5.7,
+            "p95": 11.6,
+            "p99": 16.6,
+            "errors": 0,
+            "requests": 6291,
+            "mbps": 1257.2
+          },
+          "download-100mb": {
+            "rps": 11.6,
+            "p50": 145.8,
+            "p95": 365.7,
+            "p99": 579.9,
+            "errors": 0,
+            "requests": 59,
+            "mbps": 1157.5
+          },
+          "static-page": {
+            "rps": 7787.8,
+            "p50": 0.8,
+            "p95": 2,
+            "p99": 3.4,
+            "errors": 0,
+            "requests": 38952,
+            "mbps": 5.8
+          },
+          "static-asset": {
+            "rps": 2753.4,
+            "p50": 2.6,
+            "p95": 5.8,
+            "p99": 8,
+            "errors": 0,
+            "requests": 13772,
+            "mbps": 848.7,
+            "note": "slides-BQl3B2Tj.js 1121 KB, on the wire 316 KB (br)"
+          },
+          "zip-200": {
+            "rps": 11.5,
+            "p50": 167.6,
+            "p95": 227.2,
+            "p99": 250.4,
+            "errors": 0,
+            "requests": 59
+          },
+          "upload-100mb": {
+            "p50": 132.9,
+            "p95": 203.8,
+            "p99": 203.8,
+            "errors": 0,
+            "requests": 15,
+            "mbps": 156.8,
+            "rps": 20.4,
+            "note": "one upload; latency is per chunk"
+          },
+          "login": {
+            "rps": 11.8,
+            "p50": 162,
+            "p95": 227.6,
+            "p99": 255.2,
+            "errors": 0,
+            "requests": 60
+          }
+        }
+      },
+      {
+        "machine": {
+          "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+          "cores": 4,
+          "memGb": 15.7,
+          "os": "linux 6.18.44-fc-v114",
+          "bun": "1.4.2"
+        },
+        "date": "2026-10-13T23:54:27.027Z",
+        "mode": "full",
+        "settings": {
+          "concurrency": 8,
+          "durationSecs": 5,
+          "files": 20000,
+          "bigMb": 100
+        },
+        "coldStartMs": 689,
+        "rssMb": 193,
+        "rows": {
+          "session": {
+            "rps": 10704.7,
+            "p50": 0.6,
+            "p95": 1.6,
+            "p99": 2.9,
+            "errors": 0,
+            "requests": 53532,
+            "mbps": 13.8
+          },
+          "list-2000": {
+            "rps": 64.1,
+            "p50": 113.1,
+            "p95": 199.5,
+            "p99": 249.3,
+            "errors": 0,
+            "requests": 327,
+            "mbps": 12.4
+          },
+          "search": {
+            "rps": 67,
+            "p50": 100.1,
+            "p95": 196.9,
+            "p99": 259.1,
+            "errors": 0,
+            "requests": 342,
+            "mbps": 0.1
+          },
+          "download-1mb": {
+            "rps": 1369.7,
+            "p50": 5.3,
+            "p95": 10.7,
+            "p99": 14.7,
+            "errors": 0,
+            "requests": 6860,
+            "mbps": 1369.7
+          },
+          "download-100mb": {
+            "rps": 11.2,
+            "p50": 156.6,
+            "p95": 381,
+            "p99": 483.2,
+            "errors": 0,
+            "requests": 57,
+            "mbps": 1121
+          },
+          "static-page": {
+            "rps": 7264.2,
+            "p50": 0.9,
+            "p95": 2.3,
+            "p99": 3.5,
+            "errors": 0,
+            "requests": 36328,
+            "mbps": 5.4
+          },
+          "static-asset": {
+            "rps": 2870.5,
+            "p50": 2.5,
+            "p95": 5.6,
+            "p99": 7.7,
+            "errors": 0,
+            "requests": 14366,
+            "mbps": 884.8,
+            "note": "slides-BQl3B2Tj.js 1121 KB, on the wire 316 KB (br)"
+          },
+          "zip-200": {
+            "rps": 11.3,
+            "p50": 175.3,
+            "p95": 231.8,
+            "p99": 257.4,
+            "errors": 0,
+            "requests": 59
+          },
+          "upload-100mb": {
+            "p50": 144.6,
+            "p95": 293.5,
+            "p99": 293.5,
+            "errors": 0,
+            "requests": 15,
+            "mbps": 136.5,
+            "rps": 17.7,
+            "note": "one upload; latency is per chunk"
+          },
+          "login": {
+            "rps": 12.2,
+            "p50": 165.4,
+            "p95": 187.6,
+            "p99": 218.5,
+            "errors": 0,
+            "requests": 62
+          }
+        }
+      }
+    ],
+    "new": [
+      {
+        "machine": {
+          "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+          "cores": 4,
+          "memGb": 15.7,
+          "os": "linux 6.18.44-fc-v114",
+          "bun": "1.4.2"
+        },
+        "date": "2026-10-13T23:53:33.589Z",
+        "mode": "full",
+        "settings": {
+          "concurrency": 8,
+          "durationSecs": 5,
+          "files": 20000,
+          "bigMb": 100
+        },
+        "coldStartMs": 637,
+        "rssMb": 240.3,
+        "rows": {
+          "session": {
+            "rps": 11123.3,
+            "p50": 0.6,
+            "p95": 1.5,
+            "p99": 2.7,
+            "errors": 0,
+            "requests": 55623,
+            "mbps": 14.4
+          },
+          "list-2000": {
+            "rps": 108,
+            "p50": 71.7,
+            "p95": 95.2,
+            "p99": 114,
+            "errors": 0,
+            "requests": 544,
+            "mbps": 20.8
+          },
+          "search": {
+            "rps": 952.6,
+            "p50": 7.1,
+            "p95": 14.4,
+            "p99": 17.9,
+            "errors": 0,
+            "requests": 4770,
+            "mbps": 1.2
+          },
+          "download-1mb": {
+            "rps": 1388.1,
+            "p50": 5.3,
+            "p95": 10.3,
+            "p99": 13.2,
+            "errors": 0,
+            "requests": 6951,
+            "mbps": 1388.1
+          },
+          "download-100mb": {
+            "rps": 11.5,
+            "p50": 160.2,
+            "p95": 324.1,
+            "p99": 388.9,
+            "errors": 0,
+            "requests": 59,
+            "mbps": 1145.5
+          },
+          "static-page": {
+            "rps": 8347.3,
+            "p50": 0.8,
+            "p95": 1.8,
+            "p99": 3,
+            "errors": 0,
+            "requests": 41743,
+            "mbps": 6.2
+          },
+          "static-asset": {
+            "rps": 2742.1,
+            "p50": 2.6,
+            "p95": 5.9,
+            "p99": 8.3,
+            "errors": 0,
+            "requests": 13719,
+            "mbps": 845.2,
+            "note": "slides-BQl3B2Tj.js 1121 KB, on the wire 316 KB (br)"
+          },
+          "zip-200": {
+            "rps": 11.3,
+            "p50": 168,
+            "p95": 211,
+            "p99": 243.8,
+            "errors": 0,
+            "requests": 58
+          },
+          "upload-100mb": {
+            "p50": 154.9,
+            "p95": 228.7,
+            "p99": 228.7,
+            "errors": 0,
+            "requests": 15,
+            "mbps": 136.5,
+            "rps": 17.8,
+            "note": "one upload; latency is per chunk"
+          },
+          "login": {
+            "rps": 12.4,
+            "p50": 151.5,
+            "p95": 206.4,
+            "p99": 231.4,
+            "errors": 0,
+            "requests": 63
+          }
+        }
+      },
+      {
+        "machine": {
+          "cpu": "Intel(R) Xeon(R) Processor @ 2.80GHz",
+          "cores": 4,
+          "memGb": 15.7,
+          "os": "linux 6.18.44-fc-v114",
+          "bun": "1.4.2"
+        },
+        "date": "2026-10-13T23:55:21.105Z",
+        "mode": "full",
+        "settings": {
+          "concurrency": 8,
+          "durationSecs": 5,
+          "files": 20000,
+          "bigMb": 100
+        },
+        "coldStartMs": 660,
+        "rssMb": 205.4,
+        "rows": {
+          "session": {
+            "rps": 10943.1,
+            "p50": 0.6,
+            "p95": 1.5,
+            "p99": 2.8,
+            "errors": 0,
+            "requests": 54761,
+            "mbps": 14.2
+          },
+          "list-2000": {
+            "rps": 102.3,
+            "p50": 72.3,
+            "p95": 118.5,
+            "p99": 127.2,
+            "errors": 0,
+            "requests": 520,
+            "mbps": 19.7
+          },
+          "search": {
+            "rps": 871.8,
+            "p50": 7.5,
+            "p95": 16.5,
+            "p99": 22.5,
+            "errors": 0,
+            "requests": 4366,
+            "mbps": 1.1
+          },
+          "download-1mb": {
+            "rps": 1370.8,
+            "p50": 5.3,
+            "p95": 10.2,
+            "p99": 14.2,
+            "errors": 0,
+            "requests": 6864,
+            "mbps": 1370.8
+          },
+          "download-100mb": {
+            "rps": 10.8,
+            "p50": 159.3,
+            "p95": 373.6,
+            "p99": 531.1,
+            "errors": 0,
+            "requests": 55,
+            "mbps": 1077.1
+          },
+          "static-page": {
+            "rps": 8033.4,
+            "p50": 0.8,
+            "p95": 1.8,
+            "p99": 3.3,
+            "errors": 0,
+            "requests": 40193,
+            "mbps": 6
+          },
+          "static-asset": {
+            "rps": 2921.8,
+            "p50": 2.5,
+            "p95": 5.5,
+            "p99": 7.3,
+            "errors": 0,
+            "requests": 14615,
+            "mbps": 900.6,
+            "note": "slides-BQl3B2Tj.js 1121 KB, on the wire 316 KB (br)"
+          },
+          "zip-200": {
+            "rps": 11.1,
+            "p50": 175.7,
+            "p95": 206.2,
+            "p99": 311.6,
+            "errors": 0,
+            "requests": 57
+          },
+          "upload-100mb": {
+            "p50": 147.6,
+            "p95": 192.8,
+            "p99": 192.8,
+            "errors": 0,
+            "requests": 15,
+            "mbps": 148.3,
+            "rps": 19.3,
+            "note": "one upload; latency is per chunk"
+          },
+          "login": {
+            "rps": 12,
+            "p50": 157.6,
+            "p95": 195.7,
+            "p99": 237.8,
+            "errors": 0,
+            "requests": 62
+          }
+        }
+      }
+    ]
+  }
+}
