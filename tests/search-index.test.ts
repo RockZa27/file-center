@@ -3,7 +3,7 @@
  * The storage is shared with the other test files, so every test works in its own folder and searches from there.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
+import { existsSync, linkSync, mkdirSync, rmSync, symlinkSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { unzipSync } from 'fflate'
@@ -372,9 +372,12 @@ describe('the index', () => {
   test('20,000 files are answered in under 200 ms once indexed', async () => {
     const top = `sx-perf-${tag()}`
     const root = join(storage(), top)
+    // hard links to one file: 20,000 real files take many seconds to make on a slow disk, links take a fraction
+    const one = join(base, `one-${top}`)
+    writeFileSync(one, '')
     for (let d = 0; d < 100; d++) {
       mkdirSync(join(root, `d${d}`), { recursive: true })
-      for (let f = 0; f < 200; f++) writeFileSync(join(root, `d${d}`, `file-${d}-${f}${f % 7 === 0 ? '.log' : '.dat'}`), '')
+      for (let f = 0; f < 200; f++) linkSync(one, join(root, `d${d}`, `file-${d}-${f}${f % 7 === 0 ? '.log' : '.dat'}`))
     }
     await idx.scanIndex()
     const ask = () => admin.json('GET', q({ space: 'home', q: 'file-5', path: '/' + top, ext: 'log', sort: 'mtime', order: 'desc' }))
@@ -396,6 +399,7 @@ describe('the index', () => {
     expect(worst).toBeLessThan(200)
     expect(directMs).toBeLessThan(200)
     rmSync(root, { recursive: true, force: true })
+    rmSync(one, { force: true })
     idx.indexTouched(root)
   }, 120_000)
 })
