@@ -25,6 +25,15 @@
             <n-button secondary @click="picker = true"><template #icon><n-icon :component="FolderOpenOutline" /></template></n-button>
           </div>
         </n-form-item>
+        <n-form-item :label="t('users.quota')">
+          <div class="quota">
+            <n-switch v-model:value="f.limited"><template #checked>{{ t('users.limited') }}</template><template #unchecked>{{ t('users.noLimit') }}</template></n-switch>
+            <template v-if="f.limited">
+              <n-input-number v-model:value="f.quotaValue" :min="0.01" :precision="2" :show-button="false" class="qnum" :input-props="{ inputmode: 'decimal', 'aria-label': t('users.quota') }" />
+              <n-select v-model:value="f.quotaUnit" :options="[{ label: 'MB', value: 'MB' }, { label: 'GB', value: 'GB' }]" class="qunit" />
+            </template>
+          </div>
+        </n-form-item>
         <n-form-item :label="t('users.ownPerms')"><perm-select v-model="f.permissions" /></n-form-item>
         <n-form-item :label="t('users.publicPerms')"><perm-select v-model="f.publicPermissions" /></n-form-item>
         <div class="muted hint">{{ t('users.publicHint') }}</div>
@@ -42,11 +51,12 @@
 <script setup>
 import { computed, defineComponent, h, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NAlert, NButton, NCheckbox, NCheckboxGroup, NForm, NFormItem, NIcon, NInput, NModal, NRadioButton, NRadioGroup } from 'naive-ui'
+import { NAlert, NButton, NCheckbox, NCheckboxGroup, NForm, NFormItem, NIcon, NInput, NInputNumber, NModal, NRadioButton, NRadioGroup, NSelect, NSwitch } from 'naive-ui'
 import { FolderOpenOutline } from '@vicons/ionicons5'
 import { api } from '../api'
 import { useFeedback } from '../composables'
 import { useAppStore } from '../store'
+import { joinQuota, splitQuota } from '../account-utils'
 import { parentPath } from '../utils'
 import FolderPicker from './FolderPicker.vue'
 import PasswordRules from './PasswordRules.vue'
@@ -71,20 +81,20 @@ const app = useAppStore()
 const fb = useFeedback()
 const busy = ref(false)
 const picker = ref(false)
-const f = reactive({ username: '', name: '', password: '', role: 'user', homedir: '', permissions: [], publicPermissions: [] })
+const f = reactive({ username: '', name: '', password: '', role: 'user', homedir: '', permissions: [], publicPermissions: [], limited: false, quotaValue: null, quotaUnit: 'GB' })
 const isEdit = computed(() => !!props.user)
 // visitors' uploads and activity go under the name 'guest' (any case), so the server refuses it: say so before saving
 const reserved = computed(() => !isEdit.value && f.username.trim().toLowerCase() === 'guest')
 // the password rules are hinted live; the server judges them (its common-password list too)
-const ready = computed(() => f.username.trim().length >= 3 && !reserved.value && f.name.trim() && (isEdit.value || f.password))
+const ready = computed(() => (!f.limited || f.quotaValue > 0) && f.username.trim().length >= 3 && !reserved.value && f.name.trim() && (isEdit.value || f.password))
 const parentOf = p => (p ? parentPath(p) : '/')
 
 watch(() => props.show, v => {
   if (!v) return
   const u = props.user
   Object.assign(f, u
-    ? { username: u.username, name: u.name, password: '', role: u.role, homedir: u.homedir, permissions: [...u.permissions], publicPermissions: [...u.publicPermissions] }
-    : { username: '', name: '', password: '', role: 'user', homedir: '', permissions: ['read', 'download', 'batchdownload', 'upload', 'write', 'zip'], publicPermissions: ['read', 'download', 'batchdownload'] })
+    ? { username: u.username, name: u.name, password: '', role: u.role, homedir: u.homedir, permissions: [...u.permissions], publicPermissions: [...u.publicPermissions], limited: !!u.quotaBytes, quotaValue: splitQuota(u.quotaBytes).value, quotaUnit: splitQuota(u.quotaBytes).unit }
+    : { username: '', name: '', password: '', role: 'user', homedir: '', permissions: ['read', 'download', 'batchdownload', 'upload', 'write', 'zip'], publicPermissions: ['read', 'download', 'batchdownload'], limited: false, quotaValue: null, quotaUnit: 'GB' })
 })
 
 async function save() {
@@ -93,6 +103,7 @@ async function save() {
   try {
     const body = { name: f.name.trim(), role: f.role, permissions: f.permissions, publicPermissions: f.publicPermissions }
     if (f.role === 'user') body.homedir = f.homedir.trim() || undefined
+    body.quotaBytes = f.role === 'user' && f.limited ? joinQuota(f.quotaValue, f.quotaUnit) : 0
     if (isEdit.value) {
       if (f.password) body.password = f.password
       await api.updateUser(props.user.username, body)
@@ -111,6 +122,9 @@ async function save() {
 .two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .home { display: flex; gap: 8px; width: 100%; }
 .field { width: 100%; min-width: 0; }
+.quota { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; width: 100%; }
+.qnum { width: 120px; }
+.qunit { width: 90px; }
 .hint { font-size: 12.5px; margin-top: -4px; }
 .foot { display: flex; justify-content: flex-end; gap: 8px; }
 @media (max-width: 520px) { .two { grid-template-columns: 1fr; } }

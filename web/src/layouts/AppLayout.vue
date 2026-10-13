@@ -98,7 +98,7 @@ const userOptions = computed(() => [
     ]),
   },
   { type: 'divider', key: 'd' },
-  { key: 'profile', label: t('nav.changePassword'), icon: () => h(NIcon, { component: KeyOutline }) },
+  { key: 'profile', label: t('nav.account'), icon: () => h(NIcon, { component: KeyOutline }) },
   { key: 'logout', label: t('nav.logout'), icon: () => h(NIcon, { component: LogOutOutline }) },
 ])
 

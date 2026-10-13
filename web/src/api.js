@@ -59,7 +59,18 @@ const post = (url, body = {}) => call('POST', url, body)
 export const api = {
   session: () => get('/api/session'),
   login: (username, password) => post('/api/login', { username, password }),
+  /** answers a session snapshot, or { twoFactor: true, ticket } when the account needs a code too */
+  login2fa: (ticket, code) => post('/api/login/2fa', { ticket, code }),
   logout: () => post('/api/logout'),
+  sessions: () => get('/api/sessions'),
+  /** the current device's id gives the logout flow back: a session snapshot */
+  revokeSession: id => call('DELETE', `/api/sessions/${encodeURIComponent(id)}`),
+  revokeOthers: () => post('/api/sessions/revoke-others'),
+  usage: () => get('/api/me/usage'),
+  twoFactorSetup: password => post('/api/2fa/setup', { password }),
+  twoFactorEnable: code => post('/api/2fa/enable', { code }),
+  twoFactorDisable: (password, code) => post('/api/2fa/disable', { password, code }),
+  twoFactorBackupCodes: (password, code) => post('/api/2fa/backup-codes', { password, code }),
   changePassword: (current, next) => post('/api/password', { current, next }),
 
   list: (space, path) => get('/api/list', { space, path }),
@@ -108,6 +119,9 @@ export const api = {
   createUser: u => post('/api/admin/users', u),
   updateUser: (username, u) => call('PUT', `/api/admin/users/${encodeURIComponent(username)}`, u),
   deleteUser: username => call('DELETE', `/api/admin/users/${encodeURIComponent(username)}`),
+  userSessions: username => get(`/api/admin/users/${encodeURIComponent(username)}/sessions`),
+  revokeUserSessions: username => post(`/api/admin/users/${encodeURIComponent(username)}/sessions/revoke`),
+  resetTwoFactor: (username, password) => post(`/api/admin/users/${encodeURIComponent(username)}/2fa/reset`, { password }),
   adminFolders: path => get('/api/admin/folders', { path }),
   status: () => get('/api/admin/status'),
   activity: params => get('/api/admin/activity', params),

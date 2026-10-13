@@ -1,6 +1,8 @@
 <template>
-  <n-modal :show="show" preset="card" :title="t('nav.changePassword')" style="width: min(440px, 94vw)" :mask-closable="!app.user?.mustChangePassword" :closable="!app.user?.mustChangePassword" @update:show="v => emit('update:show', v)">
+  <n-modal :show="show" preset="card" :title="t('nav.account')" style="width: min(480px, 94vw)" :mask-closable="!pinned" :closable="!pinned" :close-on-esc="!pinned" @update:show="v => emit('update:show', v)">
     <n-alert v-if="app.user?.mustChangePassword" type="warning" class="gap">{{ t('profile.mustChange') }}</n-alert>
+    <n-tabs v-model:value="tab" type="line" animated :class="{ 'no-tabs': app.user?.mustChangePassword }">
+      <n-tab-pane name="password" :tab="t('profile.passwordTab')" display-directive="show">
     <n-form label-placement="top" @submit.prevent="save">
       <!-- tells password managers which account the new password belongs to -->
       <input type="text" name="username" autocomplete="username" :value="app.user?.username || ''" readonly hidden>
@@ -17,7 +19,13 @@
         <n-input v-model:value="form.again" type="password" show-password-on="click" :input-props="{ autocomplete: 'new-password' }" @keyup.enter="save" />
       </n-form-item>
     </n-form>
-    <template #footer>
+      </n-tab-pane>
+      <n-tab-pane v-if="!app.user?.mustChangePassword" name="security" :tab="t('profile.securityTab')">
+        <!-- made when the tab opens (not before), so the lists are fresh each time -->
+        <security-panel v-if="show" @lock="v => (locked = v)" @signedout="signedOut" />
+      </n-tab-pane>
+    </n-tabs>
+    <template v-if="tab === 'password'" #footer>
       <div class="foot">
         <n-button v-if="!app.user?.mustChangePassword" @click="emit('update:show', false)">{{ t('common.cancel') }}</n-button>
         <n-button type="primary" :loading="busy" :disabled="!valid" @click="save">{{ t('common.save') }}</n-button>
@@ -29,11 +37,13 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NAlert, NButton, NForm, NFormItem, NInput, NModal } from 'naive-ui'
+import { NAlert, NButton, NForm, NFormItem, NInput, NModal, NTabPane, NTabs } from 'naive-ui'
+import { useRouter } from 'vue-router'
 import { api } from '../api'
 import { useFeedback } from '../composables'
 import { useAppStore } from '../store'
 import PasswordRules from './PasswordRules.vue'
+import SecurityPanel from './SecurityPanel.vue'
 
 const props = defineProps({ show: Boolean })
 const emit = defineEmits(['update:show'])
@@ -42,12 +52,22 @@ const app = useAppStore()
 const fb = useFeedback()
 const form = reactive({ current: '', next: '', again: '' })
 const busy = ref(false)
+const router = useRouter()
+const tab = ref('password')
+// the backup codes are on screen: nothing may close the dialog until they are marked as saved
+const locked = ref(false)
+const pinned = computed(() => !!app.user?.mustChangePassword || locked.value)
+
+function signedOut() {
+  emit('update:show', false)
+  router.push({ name: app.publicAvailable ? 'public' : 'login' })
+}
 
 const mismatch = computed(() => form.again && form.again !== form.next)
 // the length and username hints are shown live, but the server judges the password (its common-password list too)
 const valid = computed(() => form.current && form.next && form.next === form.again)
 
-watch(() => props.show, v => { if (v) Object.assign(form, { current: '', next: '', again: '' }) })
+watch(() => props.show, v => { if (v) { Object.assign(form, { current: '', next: '', again: '' }); tab.value = 'password'; locked.value = false } })
 
 async function save() {
   if (!valid.value || busy.value) return
@@ -68,5 +88,6 @@ async function save() {
 <style scoped>
 .gap { margin-bottom: 16px; }
 .field { width: 100%; min-width: 0; }
+.no-tabs :deep(.n-tabs-nav) { display: none; }
 .foot { display: flex; justify-content: flex-end; gap: 8px; }
 </style>

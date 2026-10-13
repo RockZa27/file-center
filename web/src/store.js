@@ -50,8 +50,15 @@ export const useAppStore = defineStore('app', {
     async refresh() {
       this.apply(await api.session())
     },
+    /** answers the ticket when a code is needed next, else null (signed in) */
     async login(username, password) {
-      this.apply(await api.login(username, password))
+      const r = await api.login(username, password)
+      if (r.twoFactor) return r.ticket
+      this.apply(r)
+      return null
+    },
+    async login2fa(ticket, code) {
+      this.apply(await api.login2fa(ticket, code))
     },
     async logout() {
       this.apply(await api.logout())
