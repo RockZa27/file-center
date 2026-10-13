@@ -7,6 +7,13 @@
 
     <template v-if="!result">
       <n-form label-placement="top" :show-feedback="false" class="form" @submit.prevent="create">
+        <n-form-item v-if="canDownload && canRequest" :label="t('share.kindLabel')">
+          <n-radio-group v-model:value="kind" class="kinds">
+            <n-radio value="download">{{ t('share.kindDownload') }}</n-radio>
+            <n-radio value="upload">{{ t('share.kindUpload') }}</n-radio>
+          </n-radio-group>
+        </n-form-item>
+        <div v-if="isUpload" class="muted small">{{ t('share.kindUploadHelp') }}</div>
         <n-form-item :label="t('share.expires')">
           <n-radio-group v-model:value="days">
             <n-radio-button v-for="d in allowedDays" :key="d" :value="d">{{ t('share.days', { n: d }) }}</n-radio-button>
@@ -21,16 +28,33 @@
             <div v-if="tooShort" class="hint warn">{{ t('share.passwordShort', { n: PASSWORD_MIN }) }}</div>
           </div>
         </n-form-item>
-        <n-form-item :label="t('share.limit')">
+        <n-form-item v-if="!isUpload" :label="t('share.limit')">
           <n-input-number v-model:value="limit" :min="1" :max="MAX_DOWNLOADS" :precision="0" clearable :placeholder="t('share.limitNone')" class="limit" />
         </n-form-item>
+        <template v-else>
+          <n-form-item :label="t('share.maxFileMb')">
+            <n-input-number v-model:value="maxFileMb" :min="1" :precision="0" clearable :placeholder="t('share.limitNone')" class="limit" />
+          </n-form-item>
+          <n-form-item :label="t('share.maxFiles')">
+            <n-input-number v-model:value="maxFiles" :min="1" :max="MAX_FILES" :precision="0" clearable :placeholder="t('share.limitNone')" class="limit" />
+          </n-form-item>
+          <n-form-item :label="t('share.maxTotalMb')">
+            <n-input-number v-model:value="maxTotalMb" :min="1" :precision="0" clearable :placeholder="t('share.limitNone')" class="limit" />
+          </n-form-item>
+          <n-form-item :label="t('share.note')">
+            <div class="field">
+              <n-input v-model:value="note" type="textarea" :autosize="{ minRows: 2, maxRows: 5 }" :placeholder="t('share.notePlaceholder')" :status="noteTooLong ? 'error' : undefined" />
+              <div class="hint" :class="{ warn: noteTooLong }">{{ noteLength }} / {{ NOTE_MAX }}</div>
+            </div>
+          </n-form-item>
+        </template>
       </n-form>
       <!-- stays in the modal: the reason belongs next to the form, not in a toast that is gone before it is read -->
       <n-alert v-if="error" type="error" class="gap">{{ error }}</n-alert>
     </template>
 
     <template v-else>
-      <n-alert type="success" :title="t('share.created')" class="gap">{{ t('share.onceOnly') }}</n-alert>
+      <n-alert type="success" :title="result.share.kind === 'upload' ? t('share.createdUpload') : t('share.created')" class="gap">{{ t('share.onceOnly') }}</n-alert>
       <div class="link-row">
         <!-- the whole link, wrapped: a phone can not scroll inside a one-line box to check it -->
         <n-input
@@ -43,6 +67,10 @@
       </div>
       <div class="summary muted">
         <span>{{ t('share.expiresAt', { date: formatDate(result.share.expiresAt) }) }}</span>
+        <span v-if="result.share.kind === 'upload'">{{ t('share.kindUpload') }}</span>
+        <span v-if="result.share.maxFileBytes">{{ t('share.limitFile', { size: formatBytes(result.share.maxFileBytes) }) }}</span>
+        <span v-if="result.share.maxFiles">{{ t('share.limitFiles', { n: result.share.maxFiles }) }}</span>
+        <span v-if="result.share.maxTotalBytes">{{ t('share.limitTotal', { size: formatBytes(result.share.maxTotalBytes) }) }}</span>
         <span v-if="result.share.maxDownloads">{{ t('share.limitN', { n: result.share.maxDownloads }) }}</span>
         <span v-if="result.share.hasPassword">{{ t('share.withPassword') }}</span>
       </div>
@@ -53,7 +81,7 @@
       <div class="foot">
         <template v-if="!result">
           <n-button :disabled="busy" @click="emit('update:show', false)">{{ t('common.cancel') }}</n-button>
-          <n-button type="primary" :loading="busy" :disabled="tooShort" @click="create">
+          <n-button type="primary" :loading="busy" :disabled="tooShort || noteTooLong || !kindOk" @click="create">
             <template #icon><n-icon :component="LinkOutline" /></template>{{ t('share.create') }}
           </n-button>
         </template>
@@ -69,17 +97,20 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NAlert, NButton, NForm, NFormItem, NIcon, NInput, NInputNumber, NModal, NRadioButton, NRadioGroup } from 'naive-ui'
+import { NAlert, NButton, NForm, NFormItem, NIcon, NInput, NInputNumber, NModal, NRadio, NRadioButton, NRadioGroup } from 'naive-ui'
 import { CheckmarkOutline, CopyOutline, LinkOutline } from '@vicons/ionicons5'
 import { api } from '../api'
 import { useAppStore } from '../store'
 import { errorText } from '../composables'
-import { formatDate } from '../utils'
+import { formatBytes, formatDate } from '../utils'
 import FileIcon from './FileIcon.vue'
 
 // the server's limits (src/shares.ts)
 const PASSWORD_MIN = 6
 const MAX_DOWNLOADS = 100_000
+const MAX_FILES = 100_000
+const NOTE_MAX = 500
+const MB = 1024 * 1024
 
 const props = defineProps({ show: Boolean, space: { type: String, required: true }, item: { type: Object, default: null } })
 const emit = defineEmits(['update:show'])
@@ -92,6 +123,11 @@ const allowedDays = ref(store.config?.shareDays?.length ? [...store.config.share
 const days = ref(7)
 const password = ref('')
 const limit = ref(null)
+const kind = ref('download')
+const maxFileMb = ref(null)
+const maxFiles = ref(null)
+const maxTotalMb = ref(null)
+const note = ref('')
 const busy = ref(false)
 const error = ref('')
 // { share, link } once created: the only time the link can be shown
@@ -100,6 +136,13 @@ const copied = ref(false)
 const copyFailed = ref(false)
 const linkInput = ref(null)
 
+// a download link needs `download` here, a request link `upload` and a folder
+const canDownload = computed(() => store.can(props.space, 'download'))
+const canRequest = computed(() => props.item?.type === 'dir' && store.can(props.space, 'upload'))
+const kindOk = computed(() => (kind.value === 'upload' ? canRequest.value : canDownload.value))
+const isUpload = computed(() => kind.value === 'upload')
+const noteLength = computed(() => Array.from(note.value.trim()).length)
+const noteTooLong = computed(() => noteLength.value > NOTE_MAX)
 const tooShort = computed(() => password.value.length > 0 && password.value.length < PASSWORD_MIN)
 
 watch(() => props.show, v => {
@@ -107,6 +150,11 @@ watch(() => props.show, v => {
   days.value = allowedDays.value.includes(7) ? 7 : allowedDays.value[allowedDays.value.length - 1]
   password.value = ''
   limit.value = null
+  kind.value = canDownload.value ? 'download' : 'upload'
+  maxFileMb.value = null
+  maxFiles.value = null
+  maxTotalMb.value = null
+  note.value = ''
   error.value = ''
   result.value = null
   copied.value = false
@@ -114,14 +162,20 @@ watch(() => props.show, v => {
 })
 
 async function create() {
-  if (busy.value || tooShort.value || !props.item) return
+  if (busy.value || tooShort.value || noteTooLong.value || !kindOk.value || !props.item) return
   busy.value = true
   error.value = ''
   try {
     const r = await api.createShare({
       space: props.space, path: props.item.path, days: days.value,
       ...(password.value ? { password: password.value } : {}),
-      ...(limit.value ? { maxDownloads: limit.value } : {}),
+      ...(isUpload.value ? {
+        kind: 'upload',
+        ...(maxFileMb.value ? { maxFileBytes: maxFileMb.value * MB } : {}),
+        ...(maxFiles.value ? { maxFiles: maxFiles.value } : {}),
+        ...(maxTotalMb.value ? { maxTotalBytes: maxTotalMb.value * MB } : {}),
+        ...(note.value.trim() ? { note: note.value.trim() } : {}),
+      } : limit.value ? { maxDownloads: limit.value } : {}),
     })
     password.value = ''
     result.value = { share: r.share, link: `${location.origin}${r.url}` }
@@ -169,6 +223,8 @@ async function copy() {
 .field { width: 100%; min-width: 0; }
 .hint { font-size: 12.5px; margin-top: 4px; }
 .hint.warn { color: var(--danger); }
+.small { font-size: 13px; margin-top: -4px; }
+.kinds { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .limit { width: 100%; max-width: 240px; }
 .gap { margin-top: 14px; }
 .link-row { display: flex; gap: 8px; margin-top: 14px; }

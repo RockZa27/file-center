@@ -12,7 +12,7 @@
     </div>
     <div class="surface">
       <n-data-table :columns="columns" :data="rows" :loading="loading" :bordered="false" :single-line="false"
-        :scroll-x="narrow ? undefined : (all ? 880 : 780)" table-layout="fixed" :row-key="r => r.id" :pagination="{ pageSize: 25 }"
+        :scroll-x="narrow ? undefined : (all ? 920 : 820)" table-layout="fixed" :row-key="r => r.id" :pagination="{ pageSize: 25 }"
       >
         <template #empty><n-empty :description="t('share.none')" /></template>
       </n-data-table>
@@ -24,12 +24,12 @@
 import { computed, h, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NButton, NDataTable, NEmpty, NIcon, NSwitch, NTag } from 'naive-ui'
-import { CloseCircleOutline, LockClosedOutline, RefreshOutline } from '@vicons/ionicons5'
+import { CloseCircleOutline, CloudUploadOutline, DownloadOutline, LockClosedOutline, RefreshOutline } from '@vicons/ionicons5'
 import { api } from '../api'
 import FileIcon from '../components/FileIcon.vue'
 import { useFeedback, useNarrow } from '../composables'
 import { useAppStore } from '../store'
-import { formatDate, parentPath } from '../utils'
+import { formatBytes, formatDate, parentPath } from '../utils'
 
 const { t } = useI18n()
 const app = useAppStore()
@@ -65,13 +65,29 @@ const where = s => `${s.space === 'public' ? t('share.spacePublic') : t('share.s
 // the whole name and folder, wrapped: a phone can not hover for a tooltip
 const itemCell = s => h('div', { class: 'item-cell' }, [
   h(FileIcon, { item: { name: s.name, type: s.type }, size: 20 }),
-  h('div', { class: 'item-text' }, [h('div', { class: 'item-name' }, s.name), h('div', { class: 'muted mono wrap' }, where(s))]),
+  h('div', { class: 'item-text' }, [h('div', { class: 'item-name' }, s.name), h('div', { class: 'muted mono wrap' }, where(s)), kindTag(s)]),
 ])
 const stateTag = s => h(NTag, {
   size: 'small', round: true, bordered: false, type: TONE[s.state] || 'default',
   title: s.state === 'unavailable' ? t('share.unavailableHint') : undefined,
 }, () => t(`share.state.${s.state}`))
-const downloads = s => (s.maxDownloads === null ? t('share.downloadsUnlimited', { n: s.downloads }) : t('share.downloadsOf', { n: s.downloads, max: s.maxDownloads }))
+const isUpload = s => s.kind === 'upload'
+// icon + label: a request link (people send files in) or a download link
+const kindTag = s => h('span', { class: `kind ${isUpload(s) ? 'up' : ''}` }, [
+  h(NIcon, { component: isUpload(s) ? CloudUploadOutline : DownloadOutline }),
+  isUpload(s) ? t('share.kindUploadShort') : t('share.kindDownloadShort'),
+])
+// what an upload link has received and the limits it was made with
+const limitsOf = s => [
+  s.maxFileBytes ? t('share.limitFile', { size: formatBytes(s.maxFileBytes) }) : null,
+  s.maxFiles ? t('share.limitFiles', { n: s.maxFiles }) : null,
+  s.maxTotalBytes ? t('share.limitTotal', { size: formatBytes(s.maxTotalBytes) }) : null,
+].filter(Boolean)
+const receivedCell = s => h('div', { class: 'recv' }, [
+  h('div', {}, t('share.received', { n: s.uploadedFiles ?? 0, size: formatBytes(s.uploadedBytes ?? 0) })),
+  h('div', { class: 'muted small' }, limitsOf(s).join(' · ') || t('share.limitNone')),
+])
+const downloads = s => (isUpload(s) ? receivedCell(s) : s.maxDownloads === null ? t('share.downloadsUnlimited', { n: s.downloads }) : t('share.downloadsOf', { n: s.downloads, max: s.maxDownloads }))
 const passwordCell = s => (s.hasPassword
   ? h('span', { class: 'pw' }, [h(NIcon, { component: LockClosedOutline }), t('share.yes')])
   : h('span', { class: 'muted' }, t('share.no')))
@@ -95,7 +111,7 @@ const columns = computed(() => (narrow.value
           all.value ? h('span', { class: 'owner' }, `${t('share.owner')}: ${s.owner}`) : null,
           h('span', {}, `${t('share.expiresCol')} ${formatDate(s.expiresAt)}`),
           h('span', {}, t('share.createdAt', { date: formatDate(s.createdAt) })),
-          h('span', {}, `${t('share.downloads')} ${downloads(s)}`),
+          h('span', { class: 'dl' }, [`${isUpload(s) ? t('share.receivedCol') : t('share.downloads')}: `, downloads(s)]),
           h('span', {}, [`${t('share.passwordCol')}: `, passwordCell(s)]),
         ]),
         revocable(s) ? h('div', { class: 'stacked-actions' }, [revokeButton(s)]) : null,
@@ -106,7 +122,7 @@ const columns = computed(() => (narrow.value
       { title: t('share.item'), key: 'name', minWidth: 200, render: itemCell },
       ...(all.value ? [{ title: t('share.owner'), key: 'owner', width: 100, render: s => h('span', { class: 'wrap' }, s.owner) }] : []),
       { title: t('share.expiresCol'), key: 'expiresAt', width: 140, render: when },
-      { title: t('share.downloads'), key: 'downloads', width: 110, render: downloads },
+      { title: t('share.downloadsReceived'), key: 'downloads', width: 150, render: downloads },
       { title: t('share.passwordCol'), key: 'password', width: 80, render: passwordCell },
       { title: t('share.stateCol'), key: 'state', width: 120, render: stateTag },
       { title: '', key: 'a', width: 130, align: 'right', fixed: 'right', render: revokeButton },
@@ -125,6 +141,10 @@ onMounted(load)
 :deep(.when) { min-width: 0; }
 :deep(.small) { font-size: 12.5px; margin-top: 2px; }
 :deep(.nowrap) { white-space: nowrap; }
+:deep(.kind) { display: inline-flex; align-items: center; gap: 4px; margin-top: 3px; font-size: 12.5px; color: var(--muted); }
+:deep(.kind.up) { color: var(--primary); }
+:deep(.stacked-meta .dl) { flex-basis: 100%; }
+:deep(.recv .small) { overflow-wrap: anywhere; }
 :deep(.pw) { display: inline-flex; align-items: center; gap: 4px; }
 :deep(.stacked) { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 :deep(.stacked-meta) { display: flex; align-items: center; gap: 4px 12px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); padding-left: 30px; }

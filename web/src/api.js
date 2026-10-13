@@ -27,6 +27,8 @@ async function resync() {
 
 async function call(method, url, body, extraHeaders = {}, retried = false) {
   const headers = { 'x-csrf-token': csrf, 'x-lang': lang(), ...extraHeaders }
+  // a visitor of an upload link sends no CSRF token (the server takes none there)
+  if (extraHeaders['x-csrf-token'] === null) delete headers['x-csrf-token']
   let payload
   if (body !== undefined) {
     if (body instanceof Blob || body instanceof ArrayBuffer) payload = body
@@ -166,15 +168,21 @@ export const api = {
   // whoever holds the link, no account needed
   shareInfo: (token, path) => get(`/api/s/${encodeURIComponent(token)}`, path && path !== '/' ? { path } : undefined),
   shareUnlock: (token, password) => post(`/api/s/${encodeURIComponent(token)}/unlock`, { password }),
+  // upload-request links: the visitor cookie is set by the server, no CSRF header is sent
+  shareUploadInit: (token, name, size) => call('POST', `/api/s/${encodeURIComponent(token)}/upload`, { name, size }, { 'x-csrf-token': null }),
+  shareUploadComplete: (token, id) => call('POST', `/api/s/${encodeURIComponent(token)}/upload/${id}/complete`, {}, { 'x-csrf-token': null }),
+  shareUploadCancel: (token, id) => call('DELETE', `/api/s/${encodeURIComponent(token)}/upload/${id}`, undefined, { 'x-csrf-token': null }),
+  shareUploadChunkUrl: (token, id) => `/api/s/${encodeURIComponent(token)}/upload/${id}`,
   shareDownloadUrl: (token, path) => `/api/s/${encodeURIComponent(token)}/download${path && path !== '/' ? `?${qs({ path })}` : ''}`,
 }
 
 /** PUT one chunk with progress; resolves when the server has stored it */
-export function putChunk(id, index, blob, onProgress, registerAbort) {
+export function putChunk(id, index, blob, onProgress, registerAbort, base = '/api/upload') {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
-    xhr.open('PUT', `/api/upload/${id}/${index}`)
-    xhr.setRequestHeader('x-csrf-token', csrf)
+    const visitor = base !== '/api/upload'
+    xhr.open('PUT', `${base}${visitor ? '' : `/${id}`}/${index}`)
+    if (!visitor) xhr.setRequestHeader('x-csrf-token', csrf)
     xhr.setRequestHeader('x-lang', lang())
     xhr.setRequestHeader('content-type', 'application/octet-stream')
     xhr.upload.onprogress = e => e.lengthComputable && onProgress(e.loaded)

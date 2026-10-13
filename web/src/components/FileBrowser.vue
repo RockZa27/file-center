@@ -38,12 +38,18 @@
       <span class="count muted">{{ t('files.itemCount', { n: visible.length }) }}</span>
     </div>
 
+    <!-- storage use: only in the personal folder of an account with a quota -->
+    <div v-if="usage && usage.quota > 0" class="usage">
+      <n-progress type="line" :percentage="usagePct" :status="usagePct >= 100 ? 'error' : usagePct >= 90 ? 'warning' : 'default'" :show-indicator="false" :height="6" />
+      <div class="muted small">{{ t('security.usedOf', { used: formatBytes(usage.used), quota: formatBytes(usage.quota) }) }} ({{ usagePct }}%)</div>
+    </div>
+
     <transition name="fade">
       <div v-if="selected.length" class="selection">
         <span class="sel-count">{{ t('files.selected', { n: selected.length }) }}</span>
         <div class="sel-actions">
           <n-button v-if="can('download') && can('batchdownload')" size="small" secondary @click="downloadMany(selected)"><template #icon><n-icon :component="DownloadOutline" /></template>{{ t('common.download') }}</n-button>
-          <n-button v-if="canShare && selected.length === 1" size="small" secondary @click="openShare(selected[0])"><template #icon><n-icon :component="LinkOutline" /></template>{{ t('share.action') }}</n-button>
+          <n-button v-if="selected.length === 1 && canShareItem(selected[0])" size="small" secondary @click="openShare(selected[0])"><template #icon><n-icon :component="LinkOutline" /></template>{{ t('share.action') }}</n-button>
           <n-button v-if="can('write')" size="small" secondary @click="pick('copy', selected)"><template #icon><n-icon :component="CopyOutline" /></template>{{ t('files.copyTo') }}</n-button>
           <n-button v-if="can('write')" size="small" secondary @click="pick('move', selected)"><template #icon><n-icon :component="ReturnUpForwardOutline" /></template>{{ t('files.moveTo') }}</n-button>
           <n-button v-if="can('zip') && can('write')" size="small" secondary @click="askZip(selected)"><template #icon><n-icon :component="ArchiveOutline" /></template>{{ t('files.zip') }}</n-button>
@@ -124,7 +130,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import {
   NBreadcrumb, NBreadcrumbItem, NButton, NButtonGroup, NCheckbox, NDataTable, NDropdown, NEmpty, NIcon, NInput,
-  NModal, NResult, NSpin,
+  NModal, NProgress, NResult, NSpin,
 } from 'naive-ui'
 import {
   AddOutline, ArchiveOutline, ArrowBackOutline, CloudUploadOutline, CopyOutline, CreateOutline, DocumentTextOutline,
@@ -153,7 +159,9 @@ const fb = useFeedback()
 
 const can = p => app.can(props.space, p)
 // signed in with `share` and `download` here (visitors of the public page never make links)
-const canShare = computed(() => !!app.user && can('share') && can('download'))
+// (a request link needs `upload` instead of `download`, and only a folder can receive files)
+const canShare = computed(() => !!app.user && can('share') && (can('download') || can('upload')))
+const canShareItem = it => canShare.value && (can('download') || (it.type === 'dir' && can('upload')))
 // the grid shows the original picture as its thumbnail, so leave out the big ones
 const THUMB_MAX = 5 * 1024 * 1024
 const hasThumb = it => it.type === 'file' && isImage(it.name) && it.size <= THUMB_MAX && can('download')
@@ -214,9 +222,17 @@ function onSorter(s) {
   if (!s || !s.order) { sortKey.value = 'name'; sortOrder.value = 'ascend' } else { sortKey.value = s.columnKey; sortOrder.value = s.order }
 }
 
+const usage = ref(null)
+const usagePct = computed(() => (usage.value?.quota ? Math.min(100, Math.round((usage.value.used / usage.value.quota) * 100)) : 0))
+async function loadUsage() {
+  if (props.space !== 'home' || !app.user) return
+  try { usage.value = await api.usage() } catch { /* the line is a nicety */ }
+}
+
 async function load(quiet = false) {
   if (!quiet) loading.value = true
   error.value = ''
+  loadUsage()
   try {
     const res = await api.list(props.space, location.value)
     items.value = res.entries
@@ -381,7 +397,7 @@ function actionsFor(it) {
   if (officeMode) list.push({ key: 'office', label: officeMode === 'edit' ? t('office.edit') : t('office.open'), icon: ico(officeMode === 'edit' ? CreateOutline : OpenOutline) })
   if (it.type === 'file' && can('download')) list.push({ key: 'download', label: t('common.download'), icon: ico(DownloadOutline) })
   if (it.type === 'dir' && can('download') && can('batchdownload')) list.push({ key: 'download', label: t('files.downloadZip'), icon: ico(DownloadOutline) })
-  if (canShare.value) list.push({ key: 'share', label: t('share.action'), icon: ico(LinkOutline) })
+  if (canShareItem(it)) list.push({ key: 'share', label: t('share.action'), icon: ico(LinkOutline) })
   if (can('write')) {
     list.push({ key: 'rename', label: t('common.rename'), icon: ico(CreateOutline) })
     list.push({ key: 'copy', label: t('files.copyTo'), icon: ico(CopyOutline) })
@@ -499,6 +515,8 @@ function onSearchSelect(it) {
 .browser { position: relative; }
 .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .left, .right { display: flex; align-items: center; gap: 8px; }
+.usage { margin: -4px 0 12px; max-width: 360px; display: flex; flex-direction: column; gap: 4px; }
+.usage .small { font-size: 12.5px; }
 .crumbs { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; min-height: 28px; flex-wrap: wrap; }
 .crumbs .n-breadcrumb { min-width: 0; }
 /* long Thai folder names have no spaces: the trail wraps inside the screen instead of pushing the page sideways */

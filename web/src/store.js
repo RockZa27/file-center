@@ -25,7 +25,7 @@ export const useAppStore = defineStore('app', {
     hasSpace: s => space => !!s.spaces[space],
     publicAvailable: s => !!s.spaces.public,
     // a share link needs `share` and `download` in the same space; visitors never make links
-    canShare: s => !!s.user && Object.values(s.spaces).some(p => p.includes('share') && p.includes('download')),
+    canShare: s => !!s.user && Object.values(s.spaces).some(p => p.includes('share') && (p.includes('download') || p.includes('upload'))),
   },
   actions: {
     apply(snapshot) {
