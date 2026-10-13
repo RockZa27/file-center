@@ -732,7 +732,7 @@
     "patches": [
       {
         "file": "src/search-index.ts",
-        "find": "      if (at.rel !== '/') { where.push('rel >= ?', 'rel < ?'); args.push(at.rel + '/', at.rel + '0') }\n",
+        "find": "      if (at.rel !== '/') { where.push('e.rel >= ?', 'e.rel < ?'); args.push(at.rel + '/', at.rel + '0') }\n",
         "replace": ""
       }
     ]

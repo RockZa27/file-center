@@ -30,6 +30,9 @@ const STORE_ONLY = new Set(['.zip', '.jpg', '.jpeg', '.png', '.gif', '.webp', '.
 // entries this big get ZIP64 headers up front; deflate can grow incompressible data a little past its size
 const ZIP64_FROM = 0xf000_0000
 const SAMPLE = 256 * 1024
+// zip.js has no native deflate for any level but 6, so it runs its own: level 1 is about 1.6x (text) to 2x faster than
+// 3, and its archives were 0.3% to 1.6% bigger when measured (README, "Speed")
+const DEFLATE_LEVEL = 1
 
 /**
  * Deflate runs on one core at roughly 40 MB/s, so a 5 GB video would take two minutes and save nothing.
@@ -63,7 +66,7 @@ export function zipStream(items: ZipItem[]): ReadableStream<Uint8Array> {
         await zip.add(item.name, undefined, { directory: true, lastModDate })
         continue
       }
-      await zip.add(item.name, Bun.file(item.abs).stream(), { lastModDate, level: worthCompressing(item) ? 3 : 0, zip64: item.size >= ZIP64_FROM })
+      await zip.add(item.name, Bun.file(item.abs).stream(), { lastModDate, level: worthCompressing(item) ? DEFLATE_LEVEL : 0, zip64: item.size >= ZIP64_FROM })
     }
     await zip.close()
   })().catch(err => writable.abort(err).catch(() => {}))

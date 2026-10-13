@@ -15,7 +15,9 @@ import { bad, type Entry, joinRel, searchTree, within } from './fsx'
 import { log } from './logger'
 
 /** bump when the table changes: an older file is dropped and built again */
-const SCHEMA_VERSION = 1
+const SCHEMA_VERSION = 2
+/** most FTS hits for which the hits are fetched first; a needle with more hits (a very common one) is scanned in name order */
+const FTS_CAP = 1000
 /** entries read between two breaks, and rows written per transaction */
 const BATCH = 250
 export const MAX_LIMIT = 500
@@ -48,6 +50,14 @@ const roots = () => (within(config.storageDir, paths.publicDir) ? [config.storag
 
 const extOf = (name: string, isDir: boolean) => (isDir ? '' : extname(name).slice(1).toLowerCase())
 
+/** real path of each root: looked up once, not on every request; forgotten when the index is reset, stopped or built again */
+const realRoots = new Map<string, string>()
+const realRoot = (root: string) => {
+  let r = realRoots.get(root)
+  if (r === undefined) realRoots.set(root, (r = realpathSync(root)))
+  return r
+}
+
 function removeFiles() {
   for (const suffix of ['', '-wal', '-shm', '-journal']) rmSync(paths.searchDb + suffix, { force: true })
 }
@@ -60,11 +70,19 @@ function openDb(fresh = false): Database {
       d.exec('PRAGMA synchronous = NORMAL')
       const version = d.query<{ user_version: number }, []>('PRAGMA user_version').get()?.user_version
       if (version === 0) {
+        // `id` links a row to its trigram index (entries_fts reads name_lower from here); the triggers keep the two in step
         d.exec(`CREATE TABLE IF NOT EXISTS entries (
-          root TEXT NOT NULL, rel TEXT NOT NULL, name_lower TEXT NOT NULL, ext TEXT NOT NULL, type TEXT NOT NULL,
-          size INTEGER NOT NULL, mtime INTEGER NOT NULL, gen INTEGER NOT NULL DEFAULT 0,
-          PRIMARY KEY (root, rel)
-        ) WITHOUT ROWID;
+          id INTEGER PRIMARY KEY, root TEXT NOT NULL, rel TEXT NOT NULL, name_lower TEXT NOT NULL, ext TEXT NOT NULL,
+          type TEXT NOT NULL, size INTEGER NOT NULL, mtime INTEGER NOT NULL, gen INTEGER NOT NULL DEFAULT 0,
+          UNIQUE (root, rel)
+        );
+        CREATE VIRTUAL TABLE IF NOT EXISTS entries_fts USING fts5(name_lower, content='entries', content_rowid='id', tokenize='trigram');
+        CREATE TRIGGER IF NOT EXISTS entries_ai AFTER INSERT ON entries BEGIN
+          INSERT INTO entries_fts (rowid, name_lower) VALUES (new.id, new.name_lower);
+        END;
+        CREATE TRIGGER IF NOT EXISTS entries_ad AFTER DELETE ON entries BEGIN
+          INSERT INTO entries_fts (entries_fts, rowid, name_lower) VALUES ('delete', old.id, old.name_lower);
+        END;
         CREATE INDEX IF NOT EXISTS entries_name ON entries (root, name_lower);
         CREATE INDEX IF NOT EXISTS entries_ext ON entries (root, ext);
         CREATE INDEX IF NOT EXISTS entries_mtime ON entries (root, mtime);
@@ -76,6 +94,7 @@ function openDb(fresh = false): Database {
         throw new Error('damaged')
       } else {
         d.query('SELECT 1 FROM entries LIMIT 1').get() // a missing table throws: damaged as well
+        d.query("SELECT 1 FROM entries_fts WHERE entries_fts MATCH '\"abc\"' LIMIT 1").get()
       }
       return d
     } catch (err) {
@@ -96,6 +115,7 @@ function openDb(fresh = false): Database {
 /** drop the file and start over (a query failed: the file is damaged) */
 function reset() {
   ready = false
+  realRoots.clear()
   try { db?.close() } catch { /* gone anyway */ }
   db = null
   scanning = null
@@ -122,6 +142,7 @@ export function stopSearchIndex(): void {
   timer = null
   ready = false
   scanning = null
+  realRoots.clear()
   try { db?.close() } catch { /* already closed */ }
   db = null
 }
@@ -133,7 +154,9 @@ function rowOf(root: string, rel: string, name: string, st: { isDirectory(): boo
   return [root, rel, name.toLowerCase(), extOf(name, isDir), isDir ? 'dir' : 'file', isDir ? 0 : st.size, Math.round(st.mtimeMs), gen]
 }
 
-const UPSERT = 'INSERT OR REPLACE INTO entries (root, rel, name_lower, ext, type, size, mtime, gen) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+// an update keeps the row (and its id in the trigram index): the name of a path never changes, so the index needs no touch
+const UPSERT = `INSERT INTO entries (root, rel, name_lower, ext, type, size, mtime, gen) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+  ON CONFLICT (root, rel) DO UPDATE SET ext = excluded.ext, type = excluded.type, size = excluded.size, mtime = excluded.mtime, gen = excluded.gen`
 
 /** walk `abs` (whose index path is `rel` under `root`) and write what is found, a batch at a time */
 async function walk(d: Database, root: string, abs: string, rel: string) {
@@ -169,6 +192,7 @@ export function scanIndex(): Promise<void> {
   if (!d) return Promise.resolve()
   scanning ??= (async () => {
     const mine = ++gen
+    realRoots.clear()
     const list = roots()
     for (const root of list) {
       await walk(d, root, root, '/')
@@ -300,11 +324,26 @@ function startInIndex(startAbs: string): { root: string; rel: string } | null {
   if (!at) return null
   try {
     // the root itself is rel '/': join() would leave a trailing slash that never equals the real path
-    const expected = at.rel === '/' ? realpathSync(at.root) : join(realpathSync(at.root), at.rel)
+    const expected = at.rel === '/' ? realRoot(at.root) : join(realRoot(at.root), at.rel)
     return realpathSync(startAbs) === expected ? at : null
   } catch {
     return null
   }
+}
+
+/**
+ * The ids (as JSON) of the rows whose name has `needle` in it according to the trigram index, or null when the index
+ * is not the better way: a needle under 3 characters (no trigram), or one so common that its hits are many (the scan in
+ * name order stops early there). The needle is bound as one quoted phrase with `"` doubled, so no input is ever read as
+ * FTS syntax (AND, NEAR, *, column filters...). Trigrams fold case by their own rules: the hits are only candidates,
+ * and the caller still tests instr on the real name.
+ */
+function ftsHits(d: Database, needle: string): string | null {
+  if (needle.includes('\0') || [...needle].length < 3) return null
+  const rows = d.query<{ rowid: number }, [string, number]>(
+    'SELECT rowid FROM entries_fts WHERE entries_fts MATCH ? LIMIT ?',
+  ).all('"' + needle.replaceAll('"', '""') + '"', FTS_CAP + 1)
+  return rows.length > FTS_CAP ? null : JSON.stringify(rows.map(r => r.rowid))
 }
 
 /**
@@ -316,19 +355,22 @@ export async function searchEntries(startAbs: string, startRel: string, needle: 
   const at = startInIndex(startAbs)
   if (at && db) {
     try {
-      const where = ['root = ?', 'instr(name_lower, ?) > 0']
+      // a needle of 3+ characters asks the trigram index first; the rows it names still pass the same instr test below
+      const hits = ftsHits(db, needle)
+      const where = ['e.root = ?', 'instr(e.name_lower, ?) > 0']
       const args: (string | number)[] = [at.root, needle]
-      if (at.rel !== '/') { where.push('rel >= ?', 'rel < ?'); args.push(at.rel + '/', at.rel + '0') }
-      if (f.type) { where.push('type = ?'); args.push(f.type) }
-      if (f.ext) { where.push(`ext IN (${f.ext.map(() => '?').join(',')})`); args.push(...f.ext) }
-      if (f.from !== undefined) { where.push('mtime >= ?'); args.push(f.from) }
-      if (f.to !== undefined) { where.push('mtime <= ?'); args.push(f.to) }
-      if (f.minSize !== undefined) { where.push('size >= ?'); args.push(f.minSize) }
-      if (f.maxSize !== undefined) { where.push('size <= ?'); args.push(f.maxSize) }
+      if (at.rel !== '/') { where.push('e.rel >= ?', 'e.rel < ?'); args.push(at.rel + '/', at.rel + '0') }
+      if (f.type) { where.push('e.type = ?'); args.push(f.type) }
+      if (f.ext) { where.push(`e.ext IN (${f.ext.map(() => '?').join(',')})`); args.push(...f.ext) }
+      if (f.from !== undefined) { where.push('e.mtime >= ?'); args.push(f.from) }
+      if (f.to !== undefined) { where.push('e.mtime <= ?'); args.push(f.to) }
+      if (f.minSize !== undefined) { where.push('e.size >= ?'); args.push(f.minSize) }
+      if (f.maxSize !== undefined) { where.push('e.size <= ?'); args.push(f.maxSize) }
       const dir = f.order === 'desc' ? 'DESC' : 'ASC'
-      const order = f.sort === 'name' ? `name_lower ${dir}, rel ${dir}` : `${f.sort} ${dir}, name_lower ${dir}, rel ${dir}`
+      const order = f.sort === 'name' ? `e.name_lower ${dir}, e.rel ${dir}` : `e.${f.sort} ${dir}, e.name_lower ${dir}, e.rel ${dir}`
+      if (hits) args.unshift(hits)
       const rows = db.query<{ rel: string; type: string; size: number; mtime: number }, (string | number)[]>(
-        `SELECT rel, type, size, mtime FROM entries WHERE ${where.join(' AND ')} ORDER BY ${order} LIMIT ${f.limit + 1}`,
+        `SELECT e.rel, e.type, e.size, e.mtime FROM ${hits ? 'json_each(?) AS h CROSS JOIN entries AS e ON e.id = h.value' : 'entries AS e'} WHERE ${where.join(' AND ')} ORDER BY ${order} LIMIT ${f.limit + 1}`,
       ).all(...args)
       // the path in the space: the start folder, then what lies under it
       const prefix = startRel === '/' ? '' : startRel
