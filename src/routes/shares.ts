@@ -9,7 +9,7 @@ import { config } from '../config'
 import { context, need, requireAdmin, requireUser } from '../context'
 import { bad, HttpError, listDir, normRel, notFound, resolveIn, storagePath, treeStats } from '../fsx'
 import { sizeText } from '../messages'
-import { ready } from '../quota'
+import { limitOf as quotaOf, ready } from '../quota'
 import {
   allShares, createShare, findShare, isUnlocked, kindOf, lockoutKey, openShare, publicShare, recordUpload, revokeShare, type Share,
   SHARE_COOKIE, allowedShareDays, SHARE_LOCKOUT, SHARE_MAX_DOWNLOADS, SHARE_MAX_FILES, SHARE_MAX_TOTAL, SHARE_NOTE_MAX,
@@ -289,19 +289,24 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
     if (!owner || !a) throw notFound()
     const size = Number(body.size)
     if (!Number.isSafeInteger(size) || size < 0) throw bad('upload.bad-size')
-    if (share.maxFileBytes != null && size > share.maxFileBytes) throw new HttpError(413, 'share.upload-too-big', { max: share.maxFileBytes, maxText: sizeText(share.maxFileBytes) })
+    // a link made without limits gets the server's defaults, so no link is open-ended
+    const maxFile = share.maxFileBytes ?? config.uploadRequestMaxFile
+    const maxTotal = share.maxTotalBytes ?? config.uploadRequestMaxTotal
+    if (size > maxFile) throw new HttpError(413, 'share.upload-too-big', { max: maxFile, maxText: sizeText(maxFile) })
     const load = shareUploadLoad(share.id, ip)
     if (load.count >= SHARE_UPLOADS_PER_LINK || load.byIp >= SHARE_UPLOADS_PER_IP) throw new HttpError(429, 'share.upload-busy')
     // finished and announced files both count, so parallel announcements can not pass the limit together
     const files = (share.uploadedFiles ?? 0) + load.count
     const total = (share.uploadedBytes ?? 0) + load.bytes
-    if ((share.maxFiles != null && files + 1 > share.maxFiles) || (share.maxTotalBytes != null && total + size > share.maxTotalBytes)) {
+    if ((share.maxFiles != null && files + 1 > share.maxFiles) || total + size > maxTotal) {
       throw new HttpError(403, 'share.upload-full')
     }
     const key = visitorKey(request) ?? randomBytes(16).toString('hex')
     // the bytes count against the owner's quota when the link is in their home space
     const started = initUpload({
       owner: `share:${share.id}:${key}`,
+      // bytes nobody's quota holds (the public space, an owner without a quota) count against the visitors' daily allowance
+      guest: share.space === 'public' || !quotaOf(owner),
       quotaUser: share.space === 'home' ? owner : undefined,
       shareId: share.id,
       ip,

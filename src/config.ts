@@ -34,6 +34,11 @@ export const config = {
   uploadChunkSize: num('UPLOAD_CHUNK_SIZE', 8 * 1024 ** 2), // 8 MB
   uploadSimultaneous: num('UPLOAD_SIMULTANEOUS', 3),
   uploadStaleMs: num('UPLOAD_STALE_HOURS', 3) * 3600_000,
+  /** an upload-request link made without limits gets these (per file, and all files of the link together) */
+  uploadRequestMaxFile: num('UPLOAD_REQUEST_MAX_FILE', 1024 ** 3), // 1 GB
+  uploadRequestMaxTotal: num('UPLOAD_REQUEST_MAX_TOTAL', 5 * 1024 ** 3), // 5 GB
+  /** an announced upload of such a link that gets no chunk for this long stops holding the link's slots */
+  uploadRequestIdleMs: num('UPLOAD_REQUEST_IDLE_MINUTES', 15) * 60_000,
   /** bytes all visitors (not signed in) may upload together per day; 0 = visitors can not upload */
   guestUploadDailyBytes: num('GUEST_UPLOAD_DAILY_BYTES', 1024 ** 3), // 1 GB
   /** uploads are refused when they would leave less free disk space than this */
@@ -45,6 +50,11 @@ export const config = {
   versionsDays: Math.max(0, num('VERSIONS_DAYS', 30)),
   loginMaxAttempts: num('LOGIN_MAX_ATTEMPTS', 5),
   loginLockoutMs: num('LOGIN_LOCKOUT_SECONDS', 60) * 1000,
+  /** wider nets than ip|user: failures of one account from any address, and of one address with any username, within the window */
+  loginAccountMaxAttempts: num('LOGIN_ACCOUNT_MAX_ATTEMPTS', 20),
+  loginAddressMaxAttempts: num('LOGIN_ADDRESS_MAX_ATTEMPTS', 30),
+  /** the window those failures are counted in, and how long the account / address then waits */
+  loginWideWindowMs: num('LOGIN_WIDE_WINDOW_MINUTES', 15) * 60_000,
   /** longest a share link may last; a link is made for 1, 7 or 30 days, whichever of those is not above this */
   shareMaxDays: num('SHARE_MAX_DAYS', 30),
   auditMaxBytes: 10 * 1024 * 1024,

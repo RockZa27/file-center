@@ -7,7 +7,7 @@ import { bootstrapAdmin, pruneLoginAttempts, purgeExpiredSessions } from './auth
 import { backupDue, backupRunning, runBackup } from './backup'
 import { config, ensureDirs } from './config'
 import { context } from './context'
-import { notFound, within } from './fsx'
+import { HttpError, notFound, within } from './fsx'
 import { onStop, shutdown } from './lifecycle'
 import { accessLine, log } from './logger'
 import { adminRoutes } from './routes/admin'
@@ -128,10 +128,29 @@ const fromThisMachine = (request: Request, socketIp: string | undefined) =>
 // when each request came in, for the access log (ACCESS_LOG=true)
 const requestStart = new WeakMap<Request, number>()
 
+// Bun's own limit has to fit a chunk upload, so it is far too generous for JSON: a list of names or a form is small.
+// Only the text editor (PUT /api/content, up to 2 MB of text, more once escaped) needs more.
+const JSON_MAX_BYTES = 1024 * 1024
+const BIG_JSON = /^\/api\/content$/
+
+/**
+ * A JSON body over JSON_MAX_BYTES is refused before anything parses it (a parse and a schema check of millions of
+ * list entries is a stall of its own). The length header says it when there is one; without it (chunked) the body is
+ * read from a copy of the request. Routes that read their own body (chunks, logo, update package) are not JSON.
+ */
+async function refuseBigJson(request: Request) {
+  if (request.method === 'GET' || request.method === 'HEAD' || !request.body) return
+  if (!(request.headers.get('content-type') ?? '').toLowerCase().includes('json')) return
+  if (BIG_JSON.test(new URL(request.url).pathname)) return
+  const length = Number(request.headers.get('content-length'))
+  if (length > JSON_MAX_BYTES || (!length && (await request.clone().text()).length > JSON_MAX_BYTES)) throw new HttpError(413, 'request.too-big')
+}
+
 export const app = new Elysia({ serve: { maxRequestBodySize: config.uploadChunkSize * 2 + 1024 * 1024 } })
   // set before routing, so error responses (401, 404...) carry them too
-  .onRequest(({ request, set }) => {
+  .onRequest(async ({ request, set }) => {
     if (config.accessLog) requestStart.set(request, performance.now())
+    await refuseBigJson(request)
     set.headers['x-content-type-options'] = 'nosniff'
     set.headers['x-frame-options'] = 'SAMEORIGIN'
     set.headers['referrer-policy'] = 'same-origin'

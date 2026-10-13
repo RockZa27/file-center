@@ -352,11 +352,11 @@ export function dropLoginTickets(username: string) {
 // ───────────────────────────── login lockout ─────────────────────────────
 
 // per "ip|username": failures within the lockout window, and when the lockout ends
-const attempts = new Map<string, { count: number; until: number; last: number; lockMs: number }>()
+const attempts = new Map<string, { count: number; until: number; last: number; first: number; lockMs: number; keepMs: number }>()
 const ATTEMPTS_MAX = 10_000
 
 /** how many failures lock a key, and for how long; logins use LOGIN_MAX_ATTEMPTS / LOGIN_LOCKOUT_SECONDS */
-export type Lockout = { max: number; lockMs: number }
+export type Lockout = { max: number; lockMs: number; /** failures older than this are forgotten (default: the lockout time) */ windowMs?: number }
 const loginLockout = (): Lockout => ({ max: config.loginMaxAttempts, lockMs: config.loginLockoutMs })
 
 export function lockedFor(key: string): number {
@@ -368,11 +368,14 @@ export function lockedFor(key: string): number {
 export function recordFailure(key: string, limits: Lockout = loginLockout()): boolean {
   if (attempts.size >= ATTEMPTS_MAX) pruneLoginAttempts()
   const now = Date.now()
-  const a = attempts.get(key) ?? { count: 0, until: 0, last: now, lockMs: limits.lockMs }
-  if (a.until && a.until <= now) { a.count = 0; a.until = 0 }
+  const keepMs = Math.max(limits.lockMs, limits.windowMs ?? 0)
+  const a = attempts.get(key) ?? { count: 0, until: 0, last: now, first: now, lockMs: limits.lockMs, keepMs }
+  if ((a.until && a.until <= now) || (limits.windowMs && !a.until && now - a.first > limits.windowMs)) { a.count = 0; a.until = 0 }
+  if (a.count === 0) a.first = now
   a.count++
   a.last = now
   a.lockMs = limits.lockMs
+  a.keepMs = keepMs
   const locks = a.count >= limits.max && !a.until
   if (a.count >= limits.max) a.until = now + limits.lockMs
   attempts.set(key, a)
@@ -381,12 +384,33 @@ export function recordFailure(key: string, limits: Lockout = loginLockout()): bo
 
 export const clearFailures = (key: string) => attempts.delete(key)
 
+// Wider nets than ip|user, which one address defeats by changing the username and one account defeats by changing the
+// address: all failures of an account (any address), and all failures of an address (any username).
+const wide = (max: number): Lockout => ({ max, lockMs: config.loginWideWindowMs, windowMs: config.loginWideWindowMs })
+const accountKey = (kind: 'login' | '2fa', username: string) => `${kind}-account|${username.toLowerCase()}`
+const addressKey = (ip: string) => `login-address|${ip}`
+
+/** seconds a sign-in must wait because of the account-wide or address-wide counter (0 = free); a right password does not skip it */
+export const wideLoginWait = (username: string, ip: string): number =>
+  Math.max(lockedFor(accountKey('login', username)), lockedFor(addressKey(ip)))
+export const wideCodeWait = (username: string): number => lockedFor(accountKey('2fa', username))
+
+/** count a wrong password in both wide nets; says which of them this failure locked */
+export function recordWideLoginFailure(username: string, ip: string): { account: boolean; address: boolean } {
+  return {
+    account: recordFailure(accountKey('login', username), wide(config.loginAccountMaxAttempts)),
+    address: recordFailure(addressKey(ip), wide(config.loginAddressMaxAttempts)),
+  }
+}
+export const recordWideCodeFailure = (username: string): boolean =>
+  recordFailure(accountKey('2fa', username), wide(config.loginAccountMaxAttempts))
+
 /** forget lockouts that ended and failures older than the lockout window; returns how many were dropped */
 export function pruneLoginAttempts(): number {
   const now = Date.now()
   let n = 0
   for (const [k, a] of attempts) {
-    if (a.until ? a.until <= now : now - a.last > a.lockMs) {
+    if (a.until ? a.until <= now : now - a.last > a.keepMs) {
       attempts.delete(k)
       n++
     }
@@ -399,14 +423,18 @@ export function pruneLoginAttempts(): number {
  * cookie is not enough: the password is asked again, and wrong guesses are rate limited like a login.
  * Every step-up shares one counter, so guesses can not be spread over several actions.
  */
-export async function confirmPassword(user: User, ip: string, password: string, deniedAction: string) {
+export async function confirmPassword(
+  user: User, ip: string, password: string, deniedAction: string,
+  /** the answer to a wrong password (the password change keeps its own message and status) */
+  wrong: () => HttpError = () => new HttpError(403, 'auth.wrong-password'),
+) {
   const key = `step-up|${ip}|${user.username.toLowerCase()}`
   const wait = lockedFor(key)
   if (wait) throw new HttpError(429, 'auth.confirm-locked', { seconds: wait })
   if (!(await Bun.password.verify(password, user.passwordHash).catch(() => false))) {
     if (recordFailure(key)) alert('lockout', 'admin.alert-confirm-locked', { user: user.username, ip })
     audit({ user: user.username, ip, action: deniedAction })
-    throw new HttpError(403, 'auth.wrong-password')
+    throw wrong()
   }
   clearFailures(key)
 }
