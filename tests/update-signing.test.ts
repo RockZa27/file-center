@@ -1,5 +1,5 @@
 /**
- * Signed update packages (UPDATE_PUBLIC_KEY). Runs the app as child processes with different keys and stages
+ * Signed update packages (UPDATE_PUBLIC_KEY, the built-in key, UPDATE_ALLOW_UNSIGNED). Runs the app as child processes with different keys and stages
  * packages through the HTTP API the way the web page does. Staging and the signature checks run none of the
  * package's code, so no launcher is needed: FC_SUPERVISED=1 only unlocks the update routes.
  * Needs web/dist (bun --bun run build): the signed package is built by the real scripts/package.ts --skip-web.
@@ -10,6 +10,7 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, w
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { unzipSync, zipSync } from 'fflate'
+import { BUILTIN_UPDATE_KEY } from '../src/update-key'
 
 const root = resolve(import.meta.dir, '..')
 const base = mkdtempSync(join(tmpdir(), 'fc-sign-'))
@@ -23,7 +24,7 @@ const other = generateKeyPairSync('ed25519')
 
 type Server = { port: number; data: string; proc: ReturnType<typeof Bun.spawn>; stderr: () => string; cookie: string; csrf: string }
 
-async function startServer(name: string, publicKey: string): Promise<Server> {
+async function startServer(name: string, publicKey: string, extraEnv: Record<string, string> = {}): Promise<Server> {
   const probe = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: () => new Response('') })
   const port = probe.port!
   await probe.stop(true)
@@ -35,7 +36,7 @@ async function startServer(name: string, publicKey: string): Promise<Server> {
     env: {
       PATH: process.env.PATH!, HOME: process.env.HOME ?? base, NODE_ENV: 'production', PORT: String(port), HOST: '127.0.0.1',
       STORAGE_DIR: join(dir, 'storage'), DATA_DIR: join(dir, 'data'), ADMIN_PASSWORD: PASSWORD, MIN_FREE_SPACE: '0',
-      FC_SUPERVISED: '1', UPDATE_PUBLIC_KEY: publicKey,
+      FC_SUPERVISED: '1', UPDATE_PUBLIC_KEY: publicKey, ...extraEnv,
     },
   })
   let log = ''
@@ -163,7 +164,7 @@ describe('signed update packages', () => {
     test('the update page knows a signature is required', async () => {
       const s = await api(keyed, 'GET', '/api/admin/update')
       expect(s.status).toBe(200)
-      expect(s.data.signatureRequired).toBe(true)
+      expect(s.data).toMatchObject({ signatureRequired: true, allowUnsigned: false, builtinKey: false })
     })
 
     test('a package signed with the key is accepted', async () => {
@@ -234,15 +235,69 @@ describe('signed update packages', () => {
     expect(r.data.error).toContain('Ed25519')
   }, 60_000)
 
+  describe('without UPDATE_PUBLIC_KEY the key built into File Center is used', () => {
+    let builtin: Server
+
+    test('the built-in key is a readable Ed25519 public key', () => {
+      const pub = createPublicKey({ key: Buffer.from(BUILTIN_UPDATE_KEY, 'base64'), format: 'der', type: 'spki' })
+      expect(pub.asymmetricKeyType).toBe('ed25519')
+    })
+
+    test('a package signed with a throw-away key or not at all is refused', async () => {
+      builtin = await startServer('builtin', '')
+      servers.push(builtin)
+      expect(builtin.stderr()).not.toContain('update-key-invalid')
+      const s = (await api(builtin, 'GET', '/api/admin/update')).data
+      expect(s).toMatchObject({ signatureRequired: true, allowUnsigned: false, builtinKey: true })
+      const wrong = await stage(builtin, realSigned)
+      expect(wrong.status).toBe(400)
+      expect(wrong.data.error).toContain('ลายเซ็นของแพ็กเกจไม่ถูกต้อง')
+      const none = await stage(builtin, makePackage({ version: '9.1.0' }))
+      expect(none.status).toBe(400)
+      expect(none.data.error).toContain('ไม่มีลายเซ็น')
+    }, 40_000)
+  })
+
+  // kept under its old name: what changed is that "without a key" means the built-in key, so only UPDATE_ALLOW_UNSIGNED lets unsigned in
   test('without a key, unsigned and signed packages are both accepted; the signature is not checked', async () => {
-    const open = await startServer('no-key', '')
+    const open = await startServer('no-key', '', { UPDATE_ALLOW_UNSIGNED: 'true' })
     servers.push(open)
-    expect((await api(open, 'GET', '/api/admin/update')).data.signatureRequired).toBe(false)
+    expect((await api(open, 'GET', '/api/admin/update')).data).toMatchObject({ signatureRequired: false, builtinKey: true })
     const unsigned = await stage(open, makePackage({ version: '9.1.0' }))
     expect(unsigned.status).toBe(200)
     expect(unsigned.data).toMatchObject({ signed: false, signatureVerified: false })
-    const signed = await stage(open, realSigned)
-    expect(signed.status).toBe(200)
-    expect(signed.data).toMatchObject({ version: '9.9.9', signed: true, signatureVerified: false })
+    // a signature that is there is still checked, against the built-in key
+    expect((await stage(open, realSigned)).status).toBe(400)
   }, 40_000)
+
+  describe('UPDATE_ALLOW_UNSIGNED=true', () => {
+    test('accepts an unsigned package, still checks a signature that is there, warns, and audits the install', async () => {
+      const open = await startServer('allow-unsigned', trustedPublic, { UPDATE_ALLOW_UNSIGNED: 'true' })
+      servers.push(open)
+      // warned at startup, on the update page and on the dashboard
+      expect(open.stderr()).toContain('update-allow-unsigned')
+      const s = (await api(open, 'GET', '/api/admin/update')).data
+      expect(s).toMatchObject({ signatureRequired: false, allowUnsigned: true })
+      const warnings = (await api(open, 'GET', '/api/admin/status')).data.warnings as { code: string }[]
+      expect(warnings.map(w => w.code)).toContain('update.allow-unsigned')
+
+      // a signature that is there must still verify
+      const wrong = await stage(open, makePackage({ version: '9.1.0', key: other.privateKey }))
+      expect(wrong.status).toBe(400)
+      expect(wrong.data.error).toContain('ลายเซ็นของแพ็กเกจไม่ถูกต้อง')
+      const good = await stage(open, realSigned)
+      expect(good.data).toMatchObject({ signed: true, signatureVerified: true })
+
+      // an unsigned one is staged, installed after the password, and the install is audited as unsigned
+      const built = Bun.spawnSync([process.execPath, join(root, 'scripts', 'package.ts'), '--skip-web', '--version', '9.9.8', '--out', join(base, 'unsigned')], { cwd: root })
+      expect(built.exitCode).toBe(0)
+      const staged = await stage(open, new Uint8Array(readFileSync(join(base, 'unsigned', 'file-center-9.9.8.zip'))))
+      expect(staged.status).toBe(200)
+      expect(staged.data).toMatchObject({ version: '9.9.8', signed: false, signatureVerified: false })
+      const r = await api(open, 'POST', '/api/admin/update/apply', { id: staged.data.id, password: PASSWORD })
+      expect(r.status).toBe(200)
+      const entries = (await api(open, 'GET', '/api/admin/activity?action=update-apply-unsigned')).data.items
+      expect(entries[0]).toMatchObject({ user: 'admin', detail: '9.9.8' })
+    }, 90_000)
+  })
 })

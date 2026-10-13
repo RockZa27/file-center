@@ -102,6 +102,7 @@ export const updateRoutes = new Elysia({ prefix: '/api/admin/update' })
     // the package's own code runs for the first time in here (its test run), so only after the password
     const r = await applyStaged(body.id)
     audit({ user: admin.username, ip, action: 'update-apply', detail: r.version })
+    if (!r.signed) audit({ user: admin.username, ip, action: 'update-apply-unsigned', detail: r.version })
     restartSoon()
     return { ok: true, version: r.version, restarting: true }
   }, { body: t.Object({ id: t.String(), password: t.String({ maxLength: 1000 }) }) })
@@ -132,6 +133,7 @@ export const updateRoutes = new Elysia({ prefix: '/api/admin/update' })
       throw e
     }
     audit({ user: admin.username, ip, action: 'update-apply', detail: r.version })
+    if (!r.signed) audit({ user: admin.username, ip, action: 'update-apply-unsigned', detail: r.version })
     restartSoon()
     return { ok: true, version: r.version, restarting: true }
   }, { body: t.Object({ password: t.String({ maxLength: 1000 }) }) })

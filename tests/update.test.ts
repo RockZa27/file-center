@@ -8,12 +8,16 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { createHash } from 'node:crypto'
 import { zipSync } from 'fflate'
+import { makeTestKey, signManifest, writeKeyFile } from './update-keys'
 
 const root = resolve(import.meta.dir, '..')
 const hasWeb = existsSync(join(root, 'web', 'dist', 'index.html'))
 const base = mkdtempSync(join(tmpdir(), 'fc-update-'))
 const dirs = { storage: join(base, 'storage'), data: join(base, 'data'), pkgs: join(base, 'pkgs') }
 const PASSWORD = 'update-test-pass'
+// packages must be signed: this file signs with a throw-away key and the launcher trusts its public key
+const testKey = makeTestKey()
+const keyFile = join(base, 'update-signing.key')
 const BUILTIN = JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version as string
 
 let port = 0
@@ -77,7 +81,7 @@ async function startLauncher() {
       PORT: String(port), HOST: '127.0.0.1', STORAGE_DIR: dirs.storage, DATA_DIR: dirs.data,
       ADMIN_PASSWORD: PASSWORD, UPLOAD_CHUNK_SIZE: String(1024 * 1024), MIN_FREE_SPACE: '0',
       FC_STABLE_MS: '1500', FC_HEALTH_TIMEOUT_MS: '15000', LOGIN_MAX_ATTEMPTS: '3', LOGIN_LOCKOUT_SECONDS: '3',
-      UPDATE_SOURCE: `http://127.0.0.1:${source.port}/updates`,
+      UPDATE_PUBLIC_KEY: testKey.publicKey, UPDATE_SOURCE: `http://127.0.0.1:${source.port}/updates`,
     },
   })
   await until(async () => (await health())?.status === 'ok', 30_000, 'app start')
@@ -103,7 +107,8 @@ function makePackage(name: string, opts: { version: string; server: string; extr
     name: 'file-center', version: opts.version, builtAt: new Date().toISOString(), notes: 'test',
     files: Object.fromEntries(Object.entries(files).map(([p, d]) => [p, { size: d.length, sha256: createHash('sha256').update(d).digest('hex') }])),
   }
-  const entries: Record<string, Uint8Array> = { 'manifest.json': enc.encode(JSON.stringify(manifest)), ...files }
+  const manifestBytes = enc.encode(JSON.stringify(manifest))
+  const entries: Record<string, Uint8Array> = { 'manifest.json': manifestBytes, 'manifest.sig': enc.encode(signManifest(manifestBytes, testKey)), ...files }
   if (opts.tamper) entries['server.js'] = enc.encode('console.log("evil")')
   // same length, different bytes: only the SHA-256 can tell
   if (opts.tamperSameSize) entries['server.js'] = enc.encode(opts.server.replace(/1/g, '2'))
@@ -132,8 +137,9 @@ const suite = hasWeb ? describe : describe.skip
 suite('update from the web', () => {
   beforeAll(async () => {
     mkdirSync(dirs.pkgs, { recursive: true })
+    writeKeyFile(testKey, keyFile)
     // the real thing: bundle this source tree as version 9.9.9
-    const built = Bun.spawnSync([process.execPath, join(root, 'scripts', 'package.ts'), '--skip-web', '--version', '9.9.9', '--out', join(dirs.pkgs, 'real'), '--notes', 'e2e'], { cwd: root })
+    const built = Bun.spawnSync([process.execPath, join(root, 'scripts', 'package.ts'), '--skip-web', '--version', '9.9.9', '--out', join(dirs.pkgs, 'real'), '--notes', 'e2e', '--sign', keyFile], { cwd: root })
     expect(built.exitCode).toBe(0)
     await startLauncher()
     await login(admin, 'admin', PASSWORD)
@@ -322,12 +328,12 @@ suite('update from the web', () => {
     published.set('/updates/file-center-9.9.9.zip', zip)
     published.set('/updates/latest.json', JSON.stringify({
       version: '9.9.9', file: 'file-center-9.9.9.zip', sha256: createHash('sha256').update(zip).digest('hex'), size: zip.length,
-      builtAt: new Date().toISOString(), commit: 'abc1234', notes: 'e2e', signed: false,
+      builtAt: new Date().toISOString(), commit: 'abc1234', notes: 'e2e', signed: true,
     }))
     const status = (await api('GET', '/api/admin/update')).data
     expect(status.source).toEqual({ enabled: true, url: `http://127.0.0.1:${source.port}/updates` })
     const check = await api('GET', '/api/admin/update/check')
-    expect(check.data).toMatchObject({ enabled: true, current: BUILTIN, latest: { version: '9.9.9', signed: false }, newer: true })
+    expect(check.data).toMatchObject({ enabled: true, current: BUILTIN, latest: { version: '9.9.9', signed: true }, newer: true })
 
     const staged = await api('POST', '/api/admin/update/fetch')
     expect(staged.status).toBe(200)
@@ -355,13 +361,13 @@ suite('update from the web', () => {
 
   test('one step: the published version is checked, fetched, staged, tested and installed after one password', async () => {
     // runs on 9.9.9 from the test before; the next version is this source tree again, as 9.9.10
-    const built = Bun.spawnSync([process.execPath, join(root, 'scripts', 'package.ts'), '--skip-web', '--version', '9.9.10', '--out', join(dirs.pkgs, 'next'), '--notes', 'one step'], { cwd: root })
+    const built = Bun.spawnSync([process.execPath, join(root, 'scripts', 'package.ts'), '--skip-web', '--version', '9.9.10', '--out', join(dirs.pkgs, 'next'), '--notes', 'one step', '--sign', keyFile], { cwd: root })
     expect(built.exitCode).toBe(0)
     const zip = new Uint8Array(readFileSync(join(dirs.pkgs, 'next', 'file-center-9.9.10.zip')))
     published.set('/updates/file-center-9.9.10.zip', zip)
     published.set('/updates/latest.json', JSON.stringify({
       version: '9.9.10', file: 'file-center-9.9.10.zip', sha256: createHash('sha256').update(zip).digest('hex'), size: zip.length,
-      builtAt: new Date().toISOString(), commit: 'abc1234', notes: 'one step', signed: false,
+      builtAt: new Date().toISOString(), commit: 'abc1234', notes: 'one step', signed: true,
     }))
     const before = (await health()).boot
     const denied = await api('POST', '/api/admin/update/fetch-and-apply', { password: 'wrong-password' })

@@ -27,7 +27,9 @@ function git(cwd: string, ...a: string[]) {
   if (r.code !== 0) throw new Error(`git ${a.join(' ')}: ${r.err}`)
   return r.out
 }
-const release = (repo: string, ...a: string[]) => sh([process.execPath, join(repo, 'scripts', 'release.ts'), '--skip-web', ...a], repo)
+const releaseRaw = (repo: string, ...a: string[]) => sh([process.execPath, join(repo, 'scripts', 'release.ts'), '--skip-web', ...a], repo)
+/** publishing needs --sign or --unsigned: the tests that are not about signing say --unsigned on purpose */
+const release = (repo: string, ...a: string[]) => releaseRaw(repo, ...(a.includes('--sign') ? [] : ['--unsigned']), ...a)
 const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex')
 const show = (repo: string, ref: string, file: string) => git(repo, 'show', `${ref}:${file}`)
 
@@ -162,6 +164,24 @@ describe('bun run release', () => {
     // the same version again: refused (now read from latest.json too)
     expect(release(repo).code).toBe(1)
   }, 60_000)
+
+  test('refuses to publish without --sign unless --unsigned is given', () => {
+    bump(repo, '1.4.5')
+    const before = git(repo, 'rev-parse', 'updates')
+    const r = releaseRaw(repo)
+    expect(r.code).toBe(1)
+    expect(r.err).toContain('--sign')
+    expect(r.err).toContain('--unsigned')
+    // nothing was built or committed
+    expect(git(repo, 'rev-parse', 'updates')).toBe(before)
+    expect(worktrees(repo)).toBe(1)
+    // --sign and --unsigned together are a mistake too
+    const keyFile = join(base, 'both.key')
+    writeFileSync(keyFile, generateKeyPairSync('ed25519').privateKey.export({ type: 'pkcs8', format: 'pem' }))
+    expect(releaseRaw(repo, '--sign', keyFile, '--unsigned').code).toBe(1)
+    expect(git(repo, 'rev-parse', 'updates')).toBe(before)
+    git(repo, 'reset', '--quiet', '--hard', 'HEAD~1')
+  })
 
   test('the temporary worktree is removed when something fails half way', () => {
     bump(repo, '1.5.0')

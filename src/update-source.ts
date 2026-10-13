@@ -5,7 +5,7 @@
  * downloaded or installed without an admin.
  *
  * A fetched package is only downloaded here: it then goes through exactly the staging of an uploaded one
- * (updater.ts), and installing it still needs the password and, with UPDATE_PUBLIC_KEY set, a valid signature.
+ * (updater.ts), and installing it still needs the password and a valid signature.
  * The SHA-256 in latest.json catches a broken download; it can not tell who made the package, the signature does.
  */
 import { randomBytes } from 'node:crypto'
@@ -14,7 +14,7 @@ import { join } from 'node:path'
 import { config, paths } from './config'
 import { bad, conflict, ensureDir, ensureSpace, HttpError } from './fsx'
 import { compareVersions, isVersion } from './release'
-import { runningVersion } from './updater'
+import { runningVersion, signatureRequired } from './updater'
 
 /** how long and how much; tests make the timeouts shorter */
 export const SOURCE_LIMITS = {
@@ -159,12 +159,14 @@ async function fetchLatest(base: string): Promise<Latest> {
 export async function checkSource() {
   const base = activeBase()
   const current = runningVersion()
-  if (!base) return { enabled: false, current, latest: null, newer: false }
+  if (!base) return { enabled: false, current, latest: null, newer: false, refused: false }
   const l = await fetchLatest(base)
   return {
     enabled: true,
     current,
+    // a version latest.json calls unsigned would be refused (fetchPackage), so the page can say so before downloading
     latest: { version: l.version, notes: l.notes, size: l.size, signed: l.signed, builtAt: l.builtAt },
+    refused: !l.signed && signatureRequired(),
     newer: compareVersions(l.version, current) > 0,
   }
 }
@@ -204,6 +206,8 @@ export async function fetchPackage(): Promise<{ path: string; size: number; vers
     if (compareVersions(latest.version, runningVersion()) <= 0) {
       throw bad('update.source-not-newer', { version: latest.version, running: runningVersion() })
     }
+    // latest.json says it is unsigned: do not download 100 MB to refuse it (the signature is checked again when staging)
+    if (!latest.signed && signatureRequired()) throw bad('update.unsigned')
     const tooBig = new HttpError(413, 'update.too-big')
     if (latest.size > config.updateMaxSize) throw tooBig
 

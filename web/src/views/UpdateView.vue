@@ -13,11 +13,12 @@
           <div class="kv">
             <span class="muted label">{{ t('update.signing') }}</span>
             <span class="badge" :class="{ on: st.signatureRequired }">
-              <n-icon :component="st.signatureRequired ? ShieldCheckmarkOutline : ShieldOutline" /><span>{{ st.signatureRequired ? t('update.signingRequired') : t('update.signingOptional') }}</span>
+              <n-icon :component="st.signatureRequired ? ShieldCheckmarkOutline : ShieldOutline" /><span>{{ st.signatureRequired ? t('update.signingRequired') : t('update.signingAllowUnsigned') }}</span>
             </span>
           </div>
         </div>
 
+        <n-alert v-if="st.allowUnsigned" type="warning" class="gap">{{ t('update.allowUnsignedBody') }}</n-alert>
         <n-alert v-if="st.pending" type="info" class="gap">{{ t('update.pending', { v: pendingVersion }) }}</n-alert>
         <n-alert v-if="st.last && st.last.ok" type="success" class="gap" closable>{{ t('update.lastOk', { v: st.last.version }) }}</n-alert>
         <n-alert v-if="st.last && !st.last.ok" type="error" class="gap">{{ t('update.lastFail', { v: st.last.version, msg: st.last.message }) }}</n-alert>
@@ -144,7 +145,8 @@
             <n-tag v-else type="warning" :bordered="false" class="sig"><template #icon><n-icon :component="WarningOutline" /></template>{{ t('update.latestUnsigned') }}</n-tag>
           </div>
           <div v-if="check.latest.notes" class="kv"><span class="muted">{{ t('update.notes') }}</span><span class="notes">{{ check.latest.notes }}</span></div>
-          <n-alert v-if="!check.latest.signed" type="error" :title="t('update.unsignedWebTitle')" class="gap top">{{ t('update.unsignedWebBody') }}</n-alert>
+          <n-alert v-if="check.refused" type="error" :title="t('update.refusedTitle')" class="gap top">{{ t('update.refusedBody') }}</n-alert>
+          <n-alert v-else-if="!check.latest.signed" type="error" :title="t('update.unsignedWebTitle')" class="gap top">{{ t('update.unsignedWebBody') }}</n-alert>
         </template>
       </template>
 
@@ -172,7 +174,7 @@
       </template>
       <div class="actions">
         <n-button :disabled="oneRunning" @click="oneOpen = false">{{ t('common.cancel') }}</n-button>
-        <n-button type="primary" :disabled="!onePassword && !oneRunning" :loading="oneRunning" @click="updateNow">
+        <n-button type="primary" :disabled="(!onePassword && !oneRunning) || check?.refused" :loading="oneRunning" @click="updateNow">
           <template #icon><n-icon :component="CloudDownloadOutline" /></template>{{ oneFailed ? t('common.retry') : t('update.updateNow') }}
         </n-button>
       </div>

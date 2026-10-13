@@ -4,8 +4,9 @@
  * 1. stagePackage: unzip the uploaded package into staging/ and accept only the files its manifest lists
  *    (checked by size and SHA-256). Static checks only: no code from the package runs here, because an
  *    admin session alone (a stolen cookie, say) must not be enough to run code on the server.
- *    With UPDATE_PUBLIC_KEY set, manifest.json must also carry a valid Ed25519 signature (manifest.sig) by the
- *    holder of the private key, so even a taken-over admin account (session + password) can not install its own code.
+ *    manifest.json must also carry a valid Ed25519 signature (manifest.sig) by the holder of the private key: the one in
+ *    UPDATE_PUBLIC_KEY, or File Center's own (update-key.ts). So even a taken-over admin account (session + password)
+ *    can not install its own code. UPDATE_ALLOW_UNSIGNED=true lets unsigned packages in (a signed one must still verify).
  * 2. applyStaged (after the password step-up): start the new server for a few seconds against throw-away
  *    data to prove it boots on this machine, then move it to releases/, record it in state.json and ask
  *    for a restart. The launcher starts the new code and goes back to the old one if it does not come up.
@@ -16,6 +17,7 @@ import {
 } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { config, paths } from './config'
+import { BUILTIN_UPDATE_KEY } from './update-key'
 import { bad, conflict, ensureSpace, freeSpace, HttpError, notFound } from './fsx'
 import { MESSAGES, text, type Lang, type MessageCode, type Params } from './messages'
 import {
@@ -46,7 +48,7 @@ export type StagedInfo = {
   tested: false
   /** the package carries manifest.sig */
   signed: boolean
-  /** the signature was checked against UPDATE_PUBLIC_KEY (false when no key is set: then nothing can check it) */
+  /** the signature was checked against the key in effect (false only for an unsigned package accepted by UPDATE_ALLOW_UNSIGNED) */
   signatureVerified: boolean
 }
 
@@ -64,9 +66,9 @@ export async function exclusive<T>(fn: () => Promise<T> | T): Promise<T> {
 type KeyProblem = { code: MessageCode; params: Params }
 let parsedKey: { value: string; key: KeyObject | null; error: string | null; problem: KeyProblem | null } | undefined
 
-/** the key in UPDATE_PUBLIC_KEY, parsed once per value; `error` says why it is unusable (for the log), `problem` tells the admin */
+/** the key in effect (UPDATE_PUBLIC_KEY, else the built-in one), parsed once per value; `error` says why it is unusable (for the log), `problem` tells the admin */
 export function signingKey(): { key: KeyObject | null; error: string | null; problem: KeyProblem | null } {
-  const value = config.updatePublicKey
+  const value = config.updatePublicKey || BUILTIN_UPDATE_KEY
   if (parsedKey?.value !== value) {
     parsedKey = { value, key: null, error: null, problem: null }
     if (value) {
@@ -85,19 +87,20 @@ export function signingKey(): { key: KeyObject | null; error: string | null; pro
   return { key: parsedKey.key, error: parsedKey.error, problem: parsedKey.problem }
 }
 
-/** a key is set (valid or not): every package must be signed */
-export const signatureRequired = () => config.updatePublicKey !== ''
+/** every package must be signed, unless UPDATE_ALLOW_UNSIGNED=true */
+export const signatureRequired = () => !config.updateAllowUnsigned
 
-/** check manifest.sig against the manifest bytes when a key is set; a missing or wrong signature rejects the package */
+/**
+ * Check manifest.sig against the manifest bytes. A missing signature rejects the package unless UPDATE_ALLOW_UNSIGNED
+ * is on; a signature that is there must always verify, so a package that claims to be signed can not slip through.
+ */
 function checkSignature(dir: string, manifestBytes: Buffer): { signed: boolean; signatureVerified: boolean } {
   const sigFile = join(dir, SIGNATURE_FILE)
   const signed = existsSync(sigFile)
-  if (!signatureRequired()) return { signed, signatureVerified: false }
+  if (!signed && !signatureRequired()) return { signed: false, signatureVerified: false }
   const { key, problem } = signingKey()
   if (!key) throw bad(problem!.code, problem!.params)
-  if (!signed) {
-    throw bad('update.unsigned')
-  }
+  if (!signed) throw bad('update.unsigned')
   let ok = false
   try {
     if (statSync(sigFile).size <= 1024) ok = verify(null, manifestBytes, key, Buffer.from(readFileSync(sigFile, 'utf8').trim(), 'base64'))
@@ -289,12 +292,12 @@ function pruneReleases() {
 }
 
 /** test-run and install a staged package. Call only after the password step-up; the caller restarts the app afterwards. */
-export function applyStaged(id: string): Promise<{ version: string; dir: string }> {
+export function applyStaged(id: string): Promise<{ version: string; dir: string; signed: boolean }> {
   return exclusive(async () => {
     if (!STAGED_ID.test(id)) throw notFound('update.staged-missing')
     const dir = join(staging(), id)
     if (!existsSync(join(dir, VERIFIED))) throw notFound('update.staged-missing')
-    const { manifest } = verifyTree(dir) // nothing changed since the check, signature included
+    const { manifest, signed } = verifyTree(dir) // nothing changed since the check, signature included
     if (compareVersions(manifest.version, runningVersion()) <= 0) throw bad('update.staged-not-newer')
     try {
       await smokeTest(dir, manifest)
@@ -319,7 +322,7 @@ export function applyStaged(id: string): Promise<{ version: string; dir: string 
       last: null,
     })
     pruneReleases()
-    return { version: manifest.version, dir: name }
+    return { version: manifest.version, dir: name, signed }
   })
 }
 
@@ -372,5 +375,9 @@ export function updateStatus(lang: Lang = 'th') {
     history: state.history.map(describe).filter(Boolean),
     maxPackageSize: config.updateMaxSize,
     signatureRequired: signatureRequired(),
+    /** UPDATE_ALLOW_UNSIGNED: unsigned packages are accepted (the page warns) */
+    allowUnsigned: config.updateAllowUnsigned,
+    /** the key is the one built into File Center, not UPDATE_PUBLIC_KEY */
+    builtinKey: config.updatePublicKey === '',
   }
 }

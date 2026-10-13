@@ -82,9 +82,14 @@ export const config = {
   updateMaxSize: num('UPDATE_MAX_SIZE', 200 * 1024 ** 2),
   /**
    * Ed25519 public key (base64 SPKI DER, from "bun run package --gen-key") that update packages must be signed with.
-   * Empty = packages are not signed-checked. Parsed in updater.ts, so a bad value refuses packages instead of crashing the app.
+   * Empty = the key built into File Center (update-key.ts). Parsed in updater.ts, so a bad value refuses packages instead of crashing the app.
    */
   updatePublicKey: env('UPDATE_PUBLIC_KEY', '').trim(),
+  /**
+   * "true" accepts update packages that carry no signature (one that is signed must still verify). For people who
+   * build their own packages; anyone who can make an admin install a package can then run code on the server.
+   */
+  updateAllowUnsigned: env('UPDATE_ALLOW_UNSIGNED', 'false') === 'true',
   /**
    * base URL of published updates (the `updates` branch made by "bun run release"), e.g.
    * https://raw.githubusercontent.com/<owner>/<repo>/updates. Empty = off. Checked in update-source.ts: anything but

@@ -242,12 +242,16 @@ export const MESSAGES = {
     en: 'UPDATE_PUBLIC_KEY is not valid (it must be the one-line public key from "bun run package --gen-key"), so no package is accepted until it is fixed and the server restarted.',
   },
   'update.unsigned': {
-    th: 'แพ็กเกจนี้ไม่มีลายเซ็น (manifest.sig) ระบบนี้รับเฉพาะแพ็กเกจที่เซ็นด้วยกุญแจของผู้ดูแล ให้สร้างด้วย "bun run package --sign <ไฟล์กุญแจ>"',
-    en: 'This package has no signature (manifest.sig). This server only accepts packages signed with the administrator\'s key: build it with "bun run package --sign <key file>".',
+    th: 'แพ็กเกจนี้ไม่มีลายเซ็น (manifest.sig) ระบบรับเฉพาะแพ็กเกจที่เซ็นแล้ว ให้ติดตั้งรุ่นที่เซ็นแล้วจากผู้พัฒนา หรือถ้าสร้างแพ็กเกจเอง ให้เซ็นด้วย "bun run package --sign <ไฟล์กุญแจ>" แล้วตั้ง UPDATE_PUBLIC_KEY เป็นกุญแจสาธารณะของคุณ (หรือตั้ง UPDATE_ALLOW_UNSIGNED=true เพื่อรับแพ็กเกจที่ไม่เซ็น ซึ่งเสี่ยง)',
+    en: 'This package has no signature (manifest.sig) and this server only installs signed packages. Install a signed release, or if you build your own packages, sign them with "bun run package --sign <key file>" and set UPDATE_PUBLIC_KEY to your public key (or set UPDATE_ALLOW_UNSIGNED=true to accept unsigned packages, which is risky).',
   },
   'update.bad-signature': {
-    th: 'ลายเซ็นของแพ็กเกจไม่ถูกต้อง: แพ็กเกจไม่ได้เซ็นด้วยกุญแจที่ตรงกับ UPDATE_PUBLIC_KEY หรือถูกแก้ไขหลังจากเซ็น',
-    en: 'The package signature is wrong: it was not signed with the key matching UPDATE_PUBLIC_KEY, or it was changed after signing.',
+    th: 'ลายเซ็นของแพ็กเกจไม่ถูกต้อง: แพ็กเกจไม่ได้เซ็นด้วยกุญแจที่ระบบใช้ตรวจ (UPDATE_PUBLIC_KEY หรือกุญแจของ File Center ที่ฝังมา) หรือถูกแก้ไขหลังจากเซ็น',
+    en: 'The package signature is wrong: it was not signed with the key this server checks against (UPDATE_PUBLIC_KEY, or File Center\'s built-in key), or it was changed after signing.',
+  },
+  'update.allow-unsigned': {
+    th: 'UPDATE_ALLOW_UNSIGNED=true: ระบบรับแพ็กเกจอัปเดตที่ไม่เซ็น ใครที่ได้ทั้ง session และรหัสผ่านของผู้ดูแลจะติดตั้งโค้ดของตัวเองได้ ปิดค่านี้เมื่อไม่จำเป็น',
+    en: 'UPDATE_ALLOW_UNSIGNED=true: unsigned update packages are accepted. Anyone with an admin session and password can install their own code. Turn it off when you do not need it.',
   },
   'update.odd-file': { th: 'แพ็กเกจมีไฟล์ชนิดที่ไม่รองรับ: {file}', en: 'The package contains an unsupported kind of file: {file}' },
   'update.too-many-files': { th: 'แพ็กเกจมีไฟล์มากเกินไป', en: 'The package contains too many files.' },
