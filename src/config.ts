@@ -4,6 +4,14 @@ import pkg from '../package.json'
 
 const root = resolve(import.meta.dir, '..')
 const env = (k: string, d: string) => process.env[k] ?? d
+
+/** where File Center publishes its signed releases (the `updates` branch, see scripts/release.ts) */
+export const OFFICIAL_UPDATE_SOURCE = 'https://raw.githubusercontent.com/RockZa27/file-center/updates'
+export function updateSourceOf(value: string | undefined): string {
+  if (value === undefined) return OFFICIAL_UPDATE_SOURCE
+  const v = value.trim()
+  return v.toLowerCase() === 'off' ? '' : v
+}
 const num = (k: string, d: number) => {
   const v = Number(process.env[k])
   return Number.isFinite(v) && process.env[k] !== undefined && process.env[k] !== '' ? v : d
@@ -95,7 +103,9 @@ export const config = {
    * https://raw.githubusercontent.com/<owner>/<repo>/updates. Empty = off. Checked in update-source.ts: anything but
    * https (or http to this machine, for tests) is refused at startup with a warning and stays off.
    */
-  updateSource: env('UPDATE_SOURCE', '').trim(),
+  // not set: File Center's own releases on GitHub (safe since every package must carry File Center's signature);
+  // UPDATE_SOURCE=off (or empty) turns checking and fetching off, another URL points at your own releases
+  updateSource: updateSourceOf(process.env.UPDATE_SOURCE),
   /** where backups are written; best on another disk, a dead disk takes the backups on it along */
   backupDir: resolve(env('BACKUP_DIR', join(dirname(dataDir), 'backups'))),
   /** after a successful backup the oldest beyond this many are deleted */

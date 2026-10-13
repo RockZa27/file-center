@@ -174,6 +174,9 @@ export const app = new Elysia({ serve: { maxRequestBodySize: config.uploadChunkS
     set.headers['referrer-policy'] = 'same-origin'
     // only behind HTTPS: over plain HTTP the header would be ignored anyway, and a wrong one locks browsers out for a year
     if (config.secureCookie) set.headers['strict-transport-security'] = 'max-age=31536000'
+    // API answers are per user and change all the time: no browser or reverse proxy (1Panel, nginx, a CDN) may keep one.
+    // Downloads and the static page set their own Cache-Control, which wins.
+    if (new URL(request.url).pathname.startsWith('/api/')) set.headers['cache-control'] = 'no-store'
   })
   .use(context)
   .onAfterResponse({ as: 'global' }, ({ request, set, responseValue, ip, user }) => {

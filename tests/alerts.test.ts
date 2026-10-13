@@ -397,12 +397,12 @@ describe('new version notice', () => {
     await alerts.checkForNewVersion()
     expect(systemLog().filter(e => e.event === 'update-check-failed').at(-1).level).toBe('warn')
     expect((await statusWarnings()).find(w => w.code === 'update.available')?.params).toEqual({ version: '9.5.0' })
-    // with UPDATE_SOURCE gone, so is the warning
+    // with UPDATE_SOURCE off, so is the warning
     config.updateSource = ''
     expect((await statusWarnings()).some(w => w.code === 'update.available')).toBe(false)
   })
 
-  test('without UPDATE_SOURCE nothing is asked', async () => {
+  test('with UPDATE_SOURCE off nothing is asked', async () => {
     await alerts.checkForNewVersion()
     expect(sourceAsked).toEqual([])
   })

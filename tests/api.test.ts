@@ -1288,6 +1288,17 @@ describe('hardening: security headers', () => {
       config.webDir = keep
     }
   })
+  test('API answers are never kept by a browser or a reverse proxy; downloads keep their own cache rule', async () => {
+    // a proxy that caches /api/list (1Panel/nginx with proxy_cache) shows a folder list from before the last upload,
+    // or one user's files to another
+    writeFileSync(storageAbs('cache-rule.txt'), 'x')
+    for (const [who, path] of [[guest, '/api/session'], [admin, '/api/list?space=home&path=/'], [admin, '/api/search?space=home&q=cache'],
+      [admin, '/api/admin/users'], [admin, '/api/admin/update'], [guest, '/api/no-such-route']] as const) {
+      const r = await who.raw('GET', path)
+      expect(`${path} ${r.headers.get('cache-control')}`).toBe(`${path} no-store`)
+    }
+    expect((await admin.raw('GET', '/api/download?space=home&path=/cache-rule.txt')).headers.get('cache-control')).toBe('private, no-cache')
+  })
   test('downloads and the logo keep their own stricter CSP, untouched', async () => {
     writeFileSync(storageAbs('csp.txt'), 'x')
     const dl = await admin.raw('GET', '/api/download?space=home&path=/csp.txt')

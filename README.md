@@ -177,10 +177,12 @@ bun run release --sign ~/file-center-keys/update-signing.key --notes "สิ่�
 - ไม่ใส่ `--push` = commit ไว้ในเครื่องเท่านั้น ตรวจแล้วค่อย `git push origin updates` เอง ใช้ `--skip-web` ถ้า build หน้าเว็บไว้แล้ว
 - branch ปัจจุบันที่ทำงานอยู่ไม่ถูกแตะต้อง (ทำใน git worktree ชั่วคราวแล้วลบทิ้งเสมอ)
 
-**เปิดให้ server ตรวจหาอัปเดต:** ตั้งใน `.env` แล้วรีสตาร์ต (`docker compose up -d`):
+**ตรวจหาอัปเดตจาก GitHub (เปิดอยู่แล้วตั้งแต่ 1.7.1):** ถ้าไม่ตั้ง `UPDATE_SOURCE` server ใช้รุ่นทางการที่ `https://raw.githubusercontent.com/RockZa27/file-center/updates` ปลอดภัยเพราะติดตั้งได้เฉพาะแพ็กเกจที่เซ็นด้วยกุญแจของ File Center ถ้าออกรุ่นเอง ให้ชี้ไปที่ branch `updates` ของคุณ ถ้าไม่ต้องการให้ server ติดต่อ GitHub เลย ให้ตั้ง `off` แล้วรีสตาร์ต (`docker compose up -d`):
 
 ```env
 UPDATE_SOURCE=https://raw.githubusercontent.com/<owner>/<repo>/updates
+# หรือปิด
+UPDATE_SOURCE=off
 ```
 
 หน้าอัปเดตจะมีปุ่มตรวจหาเวอร์ชันใหม่ ถ้ามีเวอร์ชันใหม่กว่า กดดาวน์โหลดแล้ว server
@@ -235,6 +237,7 @@ Cloudflare Tunnel ให้คนภายนอกเข้าผ่านโ�
 - ข้อกำหนดของ Cloudflare จำกัดการใช้ CDN แบบไม่เสียเงินเพื่อเผยแพร่วิดีโอหรือไฟล์ขนาดใหญ่ในปริมาณมาก ถ้าจะใช้แจกไฟล์ใหญ่จำนวนมาก ควรอ่านข้อกำหนดก่อน
 - โทเคนใน `.env` คือกุญแจของ tunnel ใครได้ไปก็ต่อเข้าโดเมนนี้ได้ ห้ามแชร์ ถ้าหลุดให้ Refresh token ในหน้า tunnel
 - ถ้าเปิด `BIND_ADDRESS=0.0.0.0` คู่กับ `TRUST_PROXY=cloudflare` คนในวง LAN ที่เข้าตรงจะปลอม IP ของตัวเองได้ (ไม่กระทบสิทธิ์ แต่กระทบการล็อกและประวัติ)
+- **reverse proxy อื่น (1Panel/OpenResty, nginx, Caddy):** ทุกคำตอบของ `/api/*` มีหัว `Cache-Control: no-store` (ตั้งแต่ 1.7.1) proxy ที่ทำตามหัวนี้จะไม่เก็บไว้ ถ้าเปิดแคชแบบบังคับใน proxy ให้ยกเว้น `/api/` หรือปิดแคชของไซต์นี้ ไม่อย่างนั้นรายการไฟล์จะไม่อัปเดต (เช่น อัปโหลดโฟลเดอร์แล้วไม่ขึ้นในรายการ) และข้อมูลส่วนตัวของผู้ใช้คนหนึ่งอาจถูกส่งให้อีกคน
 
 ## ดูและแก้ไฟล์ในหน้าเว็บ (ไม่ต้องมีเซิร์ฟเวอร์เพิ่ม)
 
@@ -322,7 +325,7 @@ OFFICE_SERVER_INTERNAL_URL=http://onlyoffice
 | `UPDATE_MAX_SIZE` | 200 MB | ขนาดสูงสุดของแพ็กเกจอัปเดต (ไบต์) |
 | `UPDATE_PUBLIC_KEY` | ว่าง (ใช้กุญแจของ File Center ที่ฝังมา) | public key จาก `bun run package --gen-key` ใช้ตรวจลายเซ็นแพ็กเกจแทนกุญแจที่ฝังมา สำหรับคนที่สร้างแพ็กเกจเอง (ดู ลายเซ็นแพ็กเกจ) |
 | `UPDATE_ALLOW_UNSIGNED` | `false` | `true` = รับแพ็กเกจที่ไม่เซ็นด้วย (เสี่ยง: ผู้ที่ได้ session และรหัสผ่านของ admin ติดตั้งโค้ดของตัวเองได้) ระบบเตือนในหน้าภาพรวมและหน้าอัปเดต |
-| `UPDATE_SOURCE` | ว่าง (ปิด) | URL ของ branch `updates` ที่ `bun run release` เผยแพร่ไว้ เช่น `https://raw.githubusercontent.com/<owner>/<repo>/updates` (https เท่านั้น repo สาธารณะเท่านั้น) |
+| `UPDATE_SOURCE` | รุ่นทางการ `https://raw.githubusercontent.com/RockZa27/file-center/updates` | URL ของ branch `updates` ที่ `bun run release` เผยแพร่ไว้ (https เท่านั้น repo สาธารณะเท่านั้น) `off` หรือค่าว่าง = ปิดการตรวจหาอัปเดต |
 | `BACKUP_DIR` | โฟลเดอร์ `backups` ข้าง `DATA_DIR` (Docker: `/data/backups`) | ที่เก็บไฟล์สำรองข้อมูลระบบ ควรอยู่คนละดิสก์กับข้อมูล |
 | `BACKUP_KEEP` | 7 | เก็บไฟล์สำรองล่าสุดกี่ไฟล์ |
 | `BACKUP_HOUR` | 3 | สำรองอัตโนมัติทุกวันชั่วโมงไหน (0-23 ตามเวลาเครื่อง) `off` = ปิดการสำรองอัตโนมัติ |

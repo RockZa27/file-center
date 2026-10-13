@@ -116,7 +116,15 @@ afterEach(() => {
 })
 
 describe('update source: configuration', () => {
-  test('off without UPDATE_SOURCE: nothing is asked and fetching is refused', async () => {
+  test('unset means the official releases on GitHub; off or empty turns it off', async () => {
+    const { updateSourceOf, OFFICIAL_UPDATE_SOURCE } = await import('../src/config')
+    expect(OFFICIAL_UPDATE_SOURCE).toBe('https://raw.githubusercontent.com/RockZa27/file-center/updates')
+    expect(updateSourceOf(undefined)).toBe(OFFICIAL_UPDATE_SOURCE)
+    for (const off of ['off', ' OFF ', '', '  ']) expect(`[${off}] ${updateSourceOf(off)}`).toBe(`[${off}] `)
+    expect(updateSourceOf(' https://example.com/u ')).toBe('https://example.com/u')
+  })
+
+  test('UPDATE_SOURCE=off: nothing is asked and fetching is refused', async () => {
     config.updateSource = ''
     const s = await admin.json('GET', '/api/admin/update')
     expect(s.data.source).toEqual({ enabled: false, url: null })
