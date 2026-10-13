@@ -4,6 +4,25 @@ Change one thing per agent per round, so the effect is visible.
 
 <!-- newest first -->
 
+## r7 → r8
+คะแนน r7 (ทุกตัวใช้ Sonnet เป็นรอบแรก): qa-runner 100%, security-auditor 100% (+9), verifier 100%, backend-dev 89% (−1), frontend-dev 94% (−6), ux-tester 94% (−4)
+
+ผลของการเปลี่ยนเมื่อรอบก่อน:
+- เปลี่ยนเป็น Sonnet: auditor/verifier ไม่ตกเลย (7/7 + ช่องจริงที่ไม่ได้ฝัง 1 ข้อ, ยืนยัน 8/8) และถูกกว่ารอบ 6 มาก (auditor 151k→154k tokens แต่ 87 วิ แทน 174 วิ; verifier 73k→57k tokens) — ตัว dev ใช้ token ใกล้เคียงเดิม
+- backend-dev "รันทั้งชุดก่อนบอกว่าเสร็จ": งาน quota เขียวครั้งแรก, งาน account ยังล้มครั้งแรก (ชื่อ message code `auth.2fa-*` ผิดกฎของ tests/messages.test.ts) — agent รัน qa ก่อน `bun test` ทั้งชุด
+
+การเปลี่ยน agent:
+- backend-dev (89%): ย้ายกฎให้ชัดว่า "รัน `bun test` ทั้งชุดและแก้ให้ผ่าน ก่อนเริ่ม qa ครั้งแรก — qa ครั้งแรกคือตอนที่บอกว่าเสร็จ" (hash 161b67fd28 → 3d912d6fc7)
+- ตัวอื่นไม่เปลี่ยน (≥90%)
+
+ความผิดของโจทย์/ของผม ที่รอบนี้เผย:
+- โจทย์ quota ขอให้นับ "คัดลอกจาก public เข้า home" ซึ่งไม่มีทางทำได้ (copy/move อยู่ในพื้นที่เดียว) — agent ชี้ถูก
+- โจทย์ account บอกแค่ "บอกใน README ว่า backup มี secret.key ไหม" แทนที่จะสั่งไม่ให้ลง backup ตามแผน → auditor พบ (F7) ผมแก้: backup ไม่มี secret.key แล้ว
+- บั๊กฝังเก่า 2 ตัว (copy-no-space-check, share-owner-perms) จุดยึดเลื่อนเพราะโค้ดโควตา → แก้จุดยึด, เทสต์จับ 48/48
+- ผลของ dev อยู่ใน worktree ของ agent ตอนให้คะแนนครั้งแรก (0%) → คัดลอก qa/results มาแล้วให้คะแนนใหม่ในรอบเดียวกัน (ข้อมูลเดิม ไม่ใช่กฎใหม่)
+
+backlog: placeholder 'Please Input' ของ Naive UI ไม่ได้แปล, ป้ายลิงก์ขอไฟล์ไม่ตรงกันระหว่างสรุปกับ My links, หน้าต่างอุปกรณ์ยังไม่ได้ตรวจที่ 375px, วันที่เปิด 2FA ไม่แสดง (publicUser ส่งแค่ boolean), คัดลอก/ย้ายข้ามพื้นที่ public↔home ยังไม่มี
+
 ## r6 → r7
 คะแนน r6: security-auditor 91%, verifier 100%, backend-dev 89%, frontend-dev 100%, ux-tester 98% (qa-runner ไม่เรียก)
 
