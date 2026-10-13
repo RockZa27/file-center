@@ -28,6 +28,13 @@ export type VersionMeta = {
 }
 
 const ID_RE = /^[0-9]{13}_[a-f0-9]{8}$/
+
+// ids sort as "newest first": two saves in the same millisecond (a fast machine) must still get increasing stamps
+let lastStamp = 0
+function nextStamp(): number {
+  lastStamp = Math.max(Date.now(), lastStamp + 1)
+  return lastStamp
+}
 const bucketOf = (sp: string, root = paths.versions) => join(root, createHash('sha1').update(sp).digest('hex'))
 
 export function safeId(id: unknown): string {
@@ -144,7 +151,7 @@ export function reserveVersion(owner: User | null, abs: string): VersionTicket |
   }
   const sp = storagePath(abs)
   const start = (reason: VersionMeta['reason'], by: string) => {
-    const id = `${Date.now()}_${randomBytes(4).toString('hex')}`
+    const id = `${nextStamp()}_${randomBytes(4).toString('hex')}`
     const meta: VersionMeta = { id, storagePath: sp, size: st.size, mtime: Math.round(st.mtimeMs), savedAt: new Date().toISOString(), savedBy: by, reason }
     const dir = join(bucketOf(sp), id)
     ensureDir(dir)

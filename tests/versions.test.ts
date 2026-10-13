@@ -99,6 +99,20 @@ afterEach(() => {
 })
 
 describe('versions: kept on every save', () => {
+  test('saves in the same millisecond still list newest first', async () => {
+    const c = await userWith('vr-same-ms')
+    writeFileSync(home('vr-same-ms', 'a.txt'), 'v0')
+    const realNow = Date.now
+    const frozen = realNow()
+    Date.now = () => frozen // every save sees the same clock
+    try {
+      for (const text of ['v1', 'v2', 'v3', 'v4']) expect((await put(c, '/a.txt', text)).status).toBe(200)
+    } finally { Date.now = realNow }
+    const items = (await list(c, '/a.txt')).data.items
+    const texts = await Promise.all(items.map(async (v: any) => (await download(c, v.id, '/a.txt')).text()))
+    expect(texts).toEqual(['v3', 'v2', 'v1', 'v0'])
+  })
+
   test('each PUT /api/content keeps the content it replaces; list and download show it', async () => {
     const c = await userWith('vr-save')
     writeFileSync(home('vr-save', 'a.txt'), 'one')
