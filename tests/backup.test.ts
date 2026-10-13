@@ -59,7 +59,7 @@ describe('backups (API)', () => {
   test('create, list and download a backup', async () => {
     writeFileSync(join(paths.logs, 'audit.log.1'), '{"rotated":true}\n')
     ;(await import('../src/secret-box')).seal('2fa secret') // makes secret.key
-    writeFileSync(paths.officeKey, 'k'.repeat(43))
+    if (!existsSync(paths.officeKey)) writeFileSync(paths.officeKey, 'k'.repeat(43), { mode: 0o600 }) // what office.ts makes on first use
     const made = await admin.json('POST', '/api/admin/backups')
     expect(made.status).toBe(200)
     expect(made.data.name).toMatch(NAME_RE)

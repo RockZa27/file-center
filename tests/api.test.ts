@@ -133,10 +133,12 @@ describe('files', () => {
     expect(r.data.results.map((e: any) => e.name)).toContain('b (1).txt')
   })
   test('delete goes to trash and can be restored', async () => {
+    // other test files may have left items in the shared trash: count from what is there now
+    const before = (await admin.json('GET', '/api/admin/trash')).data.items.length
     const del = await admin.json('POST', '/api/delete', { space: 'home', items: ['/b.txt'] })
     expect(del.data.done).toBe(1)
     const trash = await admin.json('GET', '/api/admin/trash')
-    expect(trash.data.items.length).toBe(1)
+    expect(trash.data.items.length).toBe(before + 1)
     expect(trash.data.items[0].originalPath).toBe('/b.txt')
     const res = await admin.json('POST', '/api/admin/trash/restore', { id: trash.data.items[0].id })
     expect(res.data.restoredTo).toBe('/b.txt')
@@ -1180,8 +1182,11 @@ describe('full system: users', () => {
     expect((await update('lifecycle', { name: 'Changed', password: 'short' })).status).toBe(400)
     expect((await users()).find(u => u.username === 'lifecycle').name).toBe('lifecycle')
     expect((await update('ghost-user', { name: 'x' })).status).toBe(404)
-    // the only admin stays an admin
+    // the only admin stays an admin (other test files may have made admins: they step down for this check)
+    const others = (await users()).filter(u => u.role === 'admin' && u.username !== 'admin').map(u => u.username)
+    for (const name of others) expect((await update(name, { role: 'user' })).status).toBe(200)
     expect((await update('admin', { role: 'user' })).status).toBe(400)
+    for (const name of others) expect((await update(name, { role: 'admin' })).status).toBe(200)
     const make = (username: string, name = 'x') =>
       admin.json('POST', '/api/admin/users', { username, name, password: 'harbor-lamp-42', role: 'user', permissions: [], publicPermissions: [] })
     for (const username of ['ab', 'bad name', 'x'.repeat(33), 'ไทย', '../up']) expect((await make(username)).status).toBe(400)
