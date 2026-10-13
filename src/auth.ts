@@ -54,6 +54,7 @@ export const publicUser = (u: User) => ({
   createdAt: u.createdAt,
   lastLogin: u.lastLogin ?? null,
   twoFactor: !!u.twoFactor,
+  twoFactorSince: u.twoFactor?.enabledAt ?? null,
 })
 
 export const hashPassword = (pw: string) => Bun.password.hash(pw)

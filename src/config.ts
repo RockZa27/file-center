@@ -40,6 +40,9 @@ export const config = {
   minFreeSpace: num('MIN_FREE_SPACE', 2 * 1024 ** 3), // 2 GB
   sessionTtlMs: num('SESSION_TTL_HOURS', 24 * 7) * 3600_000,
   trashRetentionDays: num('TRASH_RETENTION_DAYS', 30),
+  /** old contents of a file kept on every save (0 = off) and for how many days (0 = until pushed out by the count) */
+  versionsKeep: Math.max(0, Math.floor(num('VERSIONS_KEEP', 10))),
+  versionsDays: Math.max(0, num('VERSIONS_DAYS', 30)),
   loginMaxAttempts: num('LOGIN_MAX_ATTEMPTS', 5),
   loginLockoutMs: num('LOGIN_LOCKOUT_SECONDS', 60) * 1000,
   /** longest a share link may last; a link is made for 1, 7 or 30 days, whichever of those is not above this */
@@ -125,6 +128,10 @@ export const paths = {
   launcherLog: join(config.dataDir, 'logs', 'launcher.log'),
   accessLog: join(config.dataDir, 'logs', 'access.log'),
   trash: join(config.dataDir, 'trash'),
+  /** earlier contents of edited files (versions.ts): <sha1 of the storage path>/<id>/{item,meta.json} */
+  versions: join(config.dataDir, 'versions'),
+  /** favorites and recent files per user (favorites.ts) */
+  userState: join(config.dataDir, 'user-state.json'),
   tmp: join(config.dataDir, 'tmp'),
   branding: join(config.dataDir, 'branding'),
   /** installed web updates: state.json, releases/, staging/ (see release.ts) */

@@ -3,6 +3,8 @@ import { existsSync, lstatSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { basename, dirname, join } from 'node:path'
 import { config, paths } from './config'
 import { holdNow, ownerOfPath, ready } from './quota'
+import { stashedBytes, stashVersions, unstashVersions } from './versions'
+import { log } from './logger'
 import {
   conflict, ensureDir, moveTree, notFound, parentRel, resolveIn, storagePath, treeStats, uniquePath,
 } from './fsx'
@@ -47,6 +49,8 @@ export async function moveToTrash(abs: string, deletedBy: string): Promise<Trash
     rmSync(itemDir(id), { recursive: true, force: true })
     throw err
   }
+  // the earlier versions of the file(s) go along, so a restore brings them back
+  try { stashVersions(abs, join(itemDir(id), 'versions')) } catch (err) { log.warn('versions-stash-failed', { id, error: err }) }
   writeFileSync(join(itemDir(id), 'meta.json'), JSON.stringify(meta))
   return meta
 }
@@ -80,13 +84,15 @@ export async function restore(idRaw: unknown): Promise<{ meta: TrashMeta; restor
   await ready(owner)
   const finalPath = uniquePath(target)
   if (existsSync(finalPath)) throw conflict('admin.trash-name-taken')
-  const hold = holdNow(owner, meta.size)
+  const vdir = join(dir, 'versions')
+  const hold = holdNow(owner, meta.size + stashedBytes(vdir))
   try {
     await moveTree(join(dir, 'item'), finalPath)
   } catch (err) {
     hold.release()
     throw err
   }
+  try { unstashVersions(vdir, meta.originalPath, finalPath) } catch (err) { log.warn('versions-restore-failed', { id, error: err }) }
   hold.commit()
   rmSync(dir, { recursive: true, force: true })
   return { meta, restoredTo: storagePath(finalPath) }

@@ -19,8 +19,10 @@ import { accessFor, findUser, type Space, type User } from './auth'
 import { config, paths } from './config'
 import { bad, ensureDir, ensureSpace, forbidden, HttpError, moveTree, normRel, notFound, resolveIn, storagePath } from './fsx'
 import type { Lang } from './messages'
-import { holdNow, markStale, ready } from './quota'
+import { recordRecent } from './favorites'
+import { holdNow, markStale, ownerOfPath, ready } from './quota'
 import { moveToTrash } from './trash'
+import { reserveVersion } from './versions'
 
 /** ONLYOFFICE edits these as they are; legacy binary formats (doc, xls, ppt) only open for reading */
 export const OFFICE_EDIT = ['.docx', '.xlsx', '.pptx', '.odt', '.ods', '.odp', '.csv', '.txt']
@@ -325,8 +327,8 @@ async function download(url: string, file: string): Promise<number> {
 const saving = new Map<string, Promise<unknown>>()
 
 /**
- * Status 2 / 6: fetch the new version, put the current one in the trash (it can be restored from there) and put
- * the new one in its place with a rename, so nobody ever reads half a file. Throws on any failure; the caller
+ * Status 2 / 6: fetch the new version, keep the current one as a version (it can be restored from there; in the trash
+ * when versions are off) and put the new one in its place with a rename, so nobody ever reads half a file. Throws on any failure; the caller
  * answers { error: 1 }.
  */
 export async function saveVersion(t: OfficeToken, data: Record<string, unknown>): Promise<{ user: User; abs: string; size: number }> {
@@ -349,24 +351,33 @@ export async function saveVersion(t: OfficeToken, data: Record<string, unknown>)
       ensureSpace(dirname(abs), size)
       // the count is awaited before the rights are checked, so nothing awaits between that check and the reservation
       if (t.s === 'home') await ready(findUser(t.u))
+      // the old content is kept as a version in DATA_DIR: it counts against the owner of the home the file is in
+      const owner = ownerOfPath(abs)
+      await ready(owner)
       // checked again after the download: rights or the file may have changed meanwhile
       const { user } = tokenFile(t, ['write'])
-      // the old version goes to the trash (outside the home), so only the growth counts against a quota
+      // the old version is kept (or goes to the trash) outside the file: only the growth counts for the file itself
       const q = t.s === 'home' ? user : null
       const grow = size - lstatSync(abs).size
-      const hold = holdNow(q, grow)
+      // over the quota even after the oldest versions of this file went: refused, the current content stays
+      const ticket = reserveVersion(owner, abs)
+      let hold
+      try { hold = holdNow(q, grow) } catch (err) { ticket?.release(); throw err }
       try {
         // next to the file first (a copy when DATA_DIR is on another disk), then one rename into place
         await moveTree(tmp, stage)
-        await moveToTrash(abs, user.username)
-        if (existsSync(abs)) throw new HttpError(409, 'files.name-taken')
+        if (ticket) await ticket.keepAsync('office', user.username)
+        else await moveToTrash(abs, user.username)
+        if (!ticket && existsSync(abs)) throw new HttpError(409, 'files.name-taken')
         await rename(stage, abs)
       } catch (err) {
         hold.release()
+        ticket?.release()
         if (q) markStale(q.username)
         throw err
       }
       hold.commit(grow)
+      recordRecent(user, t.s, t.p)
       return { user, abs, size }
     } finally {
       await rm(tmp, { force: true }).catch(() => {})

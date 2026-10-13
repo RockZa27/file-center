@@ -235,7 +235,7 @@ OFFICE_SERVER_INTERNAL_URL=http://onlyoffice
 แล้ว document server ติดต่อ File Center เอง ไม่ใช้ cookie ของผู้ใช้: ดาวน์โหลดไฟล์จาก `GET /api/office/file/:token` และส่งไฟล์ที่บันทึกกลับมาทาง `POST /api/office/callback/:token`
 `GET /api/session` บอกผู้ที่เข้าสู่ระบบใน `config.office: { enabled, edit: [...], view: [...] }` ว่าเปิดไฟล์นามสกุลไหนได้
 
-- **บันทึก:** เมื่อทุกคนปิดเอกสาร (หรือกดบันทึกแบบ force save) document server ส่งไฟล์ใหม่มา ระบบย้าย **ฉบับเดิมไปถังขยะก่อน** (กู้คืนได้จากหน้าถังขยะ)
+- **บันทึก:** เมื่อทุกคนปิดเอกสาร (หรือกดบันทึกแบบ force save) document server ส่งไฟล์ใหม่มา ระบบเก็บ **ฉบับเดิมเป็นเวอร์ชันของไฟล์ก่อน** (กู้คืนได้ที่ `/api/versions`; ถ้าปิดเวอร์ชันด้วย `VERSIONS_KEEP=0` จะย้ายไปถังขยะแทน)
   แล้ววางไฟล์ใหม่แทนที่ในครั้งเดียว (ไม่มีช่วงที่ไฟล์เขียนไม่ครบ) บันทึก `office-save` ในประวัติการใช้งาน และ `office-open` ทุกครั้งที่เปิด
 - **ความปลอดภัย:** ลิงก์ที่ให้ document server มีโทเคนที่ File Center เซ็นด้วยกุญแจของตัวเอง (`office-links.key` ใน `DATA_DIR`) ระบุไฟล์ ผู้ใช้ โหมด และหมดอายุใน 24 ชั่วโมง
   ทุกครั้งที่ใช้ตรวจสิทธิ์ของผู้ใช้ใหม่ (ถูกถอนสิทธิ์ `write` แล้วบันทึกไม่ได้ ลิงก์แบบดูบันทึกไม่ได้เลย) document server ต้องส่ง JWT ที่เซ็นด้วย `OFFICE_JWT_SECRET` ทุกคำขอ
@@ -261,6 +261,7 @@ OFFICE_SERVER_INTERNAL_URL=http://onlyoffice
 | `MIN_FREE_SPACE` | 2 GB | ปฏิเสธการอัปโหลด คัดลอก บีบอัด และแตก zip เมื่อดิสก์จะเหลือว่างน้อยกว่านี้ (ไบต์) |
 | `UNZIP_MAX_BYTES` / `UNZIP_MAX_FILES` | 20 GB / 50,000 | ขนาดรวมและจำนวนไฟล์สูงสุดที่แตกจาก zip หนึ่งไฟล์ได้ (กัน zip bomb) |
 | `TRASH_RETENTION_DAYS` | 30 | เก็บถังขยะกี่วัน |
+| `VERSIONS_KEEP` / `VERSIONS_DAYS` | 10 / 30 | เก็บเนื้อหาเดิมของไฟล์ไว้ทุกครั้งที่บันทึกทับ (แก้ข้อความ, ONLYOFFICE, กู้คืนฉบับเก่า): กี่ฉบับต่อไฟล์ (0 = ปิด) / กี่วัน (0 = ไม่หมดอายุตามวัน) ฉบับเก่านับรวมในโควตาของเจ้าของโฟลเดอร์ ไม่อยู่ในข้อมูลสำรอง และย้ายไปกับไฟล์เมื่อเปลี่ยนชื่อ/ย้าย/ลบลงถังขยะ |
 | `SESSION_TTL_HOURS` | 168 | อายุ session ของผู้ที่เข้าสู่ระบบ (ไม่ได้ใช้งานเกินนี้จะหมดอายุ) |
 | `LOGIN_MAX_ATTEMPTS` / `LOGIN_LOCKOUT_SECONDS` | 5 / 60 | ล็อกการเข้าสู่ระบบผิดซ้ำ (นับแยกตาม IP + ชื่อผู้ใช้) |
 | `SHARE_MAX_DAYS` | 30 | อายุสูงสุดของลิงก์แชร์ (วัน) ลิงก์เลือกอายุได้ 1, 7 หรือ 30 วันเท่าที่ไม่เกินค่านี้ |
@@ -382,7 +383,7 @@ admin กำหนดโควตาให้ผู้ใช้แต่ละ�
 - **นับอะไร:** เฉพาะโฟลเดอร์ของผู้ใช้เอง (space `home`) **ถังขยะอยู่นอกโฟลเดอร์นั้น จึงไม่นับ** ลบไฟล์แล้วพื้นที่ว่างคืนทันที
   แต่กู้คืนจากถังขยะก็นับกลับเข้าไปใหม่และอาจถูกปฏิเสธถ้าเต็ม โฟลเดอร์สาธารณะไม่มีโควตา และ admin (ที่โฟลเดอร์คือทั้ง storage) ไม่ถูกจำกัดแม้ตั้ง `quotaBytes`
 - **ตรวจที่ไหน:** ตอนเริ่มอัปโหลด, `PUT /api/content` (นับเฉพาะส่วนที่ใหญ่ขึ้น), `/api/zip`, `/api/unzip` (งบไบต์ที่แตกได้ลดลงเหลือเท่าที่โควตาเหลือ),
-  `/api/copy`, การบันทึกจาก ONLYOFFICE (นับเฉพาะส่วนที่ใหญ่ขึ้น เวอร์ชันเดิมไปอยู่ในถังขยะ), การกู้คืนจากถังขยะ, และอัปโหลดผ่านลิงก์รับไฟล์ (นับกับเจ้าของลิงก์)
+  `/api/copy`, การบันทึกจาก ONLYOFFICE (นับส่วนที่ใหญ่ขึ้นของไฟล์ และเวอร์ชันเดิมที่เก็บไว้), การกู้คืนจากถังขยะ, และอัปโหลดผ่านลิงก์รับไฟล์ (นับกับเจ้าของลิงก์)
   การย้ายภายในโฟลเดอร์เดียวกันไม่เปลี่ยนยอด เต็มแล้วได้ **507** `quota.exceeded` พร้อม `params: { used, quota }` (ไบต์)
 - **นับอย่างไร:** นับด้วยการเดินโฟลเดอร์ (ไม่เกิน 1,000,000 รายการ ถ้าเกินถือว่าเต็ม) เก็บผลไว้ 60 วินาทีต่อผู้ใช้ และนับใหม่ทันทีหลังลบ
   งานที่กำลังเขียนอยู่จองพื้นที่ไว้ก่อนในจังหวะเดียวกับที่ตรวจ ส่งหลายคำขอพร้อมกันจึงแย่งไบต์สุดท้ายไม่ได้ และคืนที่จองเมื่อยกเลิก ล้มเหลว หรือถูกลบเพราะค้างนาน (`UPLOAD_STALE_HOURS`)
@@ -460,7 +461,7 @@ tests/logs.test.ts  ทดสอบ log ของระบบ การหมุ
 tests/messages.test.ts  ทุกรหัสที่ใช้ใน src/ มีในรายการข้อความ ทั้งสองภาษามีตัวแปรตรงกัน error ตอบตามภาษาของคำขอ และลิงก์ดาวน์โหลดที่ล้มเหลวได้หน้า HTML
 tests/update.test.ts, tests/backup.test.ts   ทดสอบอัปเดตและกู้คืนข้อมูลกับ launcher จริง
 tests/update-source.test.ts, tests/release.test.ts   ตรวจหา/ดาวน์โหลดอัปเดตจาก server ทดสอบในเครื่อง และ bun run release กับ repo ชั่วคราว
-tests/office.test.ts  ONLYOFFICE กับ document server ปลอม: สิทธิ์ โทเคน JWT การบันทึกลงถังขยะ CSP และ expectedMtime ของไฟล์ข้อความ
+tests/office.test.ts  ONLYOFFICE กับ document server ปลอม: สิทธิ์ โทเคน JWT การบันทึกเป็นเวอร์ชัน CSP และ expectedMtime ของไฟล์ข้อความ
 tests/alerts.test.ts  การแจ้งเตือนกับ webhook ทดสอบในเครื่อง: รูปแบบแต่ละชนิด ชั่วโมงละครั้ง ตัดความลับ และการตรวจเวอร์ชันใหม่รายวัน
 tests/perf.test.ts  การนับไฟล์ 50,000 ไฟล์ การคัดลอก 20,000 ไฟล์ และการค้นหาต้องไม่ทำให้คำขออื่นช้า (โหมด `dashboard` ใน scripts/loadtest.ts ใช้ลองกับ server จริง)
 ```
@@ -508,12 +509,14 @@ tests/perf.test.ts  การนับไฟล์ 50,000 ไฟล์ การ
 | `GET /api/session` · `POST /api/login` · `POST /api/login/2fa` · `POST /api/logout` · `POST /api/password` | เซสชัน |
 | `GET /api/sessions` · `DELETE /api/sessions/:id` · `POST /api/sessions/revoke-others` · `POST /api/2fa/setup\|enable\|disable\|backup-codes` | อุปกรณ์ที่เข้าสู่ระบบ และ 2FA (ดู อุปกรณ์ที่เข้าสู่ระบบและการยืนยันสองขั้นตอน) |
 | `GET /api/list` · `/api/folders` · `/api/search` | ดูรายการ ค้นหา (พารามิเตอร์ `space=home\|public`, `path`) |
-| `POST /api/mkdir` · `/newfile` · `/rename` · `/copy` · `/move` · `/delete` · `/zip` · `/unzip` | จัดการไฟล์ (ลบ = ย้ายไปถังขยะ) |
+| `POST /api/mkdir` · `/newfile` · `/rename` · `/copy` · `/move` · `/delete` · `/zip` · `/unzip` | จัดการไฟล์ (ลบ = ย้ายไปถังขยะ) `/copy` และ `/move` มี `destSpace` (ไม่ใส่ = space เดิม) เพื่อข้าม space: ต้องมี `read` (+`download` ถ้าคัดลอก, +`write` ถ้าย้าย) ที่ต้นทาง และ `write` + `upload` ที่ปลายทาง นับโควตาปลายทาง; ย้ายข้าม space = คัดลอกก่อนแล้วลบต้นทางลงถังขยะ (คัดลอกไม่สำเร็จต้นทางไม่ถูกแตะ) |
 | `GET/PUT /api/content` | อ่าน/บันทึกไฟล์ข้อความ (≤ 2 MB) `GET` ตอบ `mtime` ส่งกลับใน `PUT` เป็น `expectedMtime` ถ้าไฟล์ถูกแก้จากที่อื่นหลังจากเปิดจะได้ 409 `files.changed-elsewhere` และไม่บันทึก `PUT` ตอบ `mtime` ใหม่ |
 | `POST /api/office/config` · `GET /api/office/file/:token` · `POST /api/office/callback/:token` | แก้ไขเอกสาร office ด้วย ONLYOFFICE (ดู แก้ไขเอกสาร office) สองตัวหลังเรียกโดย document server เท่านั้น |
 | `GET /api/download` (รองรับ `Range`) · `POST /api/batch` + `GET /api/batch/:token` | ดาวน์โหลด |
 | `POST/GET /api/shares` · `DELETE /api/shares/:id` · `GET /api/s/:token` · `POST /api/s/:token/unlock` · `GET /api/s/:token/download` | ลิงก์แชร์ (ดู ลิงก์แชร์) |
 | `GET /api/me/usage` | พื้นที่ที่ใช้และโควตาของฉัน (ดู โควตาพื้นที่ต่อผู้ใช้) |
+| `GET /api/versions?space&path` (`read`) · `GET /api/versions/:id/download?space&path` (`download`) · `POST /api/versions/:id/restore { space, path, expectedMtime? }` (`write`) · `DELETE /api/versions/:id?space&path` (`write`) | เวอร์ชันเก่าของไฟล์ (เก็บทุกครั้งที่บันทึกทับ ดู `VERSIONS_KEEP`/`VERSIONS_DAYS`): รหัสเวอร์ชันใช้ได้กับไฟล์ของมันเท่านั้น, กู้คืนจะเก็บเนื้อหาปัจจุบันเป็นเวอร์ชันก่อน (409 `files.changed-elsewhere` ถ้า `expectedMtime` ล้าสมัย) ถ้าโควตาเต็มจะลบเวอร์ชันเก่าสุดของไฟล์นั้นก่อน ยังไม่พอก็ปฏิเสธ `quota.exceeded` |
+| `GET/POST/DELETE /api/me/favorites` (`{ space, path }`, สูงสุด 200) · `GET /api/me/recent` (50 ล่าสุด) | รายการโปรดและไฟล์ที่เปิดล่าสุดของผู้ใช้ (ผู้เยี่ยมชมได้ 401) ตรวจสิทธิ์ `read` และการมีอยู่ของไฟล์ทุกครั้งที่อ่าน |
 | `POST /api/s/:token/upload` → `PUT /api/s/:token/upload/:id/:n` → `POST /api/s/:token/upload/:id/complete` · `DELETE /api/s/:token/upload/:id` | ผู้เยี่ยมชมส่งไฟล์ผ่านลิงก์รับไฟล์ (ดู ลิงก์รับไฟล์) |
 | `POST /api/upload` → `PUT /api/upload/:id/:n` → `POST /api/upload/:id/complete` | อัปโหลดแบบแบ่งชิ้น |
 | `/api/admin/*` | ผู้ใช้, ภาพรวม, ประวัติ, ถังขยะ, ตั้งค่า, โลโก้ (เฉพาะ admin) |

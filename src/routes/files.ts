@@ -11,8 +11,10 @@ import {
 } from '../fsx'
 import { log } from '../logger'
 import { type Lang, langOf, type MessageCode, text } from '../messages'
-import { exceeded, holdNow, markStale, ready, roomLeft, usage } from '../quota'
+import { recordRecent, moveState } from '../favorites'
+import { exceeded, holdNow, markStale, ownerOfPath, ready, roomLeft, usage } from '../quota'
 import { moveToTrash } from '../trash'
+import { moveVersions, reserveVersion } from '../versions'
 import { collectZipItems, unzipTo, zipStream } from '../zip'
 
 const MAX_TEXT = 2 * 1024 * 1024
@@ -143,6 +145,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     const st = existsSync(abs) ? statSync(abs) : null
     if (!st || !st.isFile()) throw notFound()
     if (st.size > MAX_TEXT) throw new HttpError(413, 'files.too-big-to-open')
+    recordRecent(user, query.space, normRel(query.path))
     return { content: await Bun.file(abs).text(), mtime: Math.round(st.mtimeMs) }
   }, { query: spaceQ })
 
@@ -153,6 +156,9 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     await ready(q)
     const rel = normRel(body.path)
     const abs = resolveIn(a.root, rel)
+    // the earlier versions of the file count against the owner of the home it is in (not always the one saving)
+    const owner = ownerOfPath(abs)
+    await ready(owner)
     const st = existsSync(abs) ? statSync(abs) : null
     if (!st || !st.isFile()) throw notFound()
     if (Buffer.byteLength(body.content) > MAX_TEXT) throw new HttpError(413, 'files.text-too-big')
@@ -161,16 +167,22 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     if (body.expectedMtime !== undefined && Math.round(st.mtimeMs) !== body.expectedMtime) throw conflict('files.changed-elsewhere')
     // only the growth counts against the quota
     const grow = Buffer.byteLength(body.content) - st.size
-    const hold = holdNow(q, grow)
+    // the content that is replaced is kept first; over the quota even after the oldest versions went, the save is refused
+    const ticket = reserveVersion(owner, abs)
+    let hold
+    try { hold = holdNow(q, grow) } catch (err) { ticket?.release(); throw err }
     try {
+      ticket?.keep('edit', user?.username ?? 'guest')
       writeFileSync(abs, body.content)
     } catch (err) {
       hold.release()
+      ticket?.release()
       throw err
     }
     hold.commit(grow)
     if (grow < 0 && q) markStale(q.username)
     audit({ user: user?.username ?? 'guest', ip, action: 'edit', target: storagePath(abs) })
+    recordRecent(user, body.space, rel)
     // the next save sends this one back
     return { ok: true, mtime: Math.round(statSync(abs).mtimeMs) }
   }, { body: t.Object({ space: t.String(), path: t.String(), content: t.String(), expectedMtime: t.Optional(t.Number()) }) })
@@ -189,15 +201,17 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     // "a.txt" -> "A.txt" is the same file on a case-insensitive disk, but a different one on Linux
     if (existsSync(to) && !sameFile(from, to)) throw conflict('files.name-taken')
     await moveTree(from, to)
+    moveVersions(from, to)
+    moveState(from, to)
     audit({ user: user?.username ?? 'guest', ip, action: 'rename', target: storagePath(from), detail: name })
     return { ok: true }
   }, { body: t.Object({ space: t.String(), path: t.String(), name: t.String() }) })
 
   .post('/copy', ({ user, ip, body, request }) => transfer('copy', user, ip, body, langOf(request)), {
-    body: t.Object({ space: t.String(), items: t.Array(t.String()), dest: t.String() }),
+    body: t.Object({ space: t.String(), items: t.Array(t.String()), dest: t.String(), destSpace: t.Optional(t.String()) }),
   })
   .post('/move', ({ user, ip, body, request }) => transfer('move', user, ip, body, langOf(request)), {
-    body: t.Object({ space: t.String(), items: t.Array(t.String()), dest: t.String() }),
+    body: t.Object({ space: t.String(), items: t.Array(t.String()), dest: t.String(), destSpace: t.Optional(t.String()) }),
   })
 
   .post('/delete', async ({ user, ip, body, request }) => {
@@ -293,6 +307,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     const range = request.headers.get('range')
     if (!range || range.startsWith('bytes=0-')) {
       if (query.inline !== '1') audit({ user: user?.username ?? 'guest', ip, action: 'download', target: storagePath(abs) })
+      recordRecent(user, query.space, rel)
     }
     return fileResponse(abs, basename(abs), request, query.inline === '1')
   }, { query: t.Object({ space: t.String(), path: t.String(), inline: t.Optional(t.String()) }) })
@@ -343,13 +358,20 @@ function itemError(e: unknown, fallback: MessageCode, lang: Lang) {
   return known ? text(lang, known.code, known.params) : text(lang, fallback)
 }
 
-async function transfer(kind: 'copy' | 'move', user: any, ip: string, body: { space: string; items: string[]; dest: string }, lang: Lang) {
-  const a = need({ user, ip }, body.space, 'write')
-  // a move inside one space does not change what a home holds; a copy adds the size of what is copied
-  const q = a.space === 'home' ? user : null
-  if (kind === 'copy') await ready(q)
+async function transfer(
+  kind: 'copy' | 'move', user: any, ip: string,
+  body: { space: string; items: string[]; dest: string; destSpace?: string }, lang: Lang,
+) {
+  const cross = body.destSpace !== undefined && body.destSpace !== body.space
+  // inside one space: write, as it always was. Between spaces: the source must be readable (a copy also downloadable,
+  // a move also writable, the source goes) and the destination must take new files (write + upload)
+  const a = cross ? need({ user, ip }, body.space, ...(kind === 'copy' ? ['read', 'download'] as const : ['read', 'write'] as const)) : need({ user, ip }, body.space, 'write')
+  const d = cross ? need({ user, ip }, body.destSpace, 'write', 'upload') : a
+  // a move inside one space does not change what a home holds; a copy (or a move into another space) adds the size
+  const q = d.space === 'home' ? user : null
+  if (kind === 'copy' || cross) await ready(q)
   const destRel = normRel(body.dest)
-  const destAbs = resolveIn(a.root, destRel)
+  const destAbs = resolveIn(d.root, destRel)
   if (!isDir(destAbs)) throw notFound('files.dest-not-found')
   const failed: { path: string; error: string }[] = []
   let done = 0
@@ -358,24 +380,44 @@ async function transfer(kind: 'copy' | 'move', user: any, ip: string, body: { sp
       const from = resolveIn(a.root, rel)
       if (!lstatExists(from)) throw notFound()
       const to = join(destAbs, basename(from))
-      if (kind === 'move') {
-        guardSystemFolder(from)
+      if (kind === 'move') guardSystemFolder(from)
+      if (kind === 'move' && !cross) {
         if (to === from) throw conflict('files.same-folder')
         if (isDir(from) && within(from, destAbs)) throw bad('files.move-into-self')
         if (existsSync(to)) throw conflict('files.dest-name-taken')
         await moveTree(from, to)
+        moveVersions(from, to)
+        moveState(from, to)
       } else {
+        // the spaces overlap for an admin (the home is the whole storage): a folder still can not go into itself
+        if (cross && isDir(from) && within(from, destAbs)) {
+          if (kind === 'move') throw bad('files.move-into-self')
+          throw bad('files.copy-into-self')
+        }
+        if (kind === 'move' && existsSync(to)) throw conflict('files.dest-name-taken')
         // counting a big folder takes a while: other requests are answered meanwhile
         const size = isDir(from) ? (await treeStats(from)).size : lstatSync(from).size
         ensureSpace(destAbs, size)
         const hold = holdNow(q, size)
+        const target = kind === 'move' ? to : uniquePath(to)
         try {
-          await copyTree(from, uniquePath(to))
+          await copyTree(from, target)
         } catch (err) {
           hold.release()
           throw err
         }
         hold.commit()
+        if (kind === 'move') {
+          // copy first, then delete the source (to the trash, like a delete): when that fails the copy goes again
+          try {
+            await moveToTrash(from, user?.username ?? 'guest')
+          } catch (err) {
+            rmSync(target, { recursive: true, force: true })
+            markStale(q?.username)
+            throw err
+          }
+          if (a.space === 'home') markStale(user?.role === 'admin' ? undefined : user?.username)
+        }
       }
       done++
       audit({ user: user?.username ?? 'guest', ip, action: kind, target: storagePath(from), detail: storagePath(destAbs) })

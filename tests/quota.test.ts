@@ -180,17 +180,25 @@ describe('quota: upload announce', () => {
 describe('quota: other ways bytes land in a home', () => {
   test('PUT /api/content counts the growth only', async () => {
     const c = await userWith('qt-edit', 1000)
-    writeFileSync(home('qt-edit', 'note.txt'), 'x'.repeat(600))
-    quota.markStale('qt-edit')
-    const put = (content: string) => c.json('PUT', '/api/content', { space: 'home', path: '/note.txt', content })
-    expect(full(await put('y'.repeat(1200)))).toEqual(EXCEEDED)
-    expect(readFileSync(home('qt-edit', 'note.txt'), 'utf8')).toBe('x'.repeat(600))
-    // 600 -> 900 grows by 300 and fits
-    expect((await put('y'.repeat(900))).status).toBe(200)
-    // shrinking is always fine, and gives the space back
-    expect((await put('z'.repeat(100))).status).toBe(200)
-    expect((await settled(c, 'qt-edit')).used).toBe(100)
-    expect((await put('y'.repeat(1000))).status).toBe(200)
+    // versions (their own tests are in tests/versions.test.ts) would count too: this is about the file's growth
+    const { config } = await import('../src/config')
+    const keep = config.versionsKeep
+    config.versionsKeep = 0
+    try {
+      writeFileSync(home('qt-edit', 'note.txt'), 'x'.repeat(600))
+      quota.markStale('qt-edit')
+      const put = (content: string) => c.json('PUT', '/api/content', { space: 'home', path: '/note.txt', content })
+      expect(full(await put('y'.repeat(1200)))).toEqual(EXCEEDED)
+      expect(readFileSync(home('qt-edit', 'note.txt'), 'utf8')).toBe('x'.repeat(600))
+      // 600 -> 900 grows by 300 and fits
+      expect((await put('y'.repeat(900))).status).toBe(200)
+      // shrinking is always fine, and gives the space back
+      expect((await put('z'.repeat(100))).status).toBe(200)
+      expect((await settled(c, 'qt-edit')).used).toBe(100)
+      expect((await put('y'.repeat(1000))).status).toBe(200)
+    } finally {
+      config.versionsKeep = keep
+    }
   })
 
   test('zip: the archive has to fit', async () => {

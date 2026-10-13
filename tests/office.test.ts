@@ -15,6 +15,7 @@ let config: typeof import('../src/config').config
 let paths: typeof import('../src/config').paths
 let office: typeof import('../src/office')
 let logger: typeof import('../src/logger')
+let versions: typeof import('../src/versions')
 
 class Client {
   cookie = ''
@@ -130,6 +131,7 @@ beforeAll(async () => {
   ;({ config, paths } = await import('../src/config'))
   office = await import('../src/office')
   logger = await import('../src/logger')
+  versions = await import('../src/versions')
   Object.assign(saved, {
     url: config.officeUrl, internal: config.officeInternalUrl, server: config.officeServerInternalUrl, secret: config.officeJwtSecret,
     max: config.officeMaxSize, ttl: office.OFFICE_LIMITS.tokenTtlMs, timeout: office.OFFICE_LIMITS.downloadTimeoutMs,
@@ -368,6 +370,7 @@ describe('office: saving through the callback', () => {
   }
   const read = (f: string) => readFileSync(f, 'utf8')
 
+  // (the name is kept from when the old content went to the trash; it is now kept as a version, see below)
   test('status 2 puts the old version in the trash and the new bytes in place', async () => {
     const { cb, key, file } = await setup('of-save')
     const url = publishSaved(new TextEncoder().encode('new version from the editor'))
@@ -375,18 +378,20 @@ describe('office: saving through the callback', () => {
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ error: 0 })
     expect(read(file)).toBe('new version from the editor')
-    const trashed = trashOf('/users/of-save/doc.docx')
-    expect(trashed.length).toBe(1)
-    expect(readFileSync(join(paths.trash, trashed[0].id, 'item'), 'utf8')).toBe('old version')
-    expect(trashed[0].meta.deletedBy).toBe('of-save')
+    // the old content is a version now (versions.ts), not a trash entry
+    expect(trashOf('/users/of-save/doc.docx').length).toBe(0)
+    const kept = versions.listVersions(file)
+    expect(kept.length).toBe(1)
+    expect(kept[0]).toMatchObject({ reason: 'office', savedBy: 'of-save', storagePath: '/users/of-save/doc.docx', size: 11 })
+    expect(readFileSync(versions.getVersion(file, kept[0].id).item, 'utf8')).toBe('old version')
     // no leftovers next to the file
     expect(readdirSync(home('of-save'))).toEqual(['doc.docx'])
     const auditLog = readFileSync(paths.audit, 'utf8')
     expect(auditLog).toMatch(/"user":"of-save","ip":"[^"]*","action":"office-save","target":"\/users\/of-save\/doc.docx"/)
-    // the old version can be restored from the trash as usual
-    const restored = await admin.json('POST', '/api/admin/trash/restore', { id: trashed[0].id })
-    expect(restored.data.restoredTo).toBe('/users/of-save/doc (1).docx')
-    expect(read(home('of-save', 'doc (1).docx'))).toBe('old version')
+    // and it can be taken back from the versions
+    const back = await admin.json('POST', `/api/versions/${kept[0].id}/restore`, { space: 'home', path: '/users/of-save/doc.docx' })
+    expect(back.status).toBe(200)
+    expect(read(file)).toBe('old version')
   })
 
   test('status 6 (forced save) with the JWT in the Authorization header saves too', async () => {
@@ -395,7 +400,7 @@ describe('office: saving through the callback', () => {
     const res = await callback(cb, { key, status: 6, url, filetype: 'docx' }, 'header')
     expect(await res.json()).toEqual({ error: 0 })
     expect(read(file)).toBe('forced')
-    expect(trashOf('/users/of-force/doc.docx').length).toBe(1)
+    expect(versions.listVersions(file).length).toBe(1)
   })
 
   test('a callback without the right JWT is refused', async () => {
@@ -545,8 +550,10 @@ describe('office: saving counts against the quota', () => {
     expect(await (await callback(cb, { key, status: 2, url: tooBig, filetype: 'docx' })).json()).toEqual({ error: 1 })
     expect(readFileSync(home('of-quota', 'doc.docx'), 'utf8')).toBe('old version')
     expect(trashOf('/users/of-quota/doc.docx').length).toBe(0)
+    expect(versions.listVersions(home('of-quota', 'doc.docx')).length).toBe(0)
 
-    // only the growth counts (the old version goes to the trash, outside the home)
+    // the growth counts, and so does the version kept of the old content (11 + 11 + 34 = 56 of 60)
+    expect((await admin.json('PUT', '/api/admin/users/of-quota', { quotaBytes: 60 })).status).toBe(200)
     const fits = publishSaved(new TextEncoder().encode('y'.repeat(45)))
     expect(await (await callback(cb, { key, status: 2, url: fits, filetype: 'docx' })).json()).toEqual({ error: 0 })
     expect(readFileSync(home('of-quota', 'doc.docx'), 'utf8')).toBe('y'.repeat(45))

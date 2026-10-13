@@ -93,6 +93,10 @@ export const MESSAGES = {
   'files.delete-failed': { th: 'ลบไม่สำเร็จ', en: 'Could not delete.' },
   'files.transfer-failed': { th: 'ทำรายการไม่สำเร็จ', en: 'Could not complete the action.' },
 
+  // ───────────── versions and favorites ─────────────
+  'versions.not-found': { th: 'ไม่พบฉบับเก่านี้ของไฟล์', en: 'This earlier version of the file was not found.' },
+  'favorites.too-many': { th: 'รายการโปรดเต็มแล้ว (สูงสุด {max} รายการ) กรุณาเอาบางรายการออกก่อน', en: 'Your favorites are full (at most {max}). Remove some first.' },
+
   // ───────────── upload ─────────────
   'upload.not-found': { th: 'ไม่พบการอัปโหลดนี้', en: 'This upload was not found.' },
   'upload.guest-disabled': { th: 'ผู้เยี่ยมชมอัปโหลดไฟล์ไม่ได้ กรุณาเข้าสู่ระบบก่อน', en: 'Visitors cannot upload files. Please sign in first.' },

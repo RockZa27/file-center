@@ -4,7 +4,7 @@
  *
  *   users.json  settings.json  branding/  logs/audit.log  logs/system.log  backup.json  [storage/ with BACKUP_INCLUDE_FILES=true]
  *
- * Not in it: tmp/ and trash/ (temporary), app/ (installed updates), sessions.json (logins), rotated logs,
+ * Not in it: tmp/, trash/ and versions/ (temporary), app/ (installed updates), sessions.json (logins), rotated logs,
  * access.log and launcher.log, and the backup folder itself. Restoring puts back users.json, settings.json and branding/ only, never storage/.
  */
 import {
@@ -41,7 +41,7 @@ export type BackupStatus = {
 
 // top-level names in DATA_DIR that never go into a backup
 // secret.key opens the sealed 2FA secrets in users.json: a backup with both would give them away, so it is kept apart
-const SKIP = new Set(['tmp', 'trash', 'app', 'sessions.json', 'backup-status.json', 'stats-cache.json', 'cli-changed', 'secret.key'])
+const SKIP = new Set(['tmp', 'trash', 'versions', 'app', 'sessions.json', 'backup-status.json', 'stats-cache.json', 'cli-changed', 'secret.key'])
 // of the logs only the current activity and system log go in: rotated ones, access.log and launcher.log stay out
 const LOGS_KEPT = new Set(['logs/', 'logs/audit.log', 'logs/system.log'])
 // users, settings and a logo are small: anything bigger in a backup is not ours
