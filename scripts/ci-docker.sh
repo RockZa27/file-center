@@ -4,7 +4,8 @@
 #   1. build the image, start it on an empty volume with ADMIN_PASSWORD, wait for /api/health
 #   2. the app (PID 1) runs as uid 1000 and everything under /data belongs to 1000
 #   3. log in, upload a file in chunks, download it back: byte for byte the same
-#   4. build an update package (99.0.0), install it through /api/admin/update/upload|stage|apply,
+#   4. an UNSIGNED update package is refused; a package (99.0.0) signed with a throw-away key (its public key is the
+#      container's UPDATE_PUBLIC_KEY) is installed through /api/admin/update/upload|stage|apply,
 #      wait for the restart: the version is 99.0.0
 #   5. a second container with FC_RUN_AS_ROOT=true runs as uid 0
 #   6. a volume of an older install (owned by root, closed folder) is handed to uid 1000 with only the four capabilities
@@ -145,9 +146,12 @@ done
 pass 'docker-compose.yml: read_only, cap_drop ALL + 4 caps, no-new-privileges, memory and pids limits'
 
 log 'start on an empty volume'
+# update packages must be signed: a throw-away key pair, the container trusts its public key
+UPDATE_KEY=$(bun scripts/package.ts --gen-key "$WORK/keys" 2>/dev/null | tail -n1)
+[ -f "$WORK/keys/update-signing.key" ] && [ -n "$UPDATE_KEY" ] || fail 'the throw-away signing key was not made'
 docker volume create "$PREFIX-data" >/dev/null
 docker run -d --name "$PREFIX-main" -p 127.0.0.1::3000 -v "$PREFIX-data:/data" "${HARDEN[@]}" \
-  -e ADMIN_PASSWORD="$PASSWORD" -e UPLOAD_CHUNK_SIZE="$CHUNK" -e MIN_FREE_SPACE=0 "$IMAGE" >/dev/null
+  -e ADMIN_PASSWORD="$PASSWORD" -e UPLOAD_CHUNK_SIZE="$CHUNK" -e MIN_FREE_SPACE=0 -e UPDATE_PUBLIC_KEY="$UPDATE_KEY" "$IMAGE" >/dev/null
 BASE_URL="http://127.0.0.1:$(host_port "$PREFIX-main")"
 wait_health "$BASE_URL"
 pass "/api/health answers ($BASE_URL)"
@@ -197,10 +201,23 @@ if [ ! -f web/dist/index.html ]; then
   DIST_FROM_IMAGE=1
   docker cp "$PREFIX-main:/app/web/dist" web/dist
 fi
-bun scripts/package.ts --skip-web --version 99.0.0 --out "$WORK/pkg" >/dev/null
+bun scripts/package.ts --skip-web --version 99.0.0 --out "$WORK/pkg" --sign "$WORK/keys/update-signing.key" >/dev/null
 PKG="$WORK/pkg/file-center-99.0.0.zip"
 [ -f "$PKG" ] || fail 'the update package was not made'
 before=$(running)
+
+# an unsigned package (the same code, no manifest.sig) is refused when staging
+bun scripts/package.ts --skip-web --version 99.0.1 --out "$WORK/pkg-unsigned" >/dev/null
+UNSIGNED="$WORK/pkg-unsigned/file-center-99.0.1.zip"
+[ -f "$UNSIGNED" ] || fail 'the unsigned test package was not made'
+init=$(api POST /api/admin/update/upload "{\"size\":$(stat -c %s "$UNSIGNED")}")
+uid_=$(printf '%s' "$init" | json 'd.id')
+put_chunks "$uid_" "$UNSIGNED" "$(printf '%s' "$init" | json 'd.chunkSize')"
+status=$(curl -sS -o "$WORK/reply" -w '%{http_code}' -X POST -b "$COOKIES" -H "x-csrf-token: $CSRF" -H 'content-type: application/json' \
+  --data "{\"id\":\"$uid_\"}" "$BASE_URL/api/admin/update/stage") || fail 'curl stage (unsigned)'
+[ "$status" = 400 ] && [ "$(json 'd.code' < "$WORK/reply")" = update.unsigned ] || fail "an unsigned package was not refused (status $status): $(cat "$WORK/reply")"
+pass 'an unsigned update package is refused (update.unsigned)'
+
 init=$(api POST /api/admin/update/upload "{\"size\":$(stat -c %s "$PKG")}")
 id=$(printf '%s' "$init" | json 'd.id')
 size=$(printf '%s' "$init" | json 'd.chunkSize')

@@ -9,7 +9,8 @@ import { createHash, generateKeyPairSync } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { zipSync } from 'fflate'
-import { base } from './in-process-env'
+import { base, updateTestKey } from './in-process-env'
+import { signManifest } from './update-keys'
 
 let app: any
 let config: typeof import('../src/config').config
@@ -49,20 +50,21 @@ const at = (p: string) => `http://127.0.0.1:${server.port}/fc/updates${p}`
 const enc = new TextEncoder()
 const sha = (b: Uint8Array) => createHash('sha256').update(b).digest('hex')
 
-/** a package as scripts/package.ts makes it; the server code never runs here */
-function makePackage(version: string): Uint8Array {
+/** a package as scripts/package.ts makes it, signed with the test key unless `signed` is false; the server code never runs here */
+function makePackage(version: string, signed = true): Uint8Array {
   const content: Record<string, Uint8Array> = { 'server.js': enc.encode('console.log("hi")'), 'web/index.html': enc.encode('<html></html>') }
   const manifest = {
     name: 'file-center', version, builtAt: new Date().toISOString(), notes: 'from the source',
     files: Object.fromEntries(Object.entries(content).map(([p, d]) => [p, { size: d.length, sha256: sha(d) }])),
   }
-  return zipSync({ 'manifest.json': enc.encode(JSON.stringify(manifest)), ...content })
+  const manifestBytes = enc.encode(JSON.stringify(manifest))
+  return zipSync({ 'manifest.json': manifestBytes, ...(signed ? { 'manifest.sig': enc.encode(signManifest(manifestBytes, updateTestKey)) } : {}), ...content })
 }
 
 /** publish `zip` as the latest version; `latest` overrides fields of latest.json */
 function publish(version: string, zip: Uint8Array, latest: Record<string, unknown> = {}) {
   const file = `file-center-${version}.zip`
-  const body = { version, file, sha256: sha(zip), size: zip.length, builtAt: '2026-10-12T00:00:00.000Z', commit: 'abc1234', notes: 'new things', signed: false, ...latest }
+  const body = { version, file, sha256: sha(zip), size: zip.length, builtAt: '2026-10-12T00:00:00.000Z', commit: 'abc1234', notes: 'new things', signed: true, ...latest }
   files.clear()
   files.set('/latest.json', () => Response.json(body))
   files.set(`/${file}`, () => new Response(zip))
@@ -71,7 +73,8 @@ function publish(version: string, zip: Uint8Array, latest: Record<string, unknow
 const incoming = () => {
   try { return readdirSync(join(paths.app, 'incoming')).filter(n => n.startsWith('fetch-')) } catch { return [] }
 }
-const saved = { limits: {} as typeof source.SOURCE_LIMITS, maxSize: 0, key: '' }
+const staged = () => { try { return readdirSync(join(paths.app, 'staging')) } catch { return [] } }
+const saved = { limits: {} as typeof source.SOURCE_LIMITS, maxSize: 0, key: '', allowUnsigned: false }
 
 beforeAll(async () => {
   ;({ app } = await import('../src/index'))
@@ -81,6 +84,7 @@ beforeAll(async () => {
   saved.limits = { ...source.SOURCE_LIMITS }
   saved.maxSize = config.updateMaxSize
   saved.key = config.updatePublicKey
+  saved.allowUnsigned = config.updateAllowUnsigned
   server = Bun.serve({
     port: 0, hostname: '127.0.0.1',
     fetch: req => {
@@ -105,6 +109,7 @@ afterEach(() => {
   Object.assign(source.SOURCE_LIMITS, saved.limits)
   config.updateMaxSize = saved.maxSize
   config.updatePublicKey = saved.key
+  config.updateAllowUnsigned = saved.allowUnsigned
   config.updateSource = at('')
   files.clear()
   requests.length = 0
@@ -116,7 +121,7 @@ describe('update source: configuration', () => {
     const s = await admin.json('GET', '/api/admin/update')
     expect(s.data.source).toEqual({ enabled: false, url: null })
     const c = await admin.json('GET', '/api/admin/update/check')
-    expect(c).toEqual({ status: 200, data: { enabled: false, current: config.version, latest: null, newer: false } })
+    expect(c).toEqual({ status: 200, data: { enabled: false, current: config.version, latest: null, newer: false, refused: false } })
     const f = await admin.json('POST', '/api/admin/update/fetch')
     expect([f.status, f.data.code]).toEqual([409, 'update.source-off'])
     expect(requests).toEqual([])
@@ -170,8 +175,8 @@ describe('update source: check', () => {
     expect(c.status).toBe(200)
     expect(c.data).toEqual({
       enabled: true, current: config.version,
-      latest: { version: '9.1.0', notes: 'faster search', size: expect.any(Number), signed: false, builtAt: '2026-10-12T00:00:00.000Z' },
-      newer: true,
+      latest: { version: '9.1.0', notes: 'faster search', size: expect.any(Number), signed: true, builtAt: '2026-10-12T00:00:00.000Z' },
+      newer: true, refused: false,
     })
     expect(requests).toEqual(['/fc/updates/latest.json'])
   })
@@ -238,7 +243,7 @@ describe('update source: fetch', () => {
     expect(r.status).toBe(200)
     expect(r.data).toEqual({
       id: expect.stringMatching(/^[a-f0-9]{16}$/), version: '9.1.0', builtAt: expect.any(String), notes: 'from the source', files: 2,
-      bytes: expect.any(Number), serverSha256: expect.any(String), runningVersion: config.version, tested: false, signed: false, signatureVerified: false,
+      bytes: expect.any(Number), serverSha256: expect.any(String), runningVersion: config.version, tested: false, signed: true, signatureVerified: true,
     })
     expect(requests).toEqual(['/fc/updates/latest.json', '/fc/updates/file-center-9.1.0.zip'])
     expect(existsSync(join(paths.app, 'staging', r.data.id, 'server.js'))).toBe(true)
@@ -249,12 +254,64 @@ describe('update source: fetch', () => {
     expect((await admin.json('DELETE', `/api/admin/update/staged/${r.data.id}`)).status).toBe(200)
   })
 
-  test('with UPDATE_PUBLIC_KEY set, a fetched package still needs its signature', async () => {
+  test('a fetched package signed with another key than the one in effect is refused', async () => {
     config.updatePublicKey = generateKeyPairSync('ed25519').publicKey.export({ type: 'spki', format: 'der' }).toString('base64')
     publish('9.1.0', makePackage('9.1.0'))
     const r = await admin.json('POST', '/api/admin/update/fetch')
+    expect([r.status, r.data.code]).toEqual([400, 'update.bad-signature'])
+    expect(incoming()).toEqual([])
+    expect(staged()).toEqual([])
+  })
+
+  test('with no UPDATE_PUBLIC_KEY the built-in key is in effect: a package signed by a throw-away key is refused', async () => {
+    config.updatePublicKey = ''
+    publish('9.1.0', makePackage('9.1.0'))
+    const r = await admin.json('POST', '/api/admin/update/fetch')
+    expect([r.status, r.data.code]).toEqual([400, 'update.bad-signature'])
+    expect((await admin.json('GET', '/api/admin/update')).data).toMatchObject({ signatureRequired: true, builtinKey: true })
+  })
+
+  test('latest.json that calls the package unsigned: shown before downloading, refused without downloading it', async () => {
+    publish('9.1.0', makePackage('9.1.0', false), { signed: false })
+    const c = await admin.json('GET', '/api/admin/update/check')
+    expect(c.data).toMatchObject({ latest: { version: '9.1.0', signed: false }, newer: true, refused: true })
+    requests.length = 0
+    const r = await admin.json('POST', '/api/admin/update/fetch')
+    expect([r.status, r.data.code]).toEqual([400, 'update.unsigned'])
+    expect(requests).toEqual(['/fc/updates/latest.json'])
+    expect(incoming()).toEqual([])
+    // the text says what to do
+    const en = await admin.json('POST', '/api/admin/update/fetch', undefined, EN)
+    expect(en.data.error).toContain('signed release')
+    expect(en.data.error).toContain('UPDATE_ALLOW_UNSIGNED=true')
+  })
+
+  test('latest.json that lies (says signed, the package is not) is refused when staging', async () => {
+    publish('9.1.0', makePackage('9.1.0', false), { signed: true })
+    const r = await admin.json('POST', '/api/admin/update/fetch')
     expect([r.status, r.data.code]).toEqual([400, 'update.unsigned'])
     expect(incoming()).toEqual([])
+    expect(staged()).toEqual([])
+  })
+
+  test('UPDATE_ALLOW_UNSIGNED=true: an unsigned package is fetched and staged, and the page is told', async () => {
+    config.updateAllowUnsigned = true
+    publish('9.1.0', makePackage('9.1.0', false), { signed: false })
+    const c = await admin.json('GET', '/api/admin/update/check')
+    expect(c.data).toMatchObject({ latest: { signed: false }, newer: true, refused: false })
+    expect((await admin.json('GET', '/api/admin/update')).data).toMatchObject({ signatureRequired: false, allowUnsigned: true })
+    const r = await admin.json('POST', '/api/admin/update/fetch')
+    expect(r.status).toBe(200)
+    expect(r.data).toMatchObject({ version: '9.1.0', signed: false, signatureVerified: false })
+    expect((await admin.json('DELETE', `/api/admin/update/staged/${r.data.id}`)).status).toBe(200)
+  })
+
+  test('UPDATE_ALLOW_UNSIGNED=true still verifies a signature that is there', async () => {
+    config.updateAllowUnsigned = true
+    config.updatePublicKey = generateKeyPairSync('ed25519').publicKey.export({ type: 'spki', format: 'der' }).toString('base64')
+    publish('9.1.0', makePackage('9.1.0'))
+    const r = await admin.json('POST', '/api/admin/update/fetch')
+    expect([r.status, r.data.code]).toEqual([400, 'update.bad-signature'])
   })
 
   test('a version that is not newer is not downloaded', async () => {
@@ -333,7 +390,6 @@ describe('update source: fetch', () => {
 
 describe('update source: fetch and apply in one step', () => {
   const PASSWORD = () => process.env.ADMIN_PASSWORD!
-  const staged = () => { try { return readdirSync(join(paths.app, 'staging')) } catch { return [] } }
   const lastAudit = async (action: string) => (await admin.json('GET', `/api/admin/activity?action=${action}`)).data.items[0]
 
   test('a wrong password downloads nothing, not even latest.json', async () => {
@@ -375,10 +431,23 @@ describe('update source: fetch and apply in one step', () => {
     publish('9.1.0', makePackage('9.1.0'))
     const before = (await lastAudit('update-fetch'))?.ts
     const r = await admin.json('POST', '/api/admin/update/fetch-and-apply', { password: PASSWORD() })
-    expect([r.status, r.data.code, r.data.params]).toEqual([400, 'update.unsigned', { step: 'stage' }])
+    expect([r.status, r.data.code, r.data.params]).toEqual([400, 'update.bad-signature', { step: 'stage' }])
     expect(incoming()).toEqual([])
     expect(staged()).toEqual([])
     expect((await lastAudit('update-fetch'))?.ts).toBe(before)
+  })
+
+  test('an unsigned package is refused by default, before anything is downloaded', async () => {
+    publish('9.1.0', makePackage('9.1.0', false), { signed: false })
+    const r = await admin.json('POST', '/api/admin/update/fetch-and-apply', { password: PASSWORD() })
+    expect([r.status, r.data.code, r.data.params]).toEqual([400, 'update.unsigned', { step: 'fetch' }])
+    // a latest.json that claims it is signed gets as far as staging and stops there
+    publish('9.1.0', makePackage('9.1.0', false), { signed: true })
+    const lie = await admin.json('POST', '/api/admin/update/fetch-and-apply', { password: PASSWORD() })
+    expect([lie.status, lie.data.code, lie.data.params]).toEqual([400, 'update.unsigned', { step: 'stage' }])
+    expect(incoming()).toEqual([])
+    expect(staged()).toEqual([])
+    expect(existsSync(join(paths.app, 'releases'))).toBe(false)
   })
 
   test('a package whose server does not start stops at apply: nothing installed, nothing left staged', async () => {

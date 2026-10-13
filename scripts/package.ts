@@ -9,8 +9,9 @@
  *
  * The zip holds server.js (the server with its libraries bundled in), web/ and manifest.json with the SHA-256
  * of every file. Bump "version" in package.json first: the system only accepts a version newer than the running one.
- * manifest.sig is the Ed25519 signature of the exact bytes of manifest.json; a server with UPDATE_PUBLIC_KEY set
- * accepts only packages signed with the matching private key. Keep that key off the server.
+ * manifest.sig is the Ed25519 signature of the exact bytes of manifest.json; a server installs only packages signed
+ * with the private key matching its UPDATE_PUBLIC_KEY (File Center's own key when unset), unless it has
+ * UPDATE_ALLOW_UNSIGNED=true. Keep that key off the server.
  */
 import { createPrivateKey, createPublicKey, generateKeyPairSync, sign, type KeyObject } from 'node:crypto'
 import { chmodSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
@@ -107,4 +108,4 @@ const out = join(outDir, `file-center-${version}.zip`)
 writeFileSync(out, zipSync(entries, { level: 6 }))
 rmSync(tmp, { recursive: true, force: true })
 console.log(`✓ ${out} (${(statSync(out).size / 1024 / 1024).toFixed(1)} MB, ${Object.keys(files).length} ไฟล์)`)
-console.log(signingKey ? `  เซ็นแล้ว ตรงกับ UPDATE_PUBLIC_KEY=${publicKeyLine(signingKey)}` : '  ไม่ได้เซ็น (เซิร์ฟเวอร์ที่ตั้ง UPDATE_PUBLIC_KEY จะไม่รับ)')
+console.log(signingKey ? `  เซ็นแล้ว ตรงกับ UPDATE_PUBLIC_KEY=${publicKeyLine(signingKey)}` : '  ไม่ได้เซ็น (เซิร์ฟเวอร์รับเฉพาะแพ็กเกจที่เซ็น ยกเว้นตั้ง UPDATE_ALLOW_UNSIGNED=true)')

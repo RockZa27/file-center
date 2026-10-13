@@ -5,6 +5,9 @@
  *   bun run release --notes "what changed" --sign ~/keys/update-signing.key --push      ...and push it to origin
  *   (--skip-web reuses web/dist instead of building the page again)
  *
+ * Servers install only signed packages, so a release needs --sign <private key file>; --unsigned publishes one without
+ * a signature on purpose (only servers with UPDATE_ALLOW_UNSIGNED=true will take it).
+ *
  * Refuses unless the working tree is clean (the package must be exactly the commit it names) and package.json's
  * version is newer than every version already in `updates`. The package is built by scripts/package.ts. The branch
  * is changed in a temporary git worktree, so the checkout you work in is never touched; it holds only packages:
@@ -55,6 +58,11 @@ const isAncestor = (a: string, b: string) => run(['git', 'merge-base', '--is-anc
 const notes = (opt('notes') ?? '').trim()
 const signKey = args.includes('--sign') ? opt('sign') : undefined
 if (args.includes('--sign') && !signKey) fail('usage: bun run release --sign <private key file>')
+const unsigned = args.includes('--unsigned')
+if (signKey && unsigned) fail('--sign and --unsigned together make no sense: choose one')
+if (!signKey && !unsigned) {
+  fail('แพ็กเกจต้องเซ็นก่อนเผยแพร่ (เซิร์ฟเวอร์รับเฉพาะแพ็กเกจที่เซ็น): bun run release --sign <ไฟล์กุญแจส่วนตัว> หรือใส่ --unsigned ถ้าตั้งใจเผยแพร่โดยไม่เซ็น\n  (package must be signed: --sign <private key file>, or --unsigned on purpose)')
+}
 const push = args.includes('--push')
 
 // ── the source: exactly one commit, nothing on top of it
@@ -119,7 +127,7 @@ ${TABLE_HEADER}
 
 ## ข้อควรรู้
 - หน้าอัปเดตรับเฉพาะเวอร์ชันที่ใหม่กว่าที่ติดตั้งอยู่
-- เซิร์ฟเวอร์ที่ตั้ง \`UPDATE_PUBLIC_KEY\` ไว้รับเฉพาะแพ็กเกจที่เซ็นด้วยกุญแจที่ตรงกัน (คอลัมน์ "เซ็น")
+- เซิร์ฟเวอร์รับเฉพาะแพ็กเกจที่เซ็นด้วยกุญแจที่ตรงกัน (กุญแจของ File Center ที่ฝังมา หรือ \`UPDATE_PUBLIC_KEY\`) ดูคอลัมน์ "เซ็น"
 - \`latest.json\` บอกเวอร์ชันล่าสุด หน้าอัปเดตอ่านไฟล์นี้
 `
 

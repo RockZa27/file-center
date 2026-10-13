@@ -6,6 +6,7 @@
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { makeTestKey } from './update-keys'
 
 export const base = mkdtempSync(join(tmpdir(), 'fc-test-'))
 // shared by every file of the run, so it may only go once all of them are done: tests/preload.ts removes it then
@@ -16,3 +17,8 @@ process.env.DATA_DIR = join(base, 'data')
 process.env.ADMIN_PASSWORD = 'test-admin-pass'
 process.env.UPLOAD_CHUNK_SIZE = String(1024 * 1024) // 1 MB chunks keep the test fast
 process.env.LOGIN_MAX_ATTEMPTS = '3'
+// update packages must be signed: the whole run trusts this throw-away key (tests sign their packages with `updateTestKey`;
+// the real private key is not in the repository). Tests that need the built-in key or another key change config.updatePublicKey.
+export const updateTestKey = makeTestKey()
+process.env.UPDATE_PUBLIC_KEY = updateTestKey.publicKey
+delete process.env.UPDATE_ALLOW_UNSIGNED
