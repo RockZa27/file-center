@@ -1,0 +1,50 @@
+{
+ "agent": "verifier",
+ "verdicts": [
+  {
+   "findingId": "F1",
+   "verdict": "CONFIRMED",
+   "severity": "medium",
+   "repro": {
+    "command": "cd /tmp/fc-audit-r9 && bun qa/repro/F1.ts",
+    "expectExit": 42
+   }
+  },
+  {
+   "findingId": "F2",
+   "verdict": "CONFIRMED",
+   "severity": "medium",
+   "repro": {
+    "command": "cd /tmp/fc-audit-r9 && bun qa/repro/F2.ts",
+    "expectExit": 42
+   }
+  },
+  {
+   "findingId": "F3",
+   "verdict": "CONFIRMED",
+   "severity": "low",
+   "repro": {
+    "command": "cd /tmp/fc-audit-r9 && bun qa/repro/F3.ts",
+    "expectExit": 42
+   }
+  },
+  {
+   "findingId": "F4",
+   "verdict": "CONFIRMED",
+   "severity": "medium",
+   "repro": {
+    "command": "cd /tmp/fc-audit-r9 && bun qa/repro/F4.ts",
+    "expectExit": 42
+   }
+  },
+  {
+   "findingId": "F5",
+   "verdict": "CONFIRMED",
+   "severity": "critical",
+   "repro": {
+    "command": "cd /tmp/fc-audit-r9 && bun qa/repro/F5.ts",
+    "expectExit": 42
+   }
+  }
+ ]
+}
