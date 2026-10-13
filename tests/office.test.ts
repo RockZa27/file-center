@@ -370,7 +370,8 @@ describe('office: saving through the callback', () => {
   }
   const read = (f: string) => readFileSync(f, 'utf8')
 
-  test('status 2 keeps the old content as a version and puts the new bytes in place', async () => {
+  // (the name is kept from when the old content went to the trash; it is now kept as a version, see below)
+  test('status 2 puts the old version in the trash and the new bytes in place', async () => {
     const { cb, key, file } = await setup('of-save')
     const url = publishSaved(new TextEncoder().encode('new version from the editor'))
     const res = await callback(cb, { key, status: 2, url, filetype: 'docx', users: ['of-save'] })
