@@ -14,6 +14,7 @@ export const router = createRouter({
       meta: { auth: true },
       children: [
         { path: 'files', name: 'files', component: () => import('./views/FilesView.vue') },
+        { path: 'favorites', name: 'favorites', component: () => import('./views/FavoritesView.vue') },
         { path: 'shared', name: 'shared', component: () => import('./views/SharedView.vue') },
         { path: 'links', name: 'links', component: () => import('./views/SharesView.vue') },
         { path: 'admin', name: 'dashboard', component: () => import('./views/DashboardView.vue'), meta: { admin: true } },

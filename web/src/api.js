@@ -102,12 +102,24 @@ export const api = {
   /** ONLYOFFICE: { apiUrl, config } for one file, mode 'edit' or 'view' */
   officeConfig: (space, path, mode) => post('/api/office/config', { space, path, mode }),
   rename: (space, path, name) => post('/api/rename', { space, path, name }),
-  copy: (space, items, dest) => post('/api/copy', { space, items, dest }),
-  move: (space, items, dest) => post('/api/move', { space, items, dest }),
+  /** `destSpace` (another space than `space`): copy or move between spaces, needs write and upload there */
+  copy: (space, items, dest, destSpace) => post('/api/copy', { space, items, dest, destSpace }),
+  move: (space, items, dest, destSpace) => post('/api/move', { space, items, dest, destSpace }),
   remove: (space, items) => post('/api/delete', { space, items }),
   zip: (space, path, items, name) => post('/api/zip', { space, path, items, name }),
   unzip: (space, path) => post('/api/unzip', { space, path }),
   batch: (space, path, items) => post('/api/batch', { space, path, items }),
+
+  /** { current: { size, mtime }, items: [{ id, size, mtime, savedAt, savedBy, reason }] }, newest first */
+  versions: (space, path) => get('/api/versions', { space, path }),
+  versionUrl: (space, path, id) => `/api/versions/${encodeURIComponent(id)}/download?${qs({ space, path })}`,
+  /** `expectedMtime` (current.mtime of the list): 409 files.changed-elsewhere when the file changed since */
+  restoreVersion: (space, path, id, expectedMtime) => post(`/api/versions/${encodeURIComponent(id)}/restore`, { space, path, expectedMtime }),
+  deleteVersion: (space, path, id) => call('DELETE', `/api/versions/${encodeURIComponent(id)}?${qs({ space, path })}`),
+  favorites: () => get('/api/me/favorites'),
+  addFavorite: (space, path) => post('/api/me/favorites', { space, path }),
+  removeFavorite: (space, path) => call('DELETE', '/api/me/favorites', { space, path }),
+  recent: () => get('/api/me/recent'),
 
   downloadUrl: (space, path, inline = false) =>
     `/api/download?${qs({ space, path, inline: inline ? '1' : undefined })}`,

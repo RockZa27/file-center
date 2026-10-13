@@ -15,12 +15,15 @@ export const useAppStore = defineStore('app', {
     theme: read('fc.theme', 'auto'),
     lang: read('fc.lang', 'th'),
     view: read('fc.view', 'list'),
+    /** the signed-in user's starred places, as `space:path` */
+    favorites: [],
   }),
   getters: {
     isAdmin: s => s.user?.role === 'admin',
     isGuest: s => !s.user,
     appName: s => s.config.appName,
     primaryColor: s => s.config.primaryColor,
+    isFavorite: s => (space, path) => s.favorites.includes(`${space}:${path}`),
     can: s => (space, perm) => !!s.spaces[space]?.includes(perm),
     hasSpace: s => space => !!s.spaces[space],
     publicAvailable: s => !!s.spaces.public,
@@ -33,6 +36,23 @@ export const useAppStore = defineStore('app', {
       this.user = snapshot.user
       this.spaces = snapshot.spaces
       this.config = snapshot.config
+      if (!snapshot.user) this.favorites = []
+    },
+    async loadFavorites() {
+      if (!this.user) return
+      try { this.favorites = (await api.favorites()).items.map(i => `${i.space}:${i.path}`) } catch { /* the stars are a nicety */ }
+    },
+    /** answers whether the place is a favorite now; throws the server's error (e.g. the list is full) */
+    async toggleFavorite(space, path) {
+      const key = `${space}:${path}`
+      if (this.favorites.includes(key)) {
+        await api.removeFavorite(space, path)
+        this.favorites = this.favorites.filter(k => k !== key)
+        return false
+      }
+      await api.addFavorite(space, path)
+      this.favorites = [key, ...this.favorites]
+      return true
     },
     async init() {
       hooks.onUnauthorized = () => {

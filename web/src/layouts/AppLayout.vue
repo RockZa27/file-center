@@ -46,7 +46,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { NAvatar, NBadge, NButton, NDropdown, NIcon } from 'naive-ui'
 import {
   ArchiveOutline, CloudUploadOutline, DocumentTextOutline, FolderOutline, GlobeOutline, KeyOutline, LinkOutline, LogOutOutline, MenuOutline, PeopleOutline, SettingsOutline,
-  SpeedometerOutline, TimeOutline, TrashOutline,
+  SpeedometerOutline, StarOutline, TimeOutline, TrashOutline,
 } from '@vicons/ionicons5'
 import { api } from '../api'
 import AppLogo from '../components/AppLogo.vue'
@@ -69,6 +69,7 @@ const critical = computed(() => warnings.value.some(w => w.level === 'critical')
 
 const navItems = computed(() => {
   const items = [{ name: 'files', label: t('nav.files'), icon: FolderOutline }]
+  items.push({ name: 'favorites', label: t('nav.favorites'), icon: StarOutline })
   if (!app.isAdmin && app.hasSpace('public')) items.push({ name: 'shared', label: t('nav.publicFolder'), icon: GlobeOutline })
   if (app.canShare) items.push({ name: 'links', label: t('nav.shareLinks'), icon: LinkOutline })
   if (app.isAdmin) {

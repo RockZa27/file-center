@@ -88,6 +88,9 @@
               <div class="card-meta muted">{{ it.type === 'dir' ? t('common.folder') : formatBytes(it.size) }}</div>
             </button>
             <n-checkbox v-if="selectable" class="card-check" :checked="checked.includes(it.path)" @update:checked="v => toggle(it, v)" />
+            <n-button v-if="starrable" class="card-star" quaternary circle size="small" :title="isFav(it) ? t('files.removeFavorite') : t('files.addFavorite')" @click="toggleFav(it)">
+              <template #icon><n-icon :component="isFav(it) ? Star : StarOutline" :color="isFav(it) ? '#f59e0b' : undefined" /></template>
+            </n-button>
             <n-dropdown v-if="actionsFor(it).length" trigger="click" placement="bottom-end" :options="actionsFor(it)" @select="k => run(k, it)">
               <n-button class="card-menu" quaternary circle size="small"><template #icon><n-icon :component="EllipsisHorizontal" /></template></n-button>
             </n-dropdown>
@@ -110,9 +113,10 @@
 
     <upload-panel v-if="can('upload')" ref="uploader" :space="space" @uploaded="load(true)" />
     <search-modal v-model:show="searchOpen" :space="space" :start="location" @select="onSearchSelect" />
-    <folder-picker v-model:show="picker.show" :space="space" :title="picker.title" :confirm-text="picker.confirm" :initial="location" @select="onPicked2" />
+    <folder-picker v-model:show="picker.show" :space="space" :spaces="destSpaces" :title="picker.title" :confirm-text="picker.confirm" :initial="location" @select="onPicked2" />
+    <versions-modal v-model:show="versions.show" :space="space" :item="versions.item" :can-write="can('write')" :can-download="can('download')" @restored="onRestored" />
     <share-modal v-if="canShare" v-model:show="share.show" :space="space" :item="share.item" />
-    <preview-modal v-model:show="preview.show" :space="space" :item="preview.item" :siblings="visible" :can-edit="can('write')" :can-download="can('download')" :office-mode-of="officeModeOf" @saved="load(true)" @office="openOffice" />
+    <preview-modal v-model:show="preview.show" :space="space" :item="preview.item" :siblings="visible" :can-edit="can('write')" :can-download="can('download')" :office-mode-of="officeModeOf" @saved="load(true)" @office="openOffice" @versions="openVersions" />
     <office-editor v-model:show="office.show" :space="space" :item="office.item" :mode="office.mode" @closed="onOfficeClosed" />
 
     <n-modal v-model:show="prompt.show" preset="card" :title="prompt.title" style="width: min(440px, 94vw)">
@@ -135,7 +139,7 @@ import {
 import {
   AddOutline, ArchiveOutline, ArrowBackOutline, CloudUploadOutline, CopyOutline, CreateOutline, DocumentTextOutline,
   DownloadOutline, EllipsisHorizontal, EyeOffOutline, EyeOutline, FolderOpenOutline, GridOutline, HomeOutline, LinkOutline, ListOutline,
-  OpenOutline, RefreshOutline, ReturnUpForwardOutline, SearchOutline, TrashOutline, FolderOutline, EyeOutline as ViewIcon, ExpandOutline,
+  OpenOutline, RefreshOutline, ReturnUpForwardOutline, SearchOutline, Star, StarOutline, TimeOutline, TrashOutline, FolderOutline, EyeOutline as ViewIcon, ExpandOutline,
 } from '@vicons/ionicons5'
 import { api } from '../api'
 import { useFeedback } from '../composables'
@@ -149,6 +153,7 @@ import PreviewModal from './PreviewModal.vue'
 import SearchModal from './SearchModal.vue'
 import ShareModal from './ShareModal.vue'
 import UploadPanel from './UploadPanel.vue'
+import VersionsModal from './VersionsModal.vue'
 
 const props = defineProps({ space: { type: String, required: true }, emptyText: { type: String, default: '' } })
 const { t, locale } = useI18n()
@@ -191,6 +196,7 @@ const office = reactive({ show: false, item: null, mode: 'view' })
 /** stops waiting for the office editor's save (see onOfficeClosed) */
 let officeWait = null
 const share = reactive({ show: false, item: null })
+const versions = reactive({ show: false, item: null })
 const picker = reactive({ show: false, mode: 'copy', items: [], title: '', confirm: '' })
 const ctx = reactive({ show: false, x: 0, y: 0, item: null, options: [] })
 const prompt = reactive({ show: false, title: '', label: '', value: '', confirm: '', busy: false, action: null })
@@ -233,10 +239,12 @@ async function load(quiet = false) {
   if (!quiet) loading.value = true
   error.value = ''
   loadUsage()
+  app.loadFavorites()
   try {
     const res = await api.list(props.space, location.value)
     items.value = res.entries
     checked.value = checked.value.filter(p => res.entries.some(e => e.path === p))
+    applySelect()
   } catch (e) {
     // an old bookmark or a typed address: say why the page shows the top folder instead
     if (e.status === 404 && location.value !== '/') {
@@ -260,6 +268,37 @@ function go(path, replace = false) {
 watch(() => [props.space, location.value], () => { items.value = []; office.show = false; officeWait?.(); load() }, { immediate: true })
 // a folder that could not be read shows the server's text: read it again so the text follows the language switch
 watch(locale, () => { if (error.value) load(true) })
+
+// a link from Favorites / Recent: ?select=<path> marks that file (and opens its preview), then the address is cleaned
+function applySelect() {
+  const want = route.query.select
+  if (typeof want !== 'string') return
+  const it = items.value.find(e => e.path === want)
+  const { select, ...rest } = route.query
+  router.replace({ query: rest })
+  if (!it) return
+  if (selectable.value) checked.value = [it.path]
+  if (it.type === 'file' && kindOf(it.name) !== 'other' && can('download')) { preview.item = it; preview.show = true }
+}
+
+// ───── favorites ─────
+const starrable = computed(() => !!app.user)
+const isFav = it => app.isFavorite(props.space, it.path)
+async function toggleFav(it) {
+  try { await app.toggleFavorite(props.space, it.path) } catch (e) { fb.fail(e) }
+}
+
+// ───── previous versions ─────
+function openVersions(it) {
+  versions.item = it
+  versions.show = true
+}
+/** a restore changed the file: read the folder again, and an open preview of it starts over with the restored text */
+async function onRestored(it) {
+  await load(true)
+  const fresh = items.value.find(e => e.path === it.path)
+  if (fresh && preview.show) preview.item = fresh
+}
 
 // ───── opening & downloading ─────
 function triggerDownload(url) {
@@ -377,9 +416,16 @@ async function remove(list) {
 function pick(mode, list) {
   Object.assign(picker, { show: true, mode, items: list.map(i => i.path), title: mode === 'copy' ? t('files.copyTo') : t('files.moveTo'), confirm: mode === 'copy' ? t('files.copyHere') : t('files.moveHere') })
 }
-async function onPicked2(dest) {
+/** where a copy or move may go: here, and another space only with write and upload there (the server checks again) */
+const destSpaces = computed(() => {
+  const label = s => (s === 'public' ? t('nav.publicFolder') : t('nav.files'))
+  return ['home', 'public']
+    .filter(s => s === props.space || (app.can(s, 'write') && app.can(s, 'upload')))
+    .map(s => ({ value: s, label: label(s) }))
+})
+async function onPicked2(dest, destSpace) {
   try {
-    const r = await (picker.mode === 'copy' ? api.copy : api.move)(props.space, picker.items, dest)
+    const r = await (picker.mode === 'copy' ? api.copy : api.move)(props.space, picker.items, dest, destSpace && destSpace !== props.space ? destSpace : undefined)
     r.failed.length ? fb.warn(t('files.partial', { ok: r.done, failed: r.failed.length, reason: r.failed[0].error })) : fb.ok(t('files.done'))
     checked.value = []
     await load(true)
@@ -395,6 +441,8 @@ function actionsFor(it) {
   else if (kindOf(it.name) !== 'other' && can('download')) list.push({ key: 'open', label: t('files.preview'), icon: ico(ViewIcon) })
   const officeMode = it.type === 'file' ? officeModeOf(it.name) : null
   if (officeMode) list.push({ key: 'office', label: officeMode === 'edit' ? t('office.edit') : t('office.open'), icon: ico(officeMode === 'edit' ? CreateOutline : OpenOutline) })
+  if (it.type === 'file' && can('read')) list.push({ key: 'versions', label: t('versions.menu'), icon: ico(TimeOutline) })
+  if (starrable.value) list.push({ key: 'star', label: isFav(it) ? t('files.removeFavorite') : t('files.addFavorite'), icon: ico(isFav(it) ? Star : StarOutline) })
   if (it.type === 'file' && can('download')) list.push({ key: 'download', label: t('common.download'), icon: ico(DownloadOutline) })
   if (it.type === 'dir' && can('download') && can('batchdownload')) list.push({ key: 'download', label: t('files.downloadZip'), icon: ico(DownloadOutline) })
   if (canShareItem(it)) list.push({ key: 'share', label: t('share.action'), icon: ico(LinkOutline) })
@@ -415,6 +463,8 @@ function run(key, it) {
   if (key === 'open') return open(it)
   if (key === 'office') return openOffice(it, officeModeOf(it.name))
   if (key === 'download') return it.type === 'dir' ? downloadMany([it]) : triggerDownload(api.downloadUrl(props.space, it.path))
+  if (key === 'versions') return openVersions(it)
+  if (key === 'star') return toggleFav(it)
   if (key === 'share') return openShare(it)
   if (key === 'rename') return rename(it)
   if (key === 'copy') return pick('copy', [it])
@@ -444,6 +494,14 @@ function toggle(it, on) {
 const columns = computed(() => {
   const cols = []
   if (selectable.value) cols.push({ type: 'selection', width: 44 })
+  if (starrable.value) {
+    cols.push({
+      title: '', key: 'star', width: 44, align: 'center',
+      render: row => h(NButton, { quaternary: true, circle: true, size: 'small', title: isFav(row) ? t('files.removeFavorite') : t('files.addFavorite'), onClick: () => toggleFav(row) }, {
+        icon: () => h(NIcon, { component: isFav(row) ? Star : StarOutline, color: isFav(row) ? '#f59e0b' : undefined }),
+      }),
+    })
+  }
   cols.push(
     {
       title: t('common.name'), key: 'name', minWidth: 220, sorter: true,
@@ -543,6 +601,7 @@ function onSearchSelect(it) {
 .card-name { margin-top: 8px; font-size: 13.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card-meta { font-size: 12px; }
 .card-check { position: absolute; top: 14px; left: 14px; }
+.card-star { position: absolute; top: 12px; right: 44px; background: var(--surface); }
 .card-menu { position: absolute; top: 12px; right: 12px; background: var(--surface); }
 .more { grid-column: 1 / -1; text-align: center; }
 .drop { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: color-mix(in srgb, var(--primary) 14%, transparent); border: 3px dashed var(--primary); color: var(--primary); font-size: 18px; font-weight: 600; pointer-events: none; }

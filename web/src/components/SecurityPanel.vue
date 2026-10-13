@@ -50,7 +50,7 @@
       </template>
 
       <template v-else>
-        <div class="status"><n-tag type="success" round size="small" :bordered="false">{{ t('security.isOn') }}</n-tag></div>
+        <div class="status"><n-tag type="success" round size="small" :bordered="false">{{ t('security.isOn') }}</n-tag><span v-if="app.user?.twoFactorSince" class="muted small since">{{ t('security.since', { date: formatDate(app.user.twoFactorSince) }) }}</span></div>
         <template v-if="mode === 'newcodes' || mode === 'off'">
           <p class="small muted">{{ mode === 'off' ? t('security.offConfirm') : t('security.newCodesConfirm') }}</p>
           <n-form-item :label="t('security.yourPassword')" :show-feedback="false" class="gap">
@@ -93,7 +93,7 @@ import { groupSecret } from '../account-utils'
 import { api } from '../api'
 import { useFeedback } from '../composables'
 import { useAppStore } from '../store'
-import { formatBytes } from '../utils'
+import { formatBytes, formatDate } from '../utils'
 import DeviceList from './DeviceList.vue'
 
 // `lock` is true while the backup codes are on screen: the dialog must not close by a stray click; `signedout`
@@ -251,7 +251,8 @@ h3 { margin: 0 0 8px; font-size: 15px; font-weight: 600; }
 .small { font-size: 13px; margin: 0 0 8px; }
 .gap { margin-bottom: 12px; }
 .actions { display: flex; flex-wrap: wrap; gap: 8px; }
-.status { margin-bottom: 10px; }
+.status { margin-bottom: 10px; display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; }
+.since { margin: 0; }
 .qr { display: flex; justify-content: center; margin: 8px 0; min-height: 200px; align-items: center; }
 .qr img { background: #fff; padding: 6px; border-radius: 8px; border: 1px solid var(--border); max-width: 100%; height: auto; }
 .secret { padding: 8px 10px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 8px; margin: 4px 0 12px; font-size: 14px; letter-spacing: 1px; overflow-wrap: anywhere; user-select: all; }
