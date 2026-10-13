@@ -1,0 +1,16 @@
+import { join } from 'node:path'
+import { setup, put } from './helper'
+const h = await setup()
+const a = await h.mkUser('alice', ['read'], ['read'])
+await h.mkUser('bob', ['read'], [])
+put(join(h.storage, 'users', 'bob', 'passport-bob.txt'), 'secret')
+put(join(h.storage, 'users', 'alice', 'passport-alice.txt'), 'mine')
+const si = await import('../../src/search-index')
+si.indexTouched(join(h.storage, 'users', 'bob')); si.indexTouched(join(h.storage, 'users', 'alice'))
+await Bun.sleep(500)
+await h.waitIndexed(a)
+const r = await h.call(a, 'GET', '/api/search?space=home&q=passport')
+console.log(JSON.stringify(r.json))
+const leaked = (r.json?.results ?? []).some((e: any) => /bob/.test(e.path) || e.name === 'passport-bob.txt')
+console.log('indexed', r.json?.indexed, 'leaked', leaked)
+process.exit(leaked && r.json?.indexed ? 42 : 0)
