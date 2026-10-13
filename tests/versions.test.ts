@@ -479,6 +479,10 @@ describe('favorites and recent', () => {
     expect(await favs(c)).toEqual([])
     expect(await recent(c)).toEqual([])
     expect((await add(c, '/vr-fav-perm.txt', 'public')).status).toBe(403)
+    // other rights in that space, but not read (a drop folder): still hidden
+    expect((await admin.json('PUT', '/api/admin/users/vr-fav-perm', { publicPermissions: ['upload'] })).status).toBe(200)
+    expect(await favs(c)).toEqual([])
+    expect(await recent(c)).toEqual([])
     // ...and back again when it is given back
     await admin.json('PUT', '/api/admin/users/vr-fav-perm', { publicPermissions: ['read'] })
     expect((await favs(c)).length).toBe(1)

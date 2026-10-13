@@ -721,5 +721,95 @@
         "replace": "const need = 'download'"
       }
     ]
+  },
+  {
+    "id": "search-outside-start",
+    "difficulty": "medium",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/search-index.test.ts",
+    "description": "the indexed search does not limit rows to the caller's start folder, so a user's search returns names in every other home",
+    "patches": [
+      {
+        "file": "src/search-index.ts",
+        "find": "      if (at.rel !== '/') { where.push('rel >= ?', 'rel < ?'); args.push(at.rel + '/', at.rel + '0') }\n",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "index-keeps-deleted",
+    "difficulty": "medium",
+    "category": "info-leak",
+    "severity": "low",
+    "tests": "tests/search-index.test.ts",
+    "description": "a deleted or moved-away path stays in the search index until the next full scan, so its name still shows in results",
+    "patches": [
+      {
+        "file": "src/search-index.ts",
+        "find": "    removeRows(d, at.root, at.rel)\n    if (!st || st.isSymbolicLink()) return\n",
+        "replace": "    if (!st || st.isSymbolicLink()) return\n    removeRows(d, at.root, at.rel)\n"
+      }
+    ]
+  },
+  {
+    "id": "version-restore-read-perm",
+    "difficulty": "easy",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/versions.test.ts",
+    "description": "restoring a version asks only for read, so a read-only user can overwrite the current file with an old version",
+    "patches": [
+      {
+        "file": "src/routes/versions.ts",
+        "find": "need({ user, ip }, body.space, 'write')",
+        "replace": "need({ user, ip }, body.space, 'read')"
+      }
+    ]
+  },
+  {
+    "id": "versions-not-in-quota",
+    "difficulty": "medium",
+    "category": "dos",
+    "severity": "medium",
+    "tests": "tests/versions.test.ts",
+    "description": "kept versions are not counted in the owner's quota, so saving a file over and over grows the disk past the quota",
+    "patches": [
+      {
+        "file": "src/quota.ts",
+        "find": "size: r.size + versionBytesUnder(root)",
+        "replace": "size: r.size"
+      }
+    ]
+  },
+  {
+    "id": "favorites-perm-not-rechecked",
+    "difficulty": "medium",
+    "category": "info-leak",
+    "severity": "low",
+    "tests": "tests/versions.test.ts",
+    "description": "favorites keep listing paths in a space where the user lost the read permission",
+    "patches": [
+      {
+        "file": "src/favorites.ts",
+        "find": "    if (!a || !a.perms.has('read')) continue",
+        "replace": "    if (!a) continue"
+      }
+    ]
+  },
+  {
+    "id": "cross-space-dest-unchecked",
+    "difficulty": "hard",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/versions.test.ts",
+    "description": "copy/move into another space checks only read on the destination, so a user without write there can drop files into the public folder",
+    "patches": [
+      {
+        "file": "src/routes/files.ts",
+        "find": "need({ user, ip }, body.destSpace, 'write', 'upload')",
+        "replace": "need({ user, ip }, body.destSpace, 'read')"
+      }
+    ]
   }
 ]
