@@ -33,6 +33,13 @@ shift 5
 exec "$shell" -c "$cmd" "$@"`,
 }
 
+// stat that reports STUB_FAKE_UID for the one path STUB_FAKE_PATH and is the real one for everything else: where
+// the test is not root it can not chown a folder to another owner, so it makes the script see one
+const FAKE_STAT = `if [ "\${STUB_FAKE_PATH:-}" ] && [ "$#" -eq 3 ] && [ "$1" = -c ] && [ "$2" = %u ] && [ "$3" = "$STUB_FAKE_PATH" ]; then
+  echo "$STUB_FAKE_UID"; exit 0
+fi
+exec "$REAL_STAT" "$@"`
+
 /** a PATH with the stand-ins and only the real tools the script needs; `setpriv: false` leaves setpriv out */
 function binDir(withSetpriv: boolean) {
   const bin = mkdtempSync(join(base, 'bin-'))
@@ -41,7 +48,9 @@ function binDir(withSetpriv: boolean) {
     writeFileSync(join(bin, name), `#!/bin/sh\n${body}\n`)
     chmodSync(join(bin, name), 0o755)
   }
-  for (const tool of ['sh', 'mkdir', 'stat', 'awk']) symlinkSync(Bun.which(tool)!, join(bin, tool))
+  for (const tool of ['sh', 'mkdir', 'awk']) symlinkSync(Bun.which(tool)!, join(bin, tool))
+  writeFileSync(join(bin, 'stat'), `#!/bin/sh\n${FAKE_STAT}\n`)
+  chmodSync(join(bin, 'stat'), 0o755)
   return bin
 }
 const BIN = binDir(true)
@@ -54,7 +63,7 @@ function run(env: Record<string, string>, opts: { bin?: string } = {}): Run {
   const log = join(base, `calls-${Math.random().toString(36).slice(2)}.log`)
   writeFileSync(log, '')
   const p = Bun.spawnSync(['sh', SCRIPT, 'sh', '-c', 'echo "pid=$$ args=$#:$1|$2"', 'cmd', 'two words', 'x'], {
-    env: { PATH: opts.bin ?? BIN, STUB_LOG: log, STUB_UID: '0', HOME: '/root', ...env },
+    env: { PATH: opts.bin ?? BIN, REAL_STAT: Bun.which('stat')!, STUB_LOG: log, STUB_UID: '0', HOME: '/root', ...env },
   })
   const out = p.stdout.toString()
   return {
@@ -106,11 +115,12 @@ describe('docker entrypoint', () => {
   })
 
   test('a folder right under /data that is not bun\'s yet is enough to chown', () => {
-    // only root can give a folder to another owner; elsewhere the case above covers the check
-    if (process.getuid?.() !== 0) return
     const data = dataRoot()
-    chownSync(join(data, 'system'), 4242, 4242)
-    const r = run({ FC_DATA_ROOT: data, STUB_BUN_UID: owner(data) })
+    // only root can give a folder to another owner; elsewhere the stand-in stat reports one for that folder
+    const env: Record<string, string> = {}
+    if (process.getuid?.() === 0) chownSync(join(data, 'system'), 4242, 4242)
+    else Object.assign(env, { STUB_FAKE_PATH: join(data, 'system'), STUB_FAKE_UID: '4242' })
+    const r = run({ FC_DATA_ROOT: data, STUB_BUN_UID: owner(data), ...env })
     expect(r.calls[0]).toBe(`chown -R bun:bun ${data}`)
   })
 

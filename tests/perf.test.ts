@@ -238,7 +238,9 @@ async function start(env: Record<string, string> = {}) {
     stderr: 'inherit',
     env: {
       PATH: process.env.PATH!, HOME: process.env.HOME ?? base, PORT: String(port), HOST: '127.0.0.1',
-      STORAGE_DIR: dirs.storage, DATA_DIR: dirs.data, ADMIN_PASSWORD: PASSWORD, MIN_FREE_SPACE: '0', BACKUP_HOUR: 'off', ...env,
+      STORAGE_DIR: dirs.storage, DATA_DIR: dirs.data, ADMIN_PASSWORD: PASSWORD, MIN_FREE_SPACE: '0', BACKUP_HOUR: 'off',
+      // these tests are about the walk of the disk (and its limits), not the search index
+      SEARCH_INDEX: 'false', ...env,
     },
   })
   const end = Date.now() + 15_000
@@ -357,7 +359,7 @@ describe('dashboard counting does not hold up other requests', () => {
     }
     await work
     expect(results.copy.data).toEqual({ done: 1, failed: [] })
-    expect(results.search.data).toEqual({ results: [], truncated: false })
+    expect(results.search.data).toEqual({ results: [], truncated: false, indexed: false })
     expect(latencies.length).toBeGreaterThan(2)
     expect(Math.max(...latencies)).toBeLessThan(100)
 
@@ -372,6 +374,6 @@ describe('dashboard counting does not hold up other requests', () => {
     expect(hits.data.results.map((e: any) => e.path).sort()).toEqual(
       Array.from({ length: GROUPS - 1 }, (_, g) => `/big/g${g + 1}/f999`).sort(),
     )
-    expect((await api('GET', '/api/search?space=home&q=nothing-like-this')).data).toEqual({ results: [], truncated: true })
+    expect((await api('GET', '/api/search?space=home&q=nothing-like-this')).data).toEqual({ results: [], truncated: true, indexed: false })
   }, 60_000)
 })

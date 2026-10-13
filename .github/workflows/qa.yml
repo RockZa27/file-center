@@ -1,0 +1,62 @@
+# Checks on every push and pull request. No secrets are used. Actions are pinned to full versions.
+name: qa
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # build, typecheck, every test with coverage, flaky re-run, route list check, budgets (scripts/qa/run-checks.ts)
+  qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: oven-sh/setup-bun@v2.0.2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun run qa --run-id ci-${{ github.run_id }}
+      - name: Keep the results
+        if: always()
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: qa-results
+          path: qa/results/
+          if-no-files-found: warn
+
+  # the seeded-defect check: only on main and by hand, it is slower and not needed for every branch
+  seeded:
+    if: (github.event_name == 'push' && github.ref == 'refs/heads/main') || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: oven-sh/setup-bun@v2.0.2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bun run qa:seed check --run-id ci-seed
+      - name: Keep the results
+        if: always()
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: qa-seeded-results
+          path: qa/results/
+          if-no-files-found: warn
+
+  # the real image: non-root user, upload and download, update from the web, FC_RUN_AS_ROOT (scripts/ci-docker.sh)
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4.2.2
+      - uses: oven-sh/setup-bun@v2.0.2
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      - run: bash scripts/ci-docker.sh

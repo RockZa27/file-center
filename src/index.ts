@@ -19,6 +19,7 @@ import { sessionRoutes } from './routes/session'
 import { shareRoutes } from './routes/shares'
 import { updateRoutes } from './routes/update'
 import { uploadRoutes } from './routes/upload'
+import { startSearchIndex, stopSearchIndex } from './search-index'
 import { purgeExpiredShares } from './shares'
 import { purgeExpired } from './trash'
 import { cleanStaleUploads } from './uploads'
@@ -169,8 +170,9 @@ if (import.meta.main) {
     log.error('uncaught-exception', err)
     process.exit(1)
   })
-  onStop(() => app.stop())
+  onStop(async () => { stopSearchIndex(); await app.stop() })
   startAlerts()
+  startSearchIndex() // built in the background: searches walk the disk until it is ready
   // docker stop, Ctrl+C and updates: finish writing users, sessions and settings before leaving
   process.on('SIGTERM', () => void shutdown(0))
   process.on('SIGINT', () => void shutdown(0))

@@ -7,11 +7,12 @@ import { config, paths } from '../config'
 import { context, need, requireUser } from '../context'
 import {
   bad, conflict, copyTree, ensureSpace, forbidden, freeSpace, fromFsError, HttpError, isDir, joinRel, listDir, moveTree,
-  normRel, notFound, resolveIn, sameFile, searchTree, storagePath, treeStats, uniquePath, validName, within,
+  normRel, notFound, resolveIn, sameFile, storagePath, treeStats, uniquePath, validName, within,
 } from '../fsx'
 import { log } from '../logger'
 import { type Lang, langOf, type MessageCode, text } from '../messages'
 import { exceeded, holdNow, markStale, ready, roomLeft, usage } from '../quota'
+import { indexTouched, parseFilters, searchEntries } from '../search-index'
 import { moveToTrash } from '../trash'
 import { collectZipItems, unzipTo, zipStream } from '../zip'
 
@@ -106,11 +107,19 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
   .get('/search', async ({ user, query }) => {
     const a = need({ user, ip: '' }, query.space, 'read')
     const needle = query.q.trim().toLowerCase()
-    if (needle.length < 1) return { results: [], truncated: false }
+    const filters = parseFilters(query)
+    if (needle.length < 1) return { results: [], truncated: false, indexed: false }
     const startRel = normRel(query.path)
-    // a walk of up to 50,000 entries: in batches, so other requests are answered meanwhile
-    return await searchTree(resolveIn(a.root, startRel), startRel, needle)
-  }, { query: t.Object({ space: t.String(), q: t.String(), path: t.Optional(t.String()) }) })
+    // the index answers when it is built, else a walk of up to 50,000 entries in batches (other requests are answered meanwhile)
+    return await searchEntries(resolveIn(a.root, startRel), startRel, needle, filters)
+  }, {
+    query: t.Object({
+      space: t.String(), q: t.String(), path: t.Optional(t.String()),
+      type: t.Optional(t.String()), ext: t.Optional(t.String()), from: t.Optional(t.String()), to: t.Optional(t.String()),
+      minSize: t.Optional(t.String()), maxSize: t.Optional(t.String()), sort: t.Optional(t.String()), order: t.Optional(t.String()),
+      limit: t.Optional(t.String()),
+    }),
+  })
 
   // ───────────── create / edit ─────────────
   .post('/mkdir', ({ user, ip, body }) => {
@@ -121,6 +130,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     const target = join(dir, name)
     if (existsSync(target)) throw conflict('files.name-taken')
     mkdirSync(target)
+    indexTouched(target)
     audit({ user: user?.username ?? 'guest', ip, action: 'mkdir', target: storagePath(target) })
     return { ok: true }
   }, { body: t.Object({ space: t.String(), path: t.String(), name: t.String() }) })
@@ -133,6 +143,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     const target = join(dir, name)
     if (existsSync(target)) throw conflict('files.name-taken')
     writeFileSync(target, '')
+    indexTouched(target)
     audit({ user: user?.username ?? 'guest', ip, action: 'create', target: storagePath(target) })
     return { ok: true }
   }, { body: t.Object({ space: t.String(), path: t.String(), name: t.String() }) })
@@ -169,6 +180,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
       throw err
     }
     hold.commit(grow)
+    indexTouched(abs)
     if (grow < 0 && q) markStale(q.username)
     audit({ user: user?.username ?? 'guest', ip, action: 'edit', target: storagePath(abs) })
     // the next save sends this one back
@@ -189,6 +201,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     // "a.txt" -> "A.txt" is the same file on a case-insensitive disk, but a different one on Linux
     if (existsSync(to) && !sameFile(from, to)) throw conflict('files.name-taken')
     await moveTree(from, to)
+    indexTouched(from); indexTouched(to)
     audit({ user: user?.username ?? 'guest', ip, action: 'rename', target: storagePath(from), detail: name })
     return { ok: true }
   }, { body: t.Object({ space: t.String(), path: t.String(), name: t.String() }) })
@@ -248,6 +261,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
       throw err
     }
     hold.commit(statSync(target).size)
+    indexTouched(target)
     audit({ user: user?.username ?? 'guest', ip, action: 'zip', target: storagePath(target), detail: `${names.length} รายการ` })
     return { ok: true, name: basename(target) }
   }, { body: t.Object({ space: t.String(), path: t.String(), items: t.Array(t.String()), name: t.Optional(t.String()) }) })
@@ -272,6 +286,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     try {
       const count = await unzipTo(abs, dest, { maxBytes, maxFiles: config.unzipMaxFiles })
       hold.commit((await treeStats(dest)).size)
+      indexTouched(dest)
       audit({ user: user?.username ?? 'guest', ip, action: 'unzip', target: storagePath(abs), detail: `${count} ไฟล์` })
       return { ok: true, folder: basename(dest), files: count }
     } catch (err) {
@@ -364,13 +379,16 @@ async function transfer(kind: 'copy' | 'move', user: any, ip: string, body: { sp
         if (isDir(from) && within(from, destAbs)) throw bad('files.move-into-self')
         if (existsSync(to)) throw conflict('files.dest-name-taken')
         await moveTree(from, to)
+        indexTouched(from); indexTouched(to)
       } else {
         // counting a big folder takes a while: other requests are answered meanwhile
         const size = isDir(from) ? (await treeStats(from)).size : lstatSync(from).size
         ensureSpace(destAbs, size)
         const hold = holdNow(q, size)
         try {
-          await copyTree(from, uniquePath(to))
+          const copied = uniquePath(to)
+          await copyTree(from, copied)
+          indexTouched(copied)
         } catch (err) {
           hold.release()
           throw err

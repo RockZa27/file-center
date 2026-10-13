@@ -3,6 +3,7 @@ import { existsSync, lstatSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { basename, dirname, join } from 'node:path'
 import { config, paths } from './config'
 import { holdNow, ownerOfPath, ready } from './quota'
+import { indexTouched } from './search-index'
 import {
   conflict, ensureDir, moveTree, notFound, parentRel, resolveIn, storagePath, treeStats, uniquePath,
 } from './fsx'
@@ -47,6 +48,7 @@ export async function moveToTrash(abs: string, deletedBy: string): Promise<Trash
     rmSync(itemDir(id), { recursive: true, force: true })
     throw err
   }
+  indexTouched(abs)
   writeFileSync(join(itemDir(id), 'meta.json'), JSON.stringify(meta))
   return meta
 }
@@ -88,6 +90,7 @@ export async function restore(idRaw: unknown): Promise<{ meta: TrashMeta; restor
     throw err
   }
   hold.commit()
+  indexTouched(finalPath)
   rmSync(dir, { recursive: true, force: true })
   return { meta, restoredTo: storagePath(finalPath) }
 }
