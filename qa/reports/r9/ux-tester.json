@@ -1,0 +1,61 @@
+{
+ "agent": "ux-tester",
+ "flows": [
+  {
+   "name": "page-loads-fast",
+   "passed": true,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 0,
+   "screenshot": "qa/reports/r9/screenshots/page-loads-fast.png",
+   "notes": "br + immutable on assets, 304 on If-None-Match, 2,000-file folder in ~780 ms, same order as before"
+  },
+  {
+   "name": "signed-updates",
+   "passed": true,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 2,
+   "screenshot": "qa/reports/r9/screenshots/signed-updates.png",
+   "notes": "page says signatures required; unsigned and wrong-key packages refused with clear text; own-key package installed (99.0.0); allow-unsigned warnings on dashboard and update page; help text still said unsigned is accepted without a key (fixed after)"
+  },
+  {
+   "name": "login-limits",
+   "passed": true,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 5,
+   "screenshot": "qa/reports/r9/screenshots/login-limits.png",
+   "notes": "account lock shows the wait in th/en, right password refused during the wait; audit count lags by design"
+  },
+  {
+   "name": "password-change-lock",
+   "passed": true,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 7,
+   "screenshot": "qa/reports/r9/screenshots/password-change-lock.png",
+   "notes": "5 wrong current passwords then lock message with countdown"
+  },
+  {
+   "name": "big-selection",
+   "passed": false,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 3,
+   "screenshot": "qa/reports/r9/screenshots/big-selection.png",
+   "notes": "2,001 items: 400 with only 'number of items is not valid' (fixed after: says 1..2000 per request); 2,000 works"
+  },
+  {
+   "name": "request-link-limits",
+   "passed": false,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 1,
+   "screenshot": "qa/reports/r9/screenshots/request-link-limits.png",
+   "notes": "page said 'no limit' while the 1 GB/5 GB defaults applied (fixed after: info answers the limits in effect); over-limit file refused with KB size"
+  },
+  {
+   "name": "language-and-mobile",
+   "passed": true,
+   "consoleErrors": 0,
+   "expectedHttpErrors": 3,
+   "screenshot": "qa/reports/r9/screenshots/language-and-mobile.png",
+   "notes": "375x812 English: update page, login lock, request page; no sideways scroll"
+  }
+ ]
+}

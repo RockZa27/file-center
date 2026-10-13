@@ -201,7 +201,9 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
       const key = visitorKey(request)
       return {
         kind: 'upload', name: basename(abs), type: 'dir', expiresAt, needsPassword: false, note: share.note ?? '',
-        maxFileBytes: share.maxFileBytes ?? null, maxFiles: share.maxFiles ?? null, maxTotalBytes: share.maxTotalBytes ?? null,
+        // the limits that really apply: an unset one is the server's default, so the page never says "no limit" when there is one
+        maxFileBytes: share.maxFileBytes ?? config.uploadRequestMaxFile, maxFiles: share.maxFiles ?? null,
+        maxTotalBytes: share.maxTotalBytes ?? config.uploadRequestMaxTotal,
         uploadedFiles: share.uploadedFiles ?? 0, uploadedBytes: share.uploadedBytes ?? 0, full: uploadFull(share),
         mine: key ? uploadsBy(share, key) : [],
       }

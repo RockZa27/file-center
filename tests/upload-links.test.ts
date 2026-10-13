@@ -159,7 +159,8 @@ describe('upload links: what a visitor sees', () => {
     expect(r.status).toBe(200)
     expect(r.data).toEqual({
       kind: 'upload', name: 'inbox', type: 'dir', expiresAt: expect.any(String), needsPassword: false, note: '<b>plain</b> text',
-      maxFileBytes: null, maxFiles: 5, maxTotalBytes: null, uploadedFiles: 0, uploadedBytes: 0, full: false, mine: [],
+      // unset limits are shown as the defaults that apply, never as "no limit"
+      maxFileBytes: config.uploadRequestMaxFile, maxFiles: 5, maxTotalBytes: config.uploadRequestMaxTotal, uploadedFiles: 0, uploadedBytes: 0, full: false, mine: [],
     })
     const text = JSON.stringify((await v.json('GET', `/api/s/${t}?path=/`)).data)
     expect(text).not.toContain('existing.txt')

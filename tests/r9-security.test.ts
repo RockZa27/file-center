@@ -101,6 +101,9 @@ describe('F1: one request can not stall the server', () => {
     ] as const) {
       const r = await admin.json('POST', path, body)
       expect(code(r)).toEqual({ status: 400, code: 'files.bad-count' })
+      // the message says what the limit is
+      expect(r.data.params).toEqual({ max: 2000 })
+      expect(r.data.error).toContain('2000')
     }
     // 2000 are still fine to ask for (they are simply not there)
     const ok = await admin.json('POST', '/api/batch', { space: 'home', path: '/', items: items.slice(0, 2000) })

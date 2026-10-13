@@ -37,7 +37,7 @@ const MAX_ITEMS = 2000
 const itemList = t.Array(t.String(), { maxItems: MAX_ITEMS })
 
 function items(input: string[], max = MAX_ITEMS): string[] {
-  if (!input.length || input.length > max) throw bad('files.bad-count')
+  if (!input.length || input.length > max) throw bad('files.bad-count', { max })
   // the same name twice is one item, not two rounds of work
   return [...new Set(input.map(p => {
     const n = normRel(p)
@@ -48,7 +48,7 @@ function items(input: string[], max = MAX_ITEMS): string[] {
 
 /** the names of a zip / batch request in a folder: counted, de-duplicated, and all of them checked without blocking */
 async function existingNames(dir: string, input: string[]): Promise<string[]> {
-  if (input.length > MAX_ITEMS) throw bad('files.bad-count')
+  if (input.length > MAX_ITEMS) throw bad('files.bad-count', { max: MAX_ITEMS })
   const names = [...new Set(input.map(validName))]
   const missing = await Promise.all(names.map(n => access(join(dir, n)).then(() => null, () => n)))
   const first = missing.find(n => n !== null)

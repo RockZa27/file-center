@@ -90,8 +90,8 @@ export const context = new Elysia({ name: 'context' })
     }
     if (code === 'VALIDATION') {
       // a list longer than its schema allows (maxItems) is a request for too many items, not a malformed one
-      const tooMany = (error as any).all?.some((e: any) => e?.schema?.type === 'array' && e.schema.maxItems !== undefined && e.summary !== undefined || e?.schema?.maxItems !== undefined)
-      return tooMany ? answer(400, 'files.bad-count') : answer(422, 'request.invalid')
+      const tooMany = (error as any).all?.find((e: any) => e?.schema?.maxItems !== undefined)
+      return tooMany ? answer(400, 'files.bad-count', { max: tooMany.schema.maxItems }) : answer(422, 'request.invalid')
     }
     if (code === 'NOT_FOUND') return answer(404, 'request.no-route')
     if (code === 'PARSE') return answer(400, 'request.unreadable')
