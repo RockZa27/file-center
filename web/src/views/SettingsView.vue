@@ -55,7 +55,7 @@
       <div class="kv"><span class="muted">{{ t('dash.system') }}</span><span>v{{ app.config.version }}</span></div>
       <div class="kv"><span class="muted">{{ t('settings.uploadLimit') }}</span><span>{{ formatBytes(app.config.uploadMaxSize) }}</span></div>
       <div class="kv"><span class="muted">{{ t('settings.chunk') }}</span><span>{{ formatBytes(app.config.uploadChunkSize) }} × {{ app.config.uploadSimultaneous }}</span></div>
-      <div class="kv"><span class="muted">{{ t('settings.retention') }}</span><span>{{ t('trash.days', { n: app.config.trashRetentionDays }) }}</span></div>
+      <div class="kv"><span class="muted">{{ t('settings.retention') }}</span><span>{{ t('trash.days', app.config.trashRetentionDays) }}</span></div>
     </div>
   </div>
 </template>

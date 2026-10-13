@@ -8,6 +8,7 @@ import { accessFor, clearFailures, findUser, hashPassword, lockedFor, recordFail
 import { config } from '../config'
 import { context, need, requireAdmin, requireUser } from '../context'
 import { bad, HttpError, listDir, normRel, notFound, resolveIn, storagePath, treeStats } from '../fsx'
+import { sizeText } from '../messages'
 import { ready } from '../quota'
 import {
   allShares, createShare, findShare, isUnlocked, kindOf, lockoutKey, openShare, publicShare, recordUpload, revokeShare, type Share,
@@ -288,7 +289,7 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
     if (!owner || !a) throw notFound()
     const size = Number(body.size)
     if (!Number.isSafeInteger(size) || size < 0) throw bad('upload.bad-size')
-    if (share.maxFileBytes != null && size > share.maxFileBytes) throw new HttpError(413, 'share.upload-too-big', { max: share.maxFileBytes })
+    if (share.maxFileBytes != null && size > share.maxFileBytes) throw new HttpError(413, 'share.upload-too-big', { max: share.maxFileBytes, maxText: sizeText(share.maxFileBytes) })
     const load = shareUploadLoad(share.id, ip)
     if (load.count >= SHARE_UPLOADS_PER_LINK || load.byIp >= SHARE_UPLOADS_PER_IP) throw new HttpError(429, 'share.upload-busy')
     // finished and announced files both count, so parallel announcements can not pass the limit together

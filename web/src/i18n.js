@@ -472,11 +472,11 @@ const en = {
   trash: {
     subtitle: 'Deleted items stay here for {days} days before they are removed for good. You can restore them to their original place.',
     empty: 'Empty trash', emptyConfirm: 'Permanently delete {n} item(s) in the trash? This cannot be undone.', none: 'The trash is empty',
-    deletedBy: 'Deleted by', deletedAt: 'Deleted', left: 'Time left', days: '{n} days', restore: 'Restore', restored: 'Restored to {path}',
+    deletedBy: 'Deleted by', deletedAt: 'Deleted', left: 'Time left', days: '{n} day | {n} days', restore: 'Restore', restored: 'Restored to {path}',
     purge: 'Delete forever', purgeConfirm: 'Permanently delete {name}? This cannot be undone.',
   },
   share: {
-    action: 'Share link', title: 'Share a link with someone without an account', expires: 'Link lasts', days: '{n} days',
+    action: 'Share link', title: 'Share a link with someone without an account', expires: 'Link lasts', days: '{n} day | {n} days',
     password: 'Password (optional)', passwordNone: 'Empty = anyone with the link can open it', passwordShort: 'The password needs at least {n} characters',
     limit: 'Download limit (optional)', limitNone: 'No limit', create: 'Create link',
     created: 'Link created', onceOnly: 'This link is shown only once. Copy it now; if you lose it, create a new one.',

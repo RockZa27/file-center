@@ -123,8 +123,8 @@ describe('quota: upload announce', () => {
     fill('qt-up', 'old.bin', 60_000)
     const r = await announce(c, 'big.bin', 50_000)
     expect(full(r)).toEqual(EXCEEDED)
-    expect(r.data.params).toEqual({ used: 60_000, quota: 100_000 })
-    expect(r.data.error).toContain('60000')
+    expect(r.data.params).toEqual({ used: 60_000, quota: 100_000, usedText: '58.6 KB', quotaText: '97.7 KB' })
+    expect(r.data.error).toContain('58.6 KB')
     expect((await announce(c, 'ok.bin', 40_000)).status).toBe(200)
     // nothing was left behind by the refused one
     expect(readdirSync(paths.tmp).length).toBeGreaterThanOrEqual(1)
@@ -231,7 +231,7 @@ describe('quota: other ways bytes land in a home', () => {
     const copy = await c.json('POST', '/api/copy', { space: 'home', items: ['/a.bin'], dest: '/dir' })
     expect(copy.status).toBe(200)
     expect(copy.data.done).toBe(0)
-    expect(copy.data.failed[0].error).toContain('60000')
+    expect(copy.data.failed[0].error).toContain('58.6 KB')
     expect(existsSync(home('qt-copy', 'dir', 'a.bin'))).toBe(false)
     // a move is one file in a new place
     const move = await c.json('POST', '/api/move', { space: 'home', items: ['/a.bin'], dest: '/dir' })
@@ -300,5 +300,20 @@ describe('quota: usage', () => {
     await quota.ready((await import('../src/auth')).findUser('qt-only'))
     expect((await usage(c)).data.used).toBe(0)
     expect(existsSync(paths.trash)).toBe(true)
+  })
+})
+
+describe('quota: the message', () => {
+  test('sizes read as KB/MB, the byte counts stay in the params', async () => {
+    const { sizeText, text } = await import('../src/messages')
+    expect(sizeText(512)).toBe('512 B')
+    expect(sizeText(716_800)).toBe('700.0 KB')
+    expect(sizeText(1_048_576)).toBe('1.0 MB')
+    const { HttpError } = await import('../src/fsx')
+    const users = (await import('../src/auth')).allUsers()
+    const err = quota.exceeded({ ...users.find(u => u.role !== 'admin')!, quotaBytes: 1_048_576 })
+    expect(err).toBeInstanceOf(HttpError)
+    expect(err.params).toMatchObject({ quota: 1_048_576, quotaText: '1.0 MB' })
+    expect(text('en', 'quota.exceeded', err.params)).toContain('of 1.0 MB used')
   })
 })

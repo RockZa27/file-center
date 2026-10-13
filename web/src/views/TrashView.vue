@@ -53,7 +53,7 @@ const nameCell = r => h('div', { class: 'name-cell' }, [
   h(FileIcon, { item: { name: r.name, type: r.type }, size: 20 }),
   h('div', { style: 'min-width:0' }, [h('div', { class: 'truncate name-text', title: r.name }, r.name), h('div', { class: 'muted mono truncate', title: r.originalPath }, r.originalPath)]),
 ])
-const leftTag = r => h(NTag, { size: 'small', round: true, type: daysLeft(r) <= 3 ? 'warning' : 'default' }, () => t('trash.days', { n: daysLeft(r) }))
+const leftTag = r => h(NTag, { size: 'small', round: true, type: daysLeft(r) <= 3 ? 'warning' : 'default' }, () => t('trash.days', daysLeft(r)))
 const actions = r => h('div', { class: 'row-actions' }, [
   h(NButton, { size: 'small', secondary: true, type: 'primary', onClick: () => restore(r) }, { default: () => t('trash.restore'), icon: () => h(NIcon, { component: ArrowUndoOutline }) }),
   h(NButton, { size: 'small', quaternary: true, type: 'error', title: t('trash.purge'), 'aria-label': t('trash.purge'), onClick: () => purge(r) }, { icon: () => h(NIcon, { component: CloseOutline }) }),

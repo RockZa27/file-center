@@ -400,8 +400,8 @@
     "patches": [
       {
         "file": "src/routes/files.ts",
-        "find": "ensureSpace(destAbs, isDir(from) ? (await treeStats(from)).size : lstatSync(from).size)",
-        "replace": "void treeStats"
+        "find": "        ensureSpace(destAbs, size)\n        const hold = holdNow(q, size)",
+        "replace": "        const hold = holdNow(q, size)"
       }
     ]
   },
@@ -430,7 +430,7 @@
     "patches": [
       {
         "file": "src/shares.ts",
-        "find": "if (!a || !a.perms.has('share') || !a.perms.has('download')) return null",
+        "find": "if (!a || !a.perms.has('share') || !a.perms.has(need)) return null",
         "replace": "if (!a) return null"
       }
     ]

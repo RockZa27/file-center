@@ -179,13 +179,13 @@ export const MESSAGES = {
   'share.upload-folder-only': { th: 'ลิงก์รับไฟล์ใช้ได้กับโฟลเดอร์เท่านั้น', en: 'An upload link can only be made for a folder.' },
   'share.bad-upload-limits': { th: 'ขีดจำกัดของลิงก์รับไฟล์ไม่ถูกต้อง (ขนาดต่อไฟล์ไม่เกิน {file} ไบต์, จำนวนไฟล์ไม่เกิน {files}, ขนาดรวมไม่เกิน {total} ไบต์)', en: 'The upload link limits are not valid (file size up to {file} bytes, up to {files} files, total up to {total} bytes).' },
   'share.note-too-long': { th: 'ข้อความถึงผู้อัปโหลดต้องไม่เกิน {max} ตัวอักษร', en: 'The note for the visitor must be at most {max} characters.' },
-  'share.upload-too-big': { th: 'ไฟล์ใหญ่เกินที่ลิงก์นี้รับได้ (สูงสุด {max} ไบต์)', en: 'The file is bigger than this link accepts (at most {max} bytes).' },
+  'share.upload-too-big': { th: 'ไฟล์ใหญ่เกินที่ลิงก์นี้รับได้ (สูงสุด {maxText})', en: 'The file is bigger than this link accepts (at most {maxText}).' },
   'share.upload-full': { th: 'ลิงก์นี้รับไฟล์ครบตามที่กำหนดแล้ว', en: 'This link has received all the files it accepts.' },
   'share.upload-busy': { th: 'มีการอัปโหลดค้างอยู่หลายรายการเกินไป กรุณารอให้เสร็จก่อน', en: 'Too many uploads are in progress. Please wait for them to finish.' },
 
   // ───────────── quota ─────────────
   // the numbers are bytes
-  'quota.exceeded': { th: 'พื้นที่ของคุณเต็ม (ใช้ไป {used} จาก {quota} ไบต์) กรุณาลบไฟล์ก่อนหรือติดต่อผู้ดูแลระบบ', en: 'Your storage is full ({used} of {quota} bytes used). Delete some files or contact the administrator.' },
+  'quota.exceeded': { th: 'พื้นที่ของคุณเต็ม (ใช้ไป {usedText} จาก {quotaText}) กรุณาลบไฟล์ก่อนหรือติดต่อผู้ดูแลระบบ', en: 'Your storage is full ({usedText} of {quotaText} used). Delete some files or contact the administrator.' },
 
   // ───────────── office documents (ONLYOFFICE) ─────────────
   'office.disabled': { th: 'ยังไม่ได้เปิดใช้การแก้ไขเอกสาร office บนเซิร์ฟเวอร์นี้', en: 'Office document editing is not enabled on this server.' },
@@ -299,6 +299,15 @@ export type Lang = 'th' | 'en'
 export type Params = Record<string, string | number>
 
 /** the text of `code` in `lang`, with `{name}` replaced by `params.name` (once: a value is never expanded again) */
+/** a byte count as people read it (1 decimal from KB up): the numbers stay in the params for tools */
+export function sizeText(bytes: number): string {
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let v = bytes
+  let i = 0
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++ }
+  return i === 0 ? `${v} B` : `${v.toFixed(1)} ${units[i]}`
+}
+
 export function text(lang: Lang, code: MessageCode, params: Params = {}): string {
   const entry: { th: string; en: string } | undefined = MESSAGES[code]
   if (!entry) return code

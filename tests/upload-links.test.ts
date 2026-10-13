@@ -323,7 +323,7 @@ describe('upload links: limits', () => {
     const v = new Client()
     const r = await announce(v, t, 'big.bin', 11)
     expect(code(r)).toEqual({ status: 413, code: 'share.upload-too-big' })
-    expect(r.data.params).toEqual({ max: 10 })
+    expect(r.data.params).toEqual({ max: 10, maxText: '10 B' })
     expect((await send(v, t, 'ok.bin', new Uint8Array(10))).status).toBe(200)
   })
 

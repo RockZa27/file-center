@@ -9,6 +9,7 @@
  */
 import { accessFor, allUsers, type User } from './auth'
 import { bad, HttpError, treeStats, within } from './fsx'
+import { sizeText } from './messages'
 
 /** biggest quota an admin may set (1 PiB) */
 export const QUOTA_MAX = 2 ** 50
@@ -89,7 +90,9 @@ export function roomLeft(user: User): number {
 }
 
 export function exceeded(user: User): HttpError {
-  return new HttpError(507, 'quota.exceeded', { used: usedNow(user), quota: limitOf(user) })
+  const used = usedNow(user)
+  const quota = limitOf(user)
+  return new HttpError(507, 'quota.exceeded', { used, quota, usedText: sizeText(used), quotaText: sizeText(quota) })
 }
 
 /** take `bytes` or throw 507. Synchronous on purpose: check and reservation happen in one tick. */

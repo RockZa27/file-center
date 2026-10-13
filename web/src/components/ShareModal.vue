@@ -16,7 +16,7 @@
         <div v-if="isUpload" class="muted small">{{ t('share.kindUploadHelp') }}</div>
         <n-form-item :label="t('share.expires')">
           <n-radio-group v-model:value="days">
-            <n-radio-button v-for="d in allowedDays" :key="d" :value="d">{{ t('share.days', { n: d }) }}</n-radio-button>
+            <n-radio-button v-for="d in allowedDays" :key="d" :value="d">{{ t('share.days', d) }}</n-radio-button>
           </n-radio-group>
         </n-form-item>
         <n-form-item :label="t('share.password')">
