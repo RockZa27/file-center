@@ -259,7 +259,7 @@ describe('signed update packages', () => {
   })
 
   // kept under its old name: what changed is that "without a key" means the built-in key, so only UPDATE_ALLOW_UNSIGNED lets unsigned in
-  test('without a key, unsigned and signed packages are both accepted; the signature is not checked', async () => {
+  test('with UPDATE_ALLOW_UNSIGNED=true an unsigned package is accepted, a signed one still has to match the key in effect', async () => {
     const open = await startServer('no-key', '', { UPDATE_ALLOW_UNSIGNED: 'true' })
     servers.push(open)
     expect((await api(open, 'GET', '/api/admin/update')).data).toMatchObject({ signatureRequired: false, builtinKey: true })

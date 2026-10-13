@@ -40,7 +40,7 @@ const hasMore = ref(false)
 const page = ref(1)
 const f = reactive({ q: '', user: '', action: null })
 
-const ACTIONS = ['login', 'login-failed', 'logout', 'upload', 'download', 'download-zip', 'delete', 'restore', 'purge', 'mkdir', 'create', 'edit', 'rename', 'copy', 'move', 'zip', 'unzip', 'password-change', 'user-create', 'user-update', 'user-delete', 'settings-update', 'logo-update', 'logo-remove', 'update-stage', 'update-apply', 'update-rollback', 'update-denied', 'backup-create', 'backup-download', 'backup-delete', 'backup-restore', 'backup-restore-denied', 'logs-download', 'activity-export', 'update-fetch', 'share-create', 'share-download', 'share-revoke', 'alert-test']
+const ACTIONS = ['login', 'login-failed', 'logout', 'upload', 'download', 'download-zip', 'delete', 'restore', 'purge', 'mkdir', 'create', 'edit', 'rename', 'copy', 'move', 'zip', 'unzip', 'password-change', 'user-create', 'user-update', 'user-delete', 'settings-update', 'logo-update', 'logo-remove', 'update-stage', 'update-apply', 'update-apply-unsigned', 'update-rollback', 'update-denied', 'backup-create', 'backup-download', 'backup-delete', 'backup-restore', 'backup-restore-denied', 'logs-download', 'activity-export', 'update-fetch', 'share-create', 'share-download', 'share-revoke', 'alert-test']
 // the file holds what the filter boxes show; the click also applies them, so the table matches the file
 const exportUrl = computed(() => api.activityExportUrl({ q: f.q, user: f.user, action: f.action || '' }))
 const { busy: saving, follow } = useDownload()
