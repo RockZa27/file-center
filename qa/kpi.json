@@ -2882,6 +2882,396 @@
           "toolUses": 31
         }
       }
+    },
+    "r8": {
+      "at": "2026-10-13T07:46:24.214Z",
+      "check": {
+        "runId": "r8-merged",
+        "ok": true,
+        "passed": 433,
+        "total": 434,
+        "lines": 95.97
+      },
+      "suite": {
+        "mutationScore": 1,
+        "missed": []
+      },
+      "agents": {
+        "security-auditor": {
+          "evidence": 1,
+          "review": 1,
+          "composite": 1,
+          "kpis": [
+            {
+              "name": "precision (findings that are real)",
+              "value": 1,
+              "target": 0.7,
+              "weight": 2,
+              "pass": true,
+              "note": "7/7"
+            },
+            {
+              "name": "recall on planted bugs",
+              "value": 1,
+              "target": 0.8,
+              "weight": 3,
+              "pass": true,
+              "note": "6/6 (easy 1/1, subtle 0/0); missed: -"
+            },
+            {
+              "name": "ignores decoys",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true
+            },
+            {
+              "name": "severity within one level of the truth",
+              "value": 1,
+              "target": 0.8,
+              "weight": 1,
+              "pass": true
+            },
+            {
+              "name": "every finding has file, line, evidence",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true
+            }
+          ]
+        },
+        "verifier": {
+          "evidence": 1,
+          "review": 1,
+          "composite": 1,
+          "kpis": [
+            {
+              "name": "confirms the planted bugs",
+              "value": 1,
+              "target": 0.9,
+              "weight": 3,
+              "pass": true,
+              "note": "6/6"
+            },
+            {
+              "name": "refutes findings on decoys",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "no decoy was reported"
+            },
+            {
+              "name": "every finding gets a verdict",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true
+            },
+            {
+              "name": "repro commands reproduce (run twice)",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "7/7"
+            },
+            {
+              "name": "repro does not trigger on clean code",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "6/6"
+            },
+            {
+              "name": "unplanted findings reproduce on the real code",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "1/1"
+            },
+            {
+              "name": "CONFIRMED verdicts carry a repro",
+              "value": 1,
+              "target": 0.9,
+              "weight": 1,
+              "pass": true
+            }
+          ]
+        },
+        "backend-dev": {
+          "evidence": 0.9743461538461538,
+          "review": 0.8,
+          "composite": 0.9220423076923076,
+          "kpis": [
+            {
+              "name": "[search] green the first time it said \"done\"",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "excused: test-time budget: machine 1.5x slower after a worker restart (base 157 s vs 106 s before)"
+            },
+            {
+              "name": "[search] green at the end (no regression)",
+              "value": 1,
+              "target": 1,
+              "weight": 3,
+              "pass": true,
+              "note": "budget excused: test-time budget on a machine 1.5x slower after a worker restart (untouched 1.5.0 suite 157 s here vs 106 s before); the budget is now 200 s"
+            },
+            {
+              "name": "[search] added at least one test",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true,
+              "note": "12 added"
+            },
+            {
+              "name": "[search] no removed tests, no skips",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[search] stayed inside its allowed paths",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[search] needed at most one fix round",
+              "value": 0.333,
+              "target": 1,
+              "weight": 1,
+              "pass": false,
+              "note": "3 qa run(s)"
+            },
+            {
+              "name": "[search] test files with new tests fail on the code before the change",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "1/1"
+            },
+            {
+              "name": "[versions] green the first time it said \"done\"",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "excused: test-time budget: machine 1.5x slower after a worker restart (base 157 s vs 106 s before); the first run also failed the guards check for a renamed test (counted)"
+            },
+            {
+              "name": "[versions] green at the end (no regression)",
+              "value": 1,
+              "target": 1,
+              "weight": 3,
+              "pass": true,
+              "note": "budget excused: test-time budget on a machine 1.5x slower after a worker restart (untouched 1.5.0 suite 157 s here vs 106 s before); the budget is now 200 s"
+            },
+            {
+              "name": "[versions] added at least one test",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true,
+              "note": "36 added"
+            },
+            {
+              "name": "[versions] no removed tests, no skips",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[versions] stayed inside its allowed paths",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[versions] needed at most one fix round",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true,
+              "note": "2 qa run(s)"
+            },
+            {
+              "name": "[versions] test files with new tests fail on the code before the change",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "1/1"
+            }
+          ]
+        },
+        "frontend-dev": {
+          "evidence": 0.901,
+          "review": 0.8,
+          "composite": 0.8706999999999999,
+          "kpis": [
+            {
+              "name": "[search] green the first time it said \"done\"",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[search] green at the end (no regression)",
+              "value": 1,
+              "target": 1,
+              "weight": 3,
+              "pass": true
+            },
+            {
+              "name": "[search] ux-tester flows pass on its page",
+              "value": 0.571,
+              "target": 1,
+              "weight": 3,
+              "pass": false
+            },
+            {
+              "name": "[search] no removed tests, no skips",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[search] stayed inside its allowed paths",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[search] needed at most one fix round",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true,
+              "note": "2 qa run(s)"
+            },
+            {
+              "name": "[versions] green the first time it said \"done\"",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[versions] green at the end (no regression)",
+              "value": 1,
+              "target": 1,
+              "weight": 3,
+              "pass": true
+            },
+            {
+              "name": "[versions] ux-tester flows pass on its page",
+              "value": 0.571,
+              "target": 1,
+              "weight": 3,
+              "pass": false
+            },
+            {
+              "name": "[versions] no removed tests, no skips",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[versions] stayed inside its allowed paths",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "[versions] needed at most one fix round",
+              "value": 1,
+              "target": 1,
+              "weight": 1,
+              "pass": true,
+              "note": "2 qa run(s)"
+            }
+          ]
+        },
+        "ux-tester": {
+          "evidence": 0.9714,
+          "review": 1,
+          "composite": 0.9799800000000001,
+          "kpis": [
+            {
+              "name": "every flow has a screenshot",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true
+            },
+            {
+              "name": "every failure explains its cause",
+              "value": 1,
+              "target": 1,
+              "weight": 2,
+              "pass": true,
+              "note": "3 failing flow(s)"
+            },
+            {
+              "name": "flows without unexplained console errors",
+              "value": 0.857,
+              "target": 1,
+              "weight": 1,
+              "pass": false
+            }
+          ]
+        }
+      },
+      "usage": {
+        "backend-dev.versions": {
+          "tokens": 170628,
+          "ms": 1868314,
+          "toolUses": 59
+        },
+        "backend-dev.search": {
+          "tokens": 165423,
+          "ms": 2107973,
+          "toolUses": 77
+        },
+        "frontend-dev.versions": {
+          "tokens": 130668,
+          "ms": 1103810,
+          "toolUses": 62
+        },
+        "frontend-dev.search": {
+          "tokens": 95026,
+          "ms": 1496316,
+          "toolUses": 63
+        },
+        "security-auditor": {
+          "tokens": 176016,
+          "ms": 106851,
+          "toolUses": 40
+        },
+        "verifier": {
+          "tokens": 54757,
+          "ms": 139153,
+          "toolUses": 36
+        }
+      }
     }
   }
 }

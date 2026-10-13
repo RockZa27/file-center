@@ -47,6 +47,8 @@ export type DevReport = {
   iterations: number
   /** set by the orchestrator only, with the reason, when the first run failed for something that was not the agent's doing */
   excusedFirstRun?: string
+  /** the orchestrator's reason when the only failed step of a run was the test-time budget and the machine, not the change, made it slow */
+  excusedBudget?: string
 }
 export type UxReport = { agent: 'ux-tester'; flows: { name: string; passed: boolean; consoleErrors: number; expectedHttpErrors?: number; screenshot?: string; notes?: string }[] }
 export type Review = Record<string, { score: number; notes: string }>

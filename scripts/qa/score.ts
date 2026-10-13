@@ -168,10 +168,12 @@ for (const name of ['backend-dev', 'frontend-dev'] as const) {
     const first = result(d?.runIdFirst), final = result(d?.runIdFinal)
     if (!d || !first || !final) { problems.push(`${file}: run ids have no result file`); continue }
     const g = final.guards
+    // a run that failed only on the test-time budget, excused (with the reason written down) when the machine was the cause
+    const okBut = (r: CheckResult) => r.ok || (!!d.excusedBudget && r.steps.every(s => s.ok || s.name.startsWith('budgets')))
     const ks = [
       // the orchestrator may excuse a failed first run that was not the agent's doing (written down in the report)
-      kpi(`${task}green the first time it said "done"`, first.ok || d.excusedFirstRun ? 1 : 0, 1, 2, d.excusedFirstRun ? `excused: ${d.excusedFirstRun}` : undefined),
-      kpi(`${task}green at the end (no regression)`, final.ok ? 1 : 0, 1, 3),
+      kpi(`${task}green the first time it said "done"`, okBut(first) || d.excusedFirstRun ? 1 : 0, 1, 2, d.excusedFirstRun ? `excused: ${d.excusedFirstRun}` : undefined),
+      kpi(`${task}green at the end (no regression)`, okBut(final) ? 1 : 0, 1, 3, !final.ok && okBut(final) ? `budget excused: ${d.excusedBudget}` : undefined),
       // the web page has no test suite of its own and frontend-dev may not touch tests/: its proof is the ux-tester's flows
       name === 'frontend-dev'
         ? (() => { const u = agent<UxReport>('ux-tester'); return kpi(`${task}ux-tester flows pass on its page`, u ? frac(u.flows.filter(f => f.passed).length, u.flows.length) : 0, 1, 3, u ? undefined : 'no ux-tester report yet') })()
