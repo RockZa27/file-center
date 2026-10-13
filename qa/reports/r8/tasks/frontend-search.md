@@ -1,0 +1,9 @@
+Search filters in the page, plus small UI leftovers (the server side is on the base: read src/search-index.ts, the /search route in src/routes/files.ts and tests/search-index.test.ts for the exact query parameters, the `indexed` field and the `files.bad-filter` code). Versions/favorites pages were done just before you: do not change them.
+
+1. Search (web/src/components/SearchModal.vue): next to the query, a "Filters" toggle with type (all/files/folders), extensions (tags, e.g. pdf, docx), modified from/to (date pickers), size min/max (number + KB/MB/GB), sort (name/modified/size) and order; a "Search in: this folder / whole space" choice (sends `path`, today it is always `/`). Results show folder path, size and date; while `indexed` is false a small note "Index is being built — results may be slower" / th. Filters survive closing and reopening the modal during the session. Keyboard: Enter searches, arrow keys move in results, Enter opens.
+2. Leftovers from round 7:
+   - Naive UI's English "Please Input"/"Please Select" placeholders: give every input/select in the app a real placeholder (or an empty one where a label is beside it) so none falls back to the library default — check every view and modal.
+   - Request-file links: use one label everywhere ("Request link"/"ลิงก์ขอไฟล์" style) — share dialog result, My links, admin links.
+   - The admin user-devices dialog (web/src/components/UserDevicesModal.vue) at 375 px: nothing cut off, buttons wrap.
+3. Every new string in th and en in web/src/i18n.js.
+4. Browser check (1200 px and 375 px, th and en): with ~2,000 generated files in nested folders (make them with a script on disk before starting the app), search by name, then filter by ext, date and size, sort by size desc, search only in the current folder; the "index being built" note right after start; no "Please Input"/"Please Select" text anywhere in the views you open (grep the rendered page text); devices dialog at 375 px.
