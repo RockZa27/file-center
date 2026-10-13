@@ -1,10 +1,10 @@
 {
-  "version": "1.7.1",
-  "file": "file-center-1.7.1.zip",
-  "sha256": "230dc8d298324e02032662d7b9c5b0c75c38c9ce90a69c637b5e5729924dc7f2",
-  "size": 1753645,
-  "builtAt": "2026-10-13T17:17:22.191Z",
-  "commit": "a07c3a4",
-  "notes": "รายการไฟล์ไม่ค้างจากแคชของ reverse proxy (เช่น 1Panel) อีก, ปุ่มตรวจและอัปเดตจาก GitHub เปิดให้เองโดยไม่ต้องตั้ง UPDATE_SOURCE",
+  "version": "1.7.2",
+  "file": "file-center-1.7.2.zip",
+  "sha256": "89ba9b2f78b0c10afb6b08efcb2dcff3c98688d64b765a05107843600fc52518",
+  "size": 1753519,
+  "builtAt": "2026-10-13T17:45:09.849Z",
+  "commit": "f48207a",
+  "notes": ".env.example ใส่ UPDATE_SOURCE ของรุ่นทางการไว้ให้แล้ว",
   "signed": true
 }
