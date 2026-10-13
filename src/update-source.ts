@@ -231,7 +231,8 @@ export async function fetchPackage(channel: Channel = 'stable'): Promise<{ path:
       if (channel === 'beta' && e instanceof HttpError && e.code === 'update.source-status' && e.params.status === 404) throw bad('update.beta-none')
       throw e
     })
-    if (!PACKAGE_FILE.test(latest.file)) throw new HttpError(502, 'update.source-bad-file')
+    // the package of exactly that version: a stable latest.json can not hand out a beta (or any other) package
+    if (!PACKAGE_FILE.test(latest.file) || latest.file !== `file-center-${latest.version}.zip`) throw new HttpError(502, 'update.source-bad-file')
     if (compareVersions(latest.version, runningVersion()) <= 0) {
       throw bad('update.source-not-newer', { version: latest.version, running: runningVersion() })
     }

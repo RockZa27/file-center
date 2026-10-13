@@ -5,6 +5,7 @@
  */
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import { createHash } from 'node:crypto'
+import { existsSync, readdirSync } from 'node:fs'
 import { zipSync } from 'fflate'
 import { compareVersions, isBeta, isVersion } from '../src/release'
 import { base as _base, updateTestKey } from './in-process-env'
@@ -206,6 +207,25 @@ describe('fetching a beta', () => {
     expect(r.status).toBe(502)
     expect(requests).toEqual(['/fc/updates/latest.json'])
     expect((await admin.json('POST', '/api/admin/update/fetch', { channel: 'nightly' })).status).toBe(422)
+  })
+
+  test('the stable channel never installs a beta package, even a signed one latest.json points at', async () => {
+    const beta = makePackage('9.1.0-beta.1')
+    // latest.json names a beta file
+    publish('9.1.0', { latest: { file: 'file-center-9.1.0-beta.1.zip' } })
+    files.set('/file-center-9.1.0-beta.1.zip', () => new Response(beta))
+    const named = await admin.json('POST', '/api/admin/update/fetch', {})
+    expect([named.status, named.data.code]).toEqual([502, 'update.source-bad-file'])
+    expect(requests.some(p => p.endsWith('.zip'))).toBe(false)
+    // or the stable file name holds a beta package: refused once staged, and nothing is left staged
+    publish('9.1.0', { zip: beta })
+    const { staging } = await import('../src/updater')
+    const before = existsSync(staging()) ? readdirSync(staging()).length : 0
+    for (const [path, body] of [['/api/admin/update/fetch', {}], ['/api/admin/update/fetch-and-apply', { password: PASSWORD() }]] as const) {
+      const r = await admin.json('POST', path, body)
+      expect(`${path} ${r.status} ${r.data.code}`).toBe(`${path} 502 update.source-mismatch`)
+    }
+    expect(existsSync(staging()) ? readdirSync(staging()).length : 0).toBe(before)
   })
 
   test('with acceptBetaRisk a signed beta is downloaded and staged by /fetch', async () => {

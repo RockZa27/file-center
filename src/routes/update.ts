@@ -23,6 +23,19 @@ function enabled() {
 }
 
 /** `channel` is optional (stable); a beta needs `acceptBetaRisk: true` and is refused before anything is downloaded */
+/**
+ * stage a downloaded package, which must be the version its channel's latest.json named: the signature proves who
+ * built a package, not which channel it belongs to, so a stable latest.json can not hand out a signed beta
+ */
+async function stageFetched(got: { path: string; size: number; version: string }) {
+  const staged = await stagePackage(got.path, got.size)
+  if (staged.version !== got.version) {
+    discardStaged(staged.id)
+    throw new HttpError(502, 'update.source-mismatch')
+  }
+  return staged
+}
+
 const channelBody = { channel: t.Optional(t.Union([t.Literal('stable'), t.Literal('beta')])), acceptBetaRisk: t.Optional(t.Boolean()) }
 function channelOf(body: { channel?: Channel; acceptBetaRisk?: boolean } | null | undefined): Channel {
   const channel = body?.channel ?? 'stable'
@@ -69,7 +82,7 @@ export const updateRoutes = new Elysia({ prefix: '/api/admin/update' })
     const channel = channelOf(body)
     const got = await fetchPackage(channel)
     try {
-      const staged = await stagePackage(got.path, got.size)
+      const staged = await stageFetched(got)
       audit({ user: admin.username, ip, action: 'update-fetch', detail: staged.version })
       return staged
     } finally {
@@ -133,7 +146,7 @@ export const updateRoutes = new Elysia({ prefix: '/api/admin/update' })
     const got = await step('fetch', () => fetchPackage(channel))
     let staged: Awaited<ReturnType<typeof stagePackage>>
     try {
-      staged = await step('stage', () => stagePackage(got.path, got.size))
+      staged = await step('stage', () => stageFetched(got))
     } finally {
       rmSync(got.path, { force: true })
     }
