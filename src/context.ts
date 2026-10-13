@@ -1,4 +1,4 @@
-import { Elysia, NotFound, ParseError, ValidationError } from 'elysia'
+import { Elysia, ElysiaStatus, NotFound, ParseError, ValidationError } from 'elysia'
 import { accessFor, getSession, reloadIfChangedByCli, type Access, type Session, type User, findUser } from './auth'
 import { config } from './config'
 import { forbidden, fromFsError, HttpError } from './fsx'
@@ -8,6 +8,11 @@ import type { Perm } from './settings'
 
 export const SESSION_COOKIE = 'fc_sid'
 const PASSWORD_CHANGE_ROUTES = new Set(['/api/session', '/api/password', '/api/logout', '/api/health', '/api/branding/logo'])
+
+/** the socket address of a request built from another one (the GET made for a HEAD request): Bun knows only the original */
+export const socketIpOverride = new WeakMap<Request, string>()
+export const socketIpOf = (request: Request, server: { requestIP(r: Request): { address: string } | null } | null | undefined) =>
+  socketIpOverride.get(request) ?? server?.requestIP(request)?.address
 
 function clientIp(request: Request, socketIp: string): string {
   if (config.trustProxy === 'cloudflare') return request.headers.get('cf-connecting-ip')?.trim() || socketIp
@@ -93,6 +98,11 @@ export const context = new Elysia({ name: 'context' })
       return tooMany ? answer(400, 'files.bad-count', { max: tooMany.params.limit as number }) : answer(422, 'request.invalid')
     }
     if (error instanceof NotFound) return answer(404, 'request.no-route')
+    // Elysia 2 refuses a body whose type does not fit the schema (415) and fails to parse an empty JSON body; both
+    // were a body that did not pass the schema (422) in Elysia 1. JSON that is cut off or garbled stays "unreadable"
+    if ((error instanceof ElysiaStatus && error.status === 415) || (error instanceof ParseError && !request.body)) {
+      return answer(422, 'request.invalid')
+    }
     if (error instanceof ParseError) return answer(400, 'request.unreadable')
     log.error('request-failed', { method: request.method, path: safePath(request.url), error })
     return answer(500, 'request.internal')
@@ -102,7 +112,7 @@ export const context = new Elysia({ name: 'context' })
     const sid = cookie[SESSION_COOKIE]?.value as string | undefined
     const session: Session | null = getSession(sid)
     const user: User | null = session?.username ? findUser(session.username) ?? null : null
-    const ip = clientIp(request, server?.requestIP(request)?.address ?? 'unknown')
+    const ip = clientIp(request, socketIpOf(request, server) ?? 'unknown')
     return { sid, session, user, ip }
   })
   .onBeforeHandle('global', ({ request, session }) => {
