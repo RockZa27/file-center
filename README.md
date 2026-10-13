@@ -54,6 +54,10 @@ bun run bench --compare qa/bench/baseline.json       # วัดแล้วพ�
 แถวอื่น (session, download, upload) ต่างกันอยู่ในช่วงความผันผวนของเครื่อง ไม่ได้แก้อะไร ส่วน search (~12 ms ต่อ 20,000 รายการ เป็นเวลาของ SQLite) และ zip 200 ไฟล์ (~1 ms ต่อรายการใน zip.js) วัดแล้วไม่คุ้มที่จะเปลี่ยน
 การดาวน์โหลดใช้ `Bun.file` และรองรับ Range (206/416) อยู่แล้ว
 
+รอบ 1.8 (รายการโฟลเดอร์ 2,000 รายการ, `bun run bench --quick`, concurrency 8, เครื่องเดียวกัน): list-2000 69.7 → 104.8 req/s, p50 106 → 74 ms
+- โปรไฟล์ (`bun --cpu-prof`) ก่อนแก้: `lstatSync` 39%, เรียงชื่อด้วย collator 28%, JSON 8%, `readdirSync` 7% จึงเก็บ **ลำดับชื่อ** ต่อโฟลเดอร์ไว้ (LRU 200 โฟลเดอร์) และใช้ก็ต่อเมื่อตรงกับรายการที่อ่านสดทุกครั้ง (จำนวนเท่ากัน ทุกชื่อรู้จัก ชนิดตรงกัน) ขนาดและเวลาจึงสดเสมอ และไฟล์ที่เพิ่ม/ลบ/เปลี่ยนชื่อโผล่ทันที; `lstat` ทำเป็นก้อนละ 64 แล้วคืนคิวให้คำขออื่น (ลอง `lstat` แบบ async ขนาน 64 แล้ว: 49 req/s ช้ากว่าเดิม 55 เพราะค่า promise/thread pool จึงไม่ใช้)
+- คำตอบ JSON ของ `/api/list`, `/folders`, `/search`, `/versions`, `/me/favorites`, `/me/recent` และรายการ admin (users, activity, logs, folders) บีบ br (quality 4, ~1.5 ms) หรือ gzip (level 3, ~1 ms) เมื่อใหญ่ตั้งแต่ 1 KB: 222 KB → 10 KB (br) / 18 KB (gzip) บนสาย แลกกับ CPU ราว 10% บน loopback (~90 req/s); เส้นทางที่มี token/โค้ด (session, login, 2FA, แชร์, อัปโหลด) และไฟล์ดาวน์โหลดไม่บีบ (BREACH) รายการอยู่ใน `src/compress.ts`
+
 ## รันด้วย Docker และย้ายเครื่อง
 
 ```bash

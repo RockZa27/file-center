@@ -9,7 +9,7 @@ import {
 import { statusIn } from '../backup'
 import { config, paths } from '../config'
 import { context, requireAdmin } from '../context'
-import { bad, conflict, ensureDir, forbidden, HttpError, isDir, listDir, normRel, notFound, resolveIn } from '../fsx'
+import { bad, conflict, ensureDir, forbidden, HttpError, isDir, listDirAsync, normRel, notFound, resolveIn } from '../fsx'
 import { errorsSince } from '../logger'
 import { langOf, type MessageCode, type Params, text } from '../messages'
 import { cleanQuota, forget } from '../quota'
@@ -185,12 +185,12 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
   }, { body: t.Object({ password: t.String({ maxLength: 1000 }) }) })
 
   // folder tree for the "home folder" picker
-  .get('/admin/folders', ({ user, ip, query }) => {
+  .get('/admin/folders', async ({ user, ip, query }) => {
     requireAdmin({ user, ip })
     const rel = normRel(query.path)
     const abs = resolveIn(config.storageDir, rel)
     if (!isDir(abs)) throw notFound()
-    return { path: rel, entries: listDir(abs, rel).filter(e => e.type === 'dir') }
+    return { path: rel, entries: (await listDirAsync(abs, rel)).filter(e => e.type === 'dir') }
   }, { query: t.Object({ path: t.Optional(t.String()) }) })
 
   // ───────────── dashboard ─────────────

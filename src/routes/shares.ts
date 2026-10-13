@@ -7,7 +7,7 @@ import { audit } from '../audit'
 import { accessFor, clearFailures, findUser, hashPassword, lockedFor, recordFailure } from '../auth'
 import { config } from '../config'
 import { context, need, requireAdmin, requireUser } from '../context'
-import { bad, HttpError, listDir, normRel, notFound, resolveIn, storagePath, treeStats } from '../fsx'
+import { bad, HttpError, listDirAsync, normRel, notFound, resolveIn, storagePath, treeStats } from '../fsx'
 import { sizeText } from '../messages'
 import { limitOf as quotaOf, ready } from '../quota'
 import {
@@ -217,7 +217,7 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
     if (!st.isDirectory()) throw bad('files.not-a-folder')
     // a big folder takes a while to count: other requests are answered meanwhile
     const size = (await treeStats(abs, 50_000)).size
-    return { name, type: 'dir', size, expiresAt, needsPassword: false, path: at.rel, entries: listDir(at.abs, at.rel) }
+    return { name, type: 'dir', size, expiresAt, needsPassword: false, path: at.rel, entries: await listDirAsync(at.abs, at.rel) }
   }, { query: t.Object({ path: t.Optional(t.String()) }) })
 
   .post('/s/:token/unlock', async ({ params, body, ip, cookie }) => {
