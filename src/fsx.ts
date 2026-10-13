@@ -340,8 +340,9 @@ export async function treeStats(abs: string, limit = Infinity): Promise<{ size: 
 /**
  * entries of the tree under `abs` whose name contains `needle` (lower case), links skipped. Stops after `maxSeen`
  * entries or `maxResults` hits with `truncated: true`. Asynchronous in batches like treeStats.
+ * `accept` (the search filters) decides which name matches count as hits; folders are walked either way.
  */
-export async function searchTree(abs: string, rel: string, needle: string, maxSeen = 50_000, maxResults = 200) {
+export async function searchTree(abs: string, rel: string, needle: string, maxSeen = 50_000, maxResults = 200, accept?: (e: Entry) => boolean) {
   const results: Entry[] = []
   const stack: [string, string][] = [[abs, rel]]
   let seen = 0
@@ -358,7 +359,7 @@ export async function searchTree(abs: string, rel: string, needle: string, maxSe
         if (++seen > maxSeen || results.length >= maxResults) return { results, truncated: true }
         const e = entryOf(join(dir, look[k]), joinRel(dirRel, look[k]), stats[k])
         if (!e) continue
-        if (e.name.toLowerCase().includes(needle)) results.push(e)
+        if (e.name.toLowerCase().includes(needle) && (!accept || accept(e))) results.push(e)
         if (e.type === 'dir') stack.push([join(dir, look[k]), e.path])
       }
     }

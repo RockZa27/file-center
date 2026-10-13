@@ -85,6 +85,10 @@ export const config = {
   backupDir: resolve(env('BACKUP_DIR', join(dirname(dataDir), 'backups'))),
   /** after a successful backup the oldest beyond this many are deleted */
   backupKeep: Math.max(1, Math.floor(num('BACKUP_KEEP', 7))),
+  /** "false" turns the search index off: /api/search then always walks the disk */
+  searchIndex: env('SEARCH_INDEX', 'true') !== 'false',
+  /** the search index (search-index.ts) is built again from the disk this often; 0 = only at start */
+  searchRescanMinutes: Math.max(0, num('SEARCH_RESCAN_MINUTES', 30)),
   /** local hour (0-23) of the daily backup, null = "off" (no schedule; backups still run from the web page) */
   backupHour: backupHour(env('BACKUP_HOUR', '3')),
   /** "true" also puts the uploaded files (storage) in every backup; off by default because it can be huge */
@@ -149,6 +153,8 @@ export const paths = {
   cliChanged: join(config.dataDir, 'cli-changed'),
   /** saved office versions while they download (office.ts) */
   officeTmp: join(config.dataDir, 'office-tmp'),
+  /** search index (search-index.ts): rebuilt from the disk when missing or damaged, so it is not in backups */
+  searchDb: join(config.dataDir, 'search.db'),
   publicDir: join(config.storageDir, config.publicDirName),
   /** parent of the default user folders (/users/<name>) */
   usersDir: join(config.storageDir, 'users'),

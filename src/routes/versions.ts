@@ -9,6 +9,7 @@ import { conflict, ensureSpace, normRel, notFound, resolveIn, storagePath } from
 import { holdNow, markStale, ownerOfPath, ready } from '../quota'
 import { dropVersion, getVersion, listVersions, reserveVersion } from '../versions'
 import { fileResponse } from './files'
+import { indexTouched } from '../search-index'
 
 const fileQ = t.Object({ space: t.String(), path: t.String() })
 
@@ -78,6 +79,7 @@ export const versionRoutes = new Elysia({ prefix: '/api/versions' })
     }
     hold.commit(grow)
     if (grow < 0 && q) markStale(q.username)
+    indexTouched(abs)
     audit({ user: user?.username ?? 'guest', ip, action: 'version-restore', target: storagePath(abs), detail: params.id })
     recordRecent(user, body.space, normRel(body.path))
     return { ok: true, mtime: Math.round(statSync(abs).mtimeMs) }

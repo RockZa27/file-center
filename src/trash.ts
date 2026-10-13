@@ -5,6 +5,7 @@ import { config, paths } from './config'
 import { holdNow, ownerOfPath, ready } from './quota'
 import { stashedBytes, stashVersions, unstashVersions } from './versions'
 import { log } from './logger'
+import { indexTouched } from './search-index'
 import {
   conflict, ensureDir, moveTree, notFound, parentRel, resolveIn, storagePath, treeStats, uniquePath,
 } from './fsx'
@@ -51,6 +52,7 @@ export async function moveToTrash(abs: string, deletedBy: string): Promise<Trash
   }
   // the earlier versions of the file(s) go along, so a restore brings them back
   try { stashVersions(abs, join(itemDir(id), 'versions')) } catch (err) { log.warn('versions-stash-failed', { id, error: err }) }
+  indexTouched(abs)
   writeFileSync(join(itemDir(id), 'meta.json'), JSON.stringify(meta))
   return meta
 }
@@ -94,6 +96,7 @@ export async function restore(idRaw: unknown): Promise<{ meta: TrashMeta; restor
   }
   try { unstashVersions(vdir, meta.originalPath, finalPath) } catch (err) { log.warn('versions-restore-failed', { id, error: err }) }
   hold.commit()
+  indexTouched(finalPath)
   rmSync(dir, { recursive: true, force: true })
   return { meta, restoredTo: storagePath(finalPath) }
 }

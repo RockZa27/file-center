@@ -1,5 +1,7 @@
 # File Center (ElysiaJS)
 
+[![qa](https://github.com/RockZa27/file-center/actions/workflows/qa.yml/badge.svg)](https://github.com/RockZa27/file-center/actions/workflows/qa.yml)
+
 ระบบฝากและแจกจ่ายไฟล์บนเว็บ เขียนใหม่ทั้งหมดด้วย **ElysiaJS + Bun** (backend) และ **Vue 3 + Naive UI** (frontend)
 ออกแบบให้ใช้งานและหน้าตาใกล้เคียง File Center ที่สร้างต่อจาก FileGator แต่ไม่ได้ใช้โค้ดหรือข้อมูลเดิมเลย
 
@@ -259,6 +261,8 @@ OFFICE_SERVER_INTERNAL_URL=http://onlyoffice
 | `UPLOAD_STALE_HOURS` | 3 | ลบอัปโหลดที่ไม่เสร็จและไม่มีชิ้นใหม่เข้ามาเกินกี่ชั่วโมง |
 | `GUEST_UPLOAD_DAILY_BYTES` | 1 GB | ขนาดรวมที่ผู้เยี่ยมชม (ไม่ได้เข้าสู่ระบบ) ทุกคนอัปโหลดได้รวมกันต่อวัน (ไบต์) `0` = ผู้เยี่ยมชมอัปโหลดไม่ได้เลย |
 | `MIN_FREE_SPACE` | 2 GB | ปฏิเสธการอัปโหลด คัดลอก บีบอัด และแตก zip เมื่อดิสก์จะเหลือว่างน้อยกว่านี้ (ไบต์) |
+| `SEARCH_RESCAN_MINUTES` | 30 | สแกนดัชนีค้นหา (`DATA_DIR/search.db`) ใหม่จากดิสก์ทุกกี่นาที `0` = สแกนตอนเริ่มครั้งเดียว |
+| `SEARCH_INDEX` | `true` | `false` = ปิดดัชนีค้นหา `/api/search` เดินดิสก์ทุกครั้ง |
 | `UNZIP_MAX_BYTES` / `UNZIP_MAX_FILES` | 20 GB / 50,000 | ขนาดรวมและจำนวนไฟล์สูงสุดที่แตกจาก zip หนึ่งไฟล์ได้ (กัน zip bomb) |
 | `TRASH_RETENTION_DAYS` | 30 | เก็บถังขยะกี่วัน |
 | `VERSIONS_KEEP` / `VERSIONS_DAYS` | 10 / 30 | เก็บเนื้อหาเดิมของไฟล์ไว้ทุกครั้งที่บันทึกทับ (แก้ข้อความ, ONLYOFFICE, กู้คืนฉบับเก่า): กี่ฉบับต่อไฟล์ (0 = ปิด) / กี่วัน (0 = ไม่หมดอายุตามวัน) ฉบับเก่านับรวมในโควตาของเจ้าของโฟลเดอร์ ไม่อยู่ในข้อมูลสำรอง และย้ายไปกับไฟล์เมื่อเปลี่ยนชื่อ/ย้าย/ลบลงถังขยะ |
@@ -425,6 +429,46 @@ admin กำหนดโควตาให้ผู้ใช้แต่ละ�
 - ไบต์นับกับโควตาของเจ้าของลิงก์ (ถ้าลิงก์อยู่ใน home) และกับข้อจำกัดของลิงก์ โดยจองตั้งแต่ประกาศไฟล์ จำกัดอัปโหลดค้างพร้อมกัน 5 งานต่อลิงก์ และ 3 งานต่อ IP
   งานที่ค้างถูกลบตาม `UPLOAD_STALE_HOURS` ประวัติการใช้งานบันทึก `share-upload` (เจ้าของ รหัสลิงก์ ชื่อไฟล์ ขนาด) ลิงก์เก็บแค่แฮชของ cookie ผู้ส่ง ไม่เก็บตัว cookie
 
+## ค้นหาไฟล์
+
+`GET /api/search?space=home&q=report` หาจากชื่อไฟล์/โฟลเดอร์ (ตัวพิมพ์เล็กใหญ่ไม่ต่างกัน) ใต้ `path` ที่ระบุ เฉพาะภายในพื้นที่ของผู้เรียกที่มีสิทธิ์ `read`
+ตัวกรองเพิ่มเติม (ไม่ใส่ = ไม่กรอง):
+
+| พารามิเตอร์ | ความหมาย |
+|---|---|
+| `type` | `file` หรือ `dir` |
+| `ext` | นามสกุลคั่นด้วย `,` เช่น `pdf,docx` (ไม่สนตัวพิมพ์ ใส่จุดหน้าได้) |
+| `from` / `to` | วันที่แก้ไขล่าสุด แบบ ISO (`2024-03-01` หรือ `2024-03-01T08:00:00Z`) `to` แบบมีแต่วันที่รวมทั้งวัน |
+| `minSize` / `maxSize` | ขนาดเป็นไบต์ (โฟลเดอร์นับเป็น 0) |
+| `sort` / `order` | `name` (ค่าเริ่มต้น) `mtime` `size` / `asc` (ค่าเริ่มต้น) `desc` |
+| `limit` | จำนวนสูงสุดที่ตอบ ค่าเริ่มต้น 200 มากสุด 500 |
+
+ตอบ `{ results, truncated, indexed }` ค่า filter ที่ผิดตอบ 400 (`files.bad-filter`)
+
+ระบบเก็บ**ดัชนีค้นหา**ไว้ที่ `DATA_DIR/search.db` (SQLite) สร้างในเบื้องหลังตอนเริ่ม (ไม่บล็อกคำขออื่น ไม่ตามลิงก์) สแกนใหม่ทุก `SEARCH_RESCAN_MINUTES` นาที
+และอัปเดตทันทีหลังอัปโหลด สร้างโฟลเดอร์/ไฟล์ แก้ไข เปลี่ยนชื่อ ย้าย คัดลอก ลบ/ถังขยะ กู้คืน และแตก zip
+ระหว่างที่ดัชนียังสร้างไม่เสร็จ `/api/search` เดินดิสก์เองและตอบ `indexed: false` (ช้ากว่า และหยุดที่ 50,000 รายการ)
+ไฟล์นี้สร้างใหม่ได้เสมอ: ถ้าเสียหายหรือเป็นสคีมาเก่าระบบลบแล้วสร้างใหม่เอง จึงไม่ถูกรวมในการสำรองข้อมูล
+
+## ตรวจคุณภาพอัตโนมัติ (CI)
+
+GitHub Actions (`.github/workflows/qa.yml`) ทำงานทุก push และ pull request ไม่ใช้ secret:
+
+| งาน | ตรวจอะไร |
+|---|---|
+| `qa` | `bun run qa`: build หน้าเว็บ, typecheck, เทสต์ทั้งหมดพร้อม coverage (รันซ้ำเฉพาะที่ล้มเพื่อหาเทสต์ที่ไม่นิ่ง), ทุก route ที่แก้ข้อมูลต้องมีในรายการเทสต์, งบประมาณใน `qa/thresholds.json` ผลอยู่ใน artifact `qa-results` |
+| `seeded` | (เฉพาะ push เข้า `main` และสั่งเอง) `bun run qa:seed check`: ใส่บั๊กที่รู้ตัวลงไปแล้วดูว่าเทสต์จับได้ |
+| `docker` | `scripts/ci-docker.sh`: build อิมเมจจริง รันบน volume ว่าง ตรวจว่าแอปรันเป็น uid 1000 และไฟล์ใน `/data` เป็นของ 1000, อัปโหลดแบบแบ่งชิ้นแล้วดาวน์โหลดกลับ (ต้องตรงกันทุกไบต์), ติดตั้งแพ็กเกจอัปเดต 99.0.0 ผ่านหน้าอัปเดตแล้วรอรีสตาร์ต, และ `FC_RUN_AS_ROOT=true` ต้องรันเป็น uid 0 |
+
+เทสต์ทั้งหมดต้องผ่านบน runner ธรรมดา (ไม่ใช่ root ไม่มี Chromium) รันสคริปต์ Docker บนเครื่องตัวเอง (ต้องมี Docker และ Bun):
+
+```bash
+bash scripts/ci-docker.sh
+```
+
+สร้างคอนเทนเนอร์ volume และอิมเมจชั่วคราว (ชื่อขึ้นต้น `fc-ci-`) บนพอร์ตสุ่มของ `127.0.0.1` แล้วลบทิ้งเมื่อจบ ไม่ว่าผ่านหรือไม่
+ถ้าเครือข่ายผ่านพร็อกซีที่แทรก CA ของตัวเอง ให้ชี้ `FC_CI_CA_BUNDLE=/path/ca.crt` เพื่อให้ขั้นตอน build อิมเมจเชื่อ CA นั้น
+
 ## โครงสร้าง
 
 ```
@@ -436,6 +480,7 @@ src/
   alerts.ts, routes/alerts.ts               แจ้งเตือนผู้ดูแลทาง Discord/Slack/Telegram/webhook และงานตรวจเบื้องหลัง (error, ดิสก์, เวอร์ชันใหม่)
   backup.ts, routes/backup.ts               สำรองข้อมูลระบบอัตโนมัติ และกู้คืน
   config.ts         ค่าตั้งต้นและตำแหน่งโฟลเดอร์
+  search-index.ts   ดัชนีค้นหา (SQLite) และตัวกรองของ /api/search
   auth.ts           ผู้ใช้, session, ล็อกการเข้าสู่ระบบ, การแปลงสิทธิ์เป็นพื้นที่ที่เข้าถึงได้, ขั้นตอนที่สองของการเข้าสู่ระบบ (2FA)
   totp.ts, secret-box.ts, cli.ts            รหัส TOTP, เข้ารหัสความลับด้วย secret.key, คำสั่งสำหรับผู้ดูแลที่เครื่อง server
   context.ts        ตรวจ session/CSRF, รูปแบบ error เดียวกันทุก API
@@ -508,7 +553,7 @@ tests/perf.test.ts  การนับไฟล์ 50,000 ไฟล์ การ
 |---|---|
 | `GET /api/session` · `POST /api/login` · `POST /api/login/2fa` · `POST /api/logout` · `POST /api/password` | เซสชัน |
 | `GET /api/sessions` · `DELETE /api/sessions/:id` · `POST /api/sessions/revoke-others` · `POST /api/2fa/setup\|enable\|disable\|backup-codes` | อุปกรณ์ที่เข้าสู่ระบบ และ 2FA (ดู อุปกรณ์ที่เข้าสู่ระบบและการยืนยันสองขั้นตอน) |
-| `GET /api/list` · `/api/folders` · `/api/search` | ดูรายการ ค้นหา (พารามิเตอร์ `space=home\|public`, `path`) |
+| `GET /api/list` · `/api/folders` · `/api/search` | ดูรายการ ค้นหา (พารามิเตอร์ `space=home\|public`, `path`) การค้นหารับตัวกรองเพิ่ม ดู "ค้นหาไฟล์" |
 | `POST /api/mkdir` · `/newfile` · `/rename` · `/copy` · `/move` · `/delete` · `/zip` · `/unzip` | จัดการไฟล์ (ลบ = ย้ายไปถังขยะ) `/copy` และ `/move` มี `destSpace` (ไม่ใส่ = space เดิม) เพื่อข้าม space: ต้องมี `read` (+`download` ถ้าคัดลอก, +`write` ถ้าย้าย) ที่ต้นทาง และ `write` + `upload` ที่ปลายทาง นับโควตาปลายทาง; ย้ายข้าม space = คัดลอกก่อนแล้วลบต้นทางลงถังขยะ (คัดลอกไม่สำเร็จต้นทางไม่ถูกแตะ) |
 | `GET/PUT /api/content` | อ่าน/บันทึกไฟล์ข้อความ (≤ 2 MB) `GET` ตอบ `mtime` ส่งกลับใน `PUT` เป็น `expectedMtime` ถ้าไฟล์ถูกแก้จากที่อื่นหลังจากเปิดจะได้ 409 `files.changed-elsewhere` และไม่บันทึก `PUT` ตอบ `mtime` ใหม่ |
 | `POST /api/office/config` · `GET /api/office/file/:token` · `POST /api/office/callback/:token` | แก้ไขเอกสาร office ด้วย ONLYOFFICE (ดู แก้ไขเอกสาร office) สองตัวหลังเรียกโดย document server เท่านั้น |

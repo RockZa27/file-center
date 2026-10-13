@@ -5,7 +5,7 @@
  *   users.json  settings.json  branding/  logs/audit.log  logs/system.log  backup.json  [storage/ with BACKUP_INCLUDE_FILES=true]
  *
  * Not in it: tmp/, trash/ and versions/ (temporary), app/ (installed updates), sessions.json (logins), rotated logs,
- * access.log and launcher.log, and the backup folder itself. Restoring puts back users.json, settings.json and branding/ only, never storage/.
+ * access.log and launcher.log, the backup folder itself, and search.db (the search index, rebuilt from the disk). Restoring puts back users.json, settings.json and branding/ only, never storage/.
  */
 import {
   closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync,
@@ -42,6 +42,8 @@ export type BackupStatus = {
 // top-level names in DATA_DIR that never go into a backup
 // secret.key opens the sealed 2FA secrets in users.json: a backup with both would give them away, so it is kept apart
 const SKIP = new Set(['tmp', 'trash', 'versions', 'app', 'sessions.json', 'backup-status.json', 'stats-cache.json', 'cli-changed', 'secret.key'])
+// search.db* (the search index and its WAL files) is rebuilt from the disk
+const SEARCH_DB = /^search\.db(?:-wal|-shm|-journal)?$/
 // of the logs only the current activity and system log go in: rotated ones, access.log and launcher.log stay out
 const LOGS_KEPT = new Set(['logs/', 'logs/audit.log', 'logs/system.log'])
 // users, settings and a logo are small: anything bigger in a backup is not ours
@@ -136,7 +138,7 @@ async function exclusive<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 function collectItems(): ZipItem[] {
-  const names = readdirSync(config.dataDir).filter(n => !SKIP.has(n) && !n.endsWith('.tmp'))
+  const names = readdirSync(config.dataDir).filter(n => !SKIP.has(n) && !SEARCH_DB.test(n) && !n.endsWith('.tmp'))
   // the storage may sit inside the data folder: its files only go in with BACKUP_INCLUDE_FILES, under storage/
   const items = collectZipItems(config.dataDir, names)
     .filter(i => (!i.name.startsWith('logs/') || LOGS_KEPT.has(i.name)) && !within(config.storageDir, i.abs))

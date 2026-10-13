@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import type { User } from './auth'
 import { config, paths } from './config'
 import { bad, ensureDir, ensureSpace, forbidden, HttpError, notFound, resolveIn, uniquePath, validName } from './fsx'
+import { indexTouched } from './search-index'
 import { commitBytes, limitOf, releaseBytes, reserveBytes, restoreReservation } from './quota'
 import { JsonStore } from './store'
 
@@ -220,6 +221,7 @@ export async function completeUpload(id: string, owner: string) {
     ensureSpace(meta.destDir, meta.size)
     await Bun.write(finalPath, Bun.file(data))
   }
+  indexTouched(finalPath)
   rmSync(dirOf(id), { recursive: true, force: true })
   // the file is in the home now: the reservation turns into counted bytes
   if (meta.quotaUser) commitBytes(meta.quotaUser, meta.size)

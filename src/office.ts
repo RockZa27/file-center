@@ -21,6 +21,7 @@ import { bad, ensureDir, ensureSpace, forbidden, HttpError, moveTree, normRel, n
 import type { Lang } from './messages'
 import { recordRecent } from './favorites'
 import { holdNow, markStale, ownerOfPath, ready } from './quota'
+import { indexTouched } from './search-index'
 import { moveToTrash } from './trash'
 import { reserveVersion } from './versions'
 
@@ -370,6 +371,7 @@ export async function saveVersion(t: OfficeToken, data: Record<string, unknown>)
         else await moveToTrash(abs, user.username)
         if (!ticket && existsSync(abs)) throw new HttpError(409, 'files.name-taken')
         await rename(stage, abs)
+        indexTouched(abs)
       } catch (err) {
         hold.release()
         ticket?.release()

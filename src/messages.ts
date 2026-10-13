@@ -69,6 +69,7 @@ export const MESSAGES = {
 
   // ───────────── files ─────────────
   'files.system-folder': { th: 'โฟลเดอร์ระบบ ลบ ย้าย หรือเปลี่ยนชื่อไม่ได้', en: 'System folders cannot be deleted, moved or renamed.' },
+  'files.bad-filter': { th: 'ตัวกรองการค้นหาไม่ถูกต้อง: {name}', en: 'The search filter is not valid: {name}' },
   'files.bad-count': { th: 'จำนวนรายการไม่ถูกต้อง', en: 'The number of items is not valid.' },
   'files.root-item': { th: 'ไม่สามารถทำรายการกับโฟลเดอร์หลักได้', en: 'This cannot be done to the top folder.' },
   'files.folder-not-found': { th: 'ไม่พบโฟลเดอร์นี้', en: 'The folder was not found.' },
