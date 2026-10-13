@@ -67,7 +67,7 @@
       </div>
       <div class="summary muted">
         <span>{{ t('share.expiresAt', { date: formatDate(result.share.expiresAt) }) }}</span>
-        <span v-if="result.share.kind === 'upload'">{{ t('share.kindUpload') }}</span>
+        <span v-if="result.share.kind === 'upload'">{{ t('share.kindUploadShort') }}</span>
         <span v-if="result.share.maxFileBytes">{{ t('share.limitFile', { size: formatBytes(result.share.maxFileBytes) }) }}</span>
         <span v-if="result.share.maxFiles">{{ t('share.limitFiles', { n: result.share.maxFiles }) }}</span>
         <span v-if="result.share.maxTotalBytes">{{ t('share.limitTotal', { size: formatBytes(result.share.maxTotalBytes) }) }}</span>

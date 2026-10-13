@@ -2,8 +2,8 @@
   <n-modal :show="show" preset="card" :title="isEdit ? t('users.edit') : t('users.add')" style="width: min(560px, 95vw)" @update:show="v => emit('update:show', v)">
     <n-form label-placement="top" :show-feedback="false" class="form" @submit.prevent="save">
       <div class="two">
-        <n-form-item :label="t('login.username')"><n-input v-model:value="f.username" :disabled="isEdit" :status="reserved ? 'error' : undefined" :input-props="{ autocomplete: 'off' }" /></n-form-item>
-        <n-form-item :label="t('users.name')"><n-input v-model:value="f.name" /></n-form-item>
+        <n-form-item :label="t('login.username')"><n-input :placeholder="t('login.username')" v-model:value="f.username" :disabled="isEdit" :status="reserved ? 'error' : undefined" :input-props="{ autocomplete: 'off' }" /></n-form-item>
+        <n-form-item :label="t('users.name')"><n-input :placeholder="t('users.name')" v-model:value="f.name" /></n-form-item>
       </div>
       <n-alert v-if="reserved" type="error" :show-icon="true">{{ t('users.guestReserved') }}</n-alert>
       <n-form-item :label="isEdit ? t('users.newPassword') : t('login.password')">

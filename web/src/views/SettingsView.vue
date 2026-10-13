@@ -5,7 +5,7 @@
       <div class="surface block">
         <h2>{{ t('settings.brand') }}</h2>
         <n-form label-placement="top">
-          <n-form-item :label="t('settings.appName')"><n-input v-model:value="f.appName" maxlength="60" /></n-form-item>
+          <n-form-item :label="t('settings.appName')"><n-input :placeholder="t('settings.appName')" v-model:value="f.appName" maxlength="60" /></n-form-item>
           <n-form-item :label="t('settings.color')">
             <div class="colors">
               <button v-for="c in presets" :key="c" type="button" class="swatch" :class="{ on: f.primaryColor.toLowerCase() === c }" :style="{ background: c }" :aria-label="c" @click="f.primaryColor = c" />

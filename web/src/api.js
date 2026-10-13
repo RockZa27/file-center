@@ -77,7 +77,8 @@ export const api = {
 
   list: (space, path) => get('/api/list', { space, path }),
   folders: (space, path) => get('/api/folders', { space, path }),
-  search: (space, q, path) => get('/api/search', { space, q, path }),
+  /** filters: { type, ext, from, to, minSize, maxSize, sort, order } as the server reads them (ext comma separated) */
+  search: (space, q, path, filters = {}) => get('/api/search', { space, q, path, ...filters }),
   mkdir: (space, path, name) => post('/api/mkdir', { space, path, name }),
   newFile: (space, path, name) => post('/api/newfile', { space, path, name }),
   getContent: (space, path) => get('/api/content', { space, path }),

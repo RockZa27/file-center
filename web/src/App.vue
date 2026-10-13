@@ -1,5 +1,5 @@
 <template>
-  <n-config-provider :theme="isDark ? darkTheme : null" :theme-overrides="overrides" :locale="locale === 'th' ? thTH : enUS" :date-locale="locale === 'th' ? dateThTH : dateEnUS">
+  <n-config-provider :theme="isDark ? darkTheme : null" :theme-overrides="overrides" :locale="naiveLocale" :date-locale="locale === 'th' ? dateThTH : dateEnUS">
     <n-global-style />
     <n-loading-bar-provider>
       <n-dialog-provider>
@@ -31,6 +31,13 @@ import { shade } from './utils'
 const app = useAppStore()
 const { t, locale } = useI18n()
 const os = useOsTheme()
+
+// Naive UI's own "Please Input" / "Please Select" must never show: every field has a placeholder of ours, and one
+// that has none stays empty
+const naiveLocale = computed(() => {
+  const base = locale.value === 'th' ? thTH : enUS
+  return { ...base, Input: { ...base.Input, placeholder: '' }, Select: { ...base.Select, placeholder: '' } }
+})
 
 const isDark = computed(() => app.theme === 'dark' || (app.theme === 'auto' && os.value === 'dark'))
 const font = "'IBM Plex Sans Thai', system-ui, -apple-system, 'Segoe UI', sans-serif"
