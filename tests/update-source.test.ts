@@ -254,7 +254,7 @@ describe('update source: fetch', () => {
     expect((await admin.json('DELETE', `/api/admin/update/staged/${r.data.id}`)).status).toBe(200)
   })
 
-  test('a fetched package signed with another key than the one in effect is refused', async () => {
+  test('with UPDATE_PUBLIC_KEY set, a fetched package still needs its signature', async () => {
     config.updatePublicKey = generateKeyPairSync('ed25519').publicKey.export({ type: 'spki', format: 'der' }).toString('base64')
     publish('9.1.0', makePackage('9.1.0'))
     const r = await admin.json('POST', '/api/admin/update/fetch')

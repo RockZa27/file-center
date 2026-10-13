@@ -258,6 +258,18 @@ describe('signed update packages', () => {
     }, 40_000)
   })
 
+  // kept under its old name: what changed is that "without a key" means the built-in key, so only UPDATE_ALLOW_UNSIGNED lets unsigned in
+  test('without a key, unsigned and signed packages are both accepted; the signature is not checked', async () => {
+    const open = await startServer('no-key', '', { UPDATE_ALLOW_UNSIGNED: 'true' })
+    servers.push(open)
+    expect((await api(open, 'GET', '/api/admin/update')).data).toMatchObject({ signatureRequired: false, builtinKey: true })
+    const unsigned = await stage(open, makePackage({ version: '9.1.0' }))
+    expect(unsigned.status).toBe(200)
+    expect(unsigned.data).toMatchObject({ signed: false, signatureVerified: false })
+    // a signature that is there is still checked, against the built-in key
+    expect((await stage(open, realSigned)).status).toBe(400)
+  }, 40_000)
+
   describe('UPDATE_ALLOW_UNSIGNED=true', () => {
     test('accepts an unsigned package, still checks a signature that is there, warns, and audits the install', async () => {
       const open = await startServer('allow-unsigned', trustedPublic, { UPDATE_ALLOW_UNSIGNED: 'true' })
