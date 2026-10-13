@@ -1,4 +1,4 @@
-import { Elysia } from 'elysia'
+import { Elysia, NotFound, ParseError, ValidationError } from 'elysia'
 import { accessFor, getSession, reloadIfChangedByCli, type Access, type Session, type User, findUser } from './auth'
 import { config } from './config'
 import { forbidden, fromFsError, HttpError } from './fsx'
@@ -74,8 +74,7 @@ export function errorPage(status: number, lang: Lang, code: MessageCode, params:
 
 /** Per-request context: who is calling, their session, and uniform JSON errors (a small page for download links). */
 export const context = new Elysia({ name: 'context' })
-  .error({ HTTP_ERROR: HttpError })
-  .onError({ as: 'global' }, ({ error, code, set, request }) => {
+  .onError('global', ({ error, set, request }) => {
     // the text in the visitor's language; the code and params let the page tell cases apart without reading it
     const answer = (status: number, c: MessageCode, params: Params = {}) => {
       if (isDownloadNavigation(request)) return errorPage(status, langOf(request), c, params)
@@ -88,17 +87,17 @@ export const context = new Elysia({ name: 'context' })
       if (!(error instanceof HttpError)) log.warn('fs-error', { method: request.method, path: safePath(request.url), error: (error as Error).message.slice(0, 300) })
       return answer(known.status, known.code, known.params)
     }
-    if (code === 'VALIDATION') {
+    if (error instanceof ValidationError) {
       // a list longer than its schema allows (maxItems) is a request for too many items, not a malformed one
-      const tooMany = (error as any).all?.find((e: any) => e?.schema?.maxItems !== undefined)
-      return tooMany ? answer(400, 'files.bad-count', { max: tooMany.schema.maxItems }) : answer(422, 'request.invalid')
+      const tooMany = error.errors.find(e => e.keyword === 'maxItems')
+      return tooMany ? answer(400, 'files.bad-count', { max: tooMany.params.limit as number }) : answer(422, 'request.invalid')
     }
-    if (code === 'NOT_FOUND') return answer(404, 'request.no-route')
-    if (code === 'PARSE') return answer(400, 'request.unreadable')
+    if (error instanceof NotFound) return answer(404, 'request.no-route')
+    if (error instanceof ParseError) return answer(400, 'request.unreadable')
     log.error('request-failed', { method: request.method, path: safePath(request.url), error })
     return answer(500, 'request.internal')
   })
-  .derive({ as: 'global' }, ({ cookie, request, server }) => {
+  .derive('global', ({ cookie, request, server }) => {
     reloadIfChangedByCli() // users or sessions changed by `bun src/cli.ts`
     const sid = cookie[SESSION_COOKIE]?.value as string | undefined
     const session: Session | null = getSession(sid)
@@ -106,7 +105,7 @@ export const context = new Elysia({ name: 'context' })
     const ip = clientIp(request, server?.requestIP(request)?.address ?? 'unknown')
     return { sid, session, user, ip }
   })
-  .onBeforeHandle({ as: 'global' }, ({ request, session }) => {
+  .onBeforeHandle('global', ({ request, session }) => {
     // CSRF: every state-changing call must carry the token issued with the session
     if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return
     const { pathname } = new URL(request.url)
@@ -115,7 +114,7 @@ export const context = new Elysia({ name: 'context' })
     const token = request.headers.get('x-csrf-token')
     if (!session || !token || token !== session.csrf) throw new HttpError(403, 'csrf')
   })
-  .onBeforeHandle({ as: 'global' }, ({ request, user }) => {
+  .onBeforeHandle('global', ({ request, user }) => {
     // an account with a handed-out password may only change it (or leave) before anything else
     if (!user?.mustChangePassword) return
     const { pathname } = new URL(request.url)

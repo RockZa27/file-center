@@ -68,15 +68,15 @@ export const updateRoutes = new Elysia({ prefix: '/api/admin/update' })
   })
 
   // 1) announce the package, 2) PUT its chunks to /api/upload/:id/:n, 3) stage it
-  .post('/upload', ({ user, ip, body }) => {
+  .post('/upload', { body: t.Object({ size: t.Number() }) }, ({ user, ip, body }) => {
     const admin = requireAdmin({ user, ip })
     enabled()
     if (body.size > config.updateMaxSize) throw new HttpError(413, 'update.too-big')
     ensureDir(incoming())
     return initUpload({ owner: admin.username, root: incoming(), dir: '/', relativeDir: [], name: 'update.zip', size: body.size })
-  }, { body: t.Object({ size: t.Number() }) })
+  })
 
-  .post('/stage', async ({ user, ip, body }) => {
+  .post('/stage', { body: t.Object({ id: t.String() }) }, async ({ user, ip, body }) => {
     const admin = requireAdmin({ user, ip })
     enabled()
     const done = await completeUpload(body.id, admin.username)
@@ -87,7 +87,7 @@ export const updateRoutes = new Elysia({ prefix: '/api/admin/update' })
     } finally {
       rmSync(done.path, { force: true })
     }
-  }, { body: t.Object({ id: t.String() }) })
+  })
 
   .delete('/staged/:id', ({ user, ip, params }) => {
     requireAdmin({ user, ip })
@@ -95,7 +95,7 @@ export const updateRoutes = new Elysia({ prefix: '/api/admin/update' })
     return { ok: true }
   })
 
-  .post('/apply', async ({ user, ip, body }) => {
+  .post('/apply', { body: t.Object({ id: t.String(), password: t.String({ maxLength: 1000 }) }) }, async ({ user, ip, body }) => {
     const admin = requireAdmin({ user, ip })
     enabled()
     await confirmPassword(admin, ip, body.password, 'update-denied')
@@ -105,10 +105,10 @@ export const updateRoutes = new Elysia({ prefix: '/api/admin/update' })
     if (!r.signed) audit({ user: admin.username, ip, action: 'update-apply-unsigned', detail: r.version })
     restartSoon()
     return { ok: true, version: r.version, restarting: true }
-  }, { body: t.Object({ id: t.String(), password: t.String({ maxLength: 1000 }) }) })
+  })
 
   // the button "update now": /check, /fetch and /apply in one go, after the password and with none of their checks left out
-  .post('/fetch-and-apply', async ({ user, ip, body }) => {
+  .post('/fetch-and-apply', { body: t.Object({ password: t.String({ maxLength: 1000 }) }) }, async ({ user, ip, body }) => {
     const admin = requireAdmin({ user, ip })
     enabled()
     // before anything is downloaded: a stolen session alone must not even make the server fetch a package
@@ -136,9 +136,9 @@ export const updateRoutes = new Elysia({ prefix: '/api/admin/update' })
     if (!r.signed) audit({ user: admin.username, ip, action: 'update-apply-unsigned', detail: r.version })
     restartSoon()
     return { ok: true, version: r.version, restarting: true }
-  }, { body: t.Object({ password: t.String({ maxLength: 1000 }) }) })
+  })
 
-  .post('/rollback', async ({ user, ip, body }) => {
+  .post('/rollback', { body: t.Object({ dir: t.String(), password: t.String({ maxLength: 1000 }) }) }, async ({ user, ip, body }) => {
     const admin = requireAdmin({ user, ip })
     enabled()
     await confirmPassword(admin, ip, body.password, 'update-denied')
@@ -147,5 +147,5 @@ export const updateRoutes = new Elysia({ prefix: '/api/admin/update' })
     audit({ user: admin.username, ip, action: 'update-rollback', detail: r.version })
     restartSoon()
     return { ok: true, version: r.version, restarting: true }
-  }, { body: t.Object({ dir: t.String(), password: t.String({ maxLength: 1000 }) }) })
+  })
 

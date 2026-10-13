@@ -17,7 +17,7 @@ import { fileResponse } from './files'
 export const officeRoutes = new Elysia({ prefix: '/api/office' })
   .use(context)
 
-  .post('/config', ({ user, ip, body, request }) => {
+  .post('/config', { body: t.Object({ space: t.String(), path: t.String(), mode: t.Union([t.Literal('edit'), t.Literal('view')]) }) }, ({ user, ip, body, request }) => {
     const u = requireUser({ user, ip })
     requireEnabled()
     // the editor shows the whole file, so editing needs the rights to read it too
@@ -30,7 +30,7 @@ export const officeRoutes = new Elysia({ prefix: '/api/office' })
     const answer = editorConfig(u, a.space, rel, abs, body.mode, langOf(request))
     audit({ user: u.username, ip, action: 'office-open', target: storagePath(abs), detail: body.mode === 'edit' ? 'แก้ไข' : 'ดู' })
     return answer
-  }, { body: t.Object({ space: t.String(), path: t.String(), mode: t.Union([t.Literal('edit'), t.Literal('view')]) }) })
+  })
 
   // the document server fetches the file to open; with JWT enabled it always sends "Authorization: Bearer <jwt>"
   .get('/file/:token', ({ params, request }) => {

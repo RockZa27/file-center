@@ -179,7 +179,7 @@ export const app = new Elysia({ serve: { maxRequestBodySize: config.uploadChunkS
     if (new URL(request.url).pathname.startsWith('/api/')) set.headers['cache-control'] = 'no-store'
   })
   .use(context)
-  .onAfterResponse({ as: 'global' }, ({ request, set, responseValue, ip, user }) => {
+  .onAfterResponse('global', ({ request, set, responseValue, ip, user }) => {
     const start = requestStart.get(request)
     if (start === undefined) return
     const status = responseValue instanceof Response ? responseValue.status : typeof set.status === 'number' ? set.status : 200

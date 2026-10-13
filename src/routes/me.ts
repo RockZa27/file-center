@@ -12,17 +12,17 @@ export const meRoutes = new Elysia({ prefix: '/api/me' })
 
   .get('/favorites', ({ user, ip }) => ({ items: listFavorites(requireUser({ user, ip })) }))
 
-  .post('/favorites', ({ user, ip, body }) => {
+  .post('/favorites', { body: place }, ({ user, ip, body }) => {
     const u = requireUser({ user, ip })
     const a = need({ user: u, ip }, body.space, 'read')
     if (!existsSync(resolveIn(a.root, normRel(body.path)))) throw notFound()
     addFavorite(u, body.space, body.path)
     return { ok: true }
-  }, { body: place })
+  })
 
-  .delete('/favorites', ({ user, ip, body }) => {
+  .delete('/favorites', { body: place }, ({ user, ip, body }) => {
     removeFavorite(requireUser({ user, ip }), body.space, body.path)
     return { ok: true }
-  }, { body: place })
+  })
 
   .get('/recent', ({ user, ip }) => ({ items: listRecent(requireUser({ user, ip })) }))
