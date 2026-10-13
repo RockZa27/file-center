@@ -1,0 +1,8 @@
+# Trivy ignore list (used by the security job in .github/workflows/qa.yml). One entry per finding, each with the
+# reason above it. An entry without a reason does not belong here.
+
+# Dockerfile has no USER line on purpose: scripts/docker-entrypoint.sh must start as root for the one-time chown of
+# /data (volumes of older installs belong to root) and then drops to the user bun (uid 1000) with setpriv, so PID 1
+# runs as 1000 and with no capabilities. scripts/ci-docker.sh checks both. The same check under its two names:
+DS-0002
+AVD-DS-0002

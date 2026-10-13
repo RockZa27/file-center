@@ -15,15 +15,15 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4.2.2
-      - uses: oven-sh/setup-bun@v2.0.2
+      - uses: actions/checkout@v7.0.1
+      - uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version: 1.4.2
       - run: bun install --frozen-lockfile
       - run: bun run qa --run-id ci-${{ github.run_id }}
       - name: Keep the results
         if: always()
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: qa-results
           path: qa/results/
@@ -35,8 +35,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4.2.2
-      - uses: oven-sh/setup-bun@v2.0.2
+      - uses: actions/checkout@v7.0.1
+      - uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version: 1.4.2
       - run: bun install --frozen-lockfile
@@ -45,7 +45,7 @@ jobs:
       - run: bun run qa:seed check --run-id ci-seed
       - name: Keep the results
         if: always()
-        uses: actions/upload-artifact@v4.6.2
+        uses: actions/upload-artifact@v7.0.2
         with:
           name: qa-seeded-results
           path: qa/results/
@@ -56,9 +56,86 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4.2.2
-      - uses: oven-sh/setup-bun@v2.0.2
+      - uses: actions/checkout@v7.0.1
+      - uses: oven-sh/setup-bun@v2.2.0
         with:
           bun-version: 1.4.2
       - run: bun install --frozen-lockfile
       - run: bash scripts/ci-docker.sh
+
+  # known vulnerabilities, leaked secrets and Dockerfile mistakes (README: "ตรวจช่องโหว่ใน CI"). Fails only for HIGH or
+  # CRITICAL that has a fix available; every scan also leaves a SARIF file (all severities) in the artifact security-results.
+  security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: oven-sh/setup-bun@v2.2.0
+        with:
+          bun-version: 1.4.2
+      - run: bun install --frozen-lockfile
+      # npm packages from bun.lock; exits non-zero for high and critical advisories
+      - name: bun audit
+        run: bun audit --audit-level=high
+      - run: mkdir security-results
+
+      # the repository: dependencies (bun.lock), secrets in files, Dockerfile misconfiguration.
+      # The SARIF step comes first and never fails; the table step after it is the gate (exit-code 1).
+      - name: Trivy repository (SARIF)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          ignore-unfixed: true
+          format: sarif
+          output: security-results/trivy-fs.sarif
+          trivyignores: .trivyignore
+          exit-code: "0"
+      - name: Trivy repository
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,secret,misconfig
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: table
+          trivyignores: .trivyignore
+          exit-code: "1"
+          skip-setup-trivy: true
+
+      # the image built from the Dockerfile (OS packages of the base image and the app's packages inside it)
+      - name: Build the image
+        run: docker build -t file-center:security .
+      - name: Trivy image (SARIF)
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: file-center:security
+          scanners: vuln,secret
+          ignore-unfixed: true
+          format: sarif
+          output: security-results/trivy-image.sarif
+          trivyignores: .trivyignore
+          exit-code: "0"
+          skip-setup-trivy: true
+      - name: Trivy image
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: image
+          image-ref: file-center:security
+          scanners: vuln,secret
+          severity: HIGH,CRITICAL
+          ignore-unfixed: true
+          format: table
+          trivyignores: .trivyignore
+          exit-code: "1"
+          skip-setup-trivy: true
+      - name: Keep the results
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: security-results
+          path: security-results/
+          if-no-files-found: warn

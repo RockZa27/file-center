@@ -7,6 +7,12 @@
 #   4. build an update package (99.0.0), install it through /api/admin/update/upload|stage|apply,
 #      wait for the restart: the version is 99.0.0
 #   5. a second container with FC_RUN_AS_ROOT=true runs as uid 0
+#   6. a volume of an older install (owned by root, closed folder) is handed to uid 1000 with only the four capabilities
+#
+# Both containers run with the hardening of docker-compose.yml (read-only root, tmpfs /tmp, cap_drop ALL + the four
+# capabilities of the entrypoint, no-new-privileges); step 2 checks it took effect: a write outside /data fails, the
+# app (PID 1) has no capabilities left (CapEff 0) and no_new_privs is set. The update in step 4 therefore also proves
+# that a web update works on a read-only root (it writes to /data/system/app only).
 #
 # Everything it makes (containers, volumes, the image, temp files) is removed on exit, also after a failure.
 # FC_CI_CA_BUNDLE=<file> makes the image build trust an extra CA bundle (for a network with an inspecting proxy).
@@ -26,6 +32,10 @@ CSRF=
 BASE_URL=
 DIST_FROM_IMAGE=
 RESULTS=()
+# keep in step with docker-compose.yml (checked in step 1)
+HARDEN=(--read-only --tmpfs /tmp:size=256m,mode=1777 --cap-drop ALL
+  --cap-add CHOWN --cap-add SETUID --cap-add SETGID --cap-add DAC_OVERRIDE
+  --security-opt no-new-privileges:true --memory 2g --pids-limit 512)
 
 log()  { printf '== %s\n' "$*"; }
 pass() { RESULTS+=("PASS  $*"); printf '   ok: %s\n' "$*"; }
@@ -33,7 +43,7 @@ fail() { printf 'FAIL: %s\n' "$*" >&2; show_logs; exit 1; }
 
 show_logs() {
   local c
-  for c in "$PREFIX-main" "$PREFIX-root"; do
+  for c in "$PREFIX-main" "$PREFIX-root" "$PREFIX-old"; do
     if docker inspect "$c" >/dev/null 2>&1; then
       printf -- '--- logs of %s (last 60 lines)\n' "$c" >&2
       docker logs --tail 60 "$c" >&2 || true
@@ -44,8 +54,8 @@ show_logs() {
 cleanup() {
   local code=$?
   set +e
-  docker rm -f "$PREFIX-main" "$PREFIX-root" >/dev/null 2>&1
-  docker volume rm -f "$PREFIX-data" "$PREFIX-data-root" >/dev/null 2>&1
+  docker rm -f "$PREFIX-main" "$PREFIX-root" "$PREFIX-old" >/dev/null 2>&1
+  docker volume rm -f "$PREFIX-data" "$PREFIX-data-root" "$PREFIX-data-old" >/dev/null 2>&1
   docker rmi -f "$IMAGE" >/dev/null 2>&1
   # web/dist copied out of the image only because this checkout has none
   [ -z "$DIST_FROM_IMAGE" ] || rm -rf "$ROOT/web/dist"
@@ -126,9 +136,15 @@ fi
 "${build[@]}" . >/dev/null
 pass 'image builds'
 
+log 'docker-compose.yml carries the same hardening'
+for want in 'read_only: true' 'cap_drop: \[ALL\]' 'cap_add: \[CHOWN, SETUID, SETGID, DAC_OVERRIDE\]' 'no-new-privileges:true' 'mem_limit:' 'pids_limit:'; do
+  grep -Eq "^ +(- )?$want" docker-compose.yml || fail "docker-compose.yml has no '$want' (HARDEN in this script must match it)"
+done
+pass 'docker-compose.yml: read_only, cap_drop ALL + 4 caps, no-new-privileges, memory and pids limits'
+
 log 'start on an empty volume'
 docker volume create "$PREFIX-data" >/dev/null
-docker run -d --name "$PREFIX-main" -p 127.0.0.1::3000 -v "$PREFIX-data:/data" \
+docker run -d --name "$PREFIX-main" -p 127.0.0.1::3000 -v "$PREFIX-data:/data" "${HARDEN[@]}" \
   -e ADMIN_PASSWORD="$PASSWORD" -e UPLOAD_CHUNK_SIZE="$CHUNK" -e MIN_FREE_SPACE=0 "$IMAGE" >/dev/null
 BASE_URL="http://127.0.0.1:$(host_port "$PREFIX-main")"
 wait_health "$BASE_URL"
@@ -142,6 +158,20 @@ pass 'PID 1 (the launcher) runs as uid 1000'
 wrong=$(docker exec "$PREFIX-main" find /data ! -uid 1000 | head -n 5)
 [ -z "$wrong" ] || fail "files under /data not owned by 1000: $wrong"
 pass 'everything under /data belongs to uid 1000'
+
+log 'hardening took effect'
+if docker exec "$PREFIX-main" touch /app/should-not-write /etc/should-not-write 2>/dev/null; then
+  fail 'a write outside /data succeeded: the root filesystem is not read-only'
+fi
+docker exec "$PREFIX-main" touch /data/.write-test /tmp/.write-test || fail '/data or /tmp is not writable'
+docker exec "$PREFIX-main" rm -f /data/.write-test /tmp/.write-test
+pass 'root filesystem is read-only (writes to /app and /etc fail), /data and /tmp are writable'
+capeff=$(docker exec "$PREFIX-main" awk '/^CapEff:/ { print $2 }' /proc/1/status)
+[ "$capeff" = 0000000000000000 ] || fail "PID 1 has capabilities left (CapEff $capeff), expected 0000000000000000"
+pass 'PID 1 has no capabilities after the drop (CapEff 0)'
+nnp=$(docker exec "$PREFIX-main" awk '/^NoNewPrivs:/ { print $2 }' /proc/1/status)
+[ "$nnp" = 1 ] || fail "no-new-privileges is not set on PID 1 (NoNewPrivs $nnp)"
+pass 'no-new-privileges is set on PID 1'
 
 # ───────────── 3. chunked upload and download
 log 'upload in chunks and download it back'
@@ -193,9 +223,23 @@ pass 'the uploaded file survived the update'
 # ───────────── 5. the way out: FC_RUN_AS_ROOT
 log 'FC_RUN_AS_ROOT=true'
 docker volume create "$PREFIX-data-root" >/dev/null
-docker run -d --name "$PREFIX-root" -p 127.0.0.1::3000 -v "$PREFIX-data-root:/data" \
+docker run -d --name "$PREFIX-root" -p 127.0.0.1::3000 -v "$PREFIX-data-root:/data" "${HARDEN[@]}" \
   -e ADMIN_PASSWORD="$PASSWORD" -e FC_RUN_AS_ROOT=true "$IMAGE" >/dev/null
 wait_health "http://127.0.0.1:$(host_port "$PREFIX-root")"
 uid=$(docker exec "$PREFIX-root" awk '/^Uid:/ { print $2 }' /proc/1/status)
 [ "$uid" = 0 ] || fail "with FC_RUN_AS_ROOT=true PID 1 runs as uid $uid, expected 0"
 pass 'FC_RUN_AS_ROOT=true keeps uid 0'
+if docker exec "$PREFIX-root" touch /app/should-not-write 2>/dev/null; then fail 'root in the container can write outside /data: read-only is not in effect'; fi
+pass 'even as root the root filesystem is read-only'
+
+# ───────────── 6. an older install: /data belongs to root, the entrypoint's one-time chown needs its capabilities
+log 'volume owned by root (older install)'
+docker volume create "$PREFIX-data-old" >/dev/null
+docker run --rm -v "$PREFIX-data-old:/data" --entrypoint /bin/sh "$IMAGE" -c \
+  'mkdir -p /data/storage/closed /data/system && echo old > /data/storage/closed/f.txt && chmod 700 /data/storage/closed && chown -R 0:0 /data' >/dev/null
+docker run -d --name "$PREFIX-old" -p 127.0.0.1::3000 -v "$PREFIX-data-old:/data" "${HARDEN[@]}" \
+  -e ADMIN_PASSWORD="$PASSWORD" "$IMAGE" >/dev/null
+wait_health "http://127.0.0.1:$(host_port "$PREFIX-old")"
+wrong=$(docker exec "$PREFIX-old" find /data ! -uid 1000 | head -n 5)
+[ -z "$wrong" ] || fail "after the one-time chown files under /data are not owned by 1000: $wrong"
+pass 'a root-owned volume is handed to uid 1000 with only CHOWN, SETUID, SETGID, DAC_OVERRIDE'

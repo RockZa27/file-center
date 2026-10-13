@@ -5,7 +5,9 @@ RUN bun install --frozen-lockfile
 COPY . .
 RUN bun --bun run build
 
-FROM oven/bun:1.4.2
+# the runtime stage is the -slim variant: same Debian packages the app needs (setpriv, chown, stat, awk for the entrypoint),
+# about 70 MB less to ship and to scan. Distroless was not used: the entrypoint needs a shell for its one-time chown + setpriv.
+FROM oven/bun:1.4.2-slim
 WORKDIR /app
 ENV NODE_ENV=production \
     STORAGE_DIR=/data/storage \
