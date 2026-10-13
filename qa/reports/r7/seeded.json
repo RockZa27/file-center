@@ -1,0 +1,80 @@
+{
+  "dir": "/tmp/fc-audit-r7",
+  "bugs": {
+    "totp-replay": [
+      {
+        "file": "src/totp.ts",
+        "line": 69
+      }
+    ],
+    "backup-code-reuse": [
+      {
+        "file": "src/auth.ts",
+        "line": 306
+      }
+    ],
+    "login-ticket-any-ip": [
+      {
+        "file": "src/auth.ts",
+        "line": 340
+      }
+    ],
+    "session-delete-any-user": [
+      {
+        "file": "src/auth.ts",
+        "line": 222
+      }
+    ],
+    "quota-unzip-ignored": [
+      {
+        "file": "src/routes/files.ts",
+        "line": 269
+      }
+    ],
+    "upload-overwrites": [
+      {
+        "file": "src/uploads.ts",
+        "line": 214
+      }
+    ],
+    "upload-link-no-upload-perm": [
+      {
+        "file": "src/shares.ts",
+        "line": 135
+      }
+    ]
+  },
+  "decoys": {
+    "decoy-todo-download": [
+      {
+        "file": "src/routes/files.ts",
+        "line": 288
+      }
+    ],
+    "decoy-legacy-join": [
+      {
+        "file": "src/fsx.ts",
+        "line": 282
+      }
+    ],
+    "decoy-csrf-note": [
+      {
+        "file": "src/context.ts",
+        "line": 106
+      }
+    ],
+    "decoy-backup-name": [
+      {
+        "file": "src/backup.ts",
+        "line": 60
+      }
+    ],
+    "decoy-access-url": [
+      {
+        "file": "src/logger.ts",
+        "line": 147
+      }
+    ]
+  },
+  "cleanDir": "/tmp/fc-audit-r7-clean"
+}
