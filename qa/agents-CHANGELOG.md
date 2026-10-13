@@ -4,6 +4,25 @@ Change one thing per agent per round, so the effect is visible.
 
 <!-- newest first -->
 
+## r9 → r10
+คะแนน r9 (ปลอดภัย + เร็ว, ไม่มีบั๊กฝัง: auditor ตรวจโค้ดจริง): security-auditor 100%, verifier 100%, backend-dev 91% (−1), ux-tester 100% (+2) (frontend-dev, qa-runner ไม่เรียก)
+
+ผลของการเปลี่ยนเมื่อรอบก่อน:
+- frontend-dev "ลองด้วยสิทธิ์น้อยที่สุดที่ server ยอมรับ": ไม่มีงานหน้าเว็บรอบนี้ ยังวัดไม่ได้ — ดูรอบหน้า
+- backend-dev "รัน bun test ทั้งชุดก่อน qa ครั้งแรก": 3 ใน 4 งานเขียวครั้งแรก; งาน signing ล้มครั้งแรกเพราะเปลี่ยนชื่อเทสต์เดิม 2 ตัว (guard) ไม่ใช่เทสต์ล้ม
+
+การเปลี่ยน agent: ไม่มี (ทุกตัว ≥90%)
+
+สิ่งที่รอบนี้เผย:
+- auditor บนโค้ดจริงพบ 5 ข้อจริง verifier ยืนยัน 5/5; แก้ครบรวม F5 (บังคับลายเซ็นด้วยกุญแจของ File Center)
+- CVE scan ครั้งแรก: image 17 HIGH/CRITICAL (ทั้งหมดแพ็กเกจ Debian ฐาน มีรุ่นแก้) → apt-get upgrade ตอน build → 0
+- CI บน GitHub จับบั๊กจริงของรอบ 8: id เวอร์ชันเรียงผิดเมื่อบันทึกในมิลลิวินาทีเดียวกัน → แก้ + เทสต์
+- งาน seeded บน main ไม่ build หน้าเว็บ เทสต์อัปเดตข้ามเงียบ ๆ (จับได้ 50/54) → build ก่อน และบน CI ให้ล้มแทนข้าม
+- ux พบ 3 จุดที่ผู้ใช้สับสน (ข้อความจำนวนรายการ, 'ไม่จำกัด' ที่ไม่จริง, ข้อความช่วยเหลือเก่า) → ผมแก้
+- agent 2 ตัวถูกตัดเพราะขีดจำกัดการใช้งาน ทำต่อได้ไม่นับเป็นความผิด
+
+backlog: log login-failed นับย้อนหลังช้ากว่าจริงตามช่วงเวลา (by design); Elysia 2 รอออกตัวจริง
+
 ## r8 → r9
 คะแนน r8 (Sonnet รอบที่ 2): security-auditor 100%, verifier 100%, backend-dev 92% (+4), frontend-dev 87% (−7), ux-tester 98% (+4) (qa-runner ไม่เรียก: ผมรัน qa หลัง merge เอง)
 

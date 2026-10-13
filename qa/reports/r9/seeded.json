@@ -1,0 +1,1 @@
+{"dir":"/tmp/fc-audit-r9","bugs":{},"decoys":{},"note":"r9 audited the real code: nothing planted, every finding is a real one and its repro must trigger on that code"}
