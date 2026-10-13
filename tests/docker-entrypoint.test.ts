@@ -189,6 +189,13 @@ describe('hardening and security job', () => {
     expect(froms).toEqual(['FROM oven/bun:1.4.2 AS build', 'FROM oven/bun:1.4.2-slim'])
   })
 
+  test('the runtime stage installs the Debian security updates by default (the image scan found fixed HIGH/CRITICAL ones)', () => {
+    const runtime = read('Dockerfile').split('FROM oven/bun:1.4.2-slim')[1]
+    expect(runtime).toMatch(/^ARG APT_UPGRADE=true$/m)
+    expect(runtime).toMatch(/apt-get update && apt-get upgrade -y/)
+    expect(runtime).toMatch(/rm -rf \/var\/lib\/apt\/lists/)
+  })
+
   test('compose: read-only root, only /data and a tmpfs /tmp writable, no capabilities but the entrypoint needs', () => {
     const app = read('docker-compose.yml').split(/^  cloudflared:/m)[0]
     expect(app).toMatch(/^ +read_only: true$/m)

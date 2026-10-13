@@ -498,6 +498,8 @@ bash scripts/ci-docker.sh
 ถ้าต้องยอมรับข้อยกเว้นจริง ๆ ใส่ ID ใน `.trivyignore` โดย **ต้องมีบรรทัดคอมเมนต์บอกเหตุผลอยู่เหนือทุกรายการ** (เทสต์ตรวจข้อนี้) ตอนนี้มีรายการเดียวคือ `DS-0002` (ไม่มี `USER` ใน Dockerfile เพราะ entrypoint ต้องเริ่มเป็น root เพื่อ chown ครั้งเดียวแล้วลดเป็น `bun`)
 งานนี้ต้องดาวน์โหลดฐานข้อมูล Trivy จึงต้องมีอินเทอร์เน็ต และยืนยันผลจริงได้บน GitHub Actions เท่านั้น
 
+**ผลสแกนครั้งแรก (รอบ 9):** โค้ดและแพ็กเกจ npm ไม่พบช่องโหว่; อิมเมจพบ 17 รายการ (HIGH 14, CRITICAL 3) ทั้งหมดอยู่ในแพ็กเกจ Debian ของฐาน (perl-base, pcre2, sqlite, openssl, gzip) และมีรุ่นแก้แล้ว — `Dockerfile` จึงลงอัปเดตความปลอดภัยของ Debian (`apt-get upgrade`) ใน stage ที่ใช้รันทุกครั้งที่ build (ปิดได้ด้วย `--build-arg APT_UPGRADE=false` เฉพาะเครื่องที่เข้า mirror ของ Debian ไม่ได้ เช่น `FC_CI_NO_APT=1 bash scripts/ci-docker.sh`) ควร build อิมเมจใหม่เป็นระยะ (`docker compose build --pull`) เพื่อรับอัปเดตล่าสุด
+
 ## โครงสร้าง
 
 ```

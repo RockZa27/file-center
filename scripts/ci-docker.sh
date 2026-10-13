@@ -127,6 +127,8 @@ command -v bun >/dev/null || fail 'bun is not installed (used to read JSON and t
 # ───────────── 1. build and start
 log "build the image ($IMAGE)"
 build=(docker build -q -t "$IMAGE")
+# a machine that can not reach a Debian mirror builds without the security updates (CI always installs them)
+[ "${FC_CI_NO_APT:-}" = "1" ] && build+=(--build-arg APT_UPGRADE=false)
 if [ -n "${FC_CI_CA_BUNDLE:-}" ]; then
   # a machine whose HTTPS goes through an inspecting proxy: the build trusts this CA bundle too (nothing else changes)
   mkdir "$WORK/ca" && cp "$FC_CI_CA_BUNDLE" "$WORK/ca/ca.crt"
