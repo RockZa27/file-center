@@ -18,6 +18,7 @@
           </div>
         </div>
 
+        <n-alert v-if="onBeta" type="warning" class="gap" :title="t('update.onBetaTitle', { v: st.runningVersion })">{{ t('update.onBetaBody') }}</n-alert>
         <n-alert v-if="st.allowUnsigned" type="warning" class="gap">{{ t('update.allowUnsignedBody') }}</n-alert>
         <n-alert v-if="st.pending" type="info" class="gap">{{ t('update.pending', { v: pendingVersion }) }}</n-alert>
         <n-alert v-if="st.last && st.last.ok" type="success" class="gap" closable>{{ t('update.lastOk', { v: st.last.version }) }}</n-alert>
@@ -74,6 +75,38 @@
           <div class="actions">
             <n-button type="primary" :loading="checking" :disabled="!canUpdate || busy" @click="checkAndUpdate">
               <template #icon><n-icon :component="CloudDownloadOutline" /></template>{{ t('update.checkAndUpdate') }}
+            </n-button>
+          </div>
+        </div>
+
+        <!-- the beta channel: never offered as "newer", only here, behind a loud warning and a ticked box -->
+        <div v-if="beta && phase === 'idle'" class="surface block beta">
+          <h2>{{ t('update.betaTitle') }}</h2>
+          <n-alert type="error" class="gap" :show-icon="false">
+            <div class="beta-warn" role="alert">{{ t('update.betaWarn') }}</div>
+            <div class="beta-help">{{ t('update.betaHelp') }}</div>
+            <div class="beta-help">{{ t('update.betaBack') }}</div>
+          </n-alert>
+          <div class="kv"><span class="muted">{{ t('update.newVersion') }}</span><span class="strong">v{{ st.runningVersion }} → v{{ beta.version }}</span></div>
+          <div v-if="beta.builtAt" class="kv"><span class="muted">{{ t('update.builtAt') }}</span><span>{{ formatDate(beta.builtAt) }}</span></div>
+          <div class="kv"><span class="muted">{{ t('update.size') }}</span><span>{{ formatBytes(beta.size) }}</span></div>
+          <div class="kv">
+            <span class="muted label">{{ t('update.signature') }}</span>
+            <n-tag v-if="beta.signed" type="success" :bordered="false" class="sig"><template #icon><n-icon :component="ShieldCheckmarkOutline" /></template>{{ t('update.latestSigned') }}</n-tag>
+            <n-tag v-else type="warning" :bordered="false" class="sig"><template #icon><n-icon :component="WarningOutline" /></template>{{ t('update.latestUnsigned') }}</n-tag>
+          </div>
+          <div v-if="beta.notes" class="kv"><span class="muted">{{ t('update.notes') }}</span><span class="notes">{{ beta.notes }}</span></div>
+          <n-alert v-if="betaRefused" type="error" :title="t('update.refusedTitle')" class="gap top">{{ t('update.refusedBody') }}</n-alert>
+          <n-alert v-if="betaError" type="error" :title="t('update.betaFailed')" closable class="gap top refused" @close="betaError = ''">{{ betaError }}</n-alert>
+          <n-checkbox v-model:checked="betaAccept" class="beta-accept" :disabled="betaRefused || betaWorking">{{ t('update.betaAccept') }}</n-checkbox>
+          <n-form label-placement="top" @submit.prevent="installBeta">
+            <n-form-item :label="t('update.password')">
+              <n-input :placeholder="t('update.password')" v-model:value="betaPassword" type="password" show-password-on="click" autocomplete="current-password" :input-props="{ name: 'confirm-password' }" :disabled="betaWorking" @keyup.enter="installBeta" />
+            </n-form-item>
+          </n-form>
+          <div class="actions">
+            <n-button type="error" :disabled="!canBeta" :loading="betaWorking" @click="installBeta">
+              <template #icon><n-icon :component="WarningOutline" /></template>{{ t('update.betaInstall') }}
             </n-button>
           </div>
         </div>
@@ -186,7 +219,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { NAlert, NButton, NForm, NFormItem, NIcon, NInput, NModal, NProgress, NSpin, NTag, NUpload, NUploadDragger, useThemeVars } from 'naive-ui'
+import { NAlert, NButton, NCheckbox, NForm, NFormItem, NIcon, NInput, NModal, NProgress, NSpin, NTag, NUpload, NUploadDragger, useThemeVars } from 'naive-ui'
 import {
   ArrowUndoOutline, CheckmarkCircle, CloseCircle, CloudDownloadOutline, CloudUploadOutline, EllipseOutline, RefreshOutline,
   ShieldCheckmarkOutline, ShieldOutline, SyncOutline, WarningOutline,
@@ -227,10 +260,20 @@ const oneStep = ref(-1)
 const oneFailed = ref(null)
 const onePwError = ref('')
 const failRef = ref(null)
+// the beta channel (GET /check -> beta): read when the page opens and on every check, never installed without the ticked box
+const beta = ref(null)
+const betaAccept = ref(false)
+const betaPassword = ref('')
+const betaWorking = ref(false)
+const betaError = ref('')
 let stepTimers = []
 let poll = null
 
 const busy = computed(() => phase.value !== 'idle')
+const onBeta = computed(() => /-beta/.test(st.value?.runningVersion ?? ''))
+// like the stable `refused`: an unsigned beta on a server that needs signatures is refused, so say it before anyone clicks
+const betaRefused = computed(() => !!beta.value && !beta.value.signed && !!st.value?.signatureRequired)
+const canBeta = computed(() => !!beta.value && betaAccept.value && !!betaPassword.value && !betaRefused.value && !betaWorking.value && canUpdate.value && !busy.value)
 const canUpdate = computed(() => !!st.value?.enabled && !!st.value?.supervised)
 const pendingVersion = computed(() => st.value?.pending?.dir.split('-')[0] ?? '')
 const rollbackOptions = computed(() => {
@@ -243,6 +286,29 @@ const rollbackOptions = computed(() => {
 async function load() {
   loading.value = true
   try { st.value = await api.updateStatus() } catch (e) { fb.fail(e) } finally { loading.value = false }
+}
+
+/** the beta card is shown when the source has one: asked once when the page opens (an error here is not shown, the button says it) */
+async function lookForBeta() {
+  if (!st.value?.source?.enabled) return
+  try { beta.value = (await api.updateCheck()).beta ?? null } catch { beta.value = null }
+}
+
+async function installBeta() {
+  if (!canBeta.value) return
+  const target = beta.value.version
+  betaWorking.value = true
+  betaError.value = ''
+  try {
+    const before = await bootId()
+    await api.updateFetchBeta(betaPassword.value)
+    betaPassword.value = ''
+    betaAccept.value = false
+    betaWorking.value = false
+    await afterRestart(before, target)
+  } catch (e) {
+    betaError.value = errorText(e, t('common.unknownError'))
+  } finally { betaWorking.value = false }
 }
 
 async function sendPackage(file) {
@@ -293,10 +359,12 @@ async function checkSource(open) {
   checkError.value = ''
   try {
     const r = await api.updateCheck()
+    beta.value = r.beta ?? null
     check.value = r.latest ? r : null
     if (open && r.newer) openOne()
   } catch (e) {
     check.value = null
+    beta.value = null
     checkError.value = errorText(e, t('common.unknownError'))
   } finally { checking.value = false }
 }
@@ -377,6 +445,7 @@ watch(locale, () => {
   if (oneFailed.value) oneFailed.value = { ...oneFailed.value, message: '' }
   onePwError.value = ''
   refused.value = null
+  betaError.value = ''
 })
 
 async function discard() {
@@ -434,6 +503,7 @@ const rollback = () => password.value && run(() => api.updateRollback(rollbackTa
 onMounted(async () => {
   poll = setInterval(() => { if (!busy.value && !rollbackOpen.value && !oneOpen.value) load() }, 15_000)
   await load()
+  lookForBeta()
   // from the dashboard's "update" button: check right away, and open the dialog when there is a newer version
   if (route.query.go) {
     const { go, ...rest } = route.query
@@ -478,4 +548,9 @@ onBeforeUnmount(() => { clearInterval(poll); clearStepTimers() })
 .badge.on { color: var(--primary); font-weight: 500; }
 /* a tag stays on one line by default: let long labels wrap at 375 px */
 .sig { height: auto; min-height: 24px; padding-top: 2px; padding-bottom: 2px; white-space: normal; text-align: left; }
+.beta { border: 2px solid var(--danger); }
+.beta-warn { font-size: 1.4rem; font-weight: 800; line-height: 1.35; color: var(--danger); overflow-wrap: anywhere; }
+.beta-help { margin-top: 8px; font-size: 13.5px; overflow-wrap: anywhere; }
+.beta-accept { margin: 14px 0 12px; align-items: flex-start; }
+@media (max-width: 480px) { .beta-warn { font-size: 1.25rem; } .block { padding: 16px; } }
 </style>

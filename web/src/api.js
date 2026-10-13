@@ -161,7 +161,9 @@ export const api = {
   /** is there a newer version at UPDATE_SOURCE ({ current, latest, newer }) */
   updateCheck: () => get('/api/admin/update/check'),
   /** check, download, verify and install the newest version in one go; a failure names its step in params.step */
-  updateFetchAndApply: password => post('/api/admin/update/fetch-and-apply', { password }),
+  updateFetchAndApply: (password, opts = {}) => post('/api/admin/update/fetch-and-apply', { password, ...opts }),
+  /** the beta channel: the same, but only after the admin accepted the risk */
+  updateFetchBeta: password => post('/api/admin/update/fetch-and-apply', { password, channel: 'beta', acceptBetaRisk: true }),
 
   /** { enabled, kind, host, lastSent: { <kind>: ISO time } }: never the webhook URL itself */
   alerts: () => get('/api/admin/alerts'),
