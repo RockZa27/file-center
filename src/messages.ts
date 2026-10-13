@@ -260,7 +260,7 @@ export const MESSAGES = {
     en: 'manifest.json is missing from the package or unreadable (the package must be built with "bun run package").',
   },
   'update.not-file-center': { th: 'แพ็กเกจนี้ไม่ใช่ของ File Center', en: 'This is not a File Center package.' },
-  'update.bad-version': { th: 'เวอร์ชันในแพ็กเกจต้องอยู่ในรูปแบบ x.y.z', en: 'The package version must look like x.y.z.' },
+  'update.bad-version': { th: 'เวอร์ชันในแพ็กเกจต้องอยู่ในรูปแบบ x.y.z หรือ x.y.z-beta.N', en: 'The package version must look like x.y.z or x.y.z-beta.N.' },
   'update.bad-manifest': { th: 'manifest ของแพ็กเกจไม่ถูกต้อง', en: 'The package manifest is not valid.' },
   'update.missing-files': { th: 'แพ็กเกจต้องมี server.js และ web/index.html', en: 'The package must contain server.js and web/index.html.' },
   'update.files-mismatch': { th: 'ไฟล์ในแพ็กเกจไม่ตรงกับ manifest (มีไฟล์เกินหรือขาด)', en: 'The package files do not match the manifest (files are extra or missing).' },
@@ -297,8 +297,8 @@ export const MESSAGES = {
   'update.source-latest-too-big': { th: 'latest.json ของแหล่งอัปเดตใหญ่เกินกำหนด', en: 'The latest.json of the update source is too big.' },
   'update.source-latest-invalid': { th: 'latest.json ของแหล่งอัปเดตไม่ถูกต้อง', en: 'The latest.json of the update source is not valid.' },
   'update.source-bad-file': {
-    th: 'ชื่อไฟล์แพ็กเกจใน latest.json ไม่ถูกต้อง (ต้องเป็น file-center-x.y.z.zip)',
-    en: 'The package file name in latest.json is not valid (it must be file-center-x.y.z.zip).',
+    th: 'ชื่อไฟล์แพ็กเกจใน latest.json ไม่ถูกต้อง (ต้องเป็น file-center-x.y.z.zip หรือ file-center-x.y.z-beta.N.zip)',
+    en: 'The package file name in latest.json is not valid (it must be file-center-x.y.z.zip or file-center-x.y.z-beta.N.zip).',
   },
   'update.source-not-newer': {
     th: 'เวอร์ชันล่าสุดที่แหล่งอัปเดต ({version}) ไม่ใหม่กว่าเวอร์ชันที่ใช้อยู่ ({running})',
@@ -306,6 +306,17 @@ export const MESSAGES = {
   },
   // dashboard warning and alert: the daily look at UPDATE_SOURCE found a newer version
   'update.available': { th: 'มีเวอร์ชันใหม่ {version} ให้ติดตั้งที่หน้าอัปเดตระบบ', en: 'Version {version} is available on the update page.' },
+  // the beta channel (latest-beta.json): offered only on request, installed only after the admin accepts the risk
+  'update.beta-not-accepted': {
+    th: 'เวอร์ชันเบตายังไม่เสถียรและอาจมีข้อบกพร่อง ต้องยืนยันว่ารับความเสี่ยง (acceptBetaRisk) ก่อนติดตั้ง',
+    en: 'A beta version is not stable and may have bugs. You must accept the risk (acceptBetaRisk) before installing it.',
+  },
+  'update.beta-none': { th: 'แหล่งอัปเดตไม่มีเวอร์ชันเบตา', en: 'The update source has no beta version.' },
+  // dashboard warning while a beta runs
+  'update.on-beta': {
+    th: 'กำลังใช้เวอร์ชันเบตา {version} ซึ่งยังไม่เสถียร เมื่อมีเวอร์ชันปกติที่ใหม่กว่าให้ติดตั้งจากหน้าอัปเดตระบบ',
+    en: 'You are running beta version {version}, which is not stable. Install the next stable version from the update page when it is out.',
+  },
   'update.source-mismatch': {
     th: 'ไฟล์ที่ดาวน์โหลดไม่ตรงกับ SHA-256 หรือขนาดใน latest.json ไฟล์อาจเสียหายหรือถูกแก้ไข',
     en: 'The downloaded file does not match the SHA-256 or size in latest.json. It may be damaged or altered.',

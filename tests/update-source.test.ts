@@ -129,7 +129,7 @@ describe('update source: configuration', () => {
     const s = await admin.json('GET', '/api/admin/update')
     expect(s.data.source).toEqual({ enabled: false, url: null })
     const c = await admin.json('GET', '/api/admin/update/check')
-    expect(c).toEqual({ status: 200, data: { enabled: false, current: config.version, latest: null, newer: false, refused: false } })
+    expect(c).toEqual({ status: 200, data: { enabled: false, current: config.version, latest: null, newer: false, refused: false, beta: null } })
     const f = await admin.json('POST', '/api/admin/update/fetch')
     expect([f.status, f.data.code]).toEqual([409, 'update.source-off'])
     expect(requests).toEqual([])
@@ -184,9 +184,9 @@ describe('update source: check', () => {
     expect(c.data).toEqual({
       enabled: true, current: config.version,
       latest: { version: '9.1.0', notes: 'faster search', size: expect.any(Number), signed: true, builtAt: '2026-10-12T00:00:00.000Z' },
-      newer: true, refused: false,
+      newer: true, refused: false, beta: null,
     })
-    expect(requests).toEqual(['/fc/updates/latest.json'])
+    expect(requests).toEqual(['/fc/updates/latest.json', '/fc/updates/latest-beta.json'])
   })
 
   test('the running version, or an older one, is not newer', async () => {

@@ -18,6 +18,7 @@ import { chmodSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writ
 import { join, relative, resolve, sep } from 'node:path'
 import { zipSync } from 'fflate'
 import pkg from '../package.json'
+import { isVersion } from '../src/release'
 
 const root = resolve(import.meta.dir, '..')
 const args = process.argv.slice(2)
@@ -61,7 +62,7 @@ if (args.includes('--sign')) {
 const version = opt('version') ?? pkg.version
 const notes = opt('notes') ?? ''
 const outDir = resolve(opt('out') ?? join(root, 'dist-update'))
-if (!/^\d+\.\d+\.\d+$/.test(version)) throw new Error(`version must look like 1.2.3 (got "${version}")`)
+if (!isVersion(version)) throw new Error(`version must look like 1.2.3 or 1.2.3-beta.1 (got "${version}")`)
 
 if (!args.includes('--skip-web')) {
   console.log('• build หน้าเว็บ')

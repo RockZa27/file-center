@@ -12,8 +12,9 @@ import { randomBytes } from 'node:crypto'
 import { open, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { config, paths } from './config'
+import { log } from './logger'
 import { bad, conflict, ensureDir, ensureSpace, HttpError } from './fsx'
-import { compareVersions, isVersion } from './release'
+import { compareVersions, isBeta, isVersion, VERSION_PATTERN } from './release'
 import { runningVersion, signatureRequired } from './updater'
 
 /** how long and how much; tests make the timeouts shorter */
@@ -26,7 +27,7 @@ export const SOURCE_LIMITS = {
 }
 
 /** plain name, no folders: it is appended to the source URL */
-const PACKAGE_FILE = /^file-center-\d{1,6}\.\d{1,6}\.\d{1,6}\.zip$/
+const PACKAGE_FILE = new RegExp(`^file-center-${VERSION_PATTERN}\\.zip$`)
 const SHA256 = /^[a-f0-9]{64}$/
 const LOCAL_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]'])
 
@@ -132,10 +133,16 @@ async function download(url: string, o: {
   }
 }
 
-/** <source>/latest.json, checked field by field */
-async function fetchLatest(base: string): Promise<Latest> {
+export type Channel = 'stable' | 'beta'
+const CHANNEL_FILE: Record<Channel, string> = { stable: 'latest.json', beta: 'latest-beta.json' }
+
+/**
+ * <source>/latest.json (or latest-beta.json for the beta channel), checked field by field. latest.json must name a
+ * stable version and latest-beta.json a -beta.N one: a file in the wrong place is not trusted.
+ */
+async function fetchLatest(base: string, channel: Channel = 'stable'): Promise<Latest> {
   const chunks: Uint8Array[] = []
-  await download(`${base}/latest.json`, {
+  await download(`${base}/${CHANNEL_FILE[channel]}`, {
     timeoutMs: SOURCE_LIMITS.latestTimeoutMs,
     maxBytes: SOURCE_LIMITS.latestBytes,
     tooBig: new HttpError(502, 'update.source-latest-too-big'),
@@ -147,6 +154,7 @@ async function fetchLatest(base: string): Promise<Latest> {
   if (
     !j || typeof j !== 'object' || Array.isArray(j) || !isVersion(j.version) || typeof j.file !== 'string' ||
     typeof j.sha256 !== 'string' || !SHA256.test(j.sha256) || !Number.isSafeInteger(j.size) || j.size <= 0 ||
+    (channel === 'beta') !== isBeta(j.version) ||
     !optional(j.builtAt, 'string') || !optional(j.notes, 'string') || !optional(j.signed, 'boolean')
   ) throw new HttpError(502, 'update.source-latest-invalid')
   return {
@@ -155,12 +163,28 @@ async function fetchLatest(base: string): Promise<Latest> {
   }
 }
 
-/** GET /api/admin/update/check */
-export async function checkSource() {
+/**
+ * The newest beta, or null when there is none worth offering: no latest-beta.json (a plain 404), one that can not be
+ * read (logged, the stable answer must not fail because of it), or one not newer than `current` and `stable`.
+ */
+async function fetchOfferedBeta(base: string, current: string, stable: string): Promise<Latest | null> {
+  try {
+    const b = await fetchLatest(base, 'beta')
+    return compareVersions(b.version, current) > 0 && compareVersions(b.version, stable) > 0 ? b : null
+  } catch (e) {
+    const missing = e instanceof HttpError && e.code === 'update.source-status' && e.params.status === 404
+    if (!missing) log.warn('update-beta-check-failed', e instanceof HttpError ? e.message : e)
+    return null
+  }
+}
+
+/** GET /api/admin/update/check. `beta: false` (the daily look) leaves the beta channel alone: not even asked. */
+export async function checkSource({ beta = true }: { beta?: boolean } = {}) {
   const base = activeBase()
   const current = runningVersion()
-  if (!base) return { enabled: false, current, latest: null, newer: false, refused: false }
+  if (!base) return { enabled: false, current, latest: null, newer: false, refused: false, beta: null }
   const l = await fetchLatest(base)
+  const b = beta ? await fetchOfferedBeta(base, current, l.version) : null
   return {
     enabled: true,
     current,
@@ -168,6 +192,8 @@ export async function checkSource() {
     latest: { version: l.version, notes: l.notes, size: l.size, signed: l.signed, builtAt: l.builtAt },
     refused: !l.signed && signatureRequired(),
     newer: compareVersions(l.version, current) > 0,
+    // newer than the running version AND than the newest stable; only for an admin who asked (never announced)
+    beta: b && { version: b.version, notes: b.notes, size: b.size, signed: b.signed, builtAt: b.builtAt },
   }
 }
 
@@ -179,7 +205,7 @@ let announced: string | null = null
  * or null. Only latest.json is read; nothing is downloaded. Throws like /check when the source can not be read.
  */
 export async function lookForNewVersion(): Promise<string | null> {
-  const c = await checkSource()
+  const c = await checkSource({ beta: false })
   announced = c.newer && c.latest ? c.latest.version : null
   return announced
 }
@@ -195,16 +221,24 @@ let fetching = false
  * Download the package latest.json names into the incoming folder and check it against its SHA-256 and size.
  * The caller stages it (the same path as an uploaded package) and deletes the file afterwards.
  */
-export async function fetchPackage(): Promise<{ path: string; size: number; version: string }> {
+export async function fetchPackage(channel: Channel = 'stable'): Promise<{ path: string; size: number; version: string }> {
   const base = activeBase()
   if (!base) throw conflict('update.source-off')
   if (fetching) throw conflict('update.busy')
   fetching = true
   try {
-    const latest = await fetchLatest(base)
+    const latest = await fetchLatest(base, channel).catch(e => {
+      if (channel === 'beta' && e instanceof HttpError && e.code === 'update.source-status' && e.params.status === 404) throw bad('update.beta-none')
+      throw e
+    })
     if (!PACKAGE_FILE.test(latest.file)) throw new HttpError(502, 'update.source-bad-file')
     if (compareVersions(latest.version, runningVersion()) <= 0) {
       throw bad('update.source-not-newer', { version: latest.version, running: runningVersion() })
+    }
+    // a beta is only worth installing while it is ahead of the stable release too
+    if (channel === 'beta') {
+      const stable = await fetchLatest(base)
+      if (compareVersions(latest.version, stable.version) <= 0) throw bad('update.source-not-newer', { version: latest.version, running: stable.version })
     }
     // latest.json says it is unsigned: do not download 100 MB to refuse it (the signature is checked again when staging)
     if (!latest.signed && signatureRequired()) throw bad('update.unsigned')

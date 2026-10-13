@@ -3,25 +3,29 @@
  *
  *   bun run release                         build file-center-<version>.zip and commit it to the local branch `updates`
  *   bun run release --notes "what changed" --sign ~/keys/update-signing.key --push      ...and push it to origin
+ *   bun run release --beta --sign ~/keys/update-signing.key    a beta (package.json version x.y.z-beta.N): written to latest-beta.json
  *   (--skip-web reuses web/dist instead of building the page again)
  *
  * Servers install only signed packages, so a release needs --sign <private key file>; --unsigned publishes one without
  * a signature on purpose (only servers with UPDATE_ALLOW_UNSIGNED=true will take it).
  *
  * Refuses unless the working tree is clean (the package must be exactly the commit it names) and package.json's
- * version is newer than every version already in `updates`. The package is built by scripts/package.ts. The branch
+ * version is newer than every version already in `updates` (a stable release: newer than every stable one, so
+ * 1.9.0 may follow 1.9.0-beta.2; a --beta release: newer than every one, stable or beta). A -beta version needs
+ * --beta and --beta needs a -beta version. A beta never touches latest.json, which servers before 1.8.0 read. The package is built by scripts/package.ts. The branch
  * is changed in a temporary git worktree, so the checkout you work in is never touched; it holds only packages:
  *
  *   file-center-<version>.zip   one per release, kept so an older one can still be downloaded by hand
  *   SHA256SUMS                  of every zip ("sha256sum -c SHA256SUMS")
  *   README.md                   a table of the versions, in Thai (the branch page on GitHub shows it)
- *   latest.json                 the newest one, read by the update page: { version, file, sha256, size, builtAt, commit, notes, signed }
+ *   latest.json                 the newest stable one, read by the update page: { version, file, sha256, size, builtAt, commit, notes, signed }
+ *   latest-beta.json            the newest beta, same fields plus "channel": "beta" (only servers 1.8.0+ read it, when an admin asks)
  */
 import { copyFileSync, constants as FS, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { unzipSync } from 'fflate'
-import { compareVersions, isVersion } from '../src/release'
+import { compareVersions, isBeta, isVersion } from '../src/release'
 
 const root = resolve(import.meta.dir, '..')
 const args = process.argv.slice(2)
@@ -32,7 +36,7 @@ const opt = (name: string) => {
 const BRANCH = 'updates'
 const LOCAL = `refs/heads/${BRANCH}`
 const REMOTE = `refs/remotes/origin/${BRANCH}`
-const ZIP = /^file-center-(\d+\.\d+\.\d+)\.zip$/
+const ZIP = /^file-center-(\d+\.\d+\.\d+(?:-beta\.\d+)?)\.zip$/
 
 function fail(message: string): never {
   console.error(`✗ ${message}`)
@@ -64,13 +68,16 @@ if (!signKey && !unsigned) {
   fail('แพ็กเกจต้องเซ็นก่อนเผยแพร่ (เซิร์ฟเวอร์รับเฉพาะแพ็กเกจที่เซ็น): bun run release --sign <ไฟล์กุญแจส่วนตัว> หรือใส่ --unsigned ถ้าตั้งใจเผยแพร่โดยไม่เซ็น\n  (package must be signed: --sign <private key file>, or --unsigned on purpose)')
 }
 const push = args.includes('--push')
+const beta = args.includes('--beta')
 
 // ── the source: exactly one commit, nothing on top of it
 if (!run(['git', 'rev-parse', '--git-dir']).ok) fail(`${root} is not a git repository`)
 const dirty = git(['status', '--porcelain'])
 if (dirty) fail(`มีไฟล์ที่ยังไม่ได้ commit ให้ commit หรือเก็บออกก่อน (แพ็กเกจต้องตรงกับ commit ที่ระบุ):\n${dirty}`)
 const version = String(JSON.parse(readFileSync(join(root, 'package.json'), 'utf8')).version)
-if (!isVersion(version)) fail(`version ใน package.json ต้องอยู่ในรูปแบบ x.y.z (ได้ "${version}")`)
+if (!isVersion(version)) fail(`version ใน package.json ต้องอยู่ในรูปแบบ x.y.z หรือ x.y.z-beta.N (ได้ "${version}")`)
+if (beta && !isBeta(version)) fail(`--beta ต้องใช้ version แบบ x.y.z-beta.N (ได้ "${version}")\n  (--beta needs a -beta.N version)`)
+if (!beta && isBeta(version)) fail(`version ${version} เป็นเบตา ใช้ "bun run release --beta" (รุ่นปกติไม่รับ -beta)\n  (a -beta version is published with --beta only)`)
 const commit = git(['rev-parse', '--short', 'HEAD'])
 const sourceBranch = run(['git', 'symbolic-ref', '--short', '-q', 'HEAD']).out
 
@@ -95,15 +102,18 @@ if (local) {
     const m = ZIP.exec(name)
     if (m && isVersion(m[1])) published.push(m[1])
   }
-  const latest = run(['git', 'show', `${local}:latest.json`])
-  if (latest.ok) {
-    try {
-      const v = JSON.parse(latest.out).version
-      if (isVersion(v)) published.push(v)
-    } catch { /* a broken latest.json is rewritten below */ }
+  for (const f of ['latest.json', 'latest-beta.json']) {
+    const latest = run(['git', 'show', `${local}:${f}`])
+    if (latest.ok) {
+      try {
+        const v = JSON.parse(latest.out).version
+        if (isVersion(v)) published.push(v)
+      } catch { /* a broken latest file is rewritten below */ }
+    }
   }
 }
-const newest = published.sort(compareVersions).at(-1)
+// a beta must beat everything published; a stable release only the stable ones (1.9.0 may follow 1.9.0-beta.2)
+const newest = published.filter(v => beta || !isBeta(v)).sort(compareVersions).at(-1)
 if (newest && compareVersions(version, newest) <= 0) {
   fail(`เวอร์ชัน ${version} ไม่ใหม่กว่า ${newest} ที่มีใน branch ${BRANCH} แล้ว ให้เพิ่ม version ใน package.json ก่อน`)
 }
@@ -128,7 +138,8 @@ ${TABLE_HEADER}
 ## ข้อควรรู้
 - หน้าอัปเดตรับเฉพาะเวอร์ชันที่ใหม่กว่าที่ติดตั้งอยู่
 - เซิร์ฟเวอร์รับเฉพาะแพ็กเกจที่เซ็นด้วยกุญแจที่ตรงกัน (กุญแจของ File Center ที่ฝังมา หรือ \`UPDATE_PUBLIC_KEY\`) ดูคอลัมน์ "เซ็น"
-- \`latest.json\` บอกเวอร์ชันล่าสุด หน้าอัปเดตอ่านไฟล์นี้
+- \`latest.json\` บอกเวอร์ชันปกติล่าสุด หน้าอัปเดตอ่านไฟล์นี้
+- \`latest-beta.json\` บอกเวอร์ชันเบตาล่าสุด (แถวที่มี "เบตา" ในตาราง) เบตายังไม่เสถียร หน้าอัปเดตแสดงให้เลือกพร้อมคำเตือน และไม่แตะ \`latest.json\`
 `
 
 /** add the new version as the first row of the versions table; a table without the "เซ็น" column gets one */
@@ -177,14 +188,15 @@ try {
   writeFileSync(join(tree, 'SHA256SUMS'), zips.map(n => `${sha256(join(tree, n))}  ${n}\n`).join(''))
   const readmeFile = join(tree, 'README.md')
   const from = `\`${commit}\`${sourceBranch ? ` (${sourceBranch})` : ''}`
-  const row = `| ${version} | [${file}](${file}) | ${from} | ${cell(notes) || '-'} | ${signed ? 'ใช่' : 'ไม่'} |`
+  const row = `| ${version}${beta ? ' **เบตา**' : ''} | [${file}](${file}) | ${from} | ${cell(notes) || '-'} | ${signed ? 'ใช่' : 'ไม่'} |`
   writeFileSync(readmeFile, addRow(existsSync(readmeFile) ? readFileSync(readmeFile, 'utf8') : README, row))
   const latest = {
     version, file, sha256: sha256(zip), size: statSync(zip).size, builtAt: String(manifest.builtAt ?? ''), commit, notes, signed,
+    ...(beta ? { channel: 'beta' } : {}),
   }
-  writeFileSync(join(tree, 'latest.json'), JSON.stringify(latest, null, 2) + '\n')
+  writeFileSync(join(tree, beta ? 'latest-beta.json' : 'latest.json'), JSON.stringify(latest, null, 2) + '\n')
   git(['add', '-A'], tree)
-  git(['commit', '--quiet', '-m', `Update package ${version} (built from ${sourceBranch || 'commit'} ${commit})`], tree)
+  git(['commit', '--quiet', '-m', `Update package ${version}${beta ? ' (beta)' : ''} (built from ${sourceBranch || 'commit'} ${commit})`], tree)
   console.log(`✓ ${file} อยู่ใน branch ${BRANCH} แล้ว (sha256 ${latest.sha256}, ${signed ? 'เซ็นแล้ว' : 'ไม่ได้เซ็น'})`)
 
   if (push) {

@@ -8,7 +8,8 @@ import { bad, conflict, ensureDir, forbidden, fromFsError, HttpError } from '../
 import { restartSoon, supervised } from '../lifecycle'
 import { log } from '../logger'
 import { langOf } from '../messages'
-import { checkSource, fetchPackage, sourceStatus } from '../update-source'
+import { isBeta } from '../release'
+import { checkSource, fetchPackage, sourceStatus, type Channel } from '../update-source'
 import { applyStaged, discardStaged, rollbackTo, stagePackage, updateStatus } from '../updater'
 import { completeUpload, initUpload, uploadsInProgress } from '../uploads'
 
@@ -19,6 +20,14 @@ function enabled() {
   if (!supervised()) {
     throw new HttpError(409, 'not-supervised')
   }
+}
+
+/** `channel` is optional (stable); a beta needs `acceptBetaRisk: true` and is refused before anything is downloaded */
+const channelBody = { channel: t.Optional(t.Union([t.Literal('stable'), t.Literal('beta')])), acceptBetaRisk: t.Optional(t.Boolean()) }
+function channelOf(body: { channel?: Channel; acceptBetaRisk?: boolean } | null | undefined): Channel {
+  const channel = body?.channel ?? 'stable'
+  if (channel === 'beta' && body?.acceptBetaRisk !== true) throw bad('update.beta-not-accepted')
+  return channel
 }
 
 type Step = 'check' | 'fetch' | 'stage' | 'apply'
@@ -54,10 +63,11 @@ export const updateRoutes = new Elysia({ prefix: '/api/admin/update' })
   })
 
   // download the newest package from UPDATE_SOURCE and stage it exactly like an uploaded one (same answer as /stage)
-  .post('/fetch', async ({ user, ip }) => {
+  .post('/fetch', async ({ user, ip, body }) => {
     const admin = requireAdmin({ user, ip })
     enabled()
-    const got = await fetchPackage()
+    const channel = channelOf(body)
+    const got = await fetchPackage(channel)
     try {
       const staged = await stagePackage(got.path, got.size)
       audit({ user: admin.username, ip, action: 'update-fetch', detail: staged.version })
@@ -65,7 +75,7 @@ export const updateRoutes = new Elysia({ prefix: '/api/admin/update' })
     } finally {
       rmSync(got.path, { force: true })
     }
-  })
+  }, { body: t.Optional(t.Object(channelBody)) })
 
   // 1) announce the package, 2) PUT its chunks to /api/upload/:id/:n, 3) stage it
   .post('/upload', ({ user, ip, body }) => {
@@ -103,6 +113,7 @@ export const updateRoutes = new Elysia({ prefix: '/api/admin/update' })
     const r = await applyStaged(body.id)
     audit({ user: admin.username, ip, action: 'update-apply', detail: r.version })
     if (!r.signed) audit({ user: admin.username, ip, action: 'update-apply-unsigned', detail: r.version })
+    if (isBeta(r.version)) audit({ user: admin.username, ip, action: 'update-apply-beta', detail: r.version })
     restartSoon()
     return { ok: true, version: r.version, restarting: true }
   }, { body: t.Object({ id: t.String(), password: t.String({ maxLength: 1000 }) }) })
@@ -111,12 +122,15 @@ export const updateRoutes = new Elysia({ prefix: '/api/admin/update' })
   .post('/fetch-and-apply', async ({ user, ip, body }) => {
     const admin = requireAdmin({ user, ip })
     enabled()
+    const channel = channelOf(body)
     // before anything is downloaded: a stolen session alone must not even make the server fetch a package
     await confirmPassword(admin, ip, body.password, 'update-denied')
-    const checked = await step('check', () => checkSource())
+    const checked = await step('check', () => checkSource({ beta: channel === 'beta' }))
     if (!checked.enabled) throw withStep(conflict('update.source-off'), 'check')
-    if (!checked.newer) throw withStep(bad('update.source-not-newer', { version: checked.latest!.version, running: checked.current }), 'check')
-    const got = await step('fetch', () => fetchPackage())
+    if (channel === 'beta') {
+      if (!checked.beta) throw withStep(bad('update.beta-none'), 'check')
+    } else if (!checked.newer) throw withStep(bad('update.source-not-newer', { version: checked.latest!.version, running: checked.current }), 'check')
+    const got = await step('fetch', () => fetchPackage(channel))
     let staged: Awaited<ReturnType<typeof stagePackage>>
     try {
       staged = await step('stage', () => stagePackage(got.path, got.size))
@@ -134,9 +148,10 @@ export const updateRoutes = new Elysia({ prefix: '/api/admin/update' })
     }
     audit({ user: admin.username, ip, action: 'update-apply', detail: r.version })
     if (!r.signed) audit({ user: admin.username, ip, action: 'update-apply-unsigned', detail: r.version })
+    if (isBeta(r.version)) audit({ user: admin.username, ip, action: 'update-apply-beta', detail: r.version })
     restartSoon()
     return { ok: true, version: r.version, restarting: true }
-  }, { body: t.Object({ password: t.String({ maxLength: 1000 }) }) })
+  }, { body: t.Object({ password: t.String({ maxLength: 1000 }), ...channelBody }) })
 
   .post('/rollback', async ({ user, ip, body }) => {
     const admin = requireAdmin({ user, ip })
