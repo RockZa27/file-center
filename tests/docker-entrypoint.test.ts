@@ -178,3 +178,73 @@ describe('docker entrypoint', () => {
     expect(dockerfile).not.toMatch(/^USER /m)
   })
 })
+
+// the container hardening and the security job are plain text files: pin what the README promises
+describe('hardening and security job', () => {
+  const root = resolve(import.meta.dir, '..')
+  const read = (f: string) => readFileSync(join(root, f), 'utf8')
+
+  test('the runtime stage is the slim image, the build stage is unchanged', () => {
+    const froms = read('Dockerfile').split('\n').filter(l => l.startsWith('FROM '))
+    expect(froms).toEqual(['FROM oven/bun:1.4.2 AS build', 'FROM oven/bun:1.4.2-slim'])
+  })
+
+  test('compose: read-only root, only /data and a tmpfs /tmp writable, no capabilities but the entrypoint needs', () => {
+    const app = read('docker-compose.yml').split(/^  cloudflared:/m)[0]
+    expect(app).toMatch(/^ +read_only: true$/m)
+    expect(app).toMatch(/^ +- \/tmp:/m)
+    expect(app).toMatch(/^ +cap_drop: \[ALL\]$/m)
+    expect(app).toMatch(/^ +cap_add: \[CHOWN, SETUID, SETGID, DAC_OVERRIDE\]$/m)
+    expect(app).toMatch(/^ +- no-new-privileges:true$/m)
+    expect(app).toMatch(/^ +mem_limit: \$\{FC_MEMORY_LIMIT:-\w+\}$/m)
+    expect(app).toMatch(/^ +pids_limit: \$\{FC_PIDS_LIMIT:-\d+\}$/m)
+    // the only volume is /data
+    expect(app.match(/^ +- \.\/data:\/data$/gm)?.length).toBe(1)
+  })
+
+  test('the entrypoint uses no other privileged tool than chown and setpriv', () => {
+    const sh = read('scripts/docker-entrypoint.sh').replace(/^\s*#.*$/gm, '')
+    for (const tool of ['mount', 'chmod', 'setcap', 'iptables', 'mknod']) expect(sh).not.toContain(tool)
+  })
+
+  test('workflow: security job audits, runs Trivy on repo and image with the HIGH/CRITICAL fixable gate, actions pinned', () => {
+    const wf = read('.github/workflows/qa.yml')
+    const job = wf.split(/^  security:/m)[1] ?? ''
+    expect(job).toContain('bun audit --audit-level=high')
+    expect(job).toMatch(/scan-type: fs/)
+    expect(job).toMatch(/scan-type: image/)
+    expect(job).toContain('scanners: vuln,secret,misconfig')
+    expect(job.match(/severity: HIGH,CRITICAL/g)?.length).toBe(2)
+    expect(job.match(/ignore-unfixed: true/g)?.length).toBe(4)
+    expect(job.match(/exit-code: "1"/g)?.length).toBe(2)
+    expect(job).toContain('format: sarif')
+    expect(job).toContain('name: security-results')
+    // every action: a full version (vX.Y.Z), none of the Node 20 majors
+    const uses = [...wf.matchAll(/uses: (\S+)@(\S+)/g)]
+    expect(uses.length).toBeGreaterThan(8)
+    for (const [, name, ver] of uses) expect(`${name}@${ver}`).toMatch(/@v\d+\.\d+\.\d+$/)
+    expect(wf).not.toMatch(/checkout@v4|upload-artifact@v4|setup-bun@v2\.0/)
+  })
+
+  test('.trivyignore: every entry has a reason comment right above it', () => {
+    let reason = false
+    let entries = 0
+    for (const line of read('.trivyignore').split('\n')) {
+      if (line.startsWith('#')) reason = true
+      else if (line.trim() === '') reason = false
+      else {
+        entries++
+        expect(reason).toBe(true)
+      }
+    }
+    expect(entries).toBeGreaterThan(0)
+  })
+
+  test('ci-docker.sh checks read-only root, empty capabilities and no-new-privileges', () => {
+    const sh = read('scripts/ci-docker.sh')
+    expect(sh).toContain('--read-only')
+    expect(sh).toContain('CapEff')
+    expect(sh).toContain('NoNewPrivs')
+    expect(sh).toContain('FC_RUN_AS_ROOT=true')
+  })
+})

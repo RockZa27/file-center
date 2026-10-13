@@ -29,6 +29,22 @@ services:
     volumes:
       # ./data/storage = ไฟล์ที่อัปโหลด, ./data/system = ผู้ใช้ ตั้งค่า ประวัติ ถังขยะ session
       - ./data:/data
+    # เสริมความปลอดภัยของคอนเทนเนอร์ (ดูหัวข้อ "ตั้งค่าความปลอดภัยของคอนเทนเนอร์" ใน README ว่าถ้า host ใช้ไม่ได้ให้แก้อะไร)
+    # ระบบไฟล์ของอิมเมจอ่านอย่างเดียว เขียนได้เฉพาะ /data (ข้อมูล และเวอร์ชันที่อัปเดตจากเว็บใน /data/system/app) กับ /tmp
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    # ตัดสิทธิ์ทั้งหมดออก เหลือเท่าที่ entrypoint ต้องใช้ตอนเริ่ม (chown -R ครั้งเดียวแล้วลดเป็น bun ด้วย setpriv):
+    #   CHOWN = เปลี่ยนเจ้าของ ./data ของการติดตั้งเก่า, SETUID/SETGID = ลดจาก root เป็น bun (และตั้งกลุ่ม),
+    #   DAC_OVERRIDE = อ่าน/เดินเข้าโฟลเดอร์ใน ./data ที่เป็นของผู้ใช้อื่นและปิดสิทธิ์ไว้ (ตอน chown และตอน FC_RUN_AS_ROOT=true)
+    # หลังลดเป็น bun แล้ว แอปไม่เหลือสิทธิ์เลย
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETUID, SETGID, DAC_OVERRIDE]
+    security_opt:
+      - no-new-privileges:true
+    # กันแอปกินเครื่องทั้งเครื่อง ปรับได้ใน .env (FC_MEMORY_LIMIT=4g, FC_PIDS_LIMIT=1024)
+    mem_limit: ${FC_MEMORY_LIMIT:-2g}
+    pids_limit: ${FC_PIDS_LIMIT:-512}
 
   # Cloudflare Tunnel พาผู้ใช้จากโดเมนเข้ามาที่ file-center โดยไม่ต้องเปิดพอร์ตหรือมี IP จริง
   # ทำงานเมื่อ .env มี COMPOSE_PROFILES=tunnel และ TUNNEL_TOKEN (ดูหัวข้อ Cloudflare Tunnel ใน README)
