@@ -10,6 +10,7 @@
 import { accessFor, allUsers, type User } from './auth'
 import { bad, HttpError, treeStats, within } from './fsx'
 import { sizeText } from './messages'
+import { versionBytesUnder } from './versions'
 
 /** biggest quota an admin may set (1 PiB) */
 export const QUOTA_MAX = 2 ** 50
@@ -50,7 +51,8 @@ function recount(user: User): Promise<void> {
   const started = epochs.get(k) ?? 0
   const p = (async () => {
     const r = await treeStats(root, LIMIT)
-    cache.set(k, { root, size: r.size, truncated: r.truncated, at: Date.now(), stale: (epochs.get(k) ?? 0) !== started })
+    // the earlier versions of the files in this home count too
+    cache.set(k, { root, size: r.size + versionBytesUnder(root), truncated: r.truncated, at: Date.now(), stale: (epochs.get(k) ?? 0) !== started })
   })().catch(() => { /* nothing saved: the next call counts again */ }).finally(() => { counting.delete(k) })
   counting.set(k, p)
   return p

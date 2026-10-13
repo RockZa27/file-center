@@ -16,6 +16,7 @@ import { cleanQuota, forget } from '../quota'
 import { settings } from '../settings'
 import { revokeSharesOf } from '../shares'
 import { DISK_CRITICAL_PERCENT, DISK_LOW_PERCENT, diskInfo, storageStats } from '../stats'
+import { removeUserState } from '../favorites'
 import { listTrash, purge, restore, trashSummary } from '../trash'
 import { availableVersion } from '../update-source'
 import { uploadsInProgress } from '../uploads'
@@ -147,6 +148,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     saveUsers()
     destroyUserSessions(target.username)
     revokeSharesOf(target.username)
+    removeUserState(target.username)
     audit({ user: admin.username, ip, action: 'user-delete', target: target.username })
     return { ok: true }
   })

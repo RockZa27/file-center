@@ -13,6 +13,8 @@ import { accessLine, log } from './logger'
 import { adminRoutes } from './routes/admin'
 import { backupRoutes } from './routes/backup'
 import { fileRoutes } from './routes/files'
+import { meRoutes } from './routes/me'
+import { versionRoutes } from './routes/versions'
 import { logRoutes } from './routes/logs'
 import { officeRoutes } from './routes/office'
 import { sessionRoutes } from './routes/session'
@@ -21,6 +23,7 @@ import { updateRoutes } from './routes/update'
 import { uploadRoutes } from './routes/upload'
 import { purgeExpiredShares } from './shares'
 import { purgeExpired } from './trash'
+import { purgeExpiredVersions } from './versions'
 import { cleanStaleUploads } from './uploads'
 import { officeConfig, officeOrigin } from './office'
 import { cleanStaging, signingKey } from './updater'
@@ -42,11 +45,12 @@ if (office.error) log.warn('office-config-invalid', `ตั้งค่า ONLYO
 function housekeeping() {
   try {
     const trash = purgeExpired()
+    const versions = purgeExpiredVersions()
     const uploads = cleanStaleUploads()
     purgeExpiredSessions()
     cleanStaging()
     pruneLoginAttempts()
-    if (trash || uploads) log.info('housekeeping', { trash, staleUploads: uploads })
+    if (trash || uploads || versions) log.info('housekeeping', { trash, staleUploads: uploads, versions })
     // runs in the background; the result goes to backup-status.json, which the dashboard shows
     if (backupDue() && !backupRunning()) {
       runBackup().then(
@@ -152,6 +156,8 @@ export const app = new Elysia({ serve: { maxRequestBodySize: config.uploadChunkS
   .use(backupRoutes)
   .use(logRoutes)
   .use(fileRoutes)
+  .use(meRoutes)
+  .use(versionRoutes)
   .use(uploadRoutes)
   .use(shareRoutes)
   .use(officeRoutes)

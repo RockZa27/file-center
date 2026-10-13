@@ -755,6 +755,10 @@ describe('full system: CSRF', () => {
       ['POST', '/api/shares', { ...files, path: '/matrix.txt', days: 7 }],
       ['DELETE', '/api/shares/:id'],
       ['POST', '/api/office/config', { ...files, path: '/matrix.txt', mode: 'edit' }],
+      ['POST', '/api/me/favorites', { ...files, path: '/matrix.txt' }],
+      ['DELETE', '/api/me/favorites', { ...files, path: '/matrix.txt' }],
+      ['POST', '/api/versions/:id/restore', { ...files, path: '/matrix.txt' }],
+      ['DELETE', '/api/versions/:id'],
     ]
     // the exceptions, on purpose: a share link's password form needs no session (tests/shares.test.ts), and the
     // ONLYOFFICE callback comes from the document server, which has no session: it proves itself with a signed token
