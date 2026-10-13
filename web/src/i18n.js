@@ -20,7 +20,7 @@ const th = {
     files: 'ไฟล์ของฉัน', dashboard: 'ภาพรวมระบบ', users: 'ผู้ใช้', activity: 'ประวัติการใช้งาน', trash: 'ถังขยะ',
     settings: 'ตั้งค่า', update: 'อัปเดตระบบ', backup: 'สำรองข้อมูล', logs: 'บันทึกระบบ', login: 'เข้าสู่ระบบ', logout: 'ออกจากระบบ', changePassword: 'เปลี่ยนรหัสผ่าน', account: 'บัญชีและความปลอดภัย',
     language: 'ภาษา', theme: 'ธีม', themeLight: 'โหมดสว่าง', themeDark: 'โหมดมืด', themeAuto: 'ตามระบบ',
-    publicPage: 'หน้าสาธารณะ', publicFolder: 'โฟลเดอร์สาธารณะ', admin: 'ผู้ดูแลระบบ', shareLinks: 'ลิงก์ที่แชร์',
+    publicPage: 'หน้าสาธารณะ', publicFolder: 'โฟลเดอร์สาธารณะ', admin: 'ผู้ดูแลระบบ', shareLinks: 'ลิงก์ที่แชร์', favorites: 'รายการโปรด',
   },
   login: {
     codeHelp: 'เปิดแอปยืนยันตัวตนบนมือถือ แล้วกรอกรหัส 6 หลัก', backupHelp: 'กรอกรหัสสำรองหนึ่งรหัส (ใช้ได้ครั้งเดียว)', code: 'รหัส 6 หลัก', backupCode: 'รหัสสำรอง',
@@ -59,6 +59,22 @@ const th = {
     unsaved: 'ยังไม่ได้บันทึก', unsavedText: 'มีการแก้ไขที่ยังไม่ได้บันทึก ต้องการทิ้งการแก้ไขนี้ไหม?', discard: 'ทิ้งการแก้ไข',
     publicHint: 'ไฟล์ในโฟลเดอร์นี้ผู้เยี่ยมชมทุกคนเห็นและดาวน์โหลดได้ สิ่งที่คุณทำได้ในโฟลเดอร์นี้:',
     folderNotFound: 'ไม่พบโฟลเดอร์ {path} จึงกลับไปที่หน้าแรก',
+    destSpace: 'ปลายทาง', addFavorite: 'เพิ่มในรายการโปรด', removeFavorite: 'เอาออกจากรายการโปรด',
+  },
+  // previous versions of a file (VersionsModal)
+  versions: {
+    menu: 'เวอร์ชันก่อนหน้า', title: 'เวอร์ชันก่อนหน้า: {name}', current: 'ตอนนี้: {size} แก้ไขล่าสุด {date}',
+    empty: 'ยังไม่มีเวอร์ชันก่อนหน้า ระบบจะเก็บฉบับเดิมไว้ทุกครั้งที่บันทึกทับ',
+    by: 'โดย {user}', reason: { edit: 'แก้ไข', office: 'แก้ไขด้วย Office', restore: 'กู้คืน' },
+    restore: 'กู้คืน', restoreTitle: 'กู้คืนเวอร์ชันนี้', restoreText: 'ไฟล์ปัจจุบันจะถูกแทนที่ด้วยเวอร์ชันนี้ และฉบับปัจจุบันจะถูกเก็บเป็นเวอร์ชันก่อนหน้า การแก้ไขที่ยังไม่ได้บันทึกในหน้าต่างแก้ไขจะหายไป',
+    restored: 'กู้คืนเวอร์ชันแล้ว', delete: 'ลบ', deleteTitle: 'ลบเวอร์ชันนี้', deleteText: 'ลบเวอร์ชันนี้ถาวร กู้คืนไม่ได้', deleted: 'ลบเวอร์ชันแล้ว',
+    changedTitle: 'ไฟล์ถูกเปลี่ยนแล้ว', changedText: 'มีคนบันทึกไฟล์นี้หลังจากที่คุณเปิดรายการ ต้องการโหลดรายการใหม่แล้วเลือกอีกครั้งไหม?', reload: 'โหลดใหม่',
+  },
+  // favorites and recent (FavoritesView)
+  favorites: {
+    title: 'รายการโปรดและล่าสุด', hint: 'ไฟล์ที่คุณติดดาวและไฟล์ที่เปิดล่าสุด', tabFavorites: 'รายการโปรด', tabRecent: 'เปิดล่าสุด',
+    emptyFavorites: 'ยังไม่มีรายการโปรด กดดาวที่ไฟล์เพื่อเก็บไว้ที่นี่', emptyRecent: 'ยังไม่มีไฟล์ที่เปิดล่าสุด',
+    spaceHome: 'ไฟล์ของฉัน', spacePublic: 'โฟลเดอร์สาธารณะ', added: 'เพิ่มในรายการโปรดแล้ว', removed: 'เอาออกจากรายการโปรดแล้ว',
   },
   // the in-page viewers of Office files (PreviewModal → DocumentPreview, SheetGrid)
   preview: {
@@ -128,6 +144,7 @@ const th = {
     codesWarning: 'เก็บรหัสสำรองเหล่านี้ไว้ในที่ปลอดภัย จะแสดงเพียงครั้งนี้ครั้งเดียว ไม่แสดงอีก ใช้เมื่อโทรศัพท์หายหรือเข้าแอปไม่ได้ แต่ละรหัสใช้ได้ครั้งเดียว',
     copy: 'คัดลอก', downloadTxt: 'ดาวน์โหลด .txt', copied: 'คัดลอกแล้ว', copyFailed: 'คัดลอกไม่ได้ กรุณาจดเอง', backupTitle: 'รหัสสำรองสำหรับเข้าสู่ระบบ',
     savedCodes: 'ฉันเก็บรหัสไว้แล้ว', savedConfirm: 'รหัสเหล่านี้จะไม่แสดงอีก เก็บไว้เรียบร้อยแล้วใช่ไหม?', savedYes: 'เก็บแล้ว',
+    since: 'เปิดใช้งานตั้งแต่ {date}',
   },
   devices: {
     title: 'อุปกรณ์ที่เข้าสู่ระบบ', thisDevice: 'เครื่องนี้', lastUsed: 'ใช้ล่าสุด', signOut: 'ออกจากระบบ', unknown: 'อุปกรณ์ไม่ทราบชนิด', none: 'ไม่มีอุปกรณ์',
@@ -320,7 +337,7 @@ const en = {
     files: 'My files', dashboard: 'Dashboard', users: 'Users', activity: 'Activity', trash: 'Trash',
     settings: 'Settings', update: 'System update', backup: 'Backup', logs: 'System log', login: 'Sign in', logout: 'Sign out', changePassword: 'Change password', account: 'Account and security',
     language: 'Language', theme: 'Theme', themeLight: 'Light', themeDark: 'Dark', themeAuto: 'System',
-    publicPage: 'Public page', publicFolder: 'Public folder', admin: 'Administrator', shareLinks: 'Shared links',
+    publicPage: 'Public page', publicFolder: 'Public folder', admin: 'Administrator', shareLinks: 'Shared links', favorites: 'Favorites',
   },
   login: {
     codeHelp: 'Open the authenticator app on your phone and enter the 6-digit code', backupHelp: 'Enter one of your backup codes (each works once)', code: '6-digit code', backupCode: 'Backup code',
@@ -359,6 +376,22 @@ const en = {
     unsaved: 'Unsaved changes', unsavedText: 'You have unsaved changes. Discard them?', discard: 'Discard',
     publicHint: 'Everybody can see and download files in this folder. What you can do here:',
     folderNotFound: 'Folder not found: {path}. Showing the top folder instead.',
+    destSpace: 'Destination', addFavorite: 'Add to favorites', removeFavorite: 'Remove from favorites',
+  },
+  // previous versions of a file (VersionsModal)
+  versions: {
+    menu: 'Previous versions', title: 'Previous versions: {name}', current: 'Now: {size}, last changed {date}',
+    empty: 'No previous versions yet. The earlier text is kept each time the file is saved over.',
+    by: 'by {user}', reason: { edit: 'Edit', office: 'Office edit', restore: 'Restore' },
+    restore: 'Restore', restoreTitle: 'Restore this version', restoreText: 'The file will be replaced by this version, and the present one is kept as a previous version. Unsaved changes in an open editor are lost.',
+    restored: 'Version restored', delete: 'Delete', deleteTitle: 'Delete this version', deleteText: 'This version is deleted for good and cannot be restored.', deleted: 'Version deleted',
+    changedTitle: 'The file has changed', changedText: 'Someone saved this file after you opened the list. Reload the list and choose again?', reload: 'Reload',
+  },
+  // favorites and recent (FavoritesView)
+  favorites: {
+    title: 'Favorites and recent', hint: 'Files you starred and files you opened lately', tabFavorites: 'Favorites', tabRecent: 'Recent',
+    emptyFavorites: 'No favorites yet. Click the star on a file to keep it here.', emptyRecent: 'No recently opened files yet.',
+    spaceHome: 'My files', spacePublic: 'Public folder', added: 'Added to favorites', removed: 'Removed from favorites',
   },
   preview: {
     loading: 'Opening the file…', previous: 'Previous file', next: 'Next file',
@@ -425,6 +458,7 @@ const en = {
     codesWarning: 'Keep these backup codes somewhere safe. They are shown only now and never again. Use them if you lose your phone. Each works once.',
     copy: 'Copy', downloadTxt: 'Download .txt', copied: 'Copied', copyFailed: 'Could not copy. Please write them down.', backupTitle: 'Backup codes for signing in',
     savedCodes: 'I have saved them', savedConfirm: 'These codes will not be shown again. Have you saved them?', savedYes: 'Saved',
+    since: 'On since {date}',
   },
   devices: {
     title: 'Signed-in devices', thisDevice: 'This device', lastUsed: 'Last used', signOut: 'Sign out', unknown: 'Unknown device', none: 'No devices',

@@ -5,6 +5,12 @@
         <n-button v-if="officeMode" quaternary size="small" @click="toOffice">
           <template #icon><n-icon :component="officeMode === 'edit' ? CreateOutline : OpenOutline" /></template>{{ officeMode === 'edit' ? t('office.edit') : t('office.open') }}
         </n-button>
+        <n-button v-if="app.user && item" quaternary circle :title="fav ? t('files.removeFavorite') : t('files.addFavorite')" @click="toggleFav">
+          <template #icon><n-icon :component="fav ? Star : StarOutline" :color="fav ? '#f59e0b' : undefined" /></template>
+        </n-button>
+        <n-button v-if="item && isTextKind(kind)" quaternary size="small" @click="emit('versions', item)">
+          <template #icon><n-icon :component="TimeOutline" /></template>{{ t('versions.menu') }}
+        </n-button>
         <n-button v-if="canDownload && item" quaternary size="small" tag="a" :href="api.downloadUrl(space, item.path)">
           <template #icon><n-icon :component="DownloadOutline" /></template>{{ t('common.download') }}
         </n-button>
@@ -38,9 +44,10 @@
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NButton, NIcon, NModal } from 'naive-ui'
-import { ChevronBackOutline, ChevronForwardOutline, CreateOutline, DownloadOutline, OpenOutline, SaveOutline } from '@vicons/ionicons5'
+import { ChevronBackOutline, ChevronForwardOutline, CreateOutline, DownloadOutline, OpenOutline, SaveOutline, Star, StarOutline, TimeOutline } from '@vicons/ionicons5'
 import { api } from '../api'
 import { useFeedback } from '../composables'
+import { useAppStore } from '../store'
 import { isTextKind, kindOf } from '../utils'
 import DocumentPreview from './DocumentPreview.vue'
 import TextEditor from './TextEditor.vue'
@@ -51,11 +58,16 @@ const props = defineProps({
   /** name → 'edit' | 'view' | null: whether ONLYOFFICE opens this file (see officeModeFor) */
   officeModeOf: { type: Function, default: () => null },
 })
-const emit = defineEmits(['update:show', 'saved', 'office'])
+const emit = defineEmits(['update:show', 'saved', 'office', 'versions'])
+const app = useAppStore()
 const { t } = useI18n()
 const fb = useFeedback()
 
 const current = ref(null)
+const fav = computed(() => !!current.value && app.isFavorite(props.space, current.value.path))
+async function toggleFav() {
+  try { await app.toggleFavorite(props.space, current.value.path) } catch (e) { fb.fail(e) }
+}
 const editor = ref(null)
 // bumped when the same file is opened again: the editor starts over, so discarded edits are gone
 const opened = ref(0)
