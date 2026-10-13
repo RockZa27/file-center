@@ -7,7 +7,7 @@ import { audit } from '../audit'
 import { config, paths } from '../config'
 import { context, need, requireUser } from '../context'
 import {
-  bad, conflict, copyTree, ensureSpace, forbidden, freeSpace, fromFsError, HttpError, isDir, joinRel, listDir, moveTree,
+  bad, conflict, copyTree, ensureSpace, forbidden, freeSpace, fromFsError, HttpError, isDir, joinRel, listDirAsync, moveTree,
   normRel, notFound, resolveIn, sameFile, storagePath, treeStats, uniquePath, validName, within,
 } from '../fsx'
 import { log } from '../logger'
@@ -104,22 +104,22 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
   .get('/me/usage', ({ user, ip }) => usage(requireUser({ user, ip })))
 
   // ───────────── browse ─────────────
-  .get('/list', ({ user, query }) => {
+  .get('/list', async ({ user, query }) => {
     const a = need({ user, ip: '' }, query.space, 'read')
     const rel = normRel(query.path)
     const abs = resolveIn(a.root, rel)
     if (!existsSync(abs)) throw notFound('files.folder-not-found')
     if (!isDir(abs)) throw bad('files.not-a-folder')
-    return { path: rel, entries: listDir(abs, rel), permissions: [...a.perms] }
+    return { path: rel, entries: await listDirAsync(abs, rel), permissions: [...a.perms] }
   }, { query: spaceQ })
 
-  .get('/folders', ({ user, query }) => {
+  .get('/folders', async ({ user, query }) => {
     // folders only, used by the "choose destination" dialog
     const a = need({ user, ip: '' }, query.space, 'read')
     const rel = normRel(query.path)
     const abs = resolveIn(a.root, rel)
     if (!isDir(abs)) throw notFound('files.folder-not-found')
-    return { path: rel, entries: listDir(abs, rel).filter(e => e.type === 'dir') }
+    return { path: rel, entries: (await listDirAsync(abs, rel)).filter(e => e.type === 'dir') }
   }, { query: spaceQ })
 
   .get('/search', async ({ user, query }) => {

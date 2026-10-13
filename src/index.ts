@@ -5,6 +5,7 @@ import { startAlerts } from './alerts'
 import { audit } from './audit'
 import { bootstrapAdmin, pruneLoginAttempts, purgeExpiredSessions } from './auth'
 import { backupDue, backupRunning, runBackup } from './backup'
+import { compressedJson, compressibleRoute, withVary } from './compress'
 import { config, ensureDirs } from './config'
 import { context } from './context'
 import { HttpError, notFound, within } from './fsx'
@@ -179,6 +180,12 @@ export const app = new Elysia({ serve: { maxRequestBodySize: config.uploadChunkS
     if (new URL(request.url).pathname.startsWith('/api/')) set.headers['cache-control'] = 'no-store'
   })
   .use(context)
+  // JSON answers of the routes in compress.ts (and only those) go out as br or gzip when the browser accepts it
+  .onAfterHandle({ as: 'global' }, async ({ request, response, set }) => {
+    if (!compressibleRoute(request.method, new URL(request.url).pathname) || (set.status && set.status !== 200)) return
+    set.headers.vary = withVary(set.headers.vary)
+    return (await compressedJson(request, response, set.headers)) ?? undefined
+  })
   .onAfterResponse({ as: 'global' }, ({ request, set, responseValue, ip, user }) => {
     const start = requestStart.get(request)
     if (start === undefined) return

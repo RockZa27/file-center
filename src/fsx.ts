@@ -154,13 +154,62 @@ export function statEntry(abs: string, rel: string): Entry | null {
 // one collator for every sort: String.localeCompare with options builds a new one per comparison (~7x slower on 2,000 names)
 const nameOrder = new Intl.Collator('th', { numeric: true })
 
+const byTypeThenName = (a: Entry, b: Entry) => (a.type === b.type ? nameOrder.compare(a.name, b.name) : a.type === 'dir' ? -1 : 1)
+
+/** the plain, blocking listing: what listDirAsync must answer exactly (the tests compare the two) */
 export function listDir(abs: string, rel: string): Entry[] {
   const out: Entry[] = []
   for (const name of readdirSync(abs)) {
     const e = statEntry(join(abs, name), joinRel(rel, name))
     if (e) out.push(e)
   }
-  return out.sort((a, b) => (a.type === b.type ? nameOrder.compare(a.name, b.name) : a.type === 'dir' ? -1 : 1))
+  return out.sort(byTypeThenName)
+}
+
+// Sorting 2,000 names was a third of a listing. The order of a folder is kept per path (small LRU) and only trusted
+// after checking it against the fresh stats: same count, every name known with the same type. A file added, removed,
+// renamed or replaced by a folder fails that check and is sorted again, so no timestamp of the folder is relied on.
+const ORDER_CACHE_MAX = 200
+const STAT_CHUNK = 64
+const orders = new Map<string, Map<string, { rank: number; type: Entry['type'] }>>()
+
+function inKnownOrder(abs: string, found: Entry[]): Entry[] {
+  const known = orders.get(abs)
+  if (known && known.size === found.length) {
+    const sorted = new Array<Entry>(found.length)
+    let same = true
+    for (const e of found) {
+      const k = known.get(e.name)
+      if (!k || k.type !== e.type) { same = false; break }
+      sorted[k.rank] = e
+    }
+    if (same) {
+      orders.delete(abs) // most recently used goes last
+      orders.set(abs, known)
+      return sorted
+    }
+  }
+  found.sort(byTypeThenName)
+  orders.delete(abs)
+  orders.set(abs, new Map(found.map((e, rank) => [e.name, { rank, type: e.type }])))
+  if (orders.size > ORDER_CACHE_MAX) orders.delete(orders.keys().next().value!)
+  return found
+}
+
+/**
+ * listDir without holding up the other requests: every STAT_CHUNK stats the event loop gets a turn. (Measured: one
+ * async lstat per name, 64 at a time, was slower than the sync loop, 49 against 55 req/s on 2,000 entries: the cost
+ * is in the promises and the thread hops, not in waiting.) Sizes and times are read on every call; only the order may
+ * come from the cache. Same answer as listDir.
+ */
+export async function listDirAsync(abs: string, rel: string): Promise<Entry[]> {
+  const names = readdirSync(abs) // one call; the thread pool may be full of a copy's work (perf.test.ts), and a listing must not queue behind it
+  const found: (Entry | null)[] = new Array(names.length)
+  for (let i = 0; i < names.length; i++) {
+    if (i && i % STAT_CHUNK === 0) await new Promise(r => setImmediate(r))
+    found[i] = statEntry(join(abs, names[i]), joinRel(rel, names[i]))
+  }
+  return inKnownOrder(abs, found.filter((e): e is Entry => e !== null))
 }
 
 export function isDir(abs: string) {
