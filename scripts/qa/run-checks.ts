@@ -54,14 +54,18 @@ try {
 // ── tests + coverage
 const tmp = mkdtempSync(join(tmpdir(), 'fc-qa-'))
 const junit = join(tmp, 'junit.xml')
-type Case = { name: string; file: string; failed: boolean; skipped: boolean }
+type Case = { name: string; file: string; failed: boolean; skipped: boolean; message: string }
 function parseJunit(file: string): Case[] {
   const xml = readFileSync(file, 'utf8')
   const out: Case[] = []
   for (const m of xml.matchAll(/<testcase\s([^>]*?)(\/>|>([\s\S]*?)<\/testcase>)/g)) {
     const attr = (k: string) => new RegExp(`${k}="([^"]*)"`).exec(m[1])?.[1]?.replaceAll('&quot;', '"').replaceAll('&amp;', '&').replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&apos;', "'") ?? ''
     const body = m[3] ?? ''
-    out.push({ name: `${attr('classname')} > ${attr('name')}`.replace(/^ > /, ''), file: attr('file'), failed: /<failure|<error/.test(body), skipped: /<skipped/.test(body) })
+    const fail = /<(?:failure|error)\b([^>]*?)(?:\/>|>([\s\S]*?)<\/(?:failure|error)>)/.exec(body)
+    const unescape = (t: string) => t.replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
+      .replaceAll('&quot;', '"').replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&apos;', "'").replaceAll('&amp;', '&')
+    const message = fail ? unescape(fail[2] || (/message="([^"]*)"/.exec(fail[1])?.[1] ?? '')).trim() : ''
+    out.push({ name: `${attr('classname')} > ${attr('name')}`.replace(/^ > /, ''), file: attr('file'), failed: /<failure|<error/.test(body), skipped: /<skipped/.test(body), message })
   }
   return out
 }
@@ -74,6 +78,9 @@ let coverage: CheckResult['coverage'] = { lines: null, funcs: null }
   if (all) coverage = { funcs: Number(all[1]), lines: Number(all[2]) }
   const failed = cases.filter(c => c.failed)
   step('tests', cases.length > 0 && failed.length === 0, r.ms, failed.map(c => c.name).join('\n') || (cases.length ? '' : (r.err + r.out).slice(-600)))
+  // the first failures with their messages: on CI the log is all there is (the first one usually explains the rest)
+  for (const c of failed.slice(0, 3)) console.log(`\n--- ${c.name} (${c.file})\n${c.message.slice(0, 1500)}`)
+  if (!cases.length) console.log((r.err + r.out).slice(-3000))
 }
 const failedCases = cases.filter(c => c.failed)
 // a failure that passes when run again alone is flaky, not broken

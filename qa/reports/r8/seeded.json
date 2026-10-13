@@ -1,0 +1,74 @@
+{
+  "dir": "/tmp/fc-audit-r8",
+  "bugs": {
+    "search-outside-start": [
+      {
+        "file": "src/search-index.ts",
+        "line": 319
+      }
+    ],
+    "index-keeps-deleted": [
+      {
+        "file": "src/search-index.ts",
+        "line": 218
+      }
+    ],
+    "version-restore-read-perm": [
+      {
+        "file": "src/routes/versions.ts",
+        "line": 44
+      }
+    ],
+    "versions-not-in-quota": [
+      {
+        "file": "src/quota.ts",
+        "line": 55
+      }
+    ],
+    "favorites-perm-not-rechecked": [
+      {
+        "file": "src/favorites.ts",
+        "line": 67
+      }
+    ],
+    "cross-space-dest-unchecked": [
+      {
+        "file": "src/routes/files.ts",
+        "line": 385
+      }
+    ]
+  },
+  "decoys": {
+    "decoy-todo-download": [
+      {
+        "file": "src/routes/files.ts",
+        "line": 317
+      }
+    ],
+    "decoy-legacy-join": [
+      {
+        "file": "src/fsx.ts",
+        "line": 282
+      }
+    ],
+    "decoy-csrf-note": [
+      {
+        "file": "src/context.ts",
+        "line": 106
+      }
+    ],
+    "decoy-backup-name": [
+      {
+        "file": "src/backup.ts",
+        "line": 63
+      }
+    ],
+    "decoy-access-url": [
+      {
+        "file": "src/logger.ts",
+        "line": 147
+      }
+    ]
+  },
+  "cleanDir": "/tmp/fc-audit-r8-clean"
+}

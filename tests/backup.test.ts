@@ -59,6 +59,7 @@ describe('backups (API)', () => {
   test('create, list and download a backup', async () => {
     writeFileSync(join(paths.logs, 'audit.log.1'), '{"rotated":true}\n')
     ;(await import('../src/secret-box')).seal('2fa secret') // makes secret.key
+    writeFileSync(paths.officeKey, 'k'.repeat(43))
     const made = await admin.json('POST', '/api/admin/backups')
     expect(made.status).toBe(200)
     expect(made.data.name).toMatch(NAME_RE)
@@ -81,6 +82,7 @@ describe('backups (API)', () => {
     expect(files).toEqual(expect.arrayContaining(['users.json', 'settings.json', 'backup.json', 'logs/audit.log']))
     expect(files).not.toContain('sessions.json')
     expect(files).not.toContain('secret.key')
+    expect(files).not.toContain('office-links.key')
     expect(files).not.toContain('logs/audit.log.1')
     expect(files.filter(f => /^(tmp|trash|app|storage)\//.test(f))).toEqual([])
     const meta = JSON.parse(new TextDecoder().decode((await zipOf(admin, made.data.name))['backup.json']))
