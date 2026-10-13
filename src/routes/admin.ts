@@ -18,6 +18,7 @@ import { revokeSharesOf } from '../shares'
 import { DISK_CRITICAL_PERCENT, DISK_LOW_PERCENT, diskInfo, storageStats } from '../stats'
 import { removeUserState } from '../favorites'
 import { listTrash, purge, restore, trashSummary } from '../trash'
+import { isBeta } from '../release'
 import { availableVersion } from '../update-source'
 import { uploadsInProgress } from '../uploads'
 import { alertRoutes } from './alerts'
@@ -216,6 +217,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     const errors = errorsSince(Date.now() - 24 * 3600_000)
     if (errors) warn('warning', 'errors', { count: errors })
     if (config.updateAllowUnsigned) warn('warning', 'update.allow-unsigned')
+    if (isBeta(config.version)) warn('warning', 'update.on-beta', { version: config.version })
     // found by the daily look at UPDATE_SOURCE (alerts.ts)
     const newer = availableVersion()
     if (newer) warn('info', 'update.available', { version: newer })

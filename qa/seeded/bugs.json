@@ -811,5 +811,40 @@
         "replace": "need({ user, ip }, body.destSpace, 'read')"
       }
     ]
+  },
+  {
+    "id": "beta-risk-not-required",
+    "difficulty": "medium",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/update-beta.test.ts",
+    "description": "a beta installs without the admin accepting the risk (acceptBetaRisk is never checked)",
+    "patches": [
+      {
+        "file": "src/routes/update.ts",
+        "find": "if (channel === 'beta' && body?.acceptBetaRisk !== true) throw bad('update.beta-not-accepted')",
+        "replace": "if (false) throw bad('update.beta-not-accepted')"
+      }
+    ]
+  },
+  {
+    "id": "beta-offered-older-than-stable",
+    "difficulty": "subtle",
+    "category": "integrity",
+    "severity": "medium",
+    "tests": "tests/update-beta.test.ts",
+    "description": "a beta is offered and installable although the newest stable release is already ahead of it, so a server can be moved from a stable release back to older beta code",
+    "patches": [
+      {
+        "file": "src/update-source.ts",
+        "find": "compareVersions(b.version, current) > 0 && compareVersions(b.version, stable) > 0 ? b : null",
+        "replace": "compareVersions(b.version, current) > 0 ? b : null"
+      },
+      {
+        "file": "src/update-source.ts",
+        "find": "if (compareVersions(latest.version, stable.version) <= 0) throw",
+        "replace": "if (false) throw"
+      }
+    ]
   }
 ]

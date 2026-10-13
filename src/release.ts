@@ -44,16 +44,22 @@ export type ReleaseState = {
 }
 
 export const RELEASE_NAME = /^[0-9A-Za-z][0-9A-Za-z._+-]{0,63}$/
-const VERSION = /^(\d{1,6})\.(\d{1,6})\.(\d{1,6})$/
+/** x.y.z, or the beta form x.y.z-beta.N; no other pre-release word and no build metadata */
+export const VERSION_PATTERN = String.raw`(\d{1,6})\.(\d{1,6})\.(\d{1,6})(?:-beta\.(\d{1,6}))?`
+const VERSION = new RegExp(`^${VERSION_PATTERN}$`)
 
 export const isVersion = (v: unknown): v is string => typeof v === 'string' && VERSION.test(v)
+/** a version of the beta channel (x.y.z-beta.N) */
+export const isBeta = (v: unknown): v is string => isVersion(v) && v.includes('-')
 
-/** negative when a < b. Both must pass isVersion. */
+/** negative when a < b, as semver: 1.9.0-beta.1 < 1.9.0-beta.2 < 1.9.0 < 1.9.1. Both must pass isVersion. */
 export function compareVersions(a: string, b: string): number {
-  const x = VERSION.exec(a)!.slice(1).map(Number)
-  const y = VERSION.exec(b)!.slice(1).map(Number)
-  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]
-  return 0
+  const x = VERSION.exec(a)!.slice(1)
+  const y = VERSION.exec(b)!.slice(1)
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return Number(x[i]) - Number(y[i])
+  // same x.y.z: a beta comes before the release it leads up to
+  if (x[3] === undefined || y[3] === undefined) return (x[3] === undefined ? 1 : 0) - (y[3] === undefined ? 1 : 0)
+  return Number(x[3]) - Number(y[3])
 }
 
 export const appDir = (dataDir: string) => join(dataDir, 'app')

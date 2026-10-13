@@ -212,6 +212,19 @@ UPDATE_SOURCE=off
   ลายเซ็น, ลองเปิดเวอร์ชันใหม่แยกต่างหาก แล้วจึงรีสตาร์ต ตอบ `{ ok, version, restarting }`
   ถ้าขั้นใดล้มเหลว คำตอบบอกขั้นนั้นใน `params.step` (`check` / `fetch` / `stage` / `apply`) และไม่มีแพ็กเกจค้างอยู่ ประวัติการใช้งานบันทึก `update-fetch` และ `update-apply` เหมือนทำทีละขั้น
 
+#### ช่องทางเบตา (เวอร์ชัน `x.y.z-beta.N`, ตั้งแต่ 1.8.0)
+
+เบตาคือเวอร์ชันทดลองที่ออกก่อนรุ่นปกติ (เช่น `1.9.0-beta.1` < `1.9.0-beta.2` < `1.9.0` ตามลำดับ semver) **ยังไม่เสถียรและอาจมีข้อบกพร่อง
+หรือทำให้ระบบใช้งานไม่ได้** ใช้เมื่อต้องการลองของใหม่เท่านั้น ไม่ควรใช้กับเซิร์ฟเวอร์ที่คนอื่นพึ่งพาอยู่ ถ้าจะลองให้สำรองข้อมูลก่อน
+
+- **เผยแพร่:** ตั้ง `version` เป็น `x.y.z-beta.N` แล้วสั่ง `bun run release --beta --sign <กุญแจ> [--push]` ได้ไฟล์ `latest-beta.json` (รูปแบบเดียวกับ `latest.json` เพิ่ม `"channel": "beta"`) และแถวในตาราง README ของ branch `updates` ที่ติดป้าย "เบตา" โดย **ไม่แตะ `latest.json`** (server รุ่น 1.7.2 และเก่ากว่าอ่านแต่ `latest.json` จึงไม่เห็นเบตา)
+  รุ่นปกติไม่รับ version `-beta` (ต้องใช้ `--beta`) และ `--beta` ไม่รับ version ปกติ เบตาต้องใหม่กว่า **ทุกเวอร์ชัน** ที่เผยแพร่แล้ว (ปกติและเบตา) ส่วนรุ่นปกติต้องใหม่กว่าทุก **รุ่นปกติ** (จึงออก `1.9.0` ต่อจาก `1.9.0-beta.2` ได้) ต้องเซ็นเสมอเหมือนรุ่นปกติ
+- **หน้าอัปเดต:** `GET /api/admin/update/check` ตอบ `beta` เพิ่ม: `{ version, notes, size, signed, builtAt }` หรือ `null` เมื่อไม่มี `latest-beta.json`, ไม่ใหม่กว่าเวอร์ชันที่ใช้อยู่ หรือไม่ใหม่กว่ารุ่นปกติล่าสุด (`latest`/`newer`/`refused` เหมือนเดิม และเบตาที่ `signed: false` จะถูกปฏิเสธเมื่อ `signatureRequired`)
+- **ติดตั้ง:** `POST /api/admin/update/fetch` และ `/fetch-and-apply` รับ `channel: "stable" | "beta"` (ค่าเริ่มต้น `stable`) ถ้า `channel: "beta"` ต้องส่ง `acceptBetaRisk: true` ด้วย ไม่งั้นตอบ 400 `update.beta-not-accepted` (ตรวจก่อนถามรหัสผ่านและก่อนดาวน์โหลด) ที่เหลือเหมือนรุ่นปกติทุกอย่าง: รหัสผ่าน, SHA-256, ขนาด, ลายเซ็น (ไม่มีข้อยกเว้นสำหรับเบตา) ประวัติการใช้งานบันทึก `update-apply-beta` เพิ่มเมื่อติดตั้งเบตา
+- **เบื้องหลังไม่เกี่ยว:** การตรวจรายวัน คำเตือน `update.available` และการแจ้งเตือนอ่านเฉพาะ `latest.json` ไม่มีการเสนอหรือแจ้งเบตา
+- **ขณะใช้เบตา:** `GET /api/admin/status` มีคำเตือน `update.on-beta` พร้อม `{ version }` และถ้ามีรุ่นปกติที่ใหม่กว่า (รวมถึงรุ่นปกติของ x.y.z เดียวกัน เช่น `1.9.0` หลัง `1.9.0-beta.2`) จะเสนอตามปกติ
+- **กลับไปรุ่นปกติ:** (1) ติดตั้งรุ่นปกติถัดไปเมื่อออกแล้ว (จากหน้าอัปเดตหรืออัปโหลดแพ็กเกจรุ่นปกติ ต้องใหม่กว่าที่ใช้อยู่) หรือ (2) ย้อนกลับด้วย `POST /api/admin/update/rollback` `{ dir, password }` ไปเวอร์ชันที่ใช้ก่อนหน้า (ระบบเก็บ 2 เวอร์ชันล่าสุดใน `history` ของ `GET /api/admin/update`) หรือ `dir: "builtin"` สำหรับเวอร์ชันที่มากับอิมเมจ หน้าอัปเดตไม่รับแพ็กเกจที่ไม่ใหม่กว่า จึง **ติดตั้งรุ่นเก่ากว่าด้วยการอัปโหลดไม่ได้** การย้อนกลับเปลี่ยนเฉพาะโค้ด ไม่ย้อนข้อมูล (ผู้ใช้ ไฟล์ การตั้งค่า) ที่เบตาเขียนไว้แล้ว จึงควรสำรองข้อมูลก่อนลองเบตา
+
 - ใช้ได้กับ **repo สาธารณะ** เท่านั้น (server ดาวน์โหลดโดยไม่มีรหัสผ่านหรือ token) repo ส่วนตัวให้ดาวน์โหลดไฟล์ .zip เองแล้วลากมาวางแทน
 - รับเฉพาะ `https://` (ยกเว้น `http://127.0.0.1` / `localhost` สำหรับทดสอบ) และไม่ตามการ redirect ค่าอื่นระบบยังเปิดได้ แต่จะเตือนใน log และปิดการตรวจหาอัปเดตไว้
 - **ลายเซ็นบังคับ:** server จะติดตั้งโค้ดที่ดึงมาจากอินเทอร์เน็ต SHA-256 ใน `latest.json` บอกได้แค่ว่าไฟล์ไม่เสียระหว่างทาง
@@ -664,8 +677,8 @@ tests/perf.test.ts  การนับไฟล์ 50,000 ไฟล์ การ
 | `GET /api/admin/logs/download` | zip ของ `system.log`, `launcher.log`, `audit.log` (รวมไฟล์ที่หมุนแล้ว) (เฉพาะ admin) |
 | `GET /api/admin/activity/export?format=csv` | ส่งออกประวัติการใช้งานเป็น CSV ตามตัวกรองเดียวกับหน้าประวัติ (`user`, `action`, `q`) เป็น UTF-8 มี BOM ให้ Excel แสดงภาษาไทยได้ ช่องที่ขึ้นต้นด้วย `=` `+` `-` `@` tab หรือ CR จะมี `'` นำหน้ากันสูตร Excel (เฉพาะ admin) |
 | `/api/admin/update/*` | อัปเดตระบบ: อัปโหลดแพ็กเกจ (ส่งชิ้นส่วนด้วย `PUT /api/upload/:id/:n`), ตรวจ, ติดตั้ง, ย้อนกลับ (เฉพาะ admin) `GET /api/admin/update` มี `source: { enabled, url }` และ `last.message` ตามภาษาของคำขอ |
-| `GET /api/admin/update/check` · `POST /api/admin/update/fetch` | ถาม `latest.json` ของ `UPDATE_SOURCE` → `{ enabled, current, latest: { version, notes, size, signed, builtAt }, newer }` · ดาวน์โหลดแพ็กเกจล่าสุดแล้วตรวจแบบเดียวกับ `/stage` (ตอบเหมือนกัน) ติดตั้งต่อด้วย `/apply` (เฉพาะ admin) |
-| `POST /api/admin/update/fetch-and-apply` | `{ password }` ตรวจ ดาวน์โหลด ตรวจแพ็กเกจ และติดตั้งเวอร์ชันล่าสุดจาก `UPDATE_SOURCE` ในครั้งเดียว ล้มเหลวบอกขั้นใน `params.step` (เฉพาะ admin) |
+| `GET /api/admin/update/check` · `POST /api/admin/update/fetch` | ถาม `latest.json` (และ `latest-beta.json`) ของ `UPDATE_SOURCE` → `{ enabled, current, latest: { version, notes, size, signed, builtAt } \| null, newer, refused, beta: { version, notes, size, signed, builtAt } \| null }` (`beta` มีเมื่อใหม่กว่าทั้งที่ใช้อยู่และรุ่นปกติล่าสุดเท่านั้น) · `/fetch` รับ body ไม่บังคับ `{ channel?: "stable" \| "beta", acceptBetaRisk?: boolean }` (เบตาต้อง `acceptBetaRisk: true` ไม่งั้น 400 `update.beta-not-accepted`) ดาวน์โหลดแพ็กเกจแล้วตรวจแบบเดียวกับ `/stage` (ตอบเหมือนกัน) ติดตั้งต่อด้วย `/apply` (เฉพาะ admin) |
+| `POST /api/admin/update/fetch-and-apply` | `{ password, channel?, acceptBetaRisk? }` (ดู ช่องทางเบตา) ตรวจ ดาวน์โหลด ตรวจแพ็กเกจ และติดตั้งเวอร์ชันล่าสุดจาก `UPDATE_SOURCE` ในครั้งเดียว ล้มเหลวบอกขั้นใน `params.step` (เฉพาะ admin) |
 | `GET /api/admin/alerts` · `POST /api/admin/alerts/test` | สถานะการแจ้งเตือน · ส่งข้อความทดสอบ (เฉพาะ admin) |
 | `GET /api/health` | ตรวจสุขภาพ (ใช้กับ Docker healthcheck) ผู้เยี่ยมชมได้แค่ `status` เครื่อง server เองและ admin ได้เวอร์ชันด้วย |
 
