@@ -157,6 +157,8 @@ async function upload(it) {
     if (it.canceled) return
     it.status = 'error'
     it.error = e.message
+    // the storage is full: the message holds used/quota; say which file it was, the others in the queue may still fit
+    if (e.code === 'quota.exceeded') fb.warn(t('upload.quotaFailed', { name: it.displayName, message: e.message }))
   }
 }
 

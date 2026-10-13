@@ -32,6 +32,75 @@
         <div class="muted small">{{ t('shareView.expires', { date: formatDate(info.expiresAt) }) }}</div>
       </form>
 
+      <!-- a request link: the visitor only sends files in. Nothing of the folder is shown, only their own uploads. -->
+      <template v-else-if="info?.kind === 'upload'">
+        <div class="surface head up-head">
+          <div class="head-text">
+            <div class="muted small">{{ t('shareView.sendTo') }}</div>
+            <h1 class="name">{{ info.name }}</h1>
+            <div class="muted small">{{ t('shareView.expires', { date: formatDate(info.expiresAt) }) }}</div>
+          </div>
+        </div>
+
+        <!-- the owner's note: plain text, never HTML -->
+        <div v-if="info.note" class="surface note">
+          <div class="muted small">{{ t('shareView.note') }}</div>
+          <div class="note-text">{{ info.note }}</div>
+        </div>
+
+        <div class="surface rules">
+          <span v-if="info.maxFileBytes">{{ t('share.limitFile', { size: formatBytes(info.maxFileBytes) }) }}</span>
+          <span v-if="info.maxFiles">{{ t('shareView.filesLeft', { left: Math.max(0, info.maxFiles - info.uploadedFiles), max: info.maxFiles }) }}</span>
+          <span v-if="info.maxTotalBytes">{{ t('shareView.bytesLeft', { left: formatBytes(Math.max(0, info.maxTotalBytes - info.uploadedBytes)), max: formatBytes(info.maxTotalBytes) }) }}</span>
+          <span v-if="!info.maxFileBytes && !info.maxFiles && !info.maxTotalBytes" class="muted">{{ t('shareView.noLimits') }}</span>
+        </div>
+
+        <n-alert v-if="info.full" type="warning" class="up-gap">{{ t('shareView.errFull') }}</n-alert>
+
+        <div
+          v-else class="drop" :class="{ over: dropOver }" role="button" tabindex="0" :aria-label="t('shareView.choose')"
+          @click="pickInput?.click()" @keydown.enter.prevent="pickInput?.click()" @keydown.space.prevent="pickInput?.click()"
+          @dragover.prevent="dropOver = true" @dragleave="dropOver = false" @drop.prevent="onDrop"
+        >
+          <n-icon :component="CloudUploadOutline" size="40" class="drop-icon" />
+          <div class="drop-text">{{ t('shareView.dropHere') }}</div>
+          <div class="muted small drop-or">{{ t('shareView.or') }}</div>
+          <n-button type="primary" size="large" class="drop-btn" @click.stop="pickInput?.click()">
+            <template #icon><n-icon :component="CloudUploadOutline" /></template>{{ t('shareView.choose') }}
+          </n-button>
+        </div>
+        <input ref="pickInput" type="file" multiple hidden @change="onPick">
+
+        <div v-if="queue.length" class="surface up-list">
+          <div v-for="it in queue" :key="it.key" class="up-item">
+            <div class="up-line">
+              <span class="up-name">{{ it.file.name }}</span>
+              <span class="muted small up-size">{{ formatBytes(it.file.size) }}</span>
+            </div>
+            <n-progress type="line" :percentage="percent(it)" :status="it.status === 'error' ? 'error' : it.status === 'done' ? 'success' : 'default'" :show-indicator="false" :height="6" :processing="it.status === 'uploading'" />
+            <div class="up-line up-meta">
+              <span :class="{ err: it.status === 'error' }" class="muted">{{ statusText(it) }}</span>
+              <span class="up-actions">
+                <n-button v-if="it.status === 'error' && it.retryable" text type="primary" size="small" @click="retry(it)">{{ t('common.retry') }}</n-button>
+                <n-button v-if="['queued', 'uploading', 'error'].includes(it.status)" text type="error" size="small" @click="cancel(it)">{{ t('common.cancel') }}</n-button>
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div class="surface mine">
+          <h2>{{ t('shareView.mine') }}</h2>
+          <div v-if="!info.mine?.length" class="muted small">{{ t('shareView.mineNone') }}</div>
+          <div v-for="(m, i) in info.mine" :key="i" class="mine-row">
+            <n-icon :component="CheckmarkCircleOutline" class="ok" />
+            <div class="mine-text">
+              <div class="mine-name">{{ m.name }}</div>
+              <div class="muted small">{{ formatBytes(m.size) }} · {{ formatDate(m.at) }}</div>
+            </div>
+          </div>
+        </div>
+      </template>
+
       <!-- one file -->
       <div v-else-if="info?.type === 'file'" class="surface panel file">
         <file-icon :item="{ name: info.name, type: 'file' }" :size="56" />
@@ -93,12 +162,12 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { NAlert, NBreadcrumb, NBreadcrumbItem, NButton, NEmpty, NIcon, NInput, NResult, NSpin } from 'naive-ui'
-import { ArrowBackOutline, DownloadOutline, FolderOpenOutline, LockClosedOutline } from '@vicons/ionicons5'
-import { api } from '../api'
+import { NAlert, NBreadcrumb, NBreadcrumbItem, NButton, NEmpty, NIcon, NInput, NProgress, NResult, NSpin } from 'naive-ui'
+import { ArrowBackOutline, CheckmarkCircleOutline, CloudUploadOutline, DownloadOutline, FolderOpenOutline, LockClosedOutline } from '@vicons/ionicons5'
+import { api, ApiError, putChunk } from '../api'
 import AppLogo from '../components/AppLogo.vue'
 import FileIcon from '../components/FileIcon.vue'
 import PreferenceControls from '../components/PreferenceControls.vue'
@@ -185,6 +254,155 @@ async function unlock() {
   }
 }
 
+// ───── request link: send files in ─────
+const pickInput = ref(null)
+const dropOver = ref(false)
+const queue = ref([])
+let seq = 0
+let running = false
+const sleep = ms => new Promise(r => setTimeout(r, ms))
+const percent = it => (it.file.size ? Math.min(100, Math.round((it.loaded / it.file.size) * 100)) : it.status === 'done' ? 100 : 0)
+
+/** the reason in the page's language, written by us for the cases a visitor meets; the server's text for the rest */
+function uploadError(e) {
+  if (e.code === 'share.upload-too-big') return t('shareView.errTooBig', { max: formatBytes(Number(e.params?.max) || 0) })
+  if (e.code === 'share.upload-full') return t('shareView.errFull')
+  if (e.code === 'share.upload-busy') return t('shareView.errBusy')
+  if (e.code === 'quota.exceeded') return t('shareView.errOwnerFull')
+  if (e.code === 'share.not-found') return t('shareView.errGone')
+  if (e.code === 'share.password-required') return t('shareView.errLocked')
+  return errorText(e, t('common.unknownError'))
+}
+
+function statusText(it) {
+  if (it.status === 'queued') return t('upload.queued')
+  if (it.status === 'done') return it.savedAs && it.savedAs !== it.file.name ? t('shareView.savedAs', { name: it.savedAs }) : t('upload.done')
+  if (it.status === 'canceled') return t('upload.canceled')
+  if (it.status === 'error') return it.error
+  return `${percent(it)}%`
+}
+
+function addFiles(files) {
+  const max = info.value?.maxFileBytes
+  for (const file of files) {
+    const it = reactive({ key: ++seq, file, loaded: 0, status: 'queued', error: '', retryable: false, id: null, canceled: false, aborts: new Set(), savedAs: '' })
+    if (max && file.size > max) {
+      it.status = 'error'
+      it.error = t('shareView.errTooBig', { max: formatBytes(max) })
+    }
+    queue.value.push(it)
+  }
+  pump()
+}
+
+function onPick(e) {
+  addFiles([...e.target.files])
+  e.target.value = ''
+}
+
+function onDrop(e) {
+  dropOver.value = false
+  // read the entries now (the event data is gone after the first await); a folder is not taken
+  const items = [...(e.dataTransfer.items || [])]
+  const files = [...(e.dataTransfer.files || [])]
+  const isDir = i => !!items[i]?.webkitGetAsEntry?.()?.isDirectory
+  const dirs = files.filter((f, i) => isDir(i)).length
+  if (dirs) fb.warn(t('shareView.noFolders'))
+  const ok = files.filter((f, i) => !isDir(i))
+  if (ok.length) addFiles(ok)
+}
+
+async function pump() {
+  if (running) return
+  running = true
+  try {
+    for (let next = queue.value.find(i => i.status === 'queued'); next; next = queue.value.find(i => i.status === 'queued')) await sendOne(next)
+  } finally {
+    running = false
+  }
+}
+
+async function sendOne(it) {
+  it.status = 'uploading'
+  it.loaded = 0
+  it.error = ''
+  it.retryable = false
+  try {
+    // the link already holds all it takes (counts as of the last answer): say so without asking the server
+    const i = info.value
+    if (i && ((i.maxFiles && i.uploadedFiles >= i.maxFiles) || (i.maxTotalBytes && i.uploadedBytes + it.file.size > i.maxTotalBytes))) {
+      throw new ApiError(403, '', 'share.upload-full')
+    }
+    const init = await api.shareUploadInit(token.value, it.file.name, it.file.size)
+    it.id = init.id
+    const { chunkSize, total } = init
+    const base = api.shareUploadChunkUrl(token.value, it.id)
+    const sent = new Array(total).fill(0)
+    const pending = [...Array(total).keys()]
+    let failure = null
+    const sync = () => { it.loaded = sent.reduce((a, b) => a + b, 0) }
+    const worker = async () => {
+      while (!it.canceled && !failure) {
+        const idx = pending.shift()
+        if (idx === undefined) return
+        const blob = it.file.slice(idx * chunkSize, Math.min(it.file.size, (idx + 1) * chunkSize))
+        for (let attempt = 0; ; attempt++) {
+          try {
+            await putChunk(it.id, idx, blob, loaded => { sent[idx] = loaded; sync() }, abort => it.aborts.add(abort), base)
+            sent[idx] = blob.size
+            sync()
+            break
+          } catch (e) {
+            if (it.canceled) return
+            const retryable = e.status === 0 || (e.status >= 500 && e.status !== 507)
+            if (!retryable || attempt >= 3) { failure = e; return }
+            sent[idx] = 0
+            sync()
+            await sleep(1000 * (attempt + 1))
+          }
+        }
+      }
+    }
+    await Promise.all(Array.from({ length: Math.min(3, total) }, worker))
+    if (it.canceled) return
+    if (failure) throw failure
+    const done = await api.shareUploadComplete(token.value, it.id)
+    it.loaded = it.file.size
+    it.savedAs = done?.name || ''
+    it.status = 'done'
+    await refreshInfo()
+  } catch (e) {
+    if (it.canceled) return
+    it.status = 'error'
+    it.error = uploadError(e)
+    // a file that is too big or a link that is full will not work on a second try; a busy link or a lost connection may
+    it.retryable = !['share.upload-too-big', 'share.upload-full', 'share.not-found', 'quota.exceeded'].includes(e.code)
+    if (e.code === 'share.upload-full') refreshInfo()
+  }
+}
+
+/** the counts and "files you sent" after a file arrived, without the page flickering */
+async function refreshInfo() {
+  try { info.value = await api.shareInfo(token.value, '/') } catch { /* the next load tells */ }
+}
+
+function cancel(it) {
+  it.canceled = true
+  it.status = 'canceled'
+  it.aborts.forEach(a => a())
+  if (it.id) api.shareUploadCancel(token.value, it.id).catch(() => {})
+}
+
+function retry(it) {
+  it.status = 'queued'
+  it.canceled = false
+  pump()
+}
+
+const beforeUnload = e => { if (queue.value.some(i => ['queued', 'uploading'].includes(i.status))) { e.preventDefault(); e.returnValue = '' } }
+onMounted(() => window.addEventListener('beforeunload', beforeUnload))
+onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
+
 watch(() => [token.value, here.value], load, { immediate: true })
 // a text that came from the server (not one of ours) is in the old language: ask again
 watch(locale, () => { if (failed.value) load() })
@@ -235,5 +453,38 @@ h1 { margin: 0; font-weight: 600; }
   .panel { padding: 24px 16px; }
   .head { flex-direction: column; align-items: stretch; padding: 16px; }
   .entry { padding: 10px 12px; }
+}
+/* request link */
+.up-head { margin-bottom: 12px; }
+.note { padding: 14px 22px; margin-bottom: 12px; }
+.note-text { white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; margin-top: 4px; }
+.rules { display: flex; flex-wrap: wrap; gap: 4px 18px; padding: 12px 22px; margin-bottom: 12px; font-size: 13.5px; }
+.up-gap { margin-bottom: 12px; }
+.drop { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 44px 20px; margin-bottom: 14px; border: 2px dashed var(--border); border-radius: 12px; background: var(--surface); cursor: pointer; text-align: center; transition: border-color 0.15s, background 0.15s; }
+.drop:hover, .drop:focus-visible, .drop.over { border-color: var(--primary); background: var(--primary-soft); outline: none; }
+.drop-icon { color: var(--primary); }
+.drop-text { font-size: 16px; font-weight: 500; }
+.up-list, .mine { margin-bottom: 14px; }
+.up-item { padding: 12px 16px; border-top: 1px solid var(--border); }
+.up-item:first-child { border-top: 0; }
+.up-line { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 6px; }
+.up-meta { margin: 6px 0 0; font-size: 12.5px; }
+.up-name { min-width: 0; font-weight: 500; overflow-wrap: anywhere; }
+.up-size { flex: none; }
+.up-meta .err { color: var(--danger); overflow-wrap: anywhere; min-width: 0; }
+.up-actions { display: flex; gap: 12px; flex: none; }
+.mine { padding: 16px 22px; }
+.mine h2 { margin: 0 0 8px; font-size: 16px; font-weight: 600; }
+.mine-row { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); }
+.mine-text { min-width: 0; }
+.mine-name { overflow-wrap: anywhere; font-weight: 500; }
+.ok { color: #18a058; margin-top: 3px; flex: none; }
+
+@media (max-width: 640px) {
+  .note, .rules, .mine { padding-left: 16px; padding-right: 16px; }
+  /* on a phone nobody drags: the whole zone is one big button */
+  .drop { padding: 28px 16px; gap: 10px; }
+  .drop-text, .drop-or { display: none; }
+  .drop-btn { width: 100%; min-height: 56px; font-size: 17px; }
 }
 </style>
