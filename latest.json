@@ -1,10 +1,10 @@
 {
-  "version": "1.4.0",
-  "file": "file-center-1.4.0.zip",
-  "sha256": "dac195eb9a0d3ce3e46558ca1f94f7d3f932ec7689f617cd7f2c78ba6464144d",
-  "size": 1659029,
-  "builtAt": "2026-10-12T17:09:42.318Z",
-  "commit": "65847a6",
-  "notes": "อัปเดตกดครั้งเดียว, แจ้งเตือนผ่าน webhook, ดูไฟล์ Office ในเบราว์เซอร์, แก้ Markdown/CSV/โค้ด, แก้ Office ผ่าน ONLYOFFICE",
+  "version": "1.5.0",
+  "file": "file-center-1.5.0.zip",
+  "sha256": "eb55c47cd1bd1e3972f00275de379f7c9cf3a89413d0faa7c61d471f14dce2b4",
+  "size": 1694125,
+  "builtAt": "2026-10-13T02:15:08.821Z",
+  "commit": "4137b7b",
+  "notes": "ยืนยันตัวตนสองขั้นตอน (TOTP + รหัสสำรอง), รายการอุปกรณ์ที่เข้าสู่ระบบ, โควตาพื้นที่ต่อผู้ใช้, ลิงก์ขอไฟล์ให้คนนอกอัปโหลด, ไฟล์สำรองไม่เก็บกุญแจ 2FA",
   "signed": false
 }
