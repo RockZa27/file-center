@@ -7,9 +7,9 @@ import { context, need } from '../context'
 import { recordRecent } from '../favorites'
 import { conflict, ensureSpace, normRel, notFound, resolveIn, storagePath } from '../fsx'
 import { holdNow, markStale, ownerOfPath, ready } from '../quota'
+import { indexTouched } from '../search-index'
 import { dropVersion, getVersion, listVersions, reserveVersion } from '../versions'
 import { fileResponse } from './files'
-import { indexTouched } from '../search-index'
 
 const fileQ = t.Object({ space: t.String(), path: t.String() })
 
