@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, rmSync, symlinkSync, truncateSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, rmSync, symlinkSync, truncateSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { createHash, randomBytes } from 'node:crypto'
 import { unzipSync, zipSync } from 'fflate'
@@ -876,6 +876,29 @@ describe('full system: uploads', () => {
 describe('full system: downloads', () => {
   const body = randomBytes(1000)
   const get = (range?: string) => admin.raw('GET', '/api/download?space=home&path=/range.bin', undefined, range ? { range } : {})
+
+  test('a broken download can be resumed: validators, and If-Range sends the whole file once it changed', async () => {
+    writeFileSync(storageAbs('range.bin'), body)
+    const first = await get()
+    const etag = first.headers.get('etag')!, lastModified = first.headers.get('last-modified')!
+    await first.arrayBuffer()
+    expect(etag).toMatch(/^"[0-9a-z]+-[0-9a-z]+"$/)
+    expect(Date.parse(lastModified)).toBeGreaterThan(0)
+    expect(first.headers.get('accept-ranges')).toBe('bytes')
+    // the browser asks for the rest of the same file
+    for (const validator of [etag, lastModified]) {
+      const rest = await admin.raw('GET', '/api/download?space=home&path=/range.bin', undefined, { range: 'bytes=600-', 'if-range': validator })
+      expect([rest.status, rest.headers.get('content-range')]).toEqual([206, 'bytes 600-999/1000'])
+      expect(sha256(new Uint8Array(await rest.arrayBuffer()))).toBe(sha256(body.subarray(600)))
+    }
+    // the file changed meanwhile: the whole new file, never its tail glued to the old head
+    const changed = randomBytes(1000)
+    writeFileSync(storageAbs('range.bin'), changed)
+    utimesSync(storageAbs('range.bin'), new Date(), new Date(Date.now() + 5000))
+    const whole = await admin.raw('GET', '/api/download?space=home&path=/range.bin', undefined, { range: 'bytes=600-', 'if-range': etag })
+    expect([whole.status, whole.headers.get('content-range')]).toEqual([200, null])
+    expect(sha256(new Uint8Array(await whole.arrayBuffer()))).toBe(sha256(changed))
+  })
 
   test('range variants', async () => {
     writeFileSync(storageAbs('range.bin'), body)

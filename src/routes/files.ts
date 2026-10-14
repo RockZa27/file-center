@@ -61,6 +61,9 @@ export function contentDisposition(kind: 'inline' | 'attachment', name: string) 
   return `${kind}; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(name).replace(/['()]/g, escape)}`
 }
 
+/** a strong validator of one version of a file: its size and modification time (to the millisecond) */
+const fileTag = (st: { size: number; mtimeMs: number }) => `"${st.size.toString(36)}-${Math.floor(st.mtimeMs).toString(36)}"`
+
 /** `ranges: false` always sends the whole file (a share link with a download limit counts whole downloads only) */
 export function fileResponse(abs: string, name: string, request: Request, wantInline: boolean, ranges = true) {
   const st = statSync(abs)
@@ -73,10 +76,16 @@ export function fileResponse(abs: string, name: string, request: Request, wantIn
     'Accept-Ranges': ranges ? 'bytes' : 'none',
     'X-Content-Type-Options': 'nosniff',
     'Cache-Control': 'private, no-cache',
+    // validators: a browser (or a download manager) resumes a broken download only when it can tell the file is unchanged
+    'ETag': fileTag(st),
+    'Last-Modified': st.mtime.toUTCString(),
   }
   // the browser's PDF viewer does not work inside a CSP sandbox; everything else is locked down
   if (!(inline && ext === '.pdf')) headers['Content-Security-Policy'] = "default-src 'none'; img-src 'self' data:; media-src 'self'; style-src 'unsafe-inline'; sandbox"
-  const range = ranges ? request.headers.get('range')?.match(/^bytes=(\d*)-(\d*)$/) : null
+  // If-Range: resume only the same file; a file changed since the first part was fetched is sent whole again
+  const ifRange = request.headers.get('if-range')
+  const sameFile = !ifRange || ifRange === headers.ETag || ifRange === headers['Last-Modified']
+  const range = ranges && sameFile ? request.headers.get('range')?.match(/^bytes=(\d*)-(\d*)$/) : null
   // "bytes=-" names no range at all: send the whole file
   if (range && (range[1] || range[2]) && st.size > 0) {
     let start = range[1] ? Number(range[1]) : NaN
