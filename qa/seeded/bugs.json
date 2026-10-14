@@ -906,5 +906,35 @@
         "replace": "const VIEW_PERMS: Perm[] = ['read', 'download', 'batchdownload', 'zip', 'write', 'upload']"
       }
     ]
+  },
+  {
+    "id": "manager-home-takeover",
+    "difficulty": "medium",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/roles-fixes.test.ts",
+    "description": "a manager can create a user whose /users/<name> folder already exists or belongs to another account, and so take it over",
+    "patches": [
+      {
+        "file": "src/routes/admin.ts",
+        "find": "if (!isAdmin(admin) && homeIsTaken(username)) throw conflict('admin.home-exists')",
+        "replace": "if (false) throw conflict('admin.home-exists')"
+      }
+    ]
+  },
+  {
+    "id": "manager-reset-no-stepup",
+    "difficulty": "medium",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/roles-fixes.test.ts",
+    "description": "a manager sets another user's password without proving it with their own password",
+    "patches": [
+      {
+        "file": "src/routes/admin.ts",
+        "find": "if (reset) await confirmPassword(",
+        "replace": "if (false) await confirmPassword("
+      }
+    ]
   }
 ]

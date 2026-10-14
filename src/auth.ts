@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto'
-import { existsSync, readFileSync, statSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { dirname } from 'node:path'
 import { alert } from './alerts'
 import { audit } from './audit'
 import { COMMON_PASSWORDS, isRunOrRepeat } from './common-passwords'
@@ -22,15 +23,38 @@ export const isAdmin = (u: User | null | undefined): boolean => u?.role === 'adm
 export const isStaff = (u: User | null | undefined): boolean => u?.role === 'admin' || u?.role === 'manager'
 /** where the folder of a user created by a manager (and so the one a manager may read) is */
 export const defaultHome = (username: string) => `/users/${username}`
+const insideOrSame = (p: string, root: string) => p === root || p.startsWith(root === '/' ? '/' : `${root}/`)
+/** equal, or one inside the other (case-insensitive: the storage may sit on a filesystem that is) */
+const overlaps = (a: string, b: string) => {
+  const x = a.toLowerCase(), y = b.toLowerCase()
+  return insideOrSame(x, y) || insideOrSame(y, x)
+}
+/** does a folder of another account (not an admin: their "/" is no share) equal, hold or sit inside `home`? */
+export function homeOverlapsOther(home: string, except?: string): boolean {
+  return allUsers().some(u => u.role !== 'admin' && u.username !== except && overlaps(u.homedir, home))
+}
+/** a manager may only start a home that is new: nothing there yet (in any letter case) and no other account's folder near it */
+export function homeIsTaken(username: string): boolean {
+  const home = defaultHome(username)
+  if (homeOverlapsOther(home)) return true
+  const abs = resolveIn(config.storageDir, home)
+  if (existsSync(abs)) return true
+  try {
+    return readdirSync(dirname(abs)).some(n => n.toLowerCase() === username.toLowerCase())
+  } catch { return false }
+}
+
 /**
  * May `actor` change `target` (and, for the user:<name> space, read their files)? An admin: anyone. A manager: only
- * a plain user whose folder is their own /users/<name>, so a shared or odd folder an admin gave out stays admin-only.
+ * a plain user whose folder is their own /users/<name>, so a shared or odd folder an admin gave out stays admin-only. The folder must also be the target's alone: when
+ * another account's home is the same, inside it or above it, whoever can write there could reach the other's files.
  * Nobody else, and never the manager themself.
  */
 export function canManage(actor: User | null | undefined, target: User | null | undefined): boolean {
   if (!actor || !target) return false
   if (actor.role === 'admin') return true
   return actor.role === 'manager' && target.role === 'user' && target.homedir === defaultHome(target.username)
+    && !homeOverlapsOther(target.homedir, target.username)
 }
 
 export type User = {

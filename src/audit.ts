@@ -34,3 +34,19 @@ export const auditEntries = () => readNewestFirst<AuditEntry>(paths.audit, confi
 export function queryAudit({ page, pageSize, ...filter }: AuditQuery) {
   return pageOf(auditEntries(), auditMatcher(filter), page, pageSize)
 }
+
+// One line per key and minute: browsing a managed user's folders must be on the trail without a click flooding it
+const ONCE_MS = 60_000
+const ONCE_MAX = 5000
+const onceLog = new Map<string, number>()
+
+/** like audit(), but a repeat of the same key within a minute writes nothing */
+export function auditOnce(key: string, entry: Omit<AuditEntry, 'ts'>) {
+  const now = Date.now()
+  const prev = onceLog.get(key)
+  if (prev !== undefined && now - prev < ONCE_MS) return
+  if (onceLog.size >= ONCE_MAX) for (const [k, v] of onceLog) if (now - v >= ONCE_MS) onceLog.delete(k)
+  if (onceLog.size >= ONCE_MAX) onceLog.clear()
+  onceLog.set(key, now)
+  audit(entry)
+}

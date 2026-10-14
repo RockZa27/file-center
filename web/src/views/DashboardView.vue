@@ -24,14 +24,12 @@
       <div v-if="s?.reduced" class="cards">
         <div class="surface card">
           <div class="label">{{ t('dash.manageable') }}</div>
-          <div class="value">{{ s.manageableUsers }}</div>
-          <div class="muted note">{{ t('dash.manageableNote', { n: s.users }) }}</div>
+          <div class="value">{{ s.users }}</div>
         </div>
         <div class="surface card">
-          <div class="label">{{ t('dash.files') }}</div>
+          <div class="label">{{ t('dash.managedSize') }}</div>
           <template v-if="s.storage">
-            <div class="value">{{ s.storage.files.toLocaleString() }}</div>
-            <div class="muted note">{{ formatBytes(s.storage.size) }}</div>
+            <div class="value">{{ formatBytes(s.storage.size) }}</div>
             <div v-if="s.stale" class="muted note counting-note"><n-icon :component="SyncOutline" class="turning" /><span>{{ t('dash.counting') }}</span></div>
           </template>
           <div v-else class="value small counting"><n-icon :component="SyncOutline" class="turning" /><span>{{ t('dash.counting') }}</span></div>

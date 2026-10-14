@@ -79,7 +79,7 @@ const moreOptions = u => [
   { key: 'signout', label: t('users.signOutAll') },
   ...(u.twoFactor ? [{ key: 'reset', label: t('users.resetTwoFactor') }] : []),
 ]
-const quotaText = u => (u.quotaBytes ? formatBytes(u.quotaBytes) : t('users.noLimit'))
+const quotaText = u => (u.manageable === false ? '' : u.quotaBytes ? formatBytes(u.quotaBytes) : t('users.noLimit'))
 const edit = u => { form.user = u; form.show = true }
 
 async function remove(u) {
@@ -114,7 +114,7 @@ const columns = computed(() => (narrow.value
         h('div', { class: 'stacked-head' }, [who(u), actions(u)]),
         h('div', {}, [roleTag(u)]),
         h('div', { class: 'stacked-meta' }, [
-          h('div', {}, [h('span', { class: 'muted' }, `${t('users.homedir')}: `), h('span', { class: 'mono wrap' }, u.homedir)]),
+          h('div', {}, [h('span', { class: 'muted' }, `${t('users.homedir')}: `), h('span', { class: 'mono wrap' }, u.homedir ?? '')]),
           h('div', {}, [h('span', { class: 'muted' }, `${t('users.quota')}: `), quotaText(u)]),
           h('div', {}, [h('span', { class: 'muted' }, `${t('users.lastLogin')}: `), lastLogin(u)]),
         ]),
@@ -123,7 +123,7 @@ const columns = computed(() => (narrow.value
   : [
       { title: t('users.user'), key: 'name', minWidth: 190, render: who },
       { title: t('users.role'), key: 'role', width: 130, render: roleTag },
-      { title: t('users.homedir'), key: 'homedir', width: 190, render: u => h('span', { class: 'mono' }, u.homedir) },
+      { title: t('users.homedir'), key: 'homedir', width: 190, render: u => h('span', { class: 'mono' }, u.homedir ?? '') },
       { title: t('users.quota'), key: 'quota', width: 110, render: quotaText },
       { title: t('users.lastLogin'), key: 'lastLogin', width: 150, render: lastLogin },
       { title: '', key: 'a', width: 250, align: 'right', fixed: 'right', render: actions },

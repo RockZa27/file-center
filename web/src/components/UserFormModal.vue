@@ -12,6 +12,13 @@
           <password-rules :password="f.password" :username="f.username" />
         </div>
       </n-form-item>
+      <!-- a manager who sets someone's password proves it is them -->
+      <n-form-item v-if="needsOwn" :label="t('users.confirmOwn')">
+        <div class="field">
+          <n-input v-model:value="f.confirmPassword" type="password" show-password-on="click" :input-props="{ autocomplete: 'current-password' }" />
+          <div class="muted hint">{{ t('users.confirmOwnHint') }}</div>
+        </div>
+      </n-form-item>
       <n-form-item :label="t('users.role')">
         <n-radio-group v-model:value="f.role" :disabled="isEdit && user.username === app.user.username">
           <n-radio-button value="user">{{ t('role.user') }}</n-radio-button>
@@ -86,20 +93,21 @@ const app = useAppStore()
 const fb = useFeedback()
 const busy = ref(false)
 const picker = ref(false)
-const f = reactive({ username: '', name: '', password: '', role: 'user', homedir: '', permissions: [], publicPermissions: [], limited: false, quotaValue: null, quotaUnit: 'GB' })
+const f = reactive({ username: '', name: '', password: '', role: 'user', homedir: '', permissions: [], publicPermissions: [], limited: false, quotaValue: null, quotaUnit: 'GB', confirmPassword: '' })
 // a manager hands out public-folder rights no wider than their own (the session's user carries them)
 const publicAllowed = computed(() => (app.isAdmin ? null : app.user?.publicPermissions || []))
 const isEdit = computed(() => !!props.user)
+const needsOwn = computed(() => !app.isAdmin && isEdit.value && !!f.password)
 // visitors' uploads and activity go under the name 'guest' (any case), so the server refuses it: say so before saving
 const reserved = computed(() => !isEdit.value && f.username.trim().toLowerCase() === 'guest')
 // the password rules are hinted live; the server judges them (its common-password list too)
-const ready = computed(() => (!f.limited || f.quotaValue > 0) && f.username.trim().length >= 3 && !reserved.value && f.name.trim() && (isEdit.value || f.password))
+const ready = computed(() => (!f.limited || f.quotaValue > 0) && f.username.trim().length >= 3 && !reserved.value && f.name.trim() && (isEdit.value || f.password) && (!needsOwn.value || f.confirmPassword))
 const parentOf = p => (p ? parentPath(p) : '/')
 
 watch(() => props.show, v => {
   if (!v) return
   const u = props.user
-  Object.assign(f, u
+  Object.assign(f, { confirmPassword: '' }, u
     ? { username: u.username, name: u.name, password: '', role: u.role, homedir: u.homedir, permissions: [...u.permissions], publicPermissions: [...u.publicPermissions], limited: !!u.quotaBytes, quotaValue: splitQuota(u.quotaBytes).value, quotaUnit: splitQuota(u.quotaBytes).unit }
     : { username: '', name: '', password: '', role: 'user', homedir: '', permissions: ['read', 'download', 'batchdownload', 'upload', 'write', 'zip'], publicPermissions: ['read', 'download', 'batchdownload'].filter(k => !publicAllowed.value || publicAllowed.value.includes(k)), limited: false, quotaValue: null, quotaUnit: 'GB' })
 })
@@ -112,7 +120,7 @@ async function save() {
     if (f.role === 'user' && app.isAdmin) body.homedir = f.homedir.trim() || undefined
     body.quotaBytes = f.role === 'user' && f.limited ? joinQuota(f.quotaValue, f.quotaUnit) : 0
     if (isEdit.value) {
-      if (f.password) body.password = f.password
+      if (f.password) { body.password = f.password; if (needsOwn.value) body.confirmPassword = f.confirmPassword }
       await api.updateUser(props.user.username, body)
     } else {
       await api.createUser({ ...body, username: f.username.trim(), password: f.password })

@@ -130,6 +130,7 @@ export const MESSAGES = {
   'admin.user-not-found': { th: 'ไม่พบผู้ใช้', en: 'The user was not found.' },
   'admin.not-manageable': { th: 'คุณไม่มีสิทธิ์จัดการผู้ใช้นี้', en: 'You are not allowed to manage this user.' },
   'admin.role-not-allowed': { th: 'คุณกำหนดบทบาทนี้ไม่ได้ (ผู้ดูแลสร้างและแก้ไขได้เฉพาะผู้ใช้ทั่วไป)', en: 'You cannot assign this role (a manager can only create and edit regular users).' },
+  'admin.home-exists': { th: 'โฟลเดอร์ /users/ชื่อนี้ มีอยู่แล้วหรือเป็นของบัญชีอื่น ให้ผู้ดูแลระบบสร้างบัญชีนี้ หรือเลือกชื่ออื่น', en: 'The folder /users/<name> already exists or belongs to another account. Ask an administrator to create this account, or choose another name.' },
   'admin.public-perms-exceed': { th: 'ให้สิทธิ์ในโฟลเดอร์สาธารณะได้ไม่เกินสิทธิ์ที่คุณมีเอง', en: 'You can only grant public-folder rights that you hold yourself.' },
   'admin.last-admin': { th: 'ต้องมีผู้ดูแลระบบอย่างน้อยหนึ่งคน', en: 'There must be at least one administrator.' },
   'admin.delete-self': { th: 'ไม่สามารถลบบัญชีของตัวเองได้', en: 'You cannot delete your own account.' },

@@ -3,7 +3,7 @@ import { access } from 'node:fs/promises'
 import { existsSync, lstatSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
 import { Elysia, t } from 'elysia'
-import { audit } from '../audit'
+import { audit, auditOnce } from '../audit'
 import { config, paths } from '../config'
 import { context, need, requireUser } from '../context'
 import {
@@ -109,6 +109,13 @@ const batches = new Map<string, Batch>()
 /** set when the space is a staff member's read-only view of someone's home (user:<name>): the audit names whose files */
 const viewDetail = (a: { space: string }) => (a.space.startsWith('user:') ? { detail: a.space } : {})
 
+/** looking into a managed user's home leaves a line (once a minute per folder); a normal space does not */
+function browsed(user: { username: string } | null, ip: string, a: { space: string }, abs: string) {
+  if (!user || !a.space.startsWith('user:')) return
+  const target = storagePath(abs)
+  auditOnce(`browse|${user.username}|${a.space}|${target}`, { user: user.username, ip, action: 'browse', target, detail: a.space })
+}
+
 export const fileRoutes = new Elysia({ prefix: '/api' })
   .use(context)
 
@@ -116,12 +123,13 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
   .get('/me/usage', ({ user, ip }) => usage(requireUser({ user, ip })))
 
   // ───────────── browse ─────────────
-  .get('/list', async ({ user, query }) => {
+  .get('/list', async ({ user, ip, query }) => {
     const a = need({ user, ip: '' }, query.space, 'read')
     const rel = normRel(query.path)
     const abs = resolveIn(a.root, rel)
     if (!existsSync(abs)) throw notFound('files.folder-not-found')
     if (!isDir(abs)) throw bad('files.not-a-folder')
+    browsed(user, ip, a, abs)
     return { path: rel, entries: await listDirAsync(abs, rel), permissions: [...a.perms] }
   }, { query: spaceQ })
 
@@ -134,8 +142,9 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     return { path: rel, entries: (await listDirAsync(abs, rel)).filter(e => e.type === 'dir') }
   }, { query: spaceQ })
 
-  .get('/search', async ({ user, query }) => {
+  .get('/search', async ({ user, ip, query }) => {
     const a = need({ user, ip: '' }, query.space, 'read')
+    browsed(user, ip, a, resolveIn(a.root, normRel(query.path)))
     const needle = query.q.trim().toLowerCase()
     const filters = parseFilters(query)
     if (needle.length < 1) return { results: [], truncated: false, indexed: false }

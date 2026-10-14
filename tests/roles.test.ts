@@ -154,7 +154,7 @@ describe('roles: a manager creates, edits and deletes plain users', () => {
   })
   test('edits a plain user: name, rights, quota, password; the home stays', async () => {
     const r = await mia.json('PUT', '/api/admin/users/ann', {
-      name: 'Ann B', permissions: ['read', 'download'], quotaBytes: 5_000_000, homedir: '/users/elsewhere', password: 'new-harbor-pass-9',
+      name: 'Ann B', permissions: ['read', 'download'], quotaBytes: 5_000_000, homedir: '/users/elsewhere', password: 'new-harbor-pass-9', confirmPassword: PW,
     })
     expect(r.status).toBe(200)
     const u = await row(admin, 'ann')
@@ -284,7 +284,7 @@ describe('roles: dashboard, activity, shares for a manager', () => {
   test('the status is reduced', async () => {
     const r = await mia.json('GET', '/api/admin/status')
     expect(r.status).toBe(200)
-    expect(Object.keys(r.data).sort()).toEqual(['manageableUsers', 'reduced', 'stale', 'storage', 'users', 'warnings'])
+    expect(Object.keys(r.data).sort()).toEqual(['reduced', 'stale', 'storage', 'users', 'warnings'])
     expect(r.data.reduced).toBe(true)
     const full = (await admin.json('GET', '/api/admin/status')).data
     expect(full.reduced).toBe(false)
