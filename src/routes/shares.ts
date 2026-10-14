@@ -11,10 +11,10 @@ import { bad, HttpError, listDirAsync, normRel, notFound, resolveIn, storagePath
 import { sizeText } from '../messages'
 import { limitOf as quotaOf, ready } from '../quota'
 import {
-  allShares, createShare, findShare, isUnlocked, kindOf, lockoutKey, openShare, publicShare, recordUpload, revokeShare, type Share,
-  SHARE_COOKIE, allowedShareDays, SHARE_LOCKOUT, SHARE_MAX_DOWNLOADS, SHARE_MAX_FILES, SHARE_MAX_TOTAL, SHARE_NOTE_MAX,
-  SHARE_PASSWORD_MIN, SHARE_UPLOADS_PER_IP, SHARE_UPLOADS_PER_LINK, shareTarget, SHARES_PER_USER, sharesOf, startDownload,
-  UNLOCK_MS, unlockCookie, uploadFull, uploadsBy,
+  allowedShareDays, allShares, createShare, findShare, isUnlocked, kindOf, lockoutKey, openShare, publicShare,
+  recordUpload, revokeShare, type Share, SHARE_COOKIE, SHARE_LOCKOUT, SHARE_MAX_DOWNLOADS, SHARE_MAX_FILES,
+  SHARE_MAX_TOTAL, SHARE_NOTE_MAX, SHARE_PASSWORD_MIN, SHARE_UPLOADS_PER_IP, SHARE_UPLOADS_PER_LINK, SHARES_PER_USER,
+  sharesOf, shareTarget, shareToken, startDownload, stateOf, UNLOCK_MS, unlockCookie, uploadFull, uploadsBy
 } from '../shares'
 import { cancelUpload, checkUpload, completeUpload, initUpload, saveChunk, shareUploadLoad } from '../uploads'
 import { collectZipItems, zipStream } from '../zip'
@@ -174,6 +174,17 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
   .get('/shares', ({ user, ip }) => {
     const u = requireUser({ user, ip })
     return { shares: sharesOf(u.username).map(publicShare) }
+  })
+
+  // the link again, for copying: its owner or an admin, while it still works. Someone else's link is "not found"
+  .get('/shares/:id/link', ({ user, ip, params }) => {
+    const u = requireUser({ user, ip })
+    const share = findShare(params.id)
+    if (!share || (share.owner.toLowerCase() !== u.username.toLowerCase() && u.role !== 'admin')) throw notFound()
+    const token = stateOf(share) === 'active' ? shareToken(share) : null
+    if (!token) throw new HttpError(409, 'share.link-unavailable')
+    audit({ user: u.username, ip, action: 'share-link-view', target: shareTarget(share), detail: share.owner })
+    return { token, url: `/s/${token}` }
   })
 
   .delete('/shares/:id', ({ user, ip, params }) => {

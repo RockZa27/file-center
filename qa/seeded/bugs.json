@@ -846,5 +846,20 @@
         "replace": "if (false) throw"
       }
     ]
+  },
+  {
+    "id": "share-link-others",
+    "difficulty": "medium",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/shares.test.ts",
+    "description": "any signed-in user can ask for another user's share link again by its id and gets the working token",
+    "patches": [
+      {
+        "file": "src/routes/shares.ts",
+        "find": "if (!share || (share.owner.toLowerCase() !== u.username.toLowerCase() && u.role !== 'admin')) throw notFound()\n    const token = stateOf(share)",
+        "replace": "if (!share) throw notFound()\n    const token = stateOf(share)"
+      }
+    ]
   }
 ]

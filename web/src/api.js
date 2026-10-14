@@ -180,6 +180,7 @@ export const api = {
   myShares: () => get('/api/shares'),
   allShares: () => get('/api/admin/shares'),
   revokeShare: id => call('DELETE', `/api/shares/${encodeURIComponent(id)}`),
+  shareLink: id => get(`/api/shares/${encodeURIComponent(id)}/link`),
   // whoever holds the link, no account needed
   shareInfo: (token, path) => get(`/api/s/${encodeURIComponent(token)}`, path && path !== '/' ? { path } : undefined),
   shareUnlock: (token, password) => post(`/api/s/${encodeURIComponent(token)}/unlock`, { password }),

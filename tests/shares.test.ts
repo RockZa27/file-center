@@ -138,7 +138,7 @@ describe('share links: making and managing them', () => {
     expect(await statusOf(second.data.token)).toBe(404)
   })
 
-  test('the store keeps the SHA-256 of the token, never the token', async () => {
+  test('the store keeps the SHA-256 of the token and the token only sealed, never in the clear', async () => {
     const r = await share(owner, { path: '/report.txt', password: 'open-sesame' })
     const { JsonStore } = await import('../src/store')
     await JsonStore.flushAll()
@@ -148,6 +148,8 @@ describe('share links: making and managing them', () => {
     const stored = JSON.parse(raw).shares.find((x: any) => x.id === r.data.share.id)
     expect(stored.tokenHash).toBe(createHash('sha256').update(r.data.token).digest('hex'))
     expect(stored.passwordHash).toStartWith('$argon2')
+    expect(typeof stored.tokenSealed).toBe('string')
+    expect(stored.tokenSealed).not.toContain(r.data.token)
   })
 
   test('admins see every link, others may not ask', async () => {
@@ -193,6 +195,57 @@ describe('share links: making and managing them', () => {
     expect((await owner.json('GET', '/api/session')).data.config.shareDays).toEqual([1, 7, 30])
     // visitors cannot share, so they are not told
     expect((await new Client().json('GET', '/api/session')).data.config.shareDays).toBeUndefined()
+  })
+})
+
+describe('share links: copying a link again', () => {
+  const linkOf = (c: Client, id: string) => c.json('GET', `/api/shares/${id}/link`)
+
+  test('the owner and an admin get the working link again; nobody else learns it exists', async () => {
+    const r = await share(owner, { path: '/report.txt' })
+    const { token, share: s } = r.data
+    expect(s.linkAvailable).toBe(true)
+    const again = await linkOf(owner, s.id)
+    expect([again.status, again.data]).toEqual([200, { token, url: `/s/${token}` }])
+    expect(again.res.headers.get('cache-control')).toBe('no-store')
+    expect(again.res.headers.get('content-encoding')).toBeNull()
+    expect((await download(again.data.token)).status).toBe(200)
+    expect((await linkOf(admin, s.id)).data.token).toBe(token)
+    const peek = await userWith('sh-peek', ['read', 'download', 'share'])
+    expect((await linkOf(peek, s.id)).status).toBe(404)
+    expect((await linkOf(peek, 'no-such-id')).status).toBe(404)
+    expect((await linkOf(anon, s.id)).status).toBe(401)
+    // the list says it can be copied, and still never carries the token or its sealed form
+    const listed = await owner.json('GET', '/api/shares')
+    expect(listed.data.shares.find((x: any) => x.id === s.id).linkAvailable).toBe(true)
+    expect(JSON.stringify(listed.data)).not.toContain(token)
+    expect(JSON.stringify(listed.data)).not.toContain('tokenSealed')
+    // who looked is in the activity log, the token is not
+    const viewed = (await admin.json('GET', '/api/admin/activity?action=share-link-view')).data.items
+    expect(viewed.map((x: any) => x.user)).toEqual(expect.arrayContaining(['sh-owner', 'admin']))
+    expect(JSON.stringify(viewed)).not.toContain(token)
+  })
+
+  test('a revoked link, or one made before 1.8.1, can not be shown again', async () => {
+    const r = await share(owner, { path: '/report.txt' })
+    expect((await owner.json('DELETE', `/api/shares/${r.data.share.id}`)).status).toBe(200)
+    const revoked = await linkOf(owner, r.data.share.id)
+    expect([revoked.status, revoked.data.code]).toEqual([409, 'share.link-unavailable'])
+
+    // a link from before 1.8.1 only has the hash of its token
+    const old = await share(owner, { path: '/report.txt' })
+    const stored = shares.findShare(old.data.share.id)!
+    delete stored.tokenSealed
+    const before = await linkOf(owner, old.data.share.id)
+    expect([before.status, before.data.code]).toEqual([409, 'share.link-unavailable'])
+    expect((await owner.json('GET', '/api/shares')).data.shares.find((x: any) => x.id === old.data.share.id).linkAvailable).toBe(false)
+    // it still works for whoever has it
+    expect(await statusOf(old.data.token)).toBe(200)
+
+    // a sealed token that belongs to another link is never handed out
+    const other = await share(owner, { path: '/report.txt' })
+    stored.tokenSealed = shares.findShare(other.data.share.id)!.tokenSealed
+    expect((await linkOf(owner, old.data.share.id)).status).toBe(409)
   })
 })
 

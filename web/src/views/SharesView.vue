@@ -12,7 +12,7 @@
     </div>
     <div class="surface">
       <n-data-table :columns="columns" :data="rows" :loading="loading" :bordered="false" :single-line="false"
-        :scroll-x="narrow ? undefined : (all ? 920 : 820)" table-layout="fixed" :row-key="r => r.id" :pagination="{ pageSize: 25 }"
+        :scroll-x="narrow ? undefined : (all ? 1080 : 980)" table-layout="fixed" :row-key="r => r.id" :pagination="{ pageSize: 25 }"
       >
         <template #empty><n-empty :description="t('share.none')" /></template>
       </n-data-table>
@@ -24,7 +24,7 @@
 import { computed, h, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NButton, NDataTable, NEmpty, NIcon, NSwitch, NTag } from 'naive-ui'
-import { CloseCircleOutline, CloudUploadOutline, DownloadOutline, LockClosedOutline, RefreshOutline } from '@vicons/ionicons5'
+import { CloseCircleOutline, CloudUploadOutline, CopyOutline, DownloadOutline, LockClosedOutline, OpenOutline, RefreshOutline } from '@vicons/ionicons5'
 import { api } from '../api'
 import FileIcon from '../components/FileIcon.vue'
 import { useFeedback, useNarrow } from '../composables'
@@ -94,6 +94,42 @@ const passwordCell = s => (s.hasPassword
 const revokeButton = s => (revocable(s)
   ? h(NButton, { size: 'small', secondary: true, type: 'error', onClick: () => revoke(s) }, { default: () => t('share.revoke'), icon: () => h(NIcon, { component: CloseCircleOutline }) })
   : null)
+
+// the link again (kept sealed on the server since 1.8.1); asked only when wanted, never sent with the list
+async function linkOf(s) {
+  try {
+    const r = await api.shareLink(s.id)
+    return `${location.origin}${r.url}`
+  } catch (e) {
+    fb.error(e)
+    return null
+  }
+}
+async function copyLink(s) {
+  const url = await linkOf(s)
+  if (!url) return
+  try {
+    await navigator.clipboard.writeText(url)
+    fb.ok(t('share.linkCopied'))
+  } catch {
+    // no clipboard API (plain http that is not localhost): the browser's own box, already selected, to copy by hand
+    window.prompt(t('share.copyByHand'), url)
+  }
+}
+async function openLink(s) {
+  const url = await linkOf(s)
+  if (url) window.open(url, '_blank', 'noopener')
+}
+const actions = s => {
+  if (!revocable(s)) return null
+  const linkButtons = s.linkAvailable
+    ? [
+        h(NButton, { size: 'small', secondary: true, onClick: () => copyLink(s) }, { default: () => t('share.copyLink'), icon: () => h(NIcon, { component: CopyOutline }) }),
+        h(NButton, { size: 'small', quaternary: true, title: t('share.openLink'), 'aria-label': t('share.openLink'), onClick: () => openLink(s) }, { icon: () => h(NIcon, { component: OpenOutline }) }),
+      ]
+    : [h('span', { class: 'muted small no-link' }, t('share.linkNotKept'))]
+  return h('div', { class: 'row-actions' }, [...linkButtons, revokeButton(s)])
+}
 const when = s => h('div', { class: 'when' }, [
   h('div', { class: 'nowrap' }, formatDate(s.expiresAt)),
   h('div', { class: 'muted small' }, t('share.createdAt', { date: formatDate(s.createdAt) })),
@@ -114,7 +150,7 @@ const columns = computed(() => (narrow.value
           h('span', { class: 'dl' }, [`${isUpload(s) ? t('share.receivedCol') : t('share.downloads')}: `, downloads(s)]),
           h('span', {}, [`${t('share.passwordCol')}: `, passwordCell(s)]),
         ]),
-        revocable(s) ? h('div', { class: 'stacked-actions' }, [revokeButton(s)]) : null,
+        revocable(s) ? h('div', { class: 'stacked-actions' }, [actions(s)]) : null,
       ]),
     }]
   : [
@@ -125,7 +161,7 @@ const columns = computed(() => (narrow.value
       { title: t('share.downloadsReceived'), key: 'downloads', width: 150, render: downloads },
       { title: t('share.passwordCol'), key: 'password', width: 80, render: passwordCell },
       { title: t('share.stateCol'), key: 'state', width: 120, render: stateTag },
-      { title: '', key: 'a', width: 130, align: 'right', fixed: 'right', render: revokeButton },
+      { title: '', key: 'a', width: 290, align: 'right', fixed: 'right', render: actions },
     ]))
 
 onMounted(load)
@@ -150,4 +186,7 @@ onMounted(load)
 :deep(.stacked-meta) { display: flex; align-items: center; gap: 4px 12px; flex-wrap: wrap; font-size: 12.5px; color: var(--muted); padding-left: 30px; }
 :deep(.stacked-meta .owner) { overflow-wrap: anywhere; }
 :deep(.stacked-actions) { padding-left: 30px; }
+:deep(.row-actions) { display: flex; flex-wrap: wrap; gap: 6px; justify-content: flex-end; align-items: center; }
+:deep(.stacked-actions .row-actions) { justify-content: flex-start; }
+:deep(.no-link) { max-width: 150px; text-align: right; line-height: 1.3; }
 </style>

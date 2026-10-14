@@ -184,6 +184,7 @@ export const MESSAGES = {
   // ───────────── share links ─────────────
   // one answer for every link that does not work (unknown, expired, revoked, used up, item or owner gone): a guesser learns nothing
   'share.not-found': { th: 'ไม่พบลิงก์นี้ หรือลิงก์หมดอายุแล้ว', en: 'Link not found or expired.' },
+  'share.link-unavailable': { th: 'ดูลิงก์นี้ซ้ำไม่ได้: ลิงก์สร้างก่อนเวอร์ชัน 1.8.1 หรือใช้งานไม่ได้แล้ว ถ้ายังต้องใช้ให้ยกเลิกแล้วสร้างใหม่', en: 'This link can not be shown again: it was made before version 1.8.1 or no longer works. Revoke it and make a new one if you still need it.' },
   'share.bad-days': { th: 'อายุของลิงก์เลือกได้ {days} วัน', en: 'A link can last {days} days.' },
   'share.bad-max-downloads': { th: 'จำนวนครั้งที่ดาวน์โหลดได้ต้องเป็นจำนวนเต็ม 1 ถึง {max}', en: 'The download limit must be a whole number from 1 to {max}.' },
   'share.password-too-short': { th: 'รหัสผ่านของลิงก์ต้องยาวอย่างน้อย {min} ตัวอักษร', en: 'The link password must be at least {min} characters long.' },

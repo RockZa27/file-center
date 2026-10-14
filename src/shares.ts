@@ -1,8 +1,8 @@
 /**
  * Share links: a signed-in user hands out a link so someone without an account can download one file or one folder.
  *
- * Only the SHA-256 of a link's token is stored, so a copy of shares.json gives no working link; the token is shown
- * once, when the link is made. Every time a link is used it is checked again from scratch: not expired, revoked or used
+ * A link is found by the SHA-256 of its token. The token itself is kept only sealed with the server's secret.key
+ * (secret-box.ts), so the owner can copy the link again while a copy of shares.json alone still gives no working link. Every time a link is used it is checked again from scratch: not expired, revoked or used
  * up, the item still where it was and of the same type, the owner still there and still allowed to share and download
  * in that space. A link that fails any of these answers the same 404, so a guesser learns nothing.
  */
@@ -12,11 +12,14 @@ import { basename } from 'node:path'
 import { accessFor, findUser, type Lockout, type Space } from './auth'
 import { config, paths } from './config'
 import { notFound, resolveIn, storagePath } from './fsx'
+import { open, seal } from './secret-box'
 import { JsonStore } from './store'
 
 export type Share = {
   id: string
   tokenHash: string
+  /** the token sealed (secret-box.ts), for showing the link again; absent on links made before 1.8.1 */
+  tokenSealed?: string
   owner: string
   space: Space
   /** relative to the space of the owner */
@@ -83,11 +86,12 @@ export const sharesOf = (username: string) =>
   store.value.shares.filter(s => s.owner.toLowerCase() === username.toLowerCase())
 export const findShare = (id: unknown) => store.value.shares.find(s => s.id === id)
 
-export function createShare(input: Omit<Share, 'id' | 'tokenHash' | 'createdAt' | 'downloads' | 'uploadedFiles' | 'uploadedBytes' | 'received'>): { share: Share; token: string } {
+export function createShare(input: Omit<Share, 'id' | 'tokenHash' | 'tokenSealed' | 'createdAt' | 'downloads' | 'uploadedFiles' | 'uploadedBytes' | 'received'>): { share: Share; token: string } {
   const token = randomBytes(32).toString('base64url')
   const share: Share = {
     id: randomBytes(8).toString('hex'),
     tokenHash: hashToken(token),
+    tokenSealed: seal(token),
     owner: input.owner,
     space: input.space,
     path: input.path,
@@ -110,6 +114,18 @@ export function createShare(input: Omit<Share, 'id' | 'tokenHash' | 'createdAt' 
   }
   store.update(d => { d.shares.push(share) })
   return { share, token }
+}
+
+/** the token of a link, for copying it again; null when the link predates 1.8.1 or secret.key changed since */
+export function shareToken(share: Share): string | null {
+  if (!share.tokenSealed) return null
+  try {
+    const token = open(share.tokenSealed)
+    // a sealed value that does not belong to this link (copied between links by hand) is never shown
+    return hashToken(token) === share.tokenHash ? token : null
+  } catch {
+    return null
+  }
 }
 
 export function revokeShare(share: Share) {
@@ -175,6 +191,8 @@ export const publicShare = (s: Share) => ({
   } : {}),
   revokedAt: s.revokedAt ?? null,
   state: stateOf(s),
+  /** the link can be shown again (made from 1.8.1 on) */
+  linkAvailable: !!s.tokenSealed,
 })
 
 /** for the audit trail: where the item is in the storage, or space:path when the owner's space can not be found any more */
