@@ -1,6 +1,7 @@
 <template>
   <n-modal :show="show" preset="card" :title="t('nav.account')" style="width: min(480px, 94vw)" :mask-closable="!pinned" :closable="!pinned" :close-on-esc="!pinned" @update:show="v => emit('update:show', v)">
     <n-alert v-if="app.user?.mustChangePassword" type="warning" class="gap">{{ t('profile.mustChange') }}</n-alert>
+    <div class="who muted">{{ app.user?.name }} · {{ t('users.role') }}: {{ roleLabel(app.user?.role) }}</div>
     <n-tabs v-model:value="tab" type="line" animated :class="{ 'no-tabs': app.user?.mustChangePassword }">
       <n-tab-pane name="password" :tab="t('profile.passwordTab')" display-directive="show">
     <n-form label-placement="top" @submit.prevent="save">
@@ -40,7 +41,7 @@ import { useI18n } from 'vue-i18n'
 import { NAlert, NButton, NForm, NFormItem, NInput, NModal, NTabPane, NTabs } from 'naive-ui'
 import { useRouter } from 'vue-router'
 import { api } from '../api'
-import { useFeedback } from '../composables'
+import { useFeedback, useRoleLabel } from '../composables'
 import { useAppStore } from '../store'
 import PasswordRules from './PasswordRules.vue'
 import SecurityPanel from './SecurityPanel.vue'
@@ -50,6 +51,7 @@ const emit = defineEmits(['update:show'])
 const { t } = useI18n()
 const app = useAppStore()
 const fb = useFeedback()
+const roleLabel = useRoleLabel()
 const form = reactive({ current: '', next: '', again: '' })
 const busy = ref(false)
 const router = useRouter()
@@ -87,6 +89,7 @@ async function save() {
 
 <style scoped>
 .gap { margin-bottom: 16px; }
+.who { font-size: 13px; margin-bottom: 8px; overflow-wrap: anywhere; }
 .field { width: 100%; min-width: 0; }
 .no-tabs :deep(.n-tabs-nav) { display: none; }
 .foot { display: flex; justify-content: flex-end; gap: 8px; }

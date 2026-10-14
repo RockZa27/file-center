@@ -1,7 +1,7 @@
 <template>
   <div class="page">
     <div class="page-header">
-      <div><h1>{{ t('nav.dashboard') }}</h1><p>{{ t('dash.subtitle') }}</p></div>
+      <div><h1>{{ t('nav.dashboard') }}</h1><p>{{ s?.reduced ? t('dash.reducedSubtitle') : t('dash.subtitle') }}</p></div>
       <n-button :loading="loading" @click="load"><template #icon><n-icon :component="RefreshOutline" /></template>{{ t('common.refresh') }}</n-button>
     </div>
 
@@ -20,7 +20,24 @@
     </div>
 
     <n-spin :show="loading && !s">
-      <div v-if="s" class="cards">
+      <!-- a manager: people and stored files only; the server leaves out everything else -->
+      <div v-if="s?.reduced" class="cards">
+        <div class="surface card">
+          <div class="label">{{ t('dash.manageable') }}</div>
+          <div class="value">{{ s.manageableUsers }}</div>
+          <div class="muted note">{{ t('dash.manageableNote', { n: s.users }) }}</div>
+        </div>
+        <div class="surface card">
+          <div class="label">{{ t('dash.files') }}</div>
+          <template v-if="s.storage">
+            <div class="value">{{ s.storage.files.toLocaleString() }}</div>
+            <div class="muted note">{{ formatBytes(s.storage.size) }}</div>
+            <div v-if="s.stale" class="muted note counting-note"><n-icon :component="SyncOutline" class="turning" /><span>{{ t('dash.counting') }}</span></div>
+          </template>
+          <div v-else class="value small counting"><n-icon :component="SyncOutline" class="turning" /><span>{{ t('dash.counting') }}</span></div>
+        </div>
+      </div>
+      <div v-else-if="s" class="cards">
         <div class="surface card wide">
           <div class="label">{{ t('dash.disk') }}</div>
           <template v-if="s.disk">

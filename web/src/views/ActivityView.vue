@@ -10,7 +10,7 @@
         :consistent-menu-width="false" placement="bottom-end" :menu-props="{ style: 'max-width: calc(100vw - 32px)' }"
       />
       <n-button @click="apply"><template #icon><n-icon :component="RefreshOutline" /></template>{{ t('common.refresh') }}</n-button>
-      <n-button tag="a" :href="exportUrl" secondary :loading="saving !== null" :title="t('activity.exportHint')" @click="exportCsv"><template #icon><n-icon :component="DownloadOutline" /></template>{{ t('activity.export') }}</n-button>
+      <n-button v-if="app.isAdmin" tag="a" :href="exportUrl" secondary :loading="saving !== null" :title="t('activity.exportHint')" @click="exportCsv"><template #icon><n-icon :component="DownloadOutline" /></template>{{ t('activity.export') }}</n-button>
     </div>
     <div class="surface">
       <n-data-table :columns="columns" :data="rows" :loading="loading" :bordered="false" :single-line="false"
@@ -30,17 +30,19 @@ import { NButton, NDataTable, NEmpty, NIcon, NInput, NSelect, NTag } from 'naive
 import { DownloadOutline, RefreshOutline, SearchOutline } from '@vicons/ionicons5'
 import { api } from '../api'
 import { useDownload, useFeedback, useNarrow } from '../composables'
+import { useAppStore } from '../store'
 import { formatBytes, formatDate } from '../utils'
 
 const { t } = useI18n()
 const fb = useFeedback()
+const app = useAppStore()
 const rows = ref([])
 const loading = ref(false)
 const hasMore = ref(false)
 const page = ref(1)
 const f = reactive({ q: '', user: '', action: null })
 
-const ACTIONS = ['login', 'login-failed', 'logout', 'upload', 'download', 'download-zip', 'delete', 'restore', 'purge', 'mkdir', 'create', 'edit', 'rename', 'copy', 'move', 'zip', 'unzip', 'password-change', 'user-create', 'user-update', 'user-delete', 'settings-update', 'logo-update', 'logo-remove', 'update-stage', 'update-apply', 'update-apply-unsigned', 'update-rollback', 'update-denied', 'backup-create', 'backup-download', 'backup-delete', 'backup-restore', 'backup-restore-denied', 'logs-download', 'activity-export', 'update-fetch', 'share-create', 'share-download', 'share-revoke', 'share-link-view', 'alert-test']
+const ACTIONS = ['login', 'login-failed', 'logout', 'upload', 'download', 'download-zip', 'view', 'delete', 'restore', 'purge', 'mkdir', 'create', 'edit', 'rename', 'copy', 'move', 'zip', 'unzip', 'password-change', 'user-create', 'user-update', 'user-delete', 'settings-update', 'logo-update', 'logo-remove', 'update-stage', 'update-apply', 'update-apply-unsigned', 'update-rollback', 'update-denied', 'backup-create', 'backup-download', 'backup-delete', 'backup-restore', 'backup-restore-denied', 'logs-download', 'activity-export', 'update-fetch', 'share-create', 'share-download', 'share-revoke', 'share-link-view', 'alert-test']
 // the file holds what the filter boxes show; the click also applies them, so the table matches the file
 const exportUrl = computed(() => api.activityExportUrl({ q: f.q, user: f.user, action: f.action || '' }))
 const { busy: saving, follow } = useDownload()

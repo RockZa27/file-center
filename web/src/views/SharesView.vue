@@ -3,7 +3,7 @@
     <div class="page-header">
       <div><h1>{{ t('nav.shareLinks') }}</h1><p>{{ t('share.subtitle') }}</p></div>
       <div class="head-actions">
-        <label v-if="app.isAdmin" class="all">
+        <label v-if="app.isStaff" class="all">
           <n-switch v-model:value="all" :disabled="loading" @update:value="load" />
           <span>{{ t('share.showAll') }}</span>
         </label>
@@ -42,8 +42,15 @@ const all = ref(false)
 async function load() {
   loading.value = true
   try {
-    const r = await (all.value ? api.allShares() : api.myShares())
-    rows.value = [...r.shares].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
+    let shares
+    if (!all.value) shares = (await api.myShares()).shares
+    else if (app.isAdmin) shares = (await api.allShares()).shares
+    else {
+      // a manager's list holds the links of the users they manage; their own come from the personal list
+      const [others, mine] = await Promise.all([api.allShares(), api.myShares()])
+      shares = [...mine.shares, ...others.shares.filter(s => !mine.shares.some(m => m.id === s.id))]
+    }
+    rows.value = [...shares].sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))
   } catch (e) { fb.fail(e) } finally { loading.value = false }
 }
 
@@ -120,9 +127,11 @@ async function openLink(s) {
   const url = await linkOf(s)
   if (url) window.open(url, '_blank', 'noopener')
 }
+// the server hands the link again to its owner and to a super admin only (a manager gets "not found" for others')
+const mayCopy = s => app.isAdmin || String(s.owner).toLowerCase() === app.user?.username.toLowerCase()
 const actions = s => {
   if (!revocable(s)) return null
-  const linkButtons = s.linkAvailable
+  const linkButtons = !mayCopy(s) ? [] : s.linkAvailable
     ? [
         h(NButton, { size: 'small', secondary: true, onClick: () => copyLink(s) }, { default: () => t('share.copyLink'), icon: () => h(NIcon, { component: CopyOutline }) }),
         h(NButton, { size: 'small', quaternary: true, title: t('share.openLink'), 'aria-label': t('share.openLink'), onClick: () => openLink(s) }, { icon: () => h(NIcon, { component: OpenOutline }) }),

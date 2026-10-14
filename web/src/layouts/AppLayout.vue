@@ -53,8 +53,10 @@ import AppLogo from '../components/AppLogo.vue'
 import PreferenceControls from '../components/PreferenceControls.vue'
 import ProfileModal from '../components/ProfileModal.vue'
 import { useAppStore } from '../store'
+import { useRoleLabel } from '../composables'
 
 const { t } = useI18n()
+const roleLabel = useRoleLabel()
 const app = useAppStore()
 const route = useRoute()
 const router = useRouter()
@@ -71,12 +73,16 @@ const navItems = computed(() => {
   const items = [{ name: 'files', label: t('nav.files'), icon: FolderOutline }]
   items.push({ name: 'favorites', label: t('nav.favorites'), icon: StarOutline })
   if (!app.isAdmin && app.hasSpace('public')) items.push({ name: 'shared', label: t('nav.publicFolder'), icon: GlobeOutline })
-  if (app.canShare) items.push({ name: 'links', label: t('nav.shareLinks'), icon: LinkOutline })
-  if (app.isAdmin) {
+  if (app.canShare || app.isStaff) items.push({ name: 'links', label: t('nav.shareLinks'), icon: LinkOutline })
+  if (app.isStaff) {
     items.push(
       { name: 'dashboard', label: t('nav.dashboard'), icon: SpeedometerOutline, badge: alertCount.value, badgeType: critical.value ? 'error' : 'warning' },
       { name: 'users', label: t('nav.users'), icon: PeopleOutline },
       { name: 'activity', label: t('nav.activity'), icon: TimeOutline },
+    )
+  }
+  if (app.isAdmin) {
+    items.push(
       { name: 'logs', label: t('nav.logs'), icon: DocumentTextOutline },
       { name: 'trash', label: t('nav.trash'), icon: TrashOutline },
       { name: 'update', label: t('nav.update'), icon: CloudUploadOutline },
@@ -87,7 +93,7 @@ const navItems = computed(() => {
   return items
 })
 
-const pageTitle = computed(() => (route.name === 'shared' ? t('nav.publicFolder') : navItems.value.find(i => i.name === route.name)?.label || ''))
+const pageTitle = computed(() => (route.name === 'user-files' ? t('nav.users') : route.name === 'shared' ? t('nav.publicFolder') : navItems.value.find(i => i.name === route.name)?.label || ''))
 const initial = computed(() => (app.user?.name || '?').trim().slice(0, 1).toUpperCase())
 
 const userOptions = computed(() => [
@@ -95,7 +101,7 @@ const userOptions = computed(() => [
     key: 'header', type: 'render',
     render: () => h('div', { style: 'padding:8px 14px;min-width:180px' }, [
       h('div', { style: 'font-weight:600' }, app.user?.name),
-      h('div', { style: 'font-size:12px;color:var(--muted)' }, `${app.user?.username}${app.isAdmin ? ' · ' + t('nav.admin') : ''}`),
+      h('div', { style: 'font-size:12px;color:var(--muted)' }, `${app.user?.username}${app.isStaff ? ' · ' + roleLabel(app.user.role) : ''}`),
     ]),
   },
   { type: 'divider', key: 'd' },
@@ -112,7 +118,7 @@ async function onSelect(key) {
 }
 
 async function loadWarnings() {
-  if (!app.isAdmin) return
+  if (!app.isStaff) return
   try { warnings.value = (await api.status()).warnings } catch { /* the dashboard shows errors */ }
 }
 

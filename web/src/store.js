@@ -19,7 +19,11 @@ export const useAppStore = defineStore('app', {
     favorites: [],
   }),
   getters: {
+    /** the super admin: sees everything */
     isAdmin: s => s.user?.role === 'admin',
+    isManager: s => s.user?.role === 'manager',
+    /** super admin or manager: the pages under "users", "activity" and the dashboard */
+    isStaff: s => s.user?.role === 'admin' || s.user?.role === 'manager',
     isGuest: s => !s.user,
     appName: s => s.config.appName,
     primaryColor: s => s.config.primaryColor,

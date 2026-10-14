@@ -162,7 +162,11 @@ const route = useRoute()
 const router = useRouter()
 const fb = useFeedback()
 
-const can = p => app.can(props.space, p)
+// a managed user's folder (`user:<name>`) is looked at, never changed: the rights come with each listing, and the
+// session does not know them. Nothing else here may offer a write
+const viewing = computed(() => props.space.startsWith('user:'))
+const viewPerms = ref([])
+const can = p => (viewing.value ? viewPerms.value.includes(p) : app.can(props.space, p))
 // signed in with `share` and `download` here (visitors of the public page never make links)
 // (a request link needs `upload` instead of `download`, and only a folder can receive files)
 const canShare = computed(() => !!app.user && can('share') && (can('download') || can('upload')))
@@ -250,6 +254,7 @@ async function load(quiet = false) {
   try {
     const res = await api.list(props.space, location.value)
     items.value = res.entries
+    if (viewing.value) viewPerms.value = res.permissions || []
     checked.value = checked.value.filter(p => res.entries.some(e => e.path === p))
     applySelect()
   } catch (e) {
@@ -272,7 +277,7 @@ function go(path, replace = false) {
   return replace ? router.replace(target) : router.push(target)
 }
 
-watch(() => [props.space, location.value], () => { items.value = []; pagination.page = 1; office.show = false; officeWait?.(); load() }, { immediate: true })
+watch(() => [props.space, location.value], () => { items.value = []; if (!viewing.value) viewPerms.value = []; pagination.page = 1; office.show = false; officeWait?.(); load() }, { immediate: true })
 // a folder that could not be read shows the server's text: read it again so the text follows the language switch
 watch(locale, () => { if (error.value) load(true) })
 
@@ -289,7 +294,7 @@ function applySelect() {
 }
 
 // ───── favorites ─────
-const starrable = computed(() => !!app.user)
+const starrable = computed(() => !!app.user && !viewing.value)
 const isFav = it => app.isFavorite(props.space, it.path)
 async function toggleFav(it) {
   try { await app.toggleFavorite(props.space, it.path) } catch (e) { fb.fail(e) }
@@ -327,7 +332,7 @@ function open(it) {
 }
 
 // ───── ONLYOFFICE ─────
-const officeModeOf = name => officeModeFor(app.config.office, can, name)
+const officeModeOf = name => (viewing.value ? null : officeModeFor(app.config.office, can, name))
 function openOffice(it, mode) {
   Object.assign(office, { item: it, mode, show: true })
 }
@@ -426,7 +431,7 @@ function pick(mode, list) {
 /** where a copy or move may go: here, and another space only with write and upload there (the server checks again) */
 // another space where the user may put files: a copy out of this one needs only read + download here (the server's rule)
 const otherDest = s => s !== props.space && app.can(s, 'write') && app.can(s, 'upload')
-const copyOut = computed(() => can('read') && can('download') && ['home', 'public'].some(otherDest))
+const copyOut = computed(() => !viewing.value && can('read') && can('download') && ['home', 'public'].some(otherDest))
 const destSpaces = computed(() => {
   const label = s => (s === 'public' ? t('nav.publicFolder') : t('nav.files'))
   return ['home', 'public']
