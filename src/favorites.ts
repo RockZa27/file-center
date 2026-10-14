@@ -43,7 +43,8 @@ export function removeFavorite(user: User, space: string, path: string) {
 
 /** a file was opened, downloaded or saved: newest first, once per place, at most MAX_RECENT */
 export function recordRecent(user: User | null, space: string, path: string) {
-  if (!user) return
+  // a staff view of someone's home (user:<name>) is not a place of the viewer's own
+  if (!user || (space !== 'home' && space !== 'public')) return
   let ref: Ref
   try { ref = { space, path: normRel(path) } } catch { return }
   if (ref.path === '/') return

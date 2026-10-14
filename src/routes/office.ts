@@ -22,6 +22,8 @@ export const officeRoutes = new Elysia({ prefix: '/api/office' })
     requireEnabled()
     // the editor shows the whole file, so editing needs the rights to read it too
     const a = body.mode === 'edit' ? need({ user, ip }, body.space, 'read', 'download', 'write') : need({ user, ip }, body.space, 'read', 'download')
+    // the editor can save: not in a staff view of someone's home
+    if (a.space !== 'home' && a.space !== 'public') throw forbidden()
     const rel = normRel(body.path)
     const abs = resolveIn(a.root, rel)
     let st

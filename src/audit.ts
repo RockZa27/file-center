@@ -14,13 +14,14 @@ export function audit(entry: Omit<AuditEntry, 'ts'>) {
   appendLine(paths.audit, JSON.stringify({ ts: new Date().toISOString(), ...entry }), config.auditMaxBytes, config.auditMaxFiles)
 }
 
-export type AuditFilter = { user?: string; action?: string; q?: string }
+export type AuditFilter = { user?: string; action?: string; q?: string; /** a further test every entry must pass */ only?: (r: AuditEntry) => boolean }
 export type AuditQuery = AuditFilter & { page: number; pageSize: number }
 
 /** the filters of the activity page (and its CSV export) */
-export function auditMatcher({ user, action, q }: AuditFilter) {
+export function auditMatcher({ user, action, q, only }: AuditFilter) {
   const needle = q?.toLowerCase()
   return (r: AuditEntry) =>
+    (!only || only(r)) &&
     (!user || r.user === user) &&
     (!action || r.action === action) &&
     (!needle || `${r.target ?? ''} ${r.detail ?? ''} ${r.user}`.toLowerCase().includes(needle))

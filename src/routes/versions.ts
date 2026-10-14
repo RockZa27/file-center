@@ -33,10 +33,11 @@ export const versionRoutes = new Elysia({ prefix: '/api/versions' })
     }
   }, { query: fileQ })
 
-  .get('/:id/download', ({ user, query, params, request }) => {
+  .get('/:id/download', ({ user, ip, query, params, request }) => {
     const a = need({ user, ip: '' }, query.space, 'download')
     const abs = fileOf(a.root, query.path)
     const v = getVersion(abs, params.id)
+    if (a.space.startsWith('user:')) audit({ user: user!.username, ip, action: 'download', target: storagePath(abs), detail: `${a.space}, เวอร์ชันเก่า` })
     return fileResponse(v.item, basename(abs), request, false)
   }, { query: fileQ })
 

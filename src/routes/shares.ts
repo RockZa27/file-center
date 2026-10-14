@@ -4,10 +4,10 @@ import { basename, dirname, join } from 'node:path'
 import { Elysia, t } from 'elysia'
 import { alert } from '../alerts'
 import { audit } from '../audit'
-import { accessFor, clearFailures, findUser, hashPassword, lockedFor, recordFailure } from '../auth'
+import { accessFor, canManage, clearFailures, findUser, hashPassword, lockedFor, recordFailure } from '../auth'
 import { config } from '../config'
-import { context, need, requireAdmin, requireUser } from '../context'
-import { bad, HttpError, listDirAsync, normRel, notFound, resolveIn, storagePath, treeStats } from '../fsx'
+import { context, need, requireStaff, requireUser } from '../context'
+import { bad, forbidden, HttpError, listDirAsync, normRel, notFound, resolveIn, storagePath, treeStats } from '../fsx'
 import { sizeText } from '../messages'
 import { limitOf as quotaOf, ready } from '../quota'
 import {
@@ -117,6 +117,8 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
     const a = need({ user, ip }, body.space, 'share', kind === 'upload' ? 'upload' : 'download')
     const rel = normRel(body.path)
     if (rel === '/') throw bad('files.root-item')
+    // links are made in an own space only (a staff view of someone's home has no `share` right anyway)
+    if (a.space !== 'home' && a.space !== 'public') throw forbidden()
     const abs = resolveIn(a.root, rel)
     let st
     try { st = lstatSync(abs) } catch { throw notFound() }
@@ -191,15 +193,16 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
     const u = requireUser({ user, ip })
     const share = findShare(params.id)
     // someone else's link is "not found" too: ids are not to be probed
-    if (!share || (share.owner.toLowerCase() !== u.username.toLowerCase() && u.role !== 'admin')) throw notFound()
+    if (!share || (share.owner.toLowerCase() !== u.username.toLowerCase() && u.role !== 'admin' && !canManage(u, findUser(share.owner)))) throw notFound()
     revokeShare(share)
     audit({ user: u.username, ip, action: 'share-revoke', target: shareTarget(share), detail: share.owner })
     return { ok: true }
   })
 
   .get('/admin/shares', ({ user, ip }) => {
-    requireAdmin({ user, ip })
-    return { shares: allShares().map(publicShare) }
+    // a manager: the links of the users they manage
+    const actor = requireStaff({ user, ip })
+    return { shares: allShares().filter(s => actor.role === 'admin' || canManage(actor, findUser(s.owner))).map(publicShare) }
   })
 
   // ───────────── public: whoever holds the link ─────────────

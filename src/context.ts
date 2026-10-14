@@ -1,5 +1,5 @@
 import { Elysia } from 'elysia'
-import { accessFor, getSession, reloadIfChangedByCli, type Access, type Session, type User, findUser } from './auth'
+import { accessFor, canManage, getSession, isStaff, reloadIfChangedByCli, type Access, type Session, type User, findUser } from './auth'
 import { config } from './config'
 import { forbidden, fromFsError, HttpError } from './fsx'
 import { log, safePath } from './logger'
@@ -135,6 +135,21 @@ export function requireAdmin(c: Caller): User {
   const u = requireUser(c)
   if (u.role !== 'admin') throw forbidden()
   return u
+}
+
+/** admin or manager; the routes then decide per target with canManage */
+export function requireStaff(c: Caller): User {
+  const u = requireUser(c)
+  if (!isStaff(u)) throw forbidden()
+  return u
+}
+
+/** the user a staff member acts on: unknown is 404, one the caller may not manage is 403 */
+export function manageable(actor: User, username: string): User {
+  const target = findUser(username)
+  if (!target) throw new HttpError(404, 'admin.user-not-found')
+  if (!canManage(actor, target)) throw forbidden('admin.not-manageable')
+  return target
 }
 
 /** Resolve the space the caller asks for and check they hold every listed permission. */

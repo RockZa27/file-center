@@ -2,16 +2,18 @@ import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { Elysia, t } from 'elysia'
 import { audit, queryAudit } from '../audit'
+import type { Perm } from '../settings'
 import {
-  allUsers, checkPasswordStrength, cleanHomedir, cleanPerms, confirmPassword, destroyUserSessions, dropLoginTickets,
-  findUser, hashPassword, isReservedUsername, listUserSessions, publicUser, saveUsers, USERNAME_RE,
+  allUsers, canManage, checkPasswordStrength, cleanHomedir, cleanPerms, confirmPassword, defaultHome, destroyUserSessions,
+  dropLoginTickets, findUser, hashPassword, isAdmin, isReservedUsername, listUserSessions, publicUser, saveUsers, USERNAME_RE,
 } from '../auth'
 import { statusIn } from '../backup'
 import { config, paths } from '../config'
-import { context, requireAdmin } from '../context'
+import { context, manageable, requireAdmin, requireStaff } from '../context'
 import { bad, conflict, ensureDir, forbidden, HttpError, isDir, listDirAsync, normRel, notFound, resolveIn } from '../fsx'
 import { errorsSince } from '../logger'
 import { langOf, type MessageCode, type Params, text } from '../messages'
+import type { User } from '../auth'
 import { cleanQuota, forget } from '../quota'
 import { settings } from '../settings'
 import { revokeSharesOf } from '../shares'
@@ -24,11 +26,21 @@ import { uploadsInProgress } from '../uploads'
 import { alertRoutes } from './alerts'
 
 const startedAt = Date.now()
-const roleT = t.Union([t.Literal('admin'), t.Literal('user')])
+const roleT = t.Union([t.Literal('admin'), t.Literal('manager'), t.Literal('user')])
 const permsT = t.Array(t.String(), { maxItems: 50 })
 
 function adminCount() {
   return allUsers().filter(u => u.role === 'admin').length
+}
+
+/**
+ * A manager grants only what stays inside their own rights: home permissions as they like, but in the shared public
+ * folder nothing they do not hold themself (an unchanged value the target already has is no escalation)
+ */
+function checkPublicPerms(actor: User, wanted: Perm[], already: Perm[] = []) {
+  if (isAdmin(actor)) return
+  const mine = new Set(actor.publicPermissions)
+  if (wanted.some(p => !mine.has(p) && !already.includes(p))) throw forbidden('admin.public-perms-exceed')
 }
 
 export const adminRoutes = new Elysia({ prefix: '/api' })
@@ -52,13 +64,16 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
   })
 
   // ───────────── users ─────────────
+  // staff see everyone; `manageable` tells the page which rows the caller may change (a manager: plain users only)
   .get('/admin/users', ({ user, ip }) => {
-    requireAdmin({ user, ip })
-    return { users: allUsers().map(publicUser) }
+    const actor = requireStaff({ user, ip })
+    return { users: allUsers().map(u => ({ ...publicUser(u), manageable: canManage(actor, u) })) }
   })
 
   .post('/admin/users', async ({ user, ip, body }) => {
-    const admin = requireAdmin({ user, ip })
+    const admin = requireStaff({ user, ip })
+    // a manager makes plain users only, always in /users/<name>, with public rights no wider than their own
+    if (!isAdmin(admin) && body.role !== 'user') throw forbidden('admin.role-not-allowed')
     const username = body.username.trim()
     if (!USERNAME_RE.test(username)) throw bad('admin.bad-username')
     if (isReservedUsername(username)) throw bad('admin.reserved-username')
@@ -66,15 +81,17 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     checkPasswordStrength(body.password, username)
     const name = body.name.trim()
     if (!name || name.length > 60) throw bad('admin.display-name-required')
-    const homedir = body.role === 'admin' ? '/' : cleanHomedir(body.homedir, username)
+    const homedir = body.role === 'admin' ? '/' : isAdmin(admin) ? cleanHomedir(body.homedir, username) : defaultHome(username)
     if (body.role !== 'admin' && homedir === '/') throw bad('admin.home-required')
+    const publicPermissions = cleanPerms(body.publicPermissions)
+    checkPublicPerms(admin, publicPermissions)
     ensureDir(resolveIn(config.storageDir, homedir))
     const quotaBytes = body.quotaBytes === undefined ? 0 : cleanQuota(body.quotaBytes)
     allUsers().push({
       username, name, role: body.role, homedir,
       ...(quotaBytes ? { quotaBytes } : {}),
       permissions: cleanPerms(body.permissions),
-      publicPermissions: cleanPerms(body.publicPermissions),
+      publicPermissions,
       passwordHash: await hashPassword(body.password),
       createdAt: new Date().toISOString(),
     })
@@ -90,9 +107,9 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
   })
 
   .put('/admin/users/:username', async ({ user, ip, params, body }) => {
-    const admin = requireAdmin({ user, ip })
-    const target = findUser(params.username)
-    if (!target) throw notFound('admin.user-not-found')
+    const admin = requireStaff({ user, ip })
+    const target = manageable(admin, params.username)
+    if (!isAdmin(admin) && body.role !== undefined && body.role !== 'user') throw forbidden('admin.role-not-allowed')
     // check every field first: a refused request must not leave half of its changes behind
     if (body.role && body.role !== target.role && target.role === 'admin' && adminCount() <= 1) {
       throw bad('admin.last-admin')
@@ -101,7 +118,8 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     if (name !== undefined && (!name || name.length > 60)) throw bad('admin.bad-display-name')
     const role = body.role ?? target.role
     let homedir = role === 'admin' ? '/' : target.homedir
-    if (role !== 'admin' && (body.homedir !== undefined || target.homedir === '/')) {
+    // a manager can not move anyone: the folder of a user they manage is /users/<name> already (canManage)
+    if (isAdmin(admin) && role !== 'admin' && (body.homedir !== undefined || target.homedir === '/')) {
       homedir = cleanHomedir(body.homedir, target.username)
       if (homedir === '/') throw bad('admin.home-required')
     }
@@ -109,13 +127,15 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     if (body.password) checkPasswordStrength(body.password, target.username)
     const passwordHash = body.password ? await hashPassword(body.password) : null
     const quotaBytes = body.quotaBytes === undefined ? undefined : cleanQuota(body.quotaBytes)
+    const publicPermissions = body.publicPermissions ? cleanPerms(body.publicPermissions) : undefined
+    if (publicPermissions) checkPublicPerms(admin, publicPermissions, target.publicPermissions)
 
     ensureDir(homeAbs)
     if (name !== undefined) target.name = name
     target.role = role
     target.homedir = homedir
     if (body.permissions) target.permissions = cleanPerms(body.permissions)
-    if (body.publicPermissions) target.publicPermissions = cleanPerms(body.publicPermissions)
+    if (publicPermissions) target.publicPermissions = publicPermissions
     if (quotaBytes !== undefined) {
       if (quotaBytes) target.quotaBytes = quotaBytes
       else delete target.quotaBytes
@@ -139,9 +159,8 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
   })
 
   .delete('/admin/users/:username', ({ user, ip, params }) => {
-    const admin = requireAdmin({ user, ip })
-    const target = findUser(params.username)
-    if (!target) throw notFound('admin.user-not-found')
+    const admin = requireStaff({ user, ip })
+    const target = manageable(admin, params.username)
     if (target.username === admin.username) throw bad('admin.delete-self')
     if (target.role === 'admin' && adminCount() <= 1) throw bad('admin.last-admin')
     const list = allUsers()
@@ -156,16 +175,13 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
 
   // a user's signed-in devices, and ending them all (a lost phone, a stolen cookie)
   .get('/admin/users/:username/sessions', ({ user, ip, params }) => {
-    requireAdmin({ user, ip })
-    const target = findUser(params.username)
-    if (!target) throw notFound('admin.user-not-found')
+    const target = manageable(requireStaff({ user, ip }), params.username)
     return { sessions: listUserSessions(target.username) }
   })
 
   .post('/admin/users/:username/sessions/revoke', ({ user, ip, params }) => {
-    const admin = requireAdmin({ user, ip })
-    const target = findUser(params.username)
-    if (!target) throw notFound('admin.user-not-found')
+    const admin = requireStaff({ user, ip })
+    const target = manageable(admin, params.username)
     const revoked = destroyUserSessions(target.username)
     audit({ user: admin.username, ip, action: 'sessions-revoke', target: target.username, detail: String(revoked) })
     return { ok: true, revoked }
@@ -173,9 +189,8 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
 
   // for a user who lost the phone and the backup codes; the admin proves it is them with their own password
   .post('/admin/users/:username/2fa/reset', async ({ user, ip, params, body }) => {
-    const admin = requireAdmin({ user, ip })
-    const target = findUser(params.username)
-    if (!target) throw notFound('admin.user-not-found')
+    const admin = requireStaff({ user, ip })
+    const target = manageable(admin, params.username)
     await confirmPassword(admin, ip, body.password, '2fa-reset-denied')
     delete target.twoFactor
     saveUsers()
@@ -196,7 +211,26 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
 
   // ───────────── dashboard ─────────────
   .get('/admin/status', ({ user, ip, request }) => {
-    requireAdmin({ user, ip })
+    const actor = requireStaff({ user, ip })
+    if (!isAdmin(actor)) {
+      // a manager's dashboard: how many people and how much is stored. No version, uptime, disk, backup, trash or
+      // update information (system internals stay with the admin), and the password warning counts only their own users
+      const lang = langOf(request)
+      const mine = allUsers().filter(u => canManage(actor, u))
+      const warnings: { level: 'warning'; code: MessageCode; message: string; params: Params }[] = []
+      if (mine.some(u => u.mustChangePassword)) {
+        warnings.push({ level: 'warning', code: 'admin.default-password', message: text(lang, 'admin.default-password'), params: {} })
+      }
+      const { storage, stale } = storageStats()
+      return {
+        reduced: true,
+        users: allUsers().length,
+        manageableUsers: mine.length,
+        storage: storage && { size: storage.size, files: storage.files },
+        stale,
+        warnings,
+      }
+    }
     const disk = diskInfo()
     // one code per message, the text in the admin's language
     const lang = langOf(request)
@@ -222,6 +256,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     const newer = availableVersion()
     if (newer) warn('info', 'update.available', { version: newer })
     return {
+      reduced: false,
       version: config.version,
       uptimeSeconds: Math.round((Date.now() - startedAt) / 1000),
       disk,
@@ -235,9 +270,12 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     }
   })
 
+  // a manager sees what they and the users they manage did
   .get('/admin/activity', ({ user, ip, query }) => {
-    requireAdmin({ user, ip })
+    const actor = requireStaff({ user, ip })
+    const names = isAdmin(actor) ? null : new Set([actor.username, ...allUsers().filter(u => canManage(actor, u)).map(u => u.username)])
     return queryAudit({
+      only: names ? r => names.has(r.user) : undefined,
       user: query.user || undefined,
       action: query.action || undefined,
       q: query.q || undefined,

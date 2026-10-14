@@ -97,6 +97,9 @@ export function fileResponse(abs: string, name: string, request: Request, wantIn
 type Batch = { owner: string; space: string; root: string; dir: string; names: string[]; expires: number }
 const batches = new Map<string, Batch>()
 
+/** set when the space is a staff member's read-only view of someone's home (user:<name>): the audit names whose files */
+const viewDetail = (a: { space: string }) => (a.space.startsWith('user:') ? { detail: a.space } : {})
+
 export const fileRoutes = new Elysia({ prefix: '/api' })
   .use(context)
 
@@ -166,13 +169,14 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     return { ok: true }
   }, { body: t.Object({ space: t.String(), path: t.String(), name: t.String() }) })
 
-  .get('/content', async ({ user, query }) => {
+  .get('/content', async ({ user, ip, query }) => {
     const a = need({ user, ip: '' }, query.space, 'read', 'download')
     const abs = resolveIn(a.root, normRel(query.path))
     const st = existsSync(abs) ? statSync(abs) : null
     if (!st || !st.isFile()) throw notFound()
     if (st.size > MAX_TEXT) throw new HttpError(413, 'files.too-big-to-open')
     recordRecent(user, query.space, normRel(query.path))
+    if (a.space.startsWith('user:')) audit({ user: user!.username, ip, action: 'view', target: storagePath(abs), ...viewDetail(a) })
     return { content: await Bun.file(abs).text(), mtime: Math.round(st.mtimeMs) }
   }, { query: spaceQ })
 
@@ -336,7 +340,8 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     if (!existsSync(abs) || !statSync(abs).isFile()) throw notFound()
     const range = request.headers.get('range')
     if (!range || range.startsWith('bytes=0-')) {
-      if (query.inline !== '1') audit({ user: user?.username ?? 'guest', ip, action: 'download', target: storagePath(abs) })
+      // a staff member reading someone's files is always recorded, a preview included
+      if (query.inline !== '1' || a.space.startsWith('user:')) audit({ user: user?.username ?? 'guest', ip, action: 'download', target: storagePath(abs), ...viewDetail(a) })
       recordRecent(user, query.space, rel)
     }
     return fileResponse(abs, basename(abs), request, query.inline === '1')
@@ -364,7 +369,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     if (a.root !== b.root) throw new HttpError(403, 'files.download-forbidden')
     const dir = resolveIn(b.root, b.dir)
     const list = collectZipItems(dir, b.names)
-    audit({ user: b.owner, ip, action: 'download-zip', target: storagePath(dir), detail: `${b.names.length} รายการ` })
+    audit({ user: b.owner, ip, action: 'download-zip', target: storagePath(dir), detail: `${b.names.length} รายการ${b.space.startsWith('user:') ? `, ${b.space}` : ''}` })
     const name = b.names.length === 1 ? `${b.names[0]}.zip` : `${basename(b.dir === '/' ? 'files' : b.dir)}.zip`
     return new Response(zipStream(list), {
       headers: {
@@ -395,6 +400,8 @@ async function transfer(
   // inside one space: write, as it always was. Between spaces: the source must be readable (a copy also downloadable,
   // a move also writable, the source goes) and the destination must take new files (write + upload)
   const a = cross ? need({ user, ip }, body.space, ...(kind === 'copy' ? ['read', 'download'] as const : ['read', 'write'] as const)) : need({ user, ip }, body.space, 'write')
+  // a copy out of someone's home would be a download that nothing records
+  if (a.space.startsWith('user:')) throw forbidden()
   const d = cross ? need({ user, ip }, body.destSpace, 'write', 'upload') : a
   // a move inside one space does not change what a home holds; a copy (or a move into another space) adds the size
   const q = d.space === 'home' ? user : null

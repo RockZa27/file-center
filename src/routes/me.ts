@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs'
 import { Elysia, t } from 'elysia'
 import { context, need, requireUser } from '../context'
-import { normRel, notFound, resolveIn } from '../fsx'
+import { forbidden, normRel, notFound, resolveIn } from '../fsx'
 import { addFavorite, listFavorites, listRecent, removeFavorite } from '../favorites'
 
 const place = t.Object({ space: t.String(), path: t.String() })
@@ -15,6 +15,7 @@ export const meRoutes = new Elysia({ prefix: '/api/me' })
   .post('/favorites', ({ user, ip, body }) => {
     const u = requireUser({ user, ip })
     const a = need({ user: u, ip }, body.space, 'read')
+    if (a.space !== 'home' && a.space !== 'public') throw forbidden()
     if (!existsSync(resolveIn(a.root, normRel(body.path)))) throw notFound()
     addFavorite(u, body.space, body.path)
     return { ok: true }

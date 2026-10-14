@@ -11,7 +11,27 @@ import { cleanPerms, PERMISSIONS, settings, type Perm } from './settings'
 import { JsonStore } from './store'
 import { newTotpSecret, verifyTotp } from './totp'
 
-export type Role = 'admin' | 'user'
+/**
+ * admin = super admin (the whole storage, settings, updates, backups); manager = "ผู้ดูแล": manages plain users and
+ * reads their files, nothing else; user. The stored ids stay as they were so existing data needs no migration.
+ */
+export type Role = 'admin' | 'manager' | 'user'
+
+export const isAdmin = (u: User | null | undefined): boolean => u?.role === 'admin'
+/** admin or manager */
+export const isStaff = (u: User | null | undefined): boolean => u?.role === 'admin' || u?.role === 'manager'
+/** where the folder of a user created by a manager (and so the one a manager may read) is */
+export const defaultHome = (username: string) => `/users/${username}`
+/**
+ * May `actor` change `target` (and, for the user:<name> space, read their files)? An admin: anyone. A manager: only
+ * a plain user whose folder is their own /users/<name>, so a shared or odd folder an admin gave out stays admin-only.
+ * Nobody else, and never the manager themself.
+ */
+export function canManage(actor: User | null | undefined, target: User | null | undefined): boolean {
+  if (!actor || !target) return false
+  if (actor.role === 'admin') return true
+  return actor.role === 'manager' && target.role === 'user' && target.homedir === defaultHome(target.username)
+}
 
 export type User = {
   username: string
@@ -116,7 +136,7 @@ export async function bootstrapAdmin() {
 }
 
 export function cleanHomedir(input: unknown, username: string): string {
-  const p = input === undefined || input === '' ? `/users/${username}` : normRel(input)
+  const p = input === undefined || input === '' ? defaultHome(username) : normRel(input)
   // inside the public folder the user would get full rights there through their own space
   const pub = `/${config.publicDirName}`
   if (p === pub || p.startsWith(`${pub}/`)) throw bad('admin.home-in-public')
@@ -442,15 +462,19 @@ export async function confirmPassword(
 // ───────────────────────────── access ─────────────────────────────
 
 export type Space = 'home' | 'public'
+/** `user:<username>`: read-only view of the home of a user the caller manages (accessFor) */
+export type AnySpace = Space | `user:${string}`
+export const USER_SPACE = 'user:'
 
 export type Access = {
-  space: Space
+  space: AnySpace
   root: string
   perms: Set<Perm>
 }
 
 /** Which part of the storage may this visitor see for the given space, and with which rights. */
 export function accessFor(user: User | null, space: unknown): Access | null {
+  if (typeof space === 'string' && space.startsWith(USER_SPACE)) return userSpace(user, space)
   if (space !== 'home' && space !== 'public') return null
   if (!user) {
     if (space !== 'public' || !settings.get().publicEnabled) return null
@@ -463,6 +487,18 @@ export function accessFor(user: User | null, space: unknown): Access | null {
   const root = user.role === 'admin' ? config.storageDir : resolveIn(config.storageDir, normRel(user.homedir))
   ensureDir(root)
   return { space, root, perms: new Set(user.role === 'admin' ? PERMISSIONS : user.permissions) }
+}
+
+/** what a manager (or admin) may do in a managed user's home: look and take a copy, never change */
+const VIEW_PERMS: Perm[] = ['read', 'download', 'batchdownload', 'zip']
+
+function userSpace(user: User | null, space: string): Access | null {
+  const target = findUser(space.slice(USER_SPACE.length))
+  if (!user || !target || !canManage(user, target)) return null
+  const root = resolveIn(config.storageDir, normRel(target.homedir))
+  if (!existsSync(root) || !statSync(root).isDirectory()) return null
+  // the name as stored, so `user:BOB` and `user:bob` are one space
+  return { space: `${USER_SPACE}${target.username}`, root, perms: new Set(VIEW_PERMS) }
 }
 
 export { cleanPerms }

@@ -861,5 +861,50 @@
         "replace": "if (!share) throw notFound()\n    const token = stateOf(share)"
       }
     ]
+  },
+  {
+    "id": "manager-edits-admin",
+    "difficulty": "easy",
+    "category": "authz",
+    "severity": "critical",
+    "tests": "tests/roles.test.ts",
+    "description": "a manager may change, delete and reset every user, administrators and other managers included",
+    "patches": [
+      {
+        "file": "src/auth.ts",
+        "find": "return actor.role === 'manager' && target.role === 'user' && target.homedir === defaultHome(target.username)",
+        "replace": "return actor.role === 'manager'"
+      }
+    ]
+  },
+  {
+    "id": "manager-public-perms-exceed",
+    "difficulty": "medium",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/roles.test.ts",
+    "description": "a manager can grant a user rights in the shared public folder that the manager does not hold",
+    "patches": [
+      {
+        "file": "src/routes/admin.ts",
+        "find": "if (wanted.some(p => !mine.has(p) && !already.includes(p))) throw forbidden('admin.public-perms-exceed')",
+        "replace": "if (false) throw forbidden('admin.public-perms-exceed')"
+      }
+    ]
+  },
+  {
+    "id": "user-space-writable",
+    "difficulty": "medium",
+    "category": "authz",
+    "severity": "critical",
+    "tests": "tests/roles.test.ts",
+    "description": "the read-only view of a managed user's home (space user:<name>) also allows writing and uploading",
+    "patches": [
+      {
+        "file": "src/auth.ts",
+        "find": "const VIEW_PERMS: Perm[] = ['read', 'download', 'batchdownload', 'zip']",
+        "replace": "const VIEW_PERMS: Perm[] = ['read', 'download', 'batchdownload', 'zip', 'write', 'upload']"
+      }
+    ]
   }
 ]
