@@ -6,6 +6,7 @@ import {
   backupPath, backupSettings, BACKUP_NAME_RE, listBackups, restoreBackup, runBackup, statusIn,
 } from '../backup'
 import { context, requireAdmin } from '../context'
+import { fileResponse } from './files'
 import { bad, HttpError } from '../fsx'
 import { restartSoon, supervised } from '../lifecycle'
 import { langOf } from '../messages'
@@ -25,17 +26,15 @@ export const backupRoutes = new Elysia({ prefix: '/api/admin' })
     return item
   })
 
-  .get('/backups/:name/download', ({ user, ip, params }) => {
+  .get('/backups/:name/download', ({ user, ip, params, request }) => {
     const admin = requireAdmin({ user, ip })
     const abs = backupPath(params.name)
-    audit({ user: admin.username, ip, action: 'backup-download', target: params.name })
-    return new Response(Bun.file(abs), {
-      headers: {
-        'Content-Type': 'application/zip',
-        'Content-Disposition': `attachment; filename="${params.name}"`,
-        'Cache-Control': 'no-store',
-      },
-    })
+    // a resumed download asks for the rest only: one audit line per download, not per part
+    if (!request.headers.get('range')) audit({ user: admin.username, ip, action: 'backup-download', target: params.name })
+    // the same answer as any file download: Range and validators, so a backup of gigabytes can be resumed after a break
+    const res = fileResponse(abs, params.name, request, false)
+    res.headers.set('Cache-Control', 'no-store')
+    return res
   })
 
   .delete('/backups/:name', ({ user, ip, params }) => {
