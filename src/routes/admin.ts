@@ -57,7 +57,13 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     return { users: allUsers().map(publicUser) }
   })
 
-  .post('/admin/users', async ({ user, ip, body }) => {
+  .post('/admin/users', {
+    body: t.Object({
+      username: t.String(), name: t.String(), password: t.String(), role: roleT,
+      homedir: t.Optional(t.String()), permissions: permsT, publicPermissions: permsT,
+      quotaBytes: t.Optional(t.Number()),
+    }),
+  }, async ({ user, ip, body }) => {
     const admin = requireAdmin({ user, ip })
     const username = body.username.trim()
     if (!USERNAME_RE.test(username)) throw bad('admin.bad-username')
@@ -81,15 +87,15 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     saveUsers()
     audit({ user: admin.username, ip, action: 'user-create', target: username })
     return { ok: true }
-  }, {
-    body: t.Object({
-      username: t.String(), name: t.String(), password: t.String(), role: roleT,
-      homedir: t.Optional(t.String()), permissions: permsT, publicPermissions: permsT,
-      quotaBytes: t.Optional(t.Number()),
-    }),
   })
 
-  .put('/admin/users/:username', async ({ user, ip, params, body }) => {
+  .put('/admin/users/:username', {
+    body: t.Object({
+      name: t.Optional(t.String()), password: t.Optional(t.String()), role: t.Optional(roleT),
+      homedir: t.Optional(t.String()), permissions: t.Optional(permsT), publicPermissions: t.Optional(permsT),
+      quotaBytes: t.Optional(t.Number()),
+    }),
+  }, async ({ user, ip, params, body }) => {
     const admin = requireAdmin({ user, ip })
     const target = findUser(params.username)
     if (!target) throw notFound('admin.user-not-found')
@@ -130,12 +136,6 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     saveUsers()
     audit({ user: admin.username, ip, action: 'user-update', target: target.username })
     return { ok: true }
-  }, {
-    body: t.Object({
-      name: t.Optional(t.String()), password: t.Optional(t.String()), role: t.Optional(roleT),
-      homedir: t.Optional(t.String()), permissions: t.Optional(permsT), publicPermissions: t.Optional(permsT),
-      quotaBytes: t.Optional(t.Number()),
-    }),
   })
 
   .delete('/admin/users/:username', ({ user, ip, params }) => {
@@ -172,7 +172,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
   })
 
   // for a user who lost the phone and the backup codes; the admin proves it is them with their own password
-  .post('/admin/users/:username/2fa/reset', async ({ user, ip, params, body }) => {
+  .post('/admin/users/:username/2fa/reset', { body: t.Object({ password: t.String({ maxLength: 1000 }) }) }, async ({ user, ip, params, body }) => {
     const admin = requireAdmin({ user, ip })
     const target = findUser(params.username)
     if (!target) throw notFound('admin.user-not-found')
@@ -183,16 +183,16 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     destroyUserSessions(target.username)
     audit({ user: admin.username, ip, action: '2fa-reset', target: target.username })
     return { ok: true }
-  }, { body: t.Object({ password: t.String({ maxLength: 1000 }) }) })
+  })
 
   // folder tree for the "home folder" picker
-  .get('/admin/folders', async ({ user, ip, query }) => {
+  .get('/admin/folders', { query: t.Object({ path: t.Optional(t.String()) }) }, async ({ user, ip, query }) => {
     requireAdmin({ user, ip })
     const rel = normRel(query.path)
     const abs = resolveIn(config.storageDir, rel)
     if (!isDir(abs)) throw notFound()
     return { path: rel, entries: (await listDirAsync(abs, rel)).filter(e => e.type === 'dir') }
-  }, { query: t.Object({ path: t.Optional(t.String()) }) })
+  })
 
   // ───────────── dashboard ─────────────
   .get('/admin/status', ({ user, ip, request }) => {
@@ -235,7 +235,12 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     }
   })
 
-  .get('/admin/activity', ({ user, ip, query }) => {
+  .get('/admin/activity', {
+    query: t.Object({
+      user: t.Optional(t.String()), action: t.Optional(t.String()), q: t.Optional(t.String()),
+      page: t.Optional(t.String()), pageSize: t.Optional(t.String()),
+    }),
+  }, ({ user, ip, query }) => {
     requireAdmin({ user, ip })
     return queryAudit({
       user: query.user || undefined,
@@ -244,11 +249,6 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
       page: Math.max(1, Number(query.page) || 1),
       pageSize: Math.min(100, Math.max(5, Number(query.pageSize) || 25)),
     })
-  }, {
-    query: t.Object({
-      user: t.Optional(t.String()), action: t.Optional(t.String()), q: t.Optional(t.String()),
-      page: t.Optional(t.String()), pageSize: t.Optional(t.String()),
-    }),
   })
 
   // ───────────── trash ─────────────
@@ -257,19 +257,19 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     return { items: listTrash(), retentionDays: config.trashRetentionDays }
   })
 
-  .post('/admin/trash/restore', async ({ user, ip, body }) => {
+  .post('/admin/trash/restore', { body: t.Object({ id: t.String() }) }, async ({ user, ip, body }) => {
     const admin = requireAdmin({ user, ip })
     const r = await restore(body.id)
     audit({ user: admin.username, ip, action: 'restore', target: r.restoredTo })
     return { ok: true, restoredTo: r.restoredTo }
-  }, { body: t.Object({ id: t.String() }) })
+  })
 
-  .post('/admin/trash/purge', ({ user, ip, body }) => {
+  .post('/admin/trash/purge', { body: t.Object({ id: t.Optional(t.String()) }) }, ({ user, ip, body }) => {
     const admin = requireAdmin({ user, ip })
     const n = purge(body.id)
     audit({ user: admin.username, ip, action: 'purge', detail: `${n} รายการ` })
     return { ok: true, removed: n }
-  }, { body: t.Object({ id: t.Optional(t.String()) }) })
+  })
 
   // ───────────── settings ─────────────
   .get('/admin/settings', ({ user, ip }) => {
@@ -277,7 +277,14 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     return settings.get()
   })
 
-  .put('/admin/settings', ({ user, ip, body }) => {
+  .put('/admin/settings', {
+    body: t.Object({
+      appName: t.Optional(t.String()), primaryColor: t.Optional(t.String()),
+      welcomeTitle: t.Optional(t.String()), welcomeText: t.Optional(t.String()),
+      publicEmptyText: t.Optional(t.String()), publicEnabled: t.Optional(t.Boolean()),
+      guestPermissions: t.Optional(permsT),
+    }),
+  }, ({ user, ip, body }) => {
     const admin = requireAdmin({ user, ip })
     const patch: Record<string, unknown> = {}
     const text = (key: keyof typeof body, max: number, min = 0) => {
@@ -300,16 +307,9 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     settings.update(patch)
     audit({ user: admin.username, ip, action: 'settings-update', detail: Object.keys(patch).join(', ') })
     return settings.get()
-  }, {
-    body: t.Object({
-      appName: t.Optional(t.String()), primaryColor: t.Optional(t.String()),
-      welcomeTitle: t.Optional(t.String()), welcomeText: t.Optional(t.String()),
-      publicEmptyText: t.Optional(t.String()), publicEnabled: t.Optional(t.Boolean()),
-      guestPermissions: t.Optional(permsT),
-    }),
   })
 
-  .put('/admin/logo', async ({ user, ip, request }) => {
+  .put('/admin/logo', { parse: 'none' }, async ({ user, ip, request }) => {
     const admin = requireAdmin({ user, ip })
     const type = (request.headers.get('content-type') ?? '').split(';')[0].trim()
     const ext = ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/svg+xml': 'svg' } as Record<string, string>)[type]
@@ -322,7 +322,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     settings.update({ logo: `${ext}:${Date.now()}` })
     audit({ user: admin.username, ip, action: 'logo-update' })
     return settings.get()
-  }, { parse: 'none' })
+  })
 
   .delete('/admin/logo', ({ user, ip }) => {
     const admin = requireAdmin({ user, ip })

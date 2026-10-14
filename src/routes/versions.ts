@@ -23,7 +23,7 @@ function fileOf(root: string, path: string): string {
 export const versionRoutes = new Elysia({ prefix: '/api/versions' })
   .use(context)
 
-  .get('/', ({ user, query }) => {
+  .get('/', { query: fileQ }, ({ user, query }) => {
     const a = need({ user, ip: '' }, query.space, 'read')
     const abs = fileOf(a.root, query.path)
     const st = statSync(abs)
@@ -31,16 +31,16 @@ export const versionRoutes = new Elysia({ prefix: '/api/versions' })
       current: { size: st.size, mtime: Math.round(st.mtimeMs) },
       items: listVersions(abs).map(({ id, size, mtime, savedAt, savedBy, reason }) => ({ id, size, mtime, savedAt, savedBy, reason })),
     }
-  }, { query: fileQ })
+  })
 
-  .get('/:id/download', ({ user, query, params, request }) => {
+  .get('/:id/download', { query: fileQ }, ({ user, query, params, request }) => {
     const a = need({ user, ip: '' }, query.space, 'download')
     const abs = fileOf(a.root, query.path)
     const v = getVersion(abs, params.id)
     return fileResponse(v.item, basename(abs), request, false)
-  }, { query: fileQ })
+  })
 
-  .post('/:id/restore', async ({ user, ip, params, body }) => {
+  .post('/:id/restore', { body: t.Object({ space: t.String(), path: t.String(), expectedMtime: t.Optional(t.Number()) }) }, async ({ user, ip, params, body }) => {
     const a = need({ user, ip }, body.space, 'write')
     const abs0 = resolveIn(a.root, normRel(body.path))
     // the counts are awaited first: from the check of the file to the write there is no await
@@ -83,14 +83,14 @@ export const versionRoutes = new Elysia({ prefix: '/api/versions' })
     audit({ user: user?.username ?? 'guest', ip, action: 'version-restore', target: storagePath(abs), detail: params.id })
     recordRecent(user, body.space, normRel(body.path))
     return { ok: true, mtime: Math.round(statSync(abs).mtimeMs) }
-  }, { body: t.Object({ space: t.String(), path: t.String(), expectedMtime: t.Optional(t.Number()) }) })
+  })
 
   // the query is optional in the schema on purpose: validation runs before the CSRF check, which must answer 403 first
-  .delete('/:id', ({ user, ip, params, query }) => {
+  .delete('/:id', { query: t.Object({ space: t.Optional(t.String()), path: t.Optional(t.String()) }) }, ({ user, ip, params, query }) => {
     const a = need({ user, ip }, query.space, 'write')
     const abs = fileOf(a.root, query.path ?? '')
     const v = getVersion(abs, params.id)
     dropVersion(v.meta, v.dir)
     audit({ user: user?.username ?? 'guest', ip, action: 'version-delete', target: storagePath(abs), detail: params.id })
     return { ok: true }
-  }, { query: t.Object({ space: t.Optional(t.String()), path: t.Optional(t.String()) }) })
+  })

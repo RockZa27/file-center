@@ -7,7 +7,7 @@ import { bootstrapAdmin, pruneLoginAttempts, purgeExpiredSessions } from './auth
 import { backupDue, backupRunning, runBackup } from './backup'
 import { compressedJson, compressibleRoute, withVary } from './compress'
 import { config, ensureDirs } from './config'
-import { context } from './context'
+import { context, socketIpOf, socketIpOverride } from './context'
 import { HttpError, notFound, within } from './fsx'
 import { onStop, shutdown } from './lifecycle'
 import { accessLine, log } from './logger'
@@ -146,6 +146,8 @@ const fromThisMachine = (request: Request, socketIp: string | undefined) =>
 
 // when each request came in, for the access log (ACCESS_LOG=true)
 const requestStart = new WeakMap<Request, number>()
+// GET requests made on behalf of a HEAD request: the HEAD request is the one that goes in the access log
+const onBehalfOfHead = new WeakSet<Request>()
 
 // Bun's own limit has to fit a chunk upload, so it is far too generous for JSON: a list of names or a form is small.
 // Only the text editor (PUT /api/content, up to 2 MB of text, more once escaped) needs more.
@@ -181,21 +183,21 @@ export const app = new Elysia({ serve: { maxRequestBodySize: config.uploadChunkS
   })
   .use(context)
   // JSON answers of the routes in compress.ts (and only those) go out as br or gzip when the browser accepts it
-  .onAfterHandle({ as: 'global' }, async ({ request, response, set }) => {
+  .onAfterHandle('global', async ({ request, responseValue, set }) => {
     if (!compressibleRoute(request.method, new URL(request.url).pathname) || (set.status && set.status !== 200)) return
     set.headers.vary = withVary(set.headers.vary)
-    return (await compressedJson(request, response, set.headers)) ?? undefined
+    return (await compressedJson(request, responseValue, set.headers)) ?? undefined
   })
-  .onAfterResponse({ as: 'global' }, ({ request, set, responseValue, ip, user }) => {
+  .onAfterResponse('global', ({ request, set, responseValue, ip, user }) => {
     const start = requestStart.get(request)
-    if (start === undefined) return
+    if (start === undefined || onBehalfOfHead.has(request)) return
     const status = responseValue instanceof Response ? responseValue.status : typeof set.status === 'number' ? set.status : 200
     accessLine({ method: request.method, url: request.url, status, ms: performance.now() - start, ip: ip ?? '-', user: user?.username ?? null })
   })
   // `release` and `boot` let the launcher and the update page tell which process answered. The version tells an
   // attacker which known holes to try, so only the launcher (this machine) and admins (update page) get it.
   .get('/api/health', ({ request, server, user }) => {
-    if (user?.role !== 'admin' && !fromThisMachine(request, server?.requestIP(request)?.address)) return { status: 'ok' }
+    if (user?.role !== 'admin' && !fromThisMachine(request, socketIpOf(request, server))) return { status: 'ok' }
     return { status: 'ok', version: config.version, release: process.env.FC_RELEASE || null, boot: bootedAt, time: new Date().toISOString() }
   })
   .use(sessionRoutes)
@@ -213,6 +215,15 @@ export const app = new Elysia({ serve: { maxRequestBodySize: config.uploadChunkS
     const { pathname } = new URL(request.url)
     if (pathname.startsWith('/api/')) throw notFound('request.no-api')
     return serveStatic(pathname, request)
+  })
+  // Elysia 1 answered HEAD from the GET route of the same path; Elysia 2 answers 404. Monitors and proxies still ask
+  // with HEAD, so it is the GET answer (Bun drops the body of a HEAD answer and keeps the headers)
+  .head('/*', ({ request, server }): Promise<Response> => {
+    const get = new Request(request.url, { method: 'GET', headers: request.headers })
+    const socketIp = socketIpOf(request, server)
+    if (socketIp) socketIpOverride.set(get, socketIp)
+    onBehalfOfHead.add(get)
+    return app.handle(get)
   })
 
 if (import.meta.main) {

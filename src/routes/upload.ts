@@ -9,7 +9,15 @@ export const uploadRoutes = new Elysia({ prefix: '/api/upload' })
   .use(context)
 
   // 1) announce a file, 2) PUT its chunks (any order, retried freely), 3) complete
-  .post('/', async ({ user, body }) => {
+  .post('/', {
+    body: t.Object({
+      space: t.String(),
+      path: t.String(),
+      name: t.String(),
+      size: t.Number(),
+      relativeDir: t.Optional(t.String()),
+    }),
+  }, async ({ user, body }) => {
     const a = need({ user, ip: '' }, body.space, 'upload')
     const relDir = (body.relativeDir ?? '').split('/').filter(Boolean)
     if (relDir.length > 30) throw bad('upload.too-deep')
@@ -26,26 +34,18 @@ export const uploadRoutes = new Elysia({ prefix: '/api/upload' })
       name: body.name,
       size: body.size,
     })
-  }, {
-    body: t.Object({
-      space: t.String(),
-      path: t.String(),
-      name: t.String(),
-      size: t.Number(),
-      relativeDir: t.Optional(t.String()),
-    }),
   })
 
   .get('/:id', ({ user, params }) => receivedChunks(params.id, user?.username ?? 'guest'))
 
-  .put('/:id/:index', async ({ user, params, request }) => {
+  .put('/:id/:index', { parse: 'none' }, async ({ user, params, request }) => {
     const owner = user?.username ?? 'guest'
     // before buffering a whole chunk in memory: a stranger without a valid upload id costs nothing
     checkUpload(params.id, owner)
     const data = await request.arrayBuffer()
     await saveChunk(params.id, owner, Number(params.index), data)
     return { ok: true }
-  }, { parse: 'none' })
+  })
 
   .post('/:id/complete', async ({ user, ip, params }) => {
     const owner = user?.username ?? 'guest'

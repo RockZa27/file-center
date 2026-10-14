@@ -46,7 +46,7 @@ export const backupRoutes = new Elysia({ prefix: '/api/admin' })
   })
 
   // puts back users, passwords, settings and the logo of a backup, then restarts so the app reads them
-  .post('/backups/restore', async ({ user, ip, body }) => {
+  .post('/backups/restore', { body: t.Object({ name: t.String({ maxLength: 200 }), password: t.String({ maxLength: 1000 }) }) }, async ({ user, ip, body }) => {
     const admin = requireAdmin({ user, ip })
     if (!supervised()) {
       throw new HttpError(409, 'not-supervised')
@@ -57,4 +57,4 @@ export const backupRoutes = new Elysia({ prefix: '/api/admin' })
     audit({ user: admin.username, ip, action: 'backup-restore', target: body.name, detail: `สำรองข้อมูลก่อนกู้คืนไว้ที่ ${safety.name}` })
     restartSoon()
     return { ok: true, restarting: true, safety: safety.name }
-  }, { body: t.Object({ name: t.String({ maxLength: 200 }), password: t.String({ maxLength: 1000 }) }) })
+  })

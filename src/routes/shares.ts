@@ -110,7 +110,15 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
   .use(context)
 
   // ───────────── the owner's links ─────────────
-  .post('/shares', async ({ user, ip, body }) => {
+  .post('/shares', {
+    body: t.Object({
+      space: t.String(), path: t.String(), days: t.Number(),
+      password: t.Optional(t.String({ maxLength: 1000 })), maxDownloads: t.Optional(t.Nullable(t.Number())),
+      kind: t.Optional(t.Union([t.Literal('download'), t.Literal('upload')])),
+      maxFileBytes: t.Optional(t.Nullable(t.Number())), maxFiles: t.Optional(t.Nullable(t.Number())),
+      maxTotalBytes: t.Optional(t.Nullable(t.Number())), note: t.Optional(t.String({ maxLength: 5000 })),
+    }),
+  }, async ({ user, ip, body }) => {
     // visitors never make links, whatever the guest permissions say
     const owner = requireUser({ user, ip })
     const kind = body.kind ?? 'download'
@@ -161,14 +169,6 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
     })
     // the only time the token is told: it is not stored
     return { share: publicShare(share), token, url: `/s/${token}` }
-  }, {
-    body: t.Object({
-      space: t.String(), path: t.String(), days: t.Number(),
-      password: t.Optional(t.String({ maxLength: 1000 })), maxDownloads: t.Optional(t.Nullable(t.Number())),
-      kind: t.Optional(t.Union([t.Literal('download'), t.Literal('upload')])),
-      maxFileBytes: t.Optional(t.Nullable(t.Number())), maxFiles: t.Optional(t.Nullable(t.Number())),
-      maxTotalBytes: t.Optional(t.Nullable(t.Number())), note: t.Optional(t.String({ maxLength: 5000 })),
-    }),
   })
 
   .get('/shares', ({ user, ip }) => {
@@ -192,7 +192,7 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
   })
 
   // ───────────── public: whoever holds the link ─────────────
-  .get('/s/:token', async ({ params, query, request }) => {
+  .get('/s/:token', { query: t.Object({ path: t.Optional(t.String()) }) }, async ({ params, query, request }) => {
     const { share, abs } = openShare(params.token)
     const expiresAt = share.expiresAt
     if (kindOf(share) === 'upload') {
@@ -218,9 +218,9 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
     // a big folder takes a while to count: other requests are answered meanwhile
     const size = (await treeStats(abs, 50_000)).size
     return { name, type: 'dir', size, expiresAt, needsPassword: false, path: at.rel, entries: await listDirAsync(at.abs, at.rel) }
-  }, { query: t.Object({ path: t.Optional(t.String()) }) })
+  })
 
-  .post('/s/:token/unlock', async ({ params, body, ip, cookie }) => {
+  .post('/s/:token/unlock', { body: t.Object({ password: t.String({ maxLength: 1000 }) }) }, async ({ params, body, ip, cookie }) => {
     const { share } = openShare(params.token)
     if (!share.passwordHash) return { ok: true }
     const key = lockoutKey(share, ip)
@@ -237,9 +237,9 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
       secure: config.secureCookie, maxAge: Math.floor(UNLOCK_MS / 1000),
     })
     return { ok: true }
-  }, { body: t.Object({ password: t.String({ maxLength: 1000 }) }) })
+  })
 
-  .get('/s/:token/download', ({ params, query, request, user, ip }) => {
+  .get('/s/:token/download', { query: t.Object({ path: t.Optional(t.String()) }) }, ({ params, query, request, user, ip }) => {
     const { share, abs } = openShare(params.token, 'download')
     needUnlocked(share, request)
     let target = abs
@@ -274,12 +274,12 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
       slot.release()
       throw err
     }
-  }, { query: t.Object({ path: t.Optional(t.String()) }) })
+  })
 
   // ───────────── public: upload-request links ─────────────
   // The visitor has no session. What ties an upload to them is the random key in an HttpOnly, SameSite=Strict cookie
   // that only this link's path receives; the upload's owner name carries the link id and that key (see visitorUpload).
-  .post('/s/:token/upload', async ({ params, body, request, ip, cookie }) => {
+  .post('/s/:token/upload', { body: t.Object({ name: t.String(), size: t.Number() }) }, async ({ params, body, request, ip, cookie }) => {
     const first = openShare(params.token, 'upload')
     needUnlocked(first.share, request)
     const owner = findUser(first.share.owner)
@@ -325,16 +325,16 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
       })
     }
     return started
-  }, { body: t.Object({ name: t.String(), size: t.Number() }) })
+  })
 
-  .put('/s/:token/upload/:id/:n', async ({ params, request }) => {
+  .put('/s/:token/upload/:id/:n', { parse: 'none' }, async ({ params, request }) => {
     const { owner } = visitorUpload(params.token, request)
     // before buffering a whole chunk in memory: a stranger without a valid upload id costs nothing
     checkUpload(params.id, owner)
     const data = await request.arrayBuffer()
     await saveChunk(params.id, owner, Number(params.n), data)
     return { ok: true }
-  }, { parse: 'none' })
+  })
 
   .post('/s/:token/upload/:id/complete', async ({ params, request, ip }) => {
     const { share, owner, key } = visitorUpload(params.token, request)

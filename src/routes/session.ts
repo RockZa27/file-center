@@ -124,7 +124,7 @@ export const sessionRoutes = new Elysia({ prefix: '/api' })
     return snapshot(user, s, langOf(request))
   })
 
-  .post('/login', async ({ cookie, sid, ip, body, request }) => {
+  .post('/login', { body: t.Object({ username: t.String({ maxLength: 64 }), password: t.String({ maxLength: 1000 }) }) }, async ({ cookie, sid, ip, body, request }) => {
     const username = body.username.trim()
     const key = `${ip}|${username.toLowerCase()}`
     // checked before the password: a right one does not skip the wait
@@ -143,9 +143,9 @@ export const sessionRoutes = new Elysia({ prefix: '/api' })
     // the right password is not enough for an account with 2FA: no session until /login/2fa has the code
     if (user.twoFactor) return { twoFactor: true, ticket: createLoginTicket(user.username, ip) }
     return signIn(user, { cookie, sid, ip, request })
-  }, { body: t.Object({ username: t.String({ maxLength: 64 }), password: t.String({ maxLength: 1000 }) }) })
+  })
 
-  .post('/login/2fa', ({ cookie, sid, ip, body, request }) => {
+  .post('/login/2fa', { body: t.Object({ ticket: t.String({ maxLength: 200 }), code: t.String({ maxLength: 50 }) }) }, ({ cookie, sid, ip, body, request }) => {
     const username = peekLoginTicket(body.ticket, ip)
     const user = username ? findUser(username) : undefined
     if (!username || !user?.twoFactor) throw new HttpError(401, 'auth.two-factor-bad-ticket')
@@ -161,7 +161,7 @@ export const sessionRoutes = new Elysia({ prefix: '/api' })
     clearFailures(key)
     useLoginTicket(body.ticket)
     return signIn(user, { cookie, sid, ip, request })
-  }, { body: t.Object({ ticket: t.String({ maxLength: 200 }), code: t.String({ maxLength: 50 }) }) })
+  })
 
   // ───────────── signed-in devices ─────────────
   .get('/sessions', ({ user, ip, sid }) => {
@@ -192,15 +192,15 @@ export const sessionRoutes = new Elysia({ prefix: '/api' })
   })
 
   // ───────────── two-factor sign-in ─────────────
-  .post('/2fa/setup', async ({ user, ip, body }) => {
+  .post('/2fa/setup', { body: t.Object({ password: t.String({ maxLength: 1000 }) }) }, async ({ user, ip, body }) => {
     const u = requireUser({ user, ip })
     if (u.twoFactor) throw new HttpError(409, 'auth.two-factor-already-enabled')
     await confirmPassword(u, ip, body.password, '2fa-password-denied')
     const secret = startTwoFactorSetup(u)
     return { secret, uri: otpauthUri(secret, u.username, settings.get().appName) }
-  }, { body: t.Object({ password: t.String({ maxLength: 1000 }) }) })
+  })
 
-  .post('/2fa/enable', ({ user, ip, sid, body }) => {
+  .post('/2fa/enable', { body: t.Object({ code: t.String({ maxLength: 50 }) }) }, ({ user, ip, sid, body }) => {
     const u = requireUser({ user, ip })
     if (u.twoFactor) throw new HttpError(409, 'auth.two-factor-already-enabled')
     if (!hasPendingSetup(u)) throw new HttpError(400, 'auth.two-factor-no-setup')
@@ -211,18 +211,18 @@ export const sessionRoutes = new Elysia({ prefix: '/api' })
     destroyUserSessions(u.username, sid) // other devices sign in again, now with the code
     audit({ user: u.username, ip, action: '2fa-enable' })
     return { backupCodes }
-  }, { body: t.Object({ code: t.String({ maxLength: 50 }) }) })
+  })
 
-  .post('/2fa/disable', async ({ user, ip, body }) => {
+  .post('/2fa/disable', { body: t.Object({ password: t.String({ maxLength: 1000 }), code: t.String({ maxLength: 50 }) }) }, async ({ user, ip, body }) => {
     const u = requireUser({ user, ip })
     await confirmWithCode(u, ip, body.password, body.code)
     delete u.twoFactor
     saveUsers()
     audit({ user: u.username, ip, action: '2fa-disable' })
     return { ok: true }
-  }, { body: t.Object({ password: t.String({ maxLength: 1000 }), code: t.String({ maxLength: 50 }) }) })
+  })
 
-  .post('/2fa/backup-codes', async ({ user, ip, body }) => {
+  .post('/2fa/backup-codes', { body: t.Object({ password: t.String({ maxLength: 1000 }), code: t.String({ maxLength: 50 }) }) }, async ({ user, ip, body }) => {
     const u = requireUser({ user, ip })
     await confirmWithCode(u, ip, body.password, body.code)
     const { codes, hashes } = newBackupCodes()
@@ -230,7 +230,7 @@ export const sessionRoutes = new Elysia({ prefix: '/api' })
     saveUsers()
     audit({ user: u.username, ip, action: '2fa-backup-codes' })
     return { backupCodes: codes }
-  }, { body: t.Object({ password: t.String({ maxLength: 1000 }), code: t.String({ maxLength: 50 }) }) })
+  })
 
   .post('/logout', ({ cookie, sid, user, ip, request }) => {
     if (user) audit({ user: user.username, ip, action: 'logout' })
@@ -243,7 +243,7 @@ export const sessionRoutes = new Elysia({ prefix: '/api' })
     return snapshot(null, session, langOf(request))
   })
 
-  .post('/password', async ({ user, ip, sid, body }) => {
+  .post('/password', { body: t.Object({ current: t.String({ maxLength: 1000 }), next: t.String({ maxLength: 1000 }) }) }, async ({ user, ip, sid, body }) => {
     const u = requireUser({ user, ip })
     // wrong guesses count in the step-up lockout (a stolen session must not be able to guess the password at will)
     await confirmPassword(u, ip, body.current, 'password-denied', () => new HttpError(400, 'auth.wrong-current-password'))
@@ -254,6 +254,6 @@ export const sessionRoutes = new Elysia({ prefix: '/api' })
     destroyUserSessions(u.username, sid)
     audit({ user: u.username, ip, action: 'password-change' })
     return { ok: true }
-  }, { body: t.Object({ current: t.String({ maxLength: 1000 }), next: t.String({ maxLength: 1000 }) }) })
+  })
 
 export { findUser }
