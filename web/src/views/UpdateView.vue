@@ -275,7 +275,8 @@ const onBeta = computed(() => /-beta/.test(st.value?.runningVersion ?? ''))
 const betaRefused = computed(() => !!beta.value && !beta.value.signed && !!st.value?.signatureRequired)
 const canBeta = computed(() => !!beta.value && betaAccept.value && !!betaPassword.value && !betaRefused.value && !betaWorking.value && canUpdate.value && !busy.value)
 const canUpdate = computed(() => !!st.value?.enabled && !!st.value?.supervised)
-const pendingVersion = computed(() => st.value?.pending?.dir.split('-')[0] ?? '')
+// a release folder is "<version>-<8 hex of server.js>"; the version itself may hold a dash (1.9.0-beta.1)
+const pendingVersion = computed(() => st.value?.pending?.dir.replace(/-[0-9a-f]{8}$/, '') ?? '')
 const rollbackOptions = computed(() => {
   if (!st.value) return []
   const list = [...st.value.history.map(h => ({ dir: h.dir, version: h.version, builtAt: h.builtAt }))]

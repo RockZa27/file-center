@@ -73,7 +73,7 @@
         <n-data-table
           v-else-if="app.view === 'list'"
           :columns="columns" :data="sorted" :row-key="r => r.path" :checked-row-keys="checked"
-          :row-props="rowProps" :pagination="{ pageSize: 50, showSizePicker: true, pageSizes: [25, 50, 100, 200] }"
+          :row-props="rowProps" :pagination="pagination"
           :bordered="false" :single-line="false" :scroll-x="620"
           @update:checked-row-keys="k => (checked = k)" @update:sorter="onSorter"
         />
@@ -177,6 +177,13 @@ const location = computed(() => {
 
 const items = ref([])
 const loading = ref(false)
+// kept here, not written inline in the template: an inline object is made anew on every render, so the size picker
+// and the page buttons had nothing to change
+const pagination = reactive({
+  page: 1, pageSize: 50, showSizePicker: true, pageSizes: [25, 50, 100, 200],
+  onUpdatePage: p => { pagination.page = p },
+  onUpdatePageSize: s => { pagination.pageSize = s; pagination.page = 1 },
+})
 const error = ref('')
 const checked = ref([])
 const showHidden = ref(false)
@@ -265,7 +272,7 @@ function go(path, replace = false) {
   return replace ? router.replace(target) : router.push(target)
 }
 
-watch(() => [props.space, location.value], () => { items.value = []; office.show = false; officeWait?.(); load() }, { immediate: true })
+watch(() => [props.space, location.value], () => { items.value = []; pagination.page = 1; office.show = false; officeWait?.(); load() }, { immediate: true })
 // a folder that could not be read shows the server's text: read it again so the text follows the language switch
 watch(locale, () => { if (error.value) load(true) })
 
