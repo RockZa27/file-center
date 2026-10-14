@@ -17,9 +17,10 @@ export const router = createRouter({
         { path: 'favorites', name: 'favorites', component: () => import('./views/FavoritesView.vue') },
         { path: 'shared', name: 'shared', component: () => import('./views/SharedView.vue') },
         { path: 'links', name: 'links', component: () => import('./views/SharesView.vue') },
-        { path: 'admin', name: 'dashboard', component: () => import('./views/DashboardView.vue'), meta: { admin: true } },
-        { path: 'admin/users', name: 'users', component: () => import('./views/UsersView.vue'), meta: { admin: true } },
-        { path: 'admin/activity', name: 'activity', component: () => import('./views/ActivityView.vue'), meta: { admin: true } },
+        { path: 'admin', name: 'dashboard', component: () => import('./views/DashboardView.vue'), meta: { staff: true } },
+        { path: 'admin/users', name: 'users', component: () => import('./views/UsersView.vue'), meta: { staff: true } },
+        { path: 'admin/users/:username/files', name: 'user-files', component: () => import('./views/UserFilesView.vue'), meta: { staff: true } },
+        { path: 'admin/activity', name: 'activity', component: () => import('./views/ActivityView.vue'), meta: { staff: true } },
         { path: 'admin/logs', name: 'logs', component: () => import('./views/LogsView.vue'), meta: { admin: true } },
         { path: 'admin/trash', name: 'trash', component: () => import('./views/TrashView.vue'), meta: { admin: true } },
         { path: 'admin/update', name: 'update', component: () => import('./views/UpdateView.vue'), meta: { admin: true } },
@@ -33,11 +34,12 @@ export const router = createRouter({
 
 router.beforeEach(to => {
   const app = useAppStore()
-  if (to.name === 'login' && app.user) return { name: app.isAdmin ? 'dashboard' : 'files' }
+  if (to.name === 'login' && app.user) return { name: app.isStaff ? 'dashboard' : 'files' }
   if (to.name === 'public' && app.user) return { name: 'files' }
   if (to.name === 'public' && !app.publicAvailable) return { name: 'login' }
   if (to.meta.auth && !app.user) return { name: 'login' }
   if (to.meta.admin && !app.isAdmin) return { name: 'files' }
+  if (to.meta.staff && !app.isStaff) return { name: 'files' }
   if (to.name === 'shared' && !app.hasSpace('public')) return { name: 'files' }
-  if (to.name === 'links' && !app.canShare) return { name: 'files' }
+  if (to.name === 'links' && !app.canShare && !app.isStaff) return { name: 'files' }
 })

@@ -76,3 +76,9 @@ export function useFeedback() {
       }),
   }
 }
+
+/** the shown name of a stored role id: admin = Super admin, manager = Admin, user = User */
+export function useRoleLabel() {
+  const { t } = useI18n()
+  return role => t(`role.${role === 'admin' || role === 'manager' ? role : 'user'}`)
+}

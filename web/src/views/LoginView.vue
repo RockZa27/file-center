@@ -101,7 +101,7 @@ async function submit() {
 }
 
 // mustChangePassword is handled by the app shell after this, same as without a second step
-const done = () => router.replace({ name: app.isAdmin ? 'dashboard' : 'files' })
+const done = () => router.replace({ name: app.isStaff ? 'dashboard' : 'files' })
 
 async function submitCode() {
   const c = code.value.trim()

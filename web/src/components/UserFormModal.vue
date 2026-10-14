@@ -14,12 +14,15 @@
       </n-form-item>
       <n-form-item :label="t('users.role')">
         <n-radio-group v-model:value="f.role" :disabled="isEdit && user.username === app.user.username">
-          <n-radio-button value="user">{{ t('users.regular') }}</n-radio-button>
-          <n-radio-button value="admin">{{ t('nav.admin') }}</n-radio-button>
+          <n-radio-button value="user">{{ t('role.user') }}</n-radio-button>
+          <n-radio-button v-if="app.isAdmin" value="manager">{{ t('role.manager') }}</n-radio-button>
+          <n-radio-button v-if="app.isAdmin" value="admin">{{ t('role.admin') }}</n-radio-button>
         </n-radio-group>
       </n-form-item>
       <template v-if="f.role === 'user'">
-        <n-form-item :label="t('users.homedir')">
+        <!-- a manager's users always live in /users/<name>: the server sets it -->
+        <div v-if="!app.isAdmin" class="muted hint">{{ t('users.homeAuto') }}</div>
+        <n-form-item v-else :label="t('users.homedir')">
           <div class="home">
             <n-input v-model:value="f.homedir" :placeholder="`/users/${f.username || 'username'}`" />
             <n-button secondary @click="picker = true"><template #icon><n-icon :component="FolderOpenOutline" /></template></n-button>
@@ -35,11 +38,12 @@
           </div>
         </n-form-item>
         <n-form-item :label="t('users.ownPerms')"><perm-select v-model="f.permissions" /></n-form-item>
-        <n-form-item :label="t('users.publicPerms')"><perm-select v-model="f.publicPermissions" /></n-form-item>
+        <n-form-item :label="t('users.publicPerms')"><perm-select v-model="f.publicPermissions" :allowed="publicAllowed" /></n-form-item>
+        <div v-if="!app.isAdmin" class="muted hint">{{ t('users.publicLimited') }}</div>
         <div class="muted hint">{{ t('users.publicHint') }}</div>
         <div class="muted hint">{{ t('users.shareHint') }}</div>
       </template>
-      <n-alert v-else type="info" :show-icon="true">{{ t('users.adminHint') }}</n-alert>
+      <n-alert v-else type="info" :show-icon="true">{{ f.role === 'manager' ? t('users.managerRoleHint') : t('users.adminHint') }}</n-alert>
     </n-form>
     <template #footer>
       <div class="foot"><n-button @click="emit('update:show', false)">{{ t('common.cancel') }}</n-button><n-button type="primary" :loading="busy" :disabled="!ready" @click="save">{{ t('common.save') }}</n-button></div>
@@ -65,12 +69,13 @@ import PasswordRules from './PasswordRules.vue'
 const PERMS = ['read', 'download', 'batchdownload', 'upload', 'write', 'zip', 'share']
 
 const PermSelect = defineComponent({
-  props: { modelValue: { type: Array, default: () => [] } },
+  // `allowed`: the rights that may be ticked (null = all); one already set stays, so it can be taken away
+  props: { modelValue: { type: Array, default: () => [] }, allowed: { type: Array, default: null } },
   emits: ['update:modelValue'],
   setup(p, { emit }) {
     const { t } = useI18n()
     return () => h(NCheckboxGroup, { value: p.modelValue, 'onUpdate:value': v => emit('update:modelValue', v) }, () =>
-      h('div', { style: 'display:flex;flex-wrap:wrap;gap:6px 16px' }, PERMS.map(k => h(NCheckbox, { value: k, label: t(`perm.${k}`) }))))
+      h('div', { style: 'display:flex;flex-wrap:wrap;gap:6px 16px' }, PERMS.map(k => h(NCheckbox, { value: k, label: t(`perm.${k}`), disabled: !!p.allowed && !p.allowed.includes(k) && !p.modelValue.includes(k) }))))
   },
 })
 
@@ -82,6 +87,8 @@ const fb = useFeedback()
 const busy = ref(false)
 const picker = ref(false)
 const f = reactive({ username: '', name: '', password: '', role: 'user', homedir: '', permissions: [], publicPermissions: [], limited: false, quotaValue: null, quotaUnit: 'GB' })
+// a manager hands out public-folder rights no wider than their own (the session's user carries them)
+const publicAllowed = computed(() => (app.isAdmin ? null : app.user?.publicPermissions || []))
 const isEdit = computed(() => !!props.user)
 // visitors' uploads and activity go under the name 'guest' (any case), so the server refuses it: say so before saving
 const reserved = computed(() => !isEdit.value && f.username.trim().toLowerCase() === 'guest')
@@ -94,7 +101,7 @@ watch(() => props.show, v => {
   const u = props.user
   Object.assign(f, u
     ? { username: u.username, name: u.name, password: '', role: u.role, homedir: u.homedir, permissions: [...u.permissions], publicPermissions: [...u.publicPermissions], limited: !!u.quotaBytes, quotaValue: splitQuota(u.quotaBytes).value, quotaUnit: splitQuota(u.quotaBytes).unit }
-    : { username: '', name: '', password: '', role: 'user', homedir: '', permissions: ['read', 'download', 'batchdownload', 'upload', 'write', 'zip'], publicPermissions: ['read', 'download', 'batchdownload'], limited: false, quotaValue: null, quotaUnit: 'GB' })
+    : { username: '', name: '', password: '', role: 'user', homedir: '', permissions: ['read', 'download', 'batchdownload', 'upload', 'write', 'zip'], publicPermissions: ['read', 'download', 'batchdownload'].filter(k => !publicAllowed.value || publicAllowed.value.includes(k)), limited: false, quotaValue: null, quotaUnit: 'GB' })
 })
 
 async function save() {
@@ -102,7 +109,7 @@ async function save() {
   busy.value = true
   try {
     const body = { name: f.name.trim(), role: f.role, permissions: f.permissions, publicPermissions: f.publicPermissions }
-    if (f.role === 'user') body.homedir = f.homedir.trim() || undefined
+    if (f.role === 'user' && app.isAdmin) body.homedir = f.homedir.trim() || undefined
     body.quotaBytes = f.role === 'user' && f.limited ? joinQuota(f.quotaValue, f.quotaUnit) : 0
     if (isEdit.value) {
       if (f.password) body.password = f.password

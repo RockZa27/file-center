@@ -5,7 +5,7 @@
         <n-button v-if="officeMode" quaternary size="small" @click="toOffice">
           <template #icon><n-icon :component="officeMode === 'edit' ? CreateOutline : OpenOutline" /></template>{{ officeMode === 'edit' ? t('office.edit') : t('office.open') }}
         </n-button>
-        <n-button v-if="app.user && item" quaternary circle :title="fav ? t('files.removeFavorite') : t('files.addFavorite')" @click="toggleFav">
+        <n-button v-if="app.user && item && !space.startsWith('user:')" quaternary circle :title="fav ? t('files.removeFavorite') : t('files.addFavorite')" @click="toggleFav">
           <template #icon><n-icon :component="fav ? Star : StarOutline" :color="fav ? '#f59e0b' : undefined" /></template>
         </n-button>
         <n-button v-if="item && isTextKind(kind)" quaternary size="small" @click="emit('versions', item)">
