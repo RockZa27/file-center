@@ -173,6 +173,7 @@ import FileIcon from '../components/FileIcon.vue'
 import PreferenceControls from '../components/PreferenceControls.vue'
 import { errorText, useFeedback } from '../composables'
 import { useAppStore } from '../store'
+import { createPool } from '../uploadPool'
 import { formatBytes, formatDate, parentPath } from '../utils'
 
 const { t, locale } = useI18n()
@@ -259,7 +260,10 @@ const pickInput = ref(null)
 const dropOver = ref(false)
 const queue = ref([])
 let seq = 0
-let running = false
+let runners = 0
+const FILES_AT_ONCE = 3
+// one limit of chunk requests in flight for all files together
+const pool = createPool(() => app.config.uploadSimultaneous || 3)
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 const percent = it => (it.file.size ? Math.min(100, Math.round((it.loaded / it.file.size) * 100)) : it.status === 'done' ? 100 : 0)
 
@@ -312,14 +316,40 @@ function onDrop(e) {
   if (ok.length) addFiles(ok)
 }
 
-async function pump() {
-  if (running) return
-  running = true
-  try {
-    for (let next = queue.value.find(i => i.status === 'queued'); next; next = queue.value.find(i => i.status === 'queued')) await sendOne(next)
-  } finally {
-    running = false
+function pump() {
+  while (runners < FILES_AT_ONCE && queue.value.some(i => i.status === 'queued')) {
+    runners++
+    runner().finally(() => { runners-- })
   }
+}
+
+async function runner() {
+  for (let next = queue.value.find(i => i.status === 'queued'); next; next = queue.value.find(i => i.status === 'queued')) await sendOne(next)
+}
+
+// The first announcement sets the visitor's cookie. Files announced before it arrives would each get their own
+// identity and the later chunks would be refused, so until one announcement has worked the others wait for it.
+let cookieSet = false
+let announcing = Promise.resolve()
+
+/** tells the server about a file; waits and asks again while the link is busy with this visitor's other files */
+async function announce(it) {
+  const ask = async () => {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        const init = await api.shareUploadInit(token.value, it.file.name, it.file.size)
+        cookieSet = true
+        return init
+      } catch (e) {
+        if (e.code !== 'share.upload-busy' || it.canceled || attempt >= 8) throw e
+        await sleep(1000)
+      }
+    }
+  }
+  if (cookieSet) return ask()
+  const turn = announcing.then(() => ask())
+  announcing = turn.catch(() => {})
+  return turn
 }
 
 async function sendOne(it) {
@@ -333,7 +363,7 @@ async function sendOne(it) {
     if (i && ((i.maxFiles && i.uploadedFiles >= i.maxFiles) || (i.maxTotalBytes && i.uploadedBytes + it.file.size > i.maxTotalBytes))) {
       throw new ApiError(403, '', 'share.upload-full')
     }
-    const init = await api.shareUploadInit(token.value, it.file.name, it.file.size)
+    const init = await announce(it)
     it.id = init.id
     const { chunkSize, total } = init
     const base = api.shareUploadChunkUrl(token.value, it.id)
@@ -343,27 +373,38 @@ async function sendOne(it) {
     const sync = () => { it.loaded = sent.reduce((a, b) => a + b, 0) }
     const worker = async () => {
       while (!it.canceled && !failure) {
-        const idx = pending.shift()
-        if (idx === undefined) return
-        const blob = it.file.slice(idx * chunkSize, Math.min(it.file.size, (idx + 1) * chunkSize))
-        for (let attempt = 0; ; attempt++) {
-          try {
-            await putChunk(it.id, idx, blob, loaded => { sent[idx] = loaded; sync() }, abort => it.aborts.add(abort), base)
-            sent[idx] = blob.size
-            sync()
-            break
-          } catch (e) {
-            if (it.canceled) return
-            const retryable = e.status === 0 || (e.status >= 500 && e.status !== 507)
-            if (!retryable || attempt >= 3) { failure = e; return }
-            sent[idx] = 0
-            sync()
-            await sleep(1000 * (attempt + 1))
+        await pool.acquire()
+        let held = true
+        try {
+          // things may have changed while waiting for a slot
+          if (it.canceled || failure) return
+          const idx = pending.shift()
+          if (idx === undefined) return
+          const blob = it.file.slice(idx * chunkSize, Math.min(it.file.size, (idx + 1) * chunkSize))
+          for (let attempt = 0; ; attempt++) {
+            if (!held) { await pool.acquire(); held = true; if (it.canceled) return }
+            try {
+              await putChunk(it.id, idx, blob, loaded => { sent[idx] = loaded; sync() }, abort => it.aborts.add(abort), base)
+              sent[idx] = blob.size
+              sync()
+              break
+            } catch (e) {
+              if (it.canceled) return
+              const retryable = e.status === 0 || (e.status >= 500 && e.status !== 507)
+              if (!retryable || attempt >= 3) { failure = e; return }
+              sent[idx] = 0
+              sync()
+              // do not keep a slot while waiting
+              pool.release(); held = false
+              await sleep(1000 * (attempt + 1))
+            }
           }
+        } finally {
+          if (held) pool.release()
         }
       }
     }
-    await Promise.all(Array.from({ length: Math.min(3, total) }, worker))
+    await Promise.all(Array.from({ length: Math.min(Math.max(1, app.config.uploadSimultaneous || 3), total) }, worker))
     if (it.canceled) return
     if (failure) throw failure
     const done = await api.shareUploadComplete(token.value, it.id)
