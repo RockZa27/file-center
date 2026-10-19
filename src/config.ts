@@ -40,7 +40,7 @@ export const config = {
   publicDirName: 'public',
   uploadMaxSize: num('UPLOAD_MAX_SIZE', 10 * 1024 ** 3), // 10 GB per file
   uploadChunkSize: num('UPLOAD_CHUNK_SIZE', 8 * 1024 ** 2), // 8 MB
-  uploadSimultaneous: num('UPLOAD_SIMULTANEOUS', 3),
+  uploadSimultaneous: num('UPLOAD_SIMULTANEOUS', 6),
   uploadStaleMs: num('UPLOAD_STALE_HOURS', 3) * 3600_000,
   /** an upload-request link made without limits gets these (per file, and all files of the link together) */
   uploadRequestMaxFile: num('UPLOAD_REQUEST_MAX_FILE', 1024 ** 3), // 1 GB

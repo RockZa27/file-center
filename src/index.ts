@@ -165,7 +165,7 @@ async function refuseBigJson(request: Request) {
   if (length > JSON_MAX_BYTES || (!length && (await request.clone().text()).length > JSON_MAX_BYTES)) throw new HttpError(413, 'request.too-big')
 }
 
-export const app = new Elysia({ serve: { maxRequestBodySize: config.uploadChunkSize * 2 + 1024 * 1024 } })
+export const app = new Elysia({ serve: { idleTimeout: 255, maxRequestBodySize: config.uploadChunkSize * 2 + 1024 * 1024 } })
   // set before routing, so error responses (401, 404...) carry them too
   .onRequest(async ({ request, set }) => {
     if (config.accessLog) requestStart.set(request, performance.now())
@@ -229,7 +229,7 @@ if (import.meta.main) {
   // docker stop, Ctrl+C and updates: finish writing users, sessions and settings before leaving
   process.on('SIGTERM', () => void shutdown(0))
   process.on('SIGINT', () => void shutdown(0))
-  app.listen({ port: config.port, hostname: config.host }, ({ hostname, port }) => {
+  app.listen({ port: config.port, hostname: config.host, idleTimeout: 255 }, ({ hostname, port }) => {
     log.info('start', `File Center v${config.version} พร้อมใช้งานที่ http://${hostname === '0.0.0.0' ? 'localhost' : hostname}:${port}`)
     console.log(`  ไฟล์เก็บที่  ${config.storageDir}`)
     console.log(`  ข้อมูลระบบที่ ${config.dataDir}`)

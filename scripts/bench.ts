@@ -224,6 +224,36 @@ async function run(): Promise<Result> {
       }
     }
 
+    // many small files, one after the other like the web page does today: init -> PUT -> complete for each
+    {
+      const n = quick ? 20 : 100
+      const body = crypto.getRandomValues(new Uint8Array(200 * 1024))
+      const t0 = performance.now()
+      const lat: number[] = []
+      let errors = 0
+      for (let i = 0; i < n; i++) {
+        const s = performance.now()
+        try {
+          const init: any = await (await c.ok('POST', '/api/upload', { space: 'home', path: '/', name: `small-${i}.bin`, size: body.length })).json()
+          await c.ok('PUT', `/api/upload/${init.id}/0`, body)
+          await c.ok('POST', `/api/upload/${init.id}/complete`)
+          lat.push(performance.now() - s)
+        } catch { errors++ }
+      }
+      lat.sort((a, b) => a - b)
+      const took = (performance.now() - t0) / 1000
+      rows['upload-many-small'] = { p50: round(pct(lat, 0.5)), p95: round(pct(lat, 0.95)), p99: round(pct(lat, 0.99)), errors, requests: n, mbps: round(lat.length * body.length / MB / took), rps: round(lat.length / took, 1), note: `${n} files of 200 KB one after the other; latency is per file` }
+    }
+
+    // the same large file through a share link (no login): the path an outside visitor takes
+    try {
+      const made: any = await (await c.ok('POST', '/api/shares', { space: 'home', path: '/big/large.bin', days: 1 })).json()
+      const url = `${base}/api/s/${made.token}/download`
+      rows[`share-download-${bigMb}mb`] = await load(() => fetch(url).then(drain), { conc: 2, secs, min: 2 })
+    } catch (err) {
+      rows[`share-download-${bigMb}mb`] = { p50: 0, p95: 0, p99: 0, errors: 1, requests: 1, note: String(err) }
+    }
+
     // login is slow on purpose (argon2): measured, never tuned. Each call starts from a fresh anonymous session.
     rows['login'] = await load(async () => { await new Client(base).login() }, { conc: 2, secs, min: 3 })
 

@@ -457,6 +457,46 @@ describe('share links: when they stop working', () => {
     expect(shares.findShare(r.data.share.id)!.downloads).toBe(1)
   })
 
+  test('without a limit the answer is sent as it is and counted once per whole download', async () => {
+    // bigger than one read of the disk, with bytes that differ from place to place so a cut or shifted body shows
+    const bytes = new Uint8Array(3 * 1024 * 1024 + 7)
+    for (let i = 0; i < bytes.length; i++) bytes[i] = (i * 31 + (i >> 8)) & 255
+    writeFileSync(home('sh-owner', 'unlimited.bin'), bytes)
+    const r = await share(owner, { path: '/unlimited.bin' })
+    const id = r.data.share.id
+    const downloads = () => shares.findShare(id)!.downloads
+
+    const whole = await download(r.data.token)
+    expect(whole.status).toBe(200)
+    expect(whole.headers.get('accept-ranges')).toBe('bytes')
+    // counted when the answer is given, not when the last byte has left
+    expect(downloads()).toBe(1)
+    const got = new Uint8Array(await whole.arrayBuffer())
+    expect(got.length).toBe(bytes.length)
+    expect(createHash('sha256').update(got).digest('hex')).toBe(createHash('sha256').update(bytes).digest('hex'))
+    expect(downloads()).toBe(1)
+
+    // a download cancelled half way was still handed out: counted once, never twice
+    const cancelled = await download(r.data.token)
+    await cancelled.body!.cancel()
+    expect(downloads()).toBe(2)
+
+    // parts and refused ranges never count
+    const part = await download(r.data.token, '', { range: 'bytes=10-19' })
+    expect(part.status).toBe(206)
+    expect(new Uint8Array(await part.arrayBuffer())).toEqual(bytes.slice(10, 20))
+    expect((await download(r.data.token, '', { range: `bytes=${bytes.length + 5}-` })).status).toBe(416)
+    expect(downloads()).toBe(2)
+
+    // a shared folder (zip) counts once as well
+    const dir = await share(owner, { path: '/proj' })
+    const zip = await download(dir.data.token)
+    expect(zip.status).toBe(200)
+    expect(shares.findShare(dir.data.share.id)!.downloads).toBe(1)
+    expect(Object.keys(unzipSync(new Uint8Array(await zip.arrayBuffer()))).length).toBeGreaterThan(0)
+    expect(shares.findShare(dir.data.share.id)!.downloads).toBe(1)
+  })
+
   test('the item deleted, moved or turned into something else', async () => {
     mkdirSync(home('sh-owner', 'gone'))
     writeFileSync(home('sh-owner', 'gone', 'm.txt'), 'm')

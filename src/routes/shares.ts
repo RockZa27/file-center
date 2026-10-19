@@ -73,6 +73,16 @@ function counted(res: Response, slot: { finish(): void; release(): void }): Resp
   return new Response(body, { status: res.status, headers: res.headers })
 }
 
+/**
+ * A link without a download limit has nothing to protect by waiting for the last byte, so the answer goes out as it is
+ * (Bun sends a file straight from disk) and the download is counted now: once for a whole file, never for 206 and 416.
+ */
+function settled(res: Response, slot: { finish(): void; release(): void }): Response {
+  if (res.status === 200 && res.body) slot.finish()
+  else slot.release()
+  return res
+}
+
 /** the browser of a visitor to an upload link, by a random key in a cookie that only that link's path receives */
 export const VISITOR_COOKIE = 'fc_visitor'
 const VISITOR_RE = /^[a-f0-9]{32}$/
@@ -272,10 +282,11 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
       })
       if (st.isFile()) {
         // with a download limit only whole files are sent: parts of a file could be fetched without ever counting
-        return counted(fileResponse(target, basename(target), request, false, share.maxDownloads === null), slot)
+        const res = fileResponse(target, basename(target), request, false, share.maxDownloads === null)
+        return share.maxDownloads === null ? settled(res, slot) : counted(res, slot)
       }
       const zipName = `${basename(target)}.zip`
-      return counted(new Response(zipStream(collectZipItems(dirname(target), [basename(target)])), {
+      const zip = new Response(zipStream(collectZipItems(dirname(target), [basename(target)])), {
         headers: {
           'Content-Type': 'application/zip',
           'Content-Disposition': contentDisposition('attachment', zipName),
@@ -283,7 +294,8 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
           'Content-Security-Policy': "default-src 'none'; sandbox",
           'Cache-Control': 'no-store',
         },
-      }), slot)
+      })
+      return share.maxDownloads === null ? settled(zip, slot) : counted(zip, slot)
     } catch (err) {
       slot.release()
       throw err

@@ -452,6 +452,21 @@
     "severityNote": "resolveIn still refuses a link whose target is outside the shared folder (verified r5 F7), so only links pointing elsewhere inside the share are followed"
   },
   {
+    "id": "share-unlimited-never-counted",
+    "difficulty": "medium",
+    "category": "logic",
+    "severity": "low",
+    "tests": "tests/shares.test.ts",
+    "description": "a share link without a download limit is sent straight away but its downloads are never counted (the slot is only given back)",
+    "patches": [
+      {
+        "file": "src/routes/shares.ts",
+        "find": "  if (res.status === 200 && res.body) slot.finish()\n  else slot.release()",
+        "replace": "  slot.release()"
+      }
+    ]
+  },
+  {
     "id": "share-password-no-lockout",
     "difficulty": "medium",
     "category": "auth",
