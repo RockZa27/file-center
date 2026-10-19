@@ -40,6 +40,7 @@ import { ChevronDownOutline, ChevronUpOutline, CloseOutline, CloudUploadOutline 
 import { api, putChunk } from '../api'
 import { useFeedback } from '../composables'
 import { useAppStore } from '../store'
+import { createPool } from '../uploadPool'
 import { formatBytes, formatDuration } from '../utils'
 
 const props = defineProps({ space: { type: String, required: true } })
@@ -50,7 +51,10 @@ const fb = useFeedback()
 
 const queue = ref([])
 const collapsed = ref(false)
-let running = false
+let runners = 0
+const FILES_AT_ONCE = 3
+// one limit of chunk requests in flight for all files together
+const pool = createPool(() => app.config.uploadSimultaneous || 3)
 let seq = 0
 let refreshTimer = null
 
@@ -95,16 +99,20 @@ function add(list, path) {
   pump()
 }
 
-async function pump() {
-  if (running) return
-  running = true
-  try {
-    for (let next = queue.value.find(i => i.status === 'queued'); next; next = queue.value.find(i => i.status === 'queued')) {
-      await upload(next)
-    }
-  } finally {
-    running = false
-    emit('uploaded')
+function pump() {
+  while (runners < FILES_AT_ONCE && queue.value.some(i => i.status === 'queued')) {
+    runners++
+    runner().finally(() => {
+      runners--
+      // once, when the last one is out of work
+      if (runners === 0) emit('uploaded')
+    })
+  }
+}
+
+async function runner() {
+  for (let next = queue.value.find(i => i.status === 'queued'); next; next = queue.value.find(i => i.status === 'queued')) {
+    await upload(next)
   }
 }
 
@@ -125,28 +133,40 @@ async function upload(it) {
     const worker = async () => {
       while (!it.canceled && !failure) {
         if (it.paused) { await sleep(250); continue }
-        const idx = pending.shift()
-        if (idx === undefined) return
-        const blob = it.file.slice(idx * chunkSize, Math.min(it.size, (idx + 1) * chunkSize))
-        for (let attempt = 0; ; attempt++) {
-          try {
-            await putChunk(it.id, idx, blob, loaded => { sent[idx] = loaded; sync() }, abort => it.aborts.add(abort))
-            sent[idx] = blob.size
-            sync()
-            break
-          } catch (e) {
-            if (it.canceled) return
-            // 507 = server disk full, retrying will not help
-            const retryable = e.status === 0 || (e.status >= 500 && e.status !== 507)
-            if (!retryable || attempt >= 3) { failure = e; return }
-            sent[idx] = 0
-            sync()
-            await sleep(1000 * (attempt + 1))
+        await pool.acquire()
+        let held = true
+        try {
+          // things may have changed while waiting for a slot
+          if (it.canceled || failure) return
+          if (it.paused) continue
+          const idx = pending.shift()
+          if (idx === undefined) return
+          const blob = it.file.slice(idx * chunkSize, Math.min(it.size, (idx + 1) * chunkSize))
+          for (let attempt = 0; ; attempt++) {
+            if (!held) { await pool.acquire(); held = true; if (it.canceled) return }
+            try {
+              await putChunk(it.id, idx, blob, loaded => { sent[idx] = loaded; sync() }, abort => it.aborts.add(abort))
+              sent[idx] = blob.size
+              sync()
+              break
+            } catch (e) {
+              if (it.canceled) return
+              // 507 = server disk full, retrying will not help
+              const retryable = e.status === 0 || (e.status >= 500 && e.status !== 507)
+              if (!retryable || attempt >= 3) { failure = e; return }
+              sent[idx] = 0
+              sync()
+              // do not keep a slot while waiting
+              pool.release(); held = false
+              await sleep(1000 * (attempt + 1))
+            }
           }
+        } finally {
+          if (held) pool.release()
         }
       }
     }
-    await Promise.all(Array.from({ length: Math.min(app.config.uploadSimultaneous || 3, total) }, worker))
+    await Promise.all(Array.from({ length: Math.min(Math.max(1, app.config.uploadSimultaneous || 3), total) }, worker))
     if (it.canceled) return
     if (failure) throw failure
     await api.uploadComplete(it.id)
