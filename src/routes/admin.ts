@@ -21,7 +21,7 @@ import { revokeSharesOf } from '../shares'
 import { DISK_CRITICAL_PERCENT, DISK_LOW_PERCENT, diskInfo, storageStats } from '../stats'
 import { removeUserState } from '../favorites'
 import { removeGrantsOf } from '../grants'
-import { listTrash, purge, restore, trashSummary } from '../trash'
+import { listTrash, purge, restore, tombstoneTrashOf, trashSummary } from '../trash'
 import { isBeta } from '../release'
 import { availableVersion } from '../update-source'
 import { uploadsInProgress } from '../uploads'
@@ -178,6 +178,8 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     const target = manageable(admin, params.username)
     if (target.username === admin.username) throw bad('admin.delete-self')
     if (target.role === 'admin' && adminCount() <= 1) throw bad('admin.last-admin')
+    // before the account leaves the list: old trash entries find their owner from the home
+    tombstoneTrashOf(target.username)
     const list = allUsers()
     list.splice(list.indexOf(target), 1)
     saveUsers()

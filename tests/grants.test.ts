@@ -387,7 +387,7 @@ describe('grants: picking a person', () => {
     let last = 0
     let codes = ''
     for (let i = 0; i < 45 && last !== 429; i++) {
-      const r = await c.json('GET', '/api/users/lookup?q=zz')
+      const r = await c.json('GET', '/api/users/lookup?q=zzz')
       last = r.status
       codes = r.data.code ?? ''
     }
@@ -395,7 +395,7 @@ describe('grants: picking a person', () => {
     expect(codes).toBe('grants.lookup-rate')
     // someone else is not held up by it
     const other = await userWith('grl-rate2')
-    expect((await other.json('GET', '/api/users/lookup?q=zz')).status).toBe(200)
+    expect((await other.json('GET', '/api/users/lookup?q=zzz')).status).toBe(200)
   })
 })
 

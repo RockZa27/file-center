@@ -112,7 +112,7 @@ describe('own trash: who sees what', () => {
     writeFileSync(join(paths.trash, id, 'item', 'x'), 'old')
     // the file itself is stored as the "item"
     writeFileSync(join(paths.trash, id, 'meta.json'), JSON.stringify({
-      id, name: 'x', type: 'dir', size: 3, originalPath: '/users/ot-old/legacy', deletedAt: '2023-11-14T00:00:00.000Z', deletedBy: 'admin',
+      id, name: 'x', type: 'dir', size: 3, originalPath: '/users/ot-old/legacy', deletedAt: new Date().toISOString(), deletedBy: 'admin',
     }))
     const found = (await list(alice)).find(i => i.id === id)
     expect(found).toMatchObject({ owner: 'ot-old', space: 'home', path: '/legacy' })

@@ -186,6 +186,7 @@ export const MESSAGES = {
   'admin.default-public-empty': { th: 'ยังไม่มีไฟล์เผยแพร่ในขณะนี้', en: 'No files have been published yet.' },
 
   // ───────────── trash of one's own ─────────────
+  'trash.cannot-purge': { th: 'ลบรายการนี้ถาวรไม่ได้ เพราะเป็นของเจ้าของโฟลเดอร์ (คุณกู้คืนได้เท่านั้น)', en: 'You cannot delete this item for good: it belongs to the folder owner (you can only restore it).' },
   'trash.cannot-restore-here': { th: 'กู้คืนรายการนี้กลับไปที่เดิมไม่ได้ เพราะที่เดิมอยู่นอกพื้นที่ของคุณหรือคุณไม่มีสิทธิ์เขียนที่นั่น', en: 'This item cannot be restored: its original place is outside your space or you cannot write there.' },
 
   // ───────────── folders shared with another user ─────────────
@@ -193,6 +194,7 @@ export const MESSAGES = {
   'grants.folder-only': { th: 'แชร์ให้ผู้ใช้อื่นได้เฉพาะโฟลเดอร์ (ไม่ใช่ไฟล์ ลิงก์ หรือโฟลเดอร์หลัก)', en: 'Only a folder can be shared with another user (not a file, a link or your main folder).' },
   'grants.too-many': { th: 'แชร์โฟลเดอร์ให้ผู้ใช้อื่นครบ {max} รายการแล้ว กรุณายกเลิกรายการเก่าก่อน', en: 'You already share {max} folders with other users. Please remove an old one first.' },
   'grants.query-short': { th: 'พิมพ์อย่างน้อย {min} ตัวอักษรเพื่อค้นหาผู้ใช้', en: 'Type at least {min} characters to search for a user.' },
+  'grants.create-rate': { th: 'แชร์โฟลเดอร์ถี่เกินไป กรุณารอ {seconds} วินาทีแล้วลองใหม่', en: 'Too many shares in a short time. Wait {seconds} seconds and try again.' },
   'grants.lookup-rate': { th: 'ค้นหาผู้ใช้ถี่เกินไป กรุณารอ {seconds} วินาทีแล้วลองใหม่', en: 'Too many user searches. Wait {seconds} seconds and try again.' },
 
   // ───────────── share links ─────────────
@@ -356,6 +358,10 @@ export const MESSAGES = {
   'notify.upload-received': {
     th: 'มีคนอัปโหลดไฟล์ {file} ({sizeText}) เข้าลิงก์รับไฟล์ "{link}" ของคุณ',
     en: 'Someone uploaded {file} ({sizeText}) through your upload link "{link}".',
+  },
+  'notify.upload-received-many': {
+    th: 'มีคนอัปโหลดไฟล์ {n} ไฟล์ (รวม {sizeText}) เข้าลิงก์รับไฟล์ "{link}" ของคุณ ล่าสุดคือ {file}',
+    en: '{n} files ({sizeText} in all) were uploaded through your upload link "{link}"; the latest is {file}.',
   },
   'notify.link-expiring': { th: 'ลิงก์แชร์ "{name}" ของคุณจะหมดอายุภายใน 24 ชั่วโมง', en: 'Your share link "{name}" expires within 24 hours.' },
   'notify.link-limit-reached': { th: 'ลิงก์แชร์ "{name}" ของคุณถูกดาวน์โหลดครบ {max} ครั้งแล้ว', en: 'Your share link "{name}" has reached its limit of {max} downloads.' },

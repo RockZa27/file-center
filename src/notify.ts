@@ -39,6 +39,12 @@ const KIND_TEXT: Record<Exclude<NotifyKind, 'system-alert'>, MessageCode> = {
 
 export const NOTIFY_MAX = 100
 export const MAILS_PER_HOUR = 20
+/** LINE messages one user gets in an hour; the rest are dropped (the bell still has them) */
+export const LINES_PER_HOUR = 30
+/** uploads through one link inside this time make one bell item and one mail / LINE message */
+export const UPLOAD_COALESCE_MS = 10 * 60_000
+/** a file name from a visitor is cut to this many characters in a message */
+export const NAME_MAX = 80
 export const VERIFY_EVERY_MS = 2 * 60_000
 export const VERIFY_TTL_MS = 24 * 3600_000
 /** a link may expire this soon before the owner is told */
@@ -97,6 +103,19 @@ export function cleanLink(link: unknown): string | undefined {
   return /^\/(?![/\\])[^\x00-\x1f\x7f\\]*$/.test(link) ? link : undefined
 }
 
+const cutName = (v: string) => { const c = [...v]; return c.length > NAME_MAX ? `${c.slice(0, NAME_MAX).join('')}…` : v }
+
+/** the unread upload item for the same link from the last 10 minutes, if any */
+function recentUpload(list: Notification[], p: Record<string, string | number>): Notification | undefined {
+  if (typeof p.linkId !== 'string') return undefined
+  const now = Date.now()
+  for (let i = list.length - 1; i >= 0; i--) {
+    const n = list[i]
+    if (n.kind === 'upload-received' && n.params.linkId === p.linkId && !n.read && now - Date.parse(n.at) < UPLOAD_COALESCE_MS) return n
+  }
+  return undefined
+}
+
 const isKind = (k: unknown): k is NotifyKind => typeof k === 'string' && (KINDS as readonly string[]).includes(k)
 const kindsFor = (u: Pick<User, 'role'>): NotifyKind[] => KINDS.filter(k => u.role === 'admin' || !ADMIN_KINDS.includes(k))
 
@@ -112,6 +131,7 @@ export function describe(lang: Lang, kind: NotifyKind, params: Record<string, st
     if (typeof p.reasonCode === 'string' && Object.hasOwn(MESSAGES, p.reasonCode)) p.reason = text(lang, p.reasonCode as MessageCode)
     return Object.hasOwn(MESSAGES, code) ? scrub(text(lang, code as MessageCode, p)) : code
   }
+  if (kind === 'upload-received' && typeof p.n === 'number' && p.n > 1) return text(lang, 'notify.upload-received-many', p)
   return text(lang, KIND_TEXT[kind], p)
 }
 
@@ -202,14 +222,37 @@ export function rememberLang(username: string, lang: Lang) {
 
 // ───────────── sending ─────────────
 
-const mailTimes = new Map<string, number[]>()
-/** one more mail for this user this hour, or false when the hour's 20 are used */
-function takeMailSlot(username: string, now = Date.now()): boolean {
-  const key = username.toLowerCase()
-  const times = (mailTimes.get(key) ?? []).filter(t => now - t < 3600_000)
-  if (times.length >= MAILS_PER_HOUR) { mailTimes.set(key, times); return false }
-  times.push(now)
-  mailTimes.set(key, times)
+/** one budget of sends per user and hour: `take` is true while the hour's `max` are not used */
+function hourlyBudget(max: number) {
+  const times = new Map<string, number[]>()
+  return {
+    take(username: string, now = Date.now()): boolean {
+      const key = username.toLowerCase()
+      const recent = (times.get(key) ?? []).filter(t => now - t < 3600_000)
+      if (recent.length >= max) { times.set(key, recent); return false }
+      recent.push(now)
+      times.set(key, recent)
+      return true
+    },
+    clear: () => times.clear(),
+  }
+}
+// verification mail has a budget of its own: a flood of notifications can not stop a user from confirming an address
+const mailBudget = hourlyBudget(MAILS_PER_HOUR)
+const verifyBudget = hourlyBudget(MAILS_PER_HOUR)
+const lineBudget = hourlyBudget(LINES_PER_HOUR)
+const takeMailSlot = mailBudget.take
+/** when a mail / LINE message about uploads through a link last went out, per user and link */
+const uploadSent = new Map<string, number>()
+
+/** true when nothing went out for this user and link in the last 10 minutes (and notes that one does now) */
+function uploadSendSlot(username: string, linkId: unknown, channel: Channel, now = Date.now()): boolean {
+  if (typeof linkId !== 'string') return true
+  if (uploadSent.size > 5000) for (const [k, v] of uploadSent) if (now - v >= UPLOAD_COALESCE_MS) uploadSent.delete(k)
+  const key = `${channel}:${username.toLowerCase()}:${linkId}`
+  const last = uploadSent.get(key)
+  if (last !== undefined && now - last < UPLOAD_COALESCE_MS) return false
+  uploadSent.set(key, now)
   return true
 }
 
@@ -226,8 +269,9 @@ function deliverMail(u: User, address: string, kind: NotifyKind, params: Record<
   enqueue('email', () => sendMail({ to: address, subject, text: `${body}\n${url ? `\n${url}\n` : ''}` }))
 }
 
-function deliverLine(userId: string, kind: NotifyKind, params: Record<string, string | number>, lang: Lang, link?: string) {
+function deliverLine(username: string, userId: string, kind: NotifyKind, params: Record<string, string | number>, lang: Lang, link?: string) {
   if (!lineEnabled()) return
+  if (!lineBudget.take(username)) { log.warn('notify-line-limit', { user: username }); return }
   const url = linkUrl(link)
   enqueue('line', () => linePush(userId, `[${appName()}] ${describe(lang, kind, params)}${url ? `\n${url}` : ''}`))
 }
@@ -242,6 +286,8 @@ export function notify(username: string, kind: NotifyKind, params: Params = {}, 
     const user = name ? findUser(name) : undefined
     if (!user || !isKind(kind) || !kindsFor(user).includes(kind)) return false
     const p = cleanParams(params)
+    // a visitor chooses the file name: it is cut before it goes into any message
+    if (kind === 'upload-received') for (const k of ['file', 'link']) if (typeof p[k] === 'string') p[k] = cutName(p[k] as string)
     const url = cleanLink(link)
     const ev = eventsOf(user)[kind]
     const s = own(state.value.users, user.username)
@@ -249,14 +295,23 @@ export function notify(username: string, kind: NotifyKind, params: Params = {}, 
     if (ev.web) {
       const list = own(store.value, user.username) ?? []
       if (!Object.hasOwn(store.value, user.username)) put(store.value, user.username, list)
-      list.push({ id: randomBytes(8).toString('hex'), kind, at: new Date().toISOString(), read: false, params: p, ...(url ? { link: url } : {}) })
+      const open = kind === 'upload-received' ? recentUpload(list, p) : undefined
+      if (open) {
+        // one more file through the same link: the item still unread grows instead of a new one coming
+        const files = (typeof open.params.n === 'number' ? open.params.n : 1) + 1
+        const total = (typeof open.params.size === 'number' ? open.params.size : 0) + (typeof p.size === 'number' ? p.size : 0)
+        open.params = { ...open.params, ...p, n: files, size: total }
+        open.at = new Date().toISOString()
+      } else list.push({ id: randomBytes(8).toString('hex'), kind, at: new Date().toISOString(), read: false, params: p, ...(url ? { link: url } : {}) })
       if (list.length > NOTIFY_MAX) list.splice(0, list.length - NOTIFY_MAX)
       saveSoon()
       did = true
     }
     // nothing at all goes to an address that has not been confirmed
-    if (ev.email && s?.email?.verified) { deliverMail(user, s.email.address, kind, p, url); did = true }
-    if (ev.line && s?.line?.userId) { deliverLine(s.line.userId, kind, p, langOfUser(user.username), url); did = true }
+    // uploads through one link: a mail / LINE message at most once in 10 minutes
+    const quiet = (channel: Channel) => kind === 'upload-received' && !uploadSendSlot(user.username, p.linkId, channel)
+    if (ev.email && s?.email?.verified && !quiet('email')) { deliverMail(user, s.email.address, kind, p, url); did = true }
+    if (ev.line && s?.line?.userId && !quiet('line')) { deliverLine(user.username, s.line.userId, kind, p, langOfUser(user.username), url); did = true }
     return did
   } catch (err) {
     log.warn('notify-failed', { kind, error: err })
@@ -278,7 +333,7 @@ export function requestEmailVerification(u: User, input: unknown): { address: st
   const now = Date.now()
   const wait = (s.email?.verifySentAt ?? 0) + VERIFY_EVERY_MS - now
   if (wait > 0) throw new HttpError(429, 'notify.verify-too-soon', { seconds: Math.ceil(wait / 1000) })
-  if (!takeMailSlot(u.username, now)) throw new HttpError(429, 'notify.mail-limit')
+  if (!verifyBudget.take(u.username, now)) throw new HttpError(429, 'notify.mail-limit')
   const token = randomBytes(32).toString('base64url')
   s.email = { address, verified: false, tokenHash: hashToken(token), tokenExpires: now + VERIFY_TTL_MS, verifySentAt: now }
   saveState()
@@ -397,6 +452,9 @@ export async function notifyIdle() {
 
 /** forget the hourly marks and counters (tests) */
 export function resetNotifyLimits() {
-  mailTimes.clear()
+  mailBudget.clear()
+  verifyBudget.clear()
+  lineBudget.clear()
+  uploadSent.clear()
   lastBell.clear()
 }

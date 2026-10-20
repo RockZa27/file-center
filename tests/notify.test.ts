@@ -3,7 +3,7 @@
  * Runs in-process on the same app as api.test.ts (see in-process-env.ts); every user here starts with "nt-".
  * The settings other files may rely on (SMTP_*, LINE_*, PUBLIC_URL) are set here and put back at the end.
  */
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, setSystemTime, test } from 'bun:test'
 import { createHmac } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import net from 'node:net'
@@ -613,14 +613,14 @@ describe('notifications: e-mail', () => {
     smtp.mails.length = 0
     for (let i = 0; i < 30; i++) notifyMod.notify('nt-mail4', 'folder-shared', { from: 'carol', name: `F${i}` })
     await settle()
-    // the verification mail used one of the 20
-    expect(smtp.mails).toHaveLength(19)
+    // the verification mail has its own budget: all 20 are notifications
+    expect(smtp.mails).toHaveLength(20)
     // the limit is per user: another user's mail goes
     const other = await userWith('nt-mail5')
     await turnOn(other, 'folder-shared', { email: true })
     await other.json('PUT', '/api/me/email', { address: 'five@example.com' })
     await settle()
-    expect(smtp.mails).toHaveLength(20)
+    expect(smtp.mails).toHaveLength(21)
     notifyMod.resetNotifyLimits()
   })
 
@@ -1009,5 +1009,115 @@ describe('notifications: LINE', () => {
     expect(push[0].body.messages[0].text).toContain('disk')
     config.lineGroupId = ''
     alerts.resetAlerts()
+  })
+})
+
+// ───────────── floods (security review F5) ─────────────
+
+describe('notifications: floods', () => {
+  const upload = (user: string, linkId: string, file: string, size: number, link = 'inbox') =>
+    notifyMod.notify(user, 'upload-received', { link, linkId, file, size }, '/files?path=%2Finbox')
+
+  async function verifiedMailUser(name: string, address: string) {
+    useSmtp(smtp)
+    notifyMod.resetNotifyLimits()
+    const c = await userWith(name)
+    await c.json('PUT', '/api/me/email', { address })
+    await settle()
+    const token = /token=([A-Za-z0-9_-]+)/.exec(smtp.mails.at(-1)!.body)![1]
+    await new Client().raw('GET', `/api/me/email/verify?token=${token}`)
+    smtp.mails.length = 0
+    return c
+  }
+
+  test('uploads through one link make one bell item that grows, until it is read', async () => {
+    const c = await userWith('nt-flood1')
+    upload('nt-flood1', 'link-a', 'one.pdf', 100)
+    upload('nt-flood1', 'link-a', 'two.pdf', 200)
+    upload('nt-flood1', 'link-a', 'three.pdf', 300)
+    upload('nt-flood1', 'link-b', 'other.pdf', 5)
+    const items = (await bell(c)).items
+    expect(items).toHaveLength(2)
+    const a = items.find((n: any) => n.params.linkId === 'link-a')
+    expect(a.params).toMatchObject({ n: 3, file: 'three.pdf', size: 600 })
+    expect(a.text).toBe('3 files (600 B in all) were uploaded through your upload link "inbox"; the latest is three.pdf.')
+    expect((await bell(c, '', TH)).items.find((n: any) => n.params.linkId === 'link-a').text).toContain('3 ไฟล์')
+    expect(items.find((n: any) => n.params.linkId === 'link-b').params.n).toBeUndefined()
+    // once read, the next upload is a new item
+    await c.json('POST', '/api/me/notifications/read', {})
+    upload('nt-flood1', 'link-a', 'four.pdf', 1)
+    const after = (await bell(c)).items
+    expect(after).toHaveLength(3)
+    expect(after[0].params).toMatchObject({ file: 'four.pdf', size: 1 })
+    expect(after[0].params.n).toBeUndefined()
+    // and after ten minutes it is a new item as well
+    setSystemTime(new Date(Date.now() + 11 * 60_000))
+    try {
+      upload('nt-flood1', 'link-a', 'five.pdf', 1)
+    } finally { setSystemTime() }
+    expect((await bell(c)).items).toHaveLength(4)
+  })
+
+  test('mail about uploads through one link goes out once, not once per file', async () => {
+    const c = await verifiedMailUser('nt-flood2', 'flood2@example.com')
+    await turnOn(c, 'upload-received', { email: true })
+    for (let i = 0; i < 6; i++) upload('nt-flood2', 'link-a', `f${i}.pdf`, 10)
+    upload('nt-flood2', 'link-b', 'g.pdf', 10)
+    await settle()
+    expect(smtp.mails).toHaveLength(2)
+  })
+
+  test('LINE about uploads through one link goes out once, and a user gets 30 LINE messages an hour', async () => {
+    lineOn()
+    notifyMod.resetNotifyLimits()
+    const c = await userWith('nt-flood3')
+    const code = (await c.json('POST', '/api/me/line/link')).data.code
+    await webhook([lineText('U-flood3', code)])
+    expect(notifyMod.accountOfLine('U-flood3')).toBe('nt-flood3')
+    await turnOn(c, 'upload-received', { line: true })
+    await turnOn(c, 'folder-shared', { line: true })
+    lineCalls = []
+    for (let i = 0; i < 6; i++) upload('nt-flood3', 'link-a', `f${i}.pdf`, 10)
+    await settle()
+    expect(lineCalls.filter(x => x.path === '/v2/bot/message/push')).toHaveLength(1)
+    lineCalls = []
+    for (let i = 0; i < 40; i++) notifyMod.notify('nt-flood3', 'folder-shared', { from: 'carol', name: `F${i}` })
+    await settle()
+    // one went out above: 29 are left of the hour's 30
+    expect(lineCalls.filter(x => x.path === '/v2/bot/message/push')).toHaveLength(29)
+    // the bell has them all
+    expect((await bell(c)).items.filter((n: any) => n.kind === 'folder-shared')).toHaveLength(40)
+    // another user is not held up
+    expect(notifyMod.notify('nt-line1', 'folder-shared', { from: 'carol', name: 'x' })).toBe(true)
+    notifyMod.resetNotifyLimits()
+    lineOff()
+  })
+
+  test('a visitor\'s file name is cut to 80 characters in a message', async () => {
+    const c = await userWith('nt-flood4')
+    upload('nt-flood4', 'link-a', 'x'.repeat(200) + '.pdf', 10, 'y'.repeat(200))
+    const n = (await bell(c)).items[0]
+    expect(n.params.file).toBe('x'.repeat(80) + '…')
+    expect(n.params.link).toBe('y'.repeat(80) + '…')
+    expect(n.text.length).toBeLessThan(260)
+  })
+
+  test('mail about notifications can not use up the budget of the verification mail', async () => {
+    const c = await verifiedMailUser('nt-flood5', 'flood5@example.com')
+    await turnOn(c, 'folder-shared', { email: true })
+    for (let i = 0; i < 25; i++) notifyMod.notify('nt-flood5', 'folder-shared', { from: 'carol', name: `F${i}` })
+    await settle()
+    expect(smtp.mails).toHaveLength(20)
+    smtp.mails.length = 0
+    // the two minutes between verification mails have passed, the hour's notification mails are all used
+    setSystemTime(new Date(Date.now() + 3 * 60_000))
+    try {
+      const r = await c.json('PUT', '/api/me/email', { address: 'flood5b@example.com' }, EN)
+      expect(r.status).toBe(200)
+    } finally { setSystemTime() }
+    await settle()
+    expect(smtp.mails).toHaveLength(1)
+    expect(smtp.mails[0].to).toEqual(['flood5b@example.com'])
+    notifyMod.resetNotifyLimits()
   })
 })

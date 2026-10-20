@@ -1,10 +1,10 @@
 import { randomBytes } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { open } from 'node:fs/promises'
-import { join } from 'node:path'
-import type { User } from './auth'
+import { join, relative } from 'node:path'
+import { accessFor, type User } from './auth'
 import { config, paths } from './config'
-import { bad, ensureDir, ensureSpace, forbidden, HttpError, notFound, resolveIn, uniquePath, validName } from './fsx'
+import { bad, ensureDir, ensureSpace, forbidden, HttpError, normRel, notFound, resolveIn, uniquePath, validName, within } from './fsx'
 import { indexTouched } from './search-index'
 import { commitBytes, limitOf, releaseBytes, reserveBytes, restoreReservation } from './quota'
 import { JsonStore } from './store'
@@ -19,6 +19,8 @@ type Meta = {
   chunkSize: number
   total: number
   createdAt: number
+  /** the space the upload was announced in (not for an upload-request link): its rights are checked again on every chunk and at the end */
+  space?: string
   /** set for a visitor's upload: the day its size was counted against the visitors' allowance */
   guestDay?: string
   /** set when the bytes count against this user's quota (quota.ts): the reservation is given back when the upload ends */
@@ -46,9 +48,31 @@ function loadMeta(id: unknown, owner: string): Meta {
   }
 }
 
-/** throws unless `owner` has this upload; lets a route refuse before it reads the request body */
-export function checkUpload(id: string, owner: string) {
-  loadMeta(id, owner)
+/**
+ * The upload right of a space can end while a file is on its way (a grant taken back or set to view, the permission
+ * removed, the folder moved or replaced by a link): whoever started it must still have `upload` there, and the
+ * folder must still be inside the space. If not, the upload is thrown away (its quota hold is given back) and refused.
+ */
+function stillAllowed(id: string, meta: Meta, user: User | null | undefined) {
+  if (!meta.space) return
+  let ok = false
+  try {
+    const a = accessFor(user ?? null, meta.space)
+    if (a && a.perms.has('upload') && within(a.root, meta.destDir)) {
+      resolveIn(a.root, normRel(relative(a.root, meta.destDir)))
+      ok = true
+    }
+  } catch { /* outside the space now */ }
+  if (!ok) {
+    restoreReservations()
+    dropUpload(id, meta)
+    throw forbidden()
+  }
+}
+
+/** throws unless `owner` has this upload and may still add to it; lets a route refuse before it reads the request body */
+export function checkUpload(id: string, owner: string, user?: User | null) {
+  stillAllowed(id, loadMeta(id, owner), user)
 }
 
 // ───────────── visitors' daily allowance ─────────────
@@ -144,6 +168,8 @@ export function initUpload(args: {
   guest?: boolean
   /** the user whose quota the bytes count against; the caller has awaited quota.ready() for them */
   quotaUser?: User
+  /** the space the user announced it in (rights are checked again later) */
+  space?: string
   shareId?: string
   ip?: string
   root: string
@@ -169,6 +195,7 @@ export function initUpload(args: {
   const meta: Meta = { id, owner: args.owner, destDir, name, size, chunkSize, total, createdAt: Date.now() }
   // counted before anything is written and in the same tick as the check: nothing can slip in between
   if (args.guest) meta.guestDay = reserveGuest(size)
+  if (args.space) meta.space = args.space
   if (args.shareId) { meta.shareId = args.shareId; meta.ip = args.ip ?? '' }
   if (args.quotaUser) {
     try {
@@ -198,8 +225,9 @@ export function receivedChunks(id: string, owner: string): { received: number[];
   return { received, total: meta.total }
 }
 
-export async function saveChunk(id: string, owner: string, index: number, data: ArrayBuffer) {
+export async function saveChunk(id: string, owner: string, index: number, data: ArrayBuffer, user?: User | null) {
   const meta = loadMeta(id, owner)
+  stillAllowed(id, meta, user)
   if (!Number.isInteger(index) || index < 0 || index >= meta.total) throw bad('upload.bad-chunk-index')
   const expected = index === meta.total - 1 ? meta.size - meta.chunkSize * (meta.total - 1) : meta.chunkSize
   if (data.byteLength !== expected) throw bad('upload.bad-chunk-size', { bytes: expected })
@@ -215,9 +243,10 @@ export async function saveChunk(id: string, owner: string, index: number, data: 
   touch(id)
 }
 
-export async function completeUpload(id: string, owner: string) {
+export async function completeUpload(id: string, owner: string, user?: User | null) {
   restoreReservations()
   const meta = loadMeta(id, owner)
+  stillAllowed(id, meta, user)
   for (let i = 0; i < meta.total; i++) {
     if (!existsSync(join(dirOf(id), String(i)))) throw bad('upload.missing-chunk', { n: i + 1 })
   }
