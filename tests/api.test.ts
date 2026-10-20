@@ -768,6 +768,12 @@ describe('full system: CSRF', () => {
       ['DELETE', '/api/me/line'],
       ['POST', '/api/versions/:id/restore', { ...files, path: '/matrix.txt' }],
       ['DELETE', '/api/versions/:id'],
+      ['POST', '/api/me/trash/:id/restore'],
+      ['DELETE', '/api/me/trash/:id'],
+      ['DELETE', '/api/me/trash'],
+      ['POST', '/api/grants', { ...files, path: '/matrix.txt', to: 'somchai', perms: 'view' }],
+      ['PATCH', '/api/grants/:id', { perms: 'edit' }],
+      ['DELETE', '/api/grants/:id'],
     ]
     // the exceptions, on purpose: a share link's password form needs no session (tests/shares.test.ts), and the
     // ONLYOFFICE callback comes from the document server, which has no session: it proves itself with a signed token

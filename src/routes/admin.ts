@@ -20,6 +20,7 @@ import { forgetNotifications } from '../notify'
 import { revokeSharesOf } from '../shares'
 import { DISK_CRITICAL_PERCENT, DISK_LOW_PERCENT, diskInfo, storageStats } from '../stats'
 import { removeUserState } from '../favorites'
+import { removeGrantsOf } from '../grants'
 import { listTrash, purge, restore, trashSummary } from '../trash'
 import { isBeta } from '../release'
 import { availableVersion } from '../update-source'
@@ -184,6 +185,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     revokeSharesOf(target.username)
     removeUserState(target.username)
     forgetNotifications(target.username)
+    removeGrantsOf(target.username)
     audit({ user: admin.username, ip, action: 'user-delete', target: target.username })
     return { ok: true }
   })

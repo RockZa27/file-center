@@ -185,6 +185,16 @@ export const MESSAGES = {
   },
   'admin.default-public-empty': { th: 'ยังไม่มีไฟล์เผยแพร่ในขณะนี้', en: 'No files have been published yet.' },
 
+  // ───────────── trash of one's own ─────────────
+  'trash.cannot-restore-here': { th: 'กู้คืนรายการนี้กลับไปที่เดิมไม่ได้ เพราะที่เดิมอยู่นอกพื้นที่ของคุณหรือคุณไม่มีสิทธิ์เขียนที่นั่น', en: 'This item cannot be restored: its original place is outside your space or you cannot write there.' },
+
+  // ───────────── folders shared with another user ─────────────
+  'grants.to-self': { th: 'แชร์โฟลเดอร์ให้ตัวเองไม่ได้', en: 'You cannot share a folder with yourself.' },
+  'grants.folder-only': { th: 'แชร์ให้ผู้ใช้อื่นได้เฉพาะโฟลเดอร์ (ไม่ใช่ไฟล์ ลิงก์ หรือโฟลเดอร์หลัก)', en: 'Only a folder can be shared with another user (not a file, a link or your main folder).' },
+  'grants.too-many': { th: 'แชร์โฟลเดอร์ให้ผู้ใช้อื่นครบ {max} รายการแล้ว กรุณายกเลิกรายการเก่าก่อน', en: 'You already share {max} folders with other users. Please remove an old one first.' },
+  'grants.query-short': { th: 'พิมพ์อย่างน้อย {min} ตัวอักษรเพื่อค้นหาผู้ใช้', en: 'Type at least {min} characters to search for a user.' },
+  'grants.lookup-rate': { th: 'ค้นหาผู้ใช้ถี่เกินไป กรุณารอ {seconds} วินาทีแล้วลองใหม่', en: 'Too many user searches. Wait {seconds} seconds and try again.' },
+
   // ───────────── share links ─────────────
   // one answer for every link that does not work (unknown, expired, revoked, used up, item or owner gone): a guesser learns nothing
   'share.not-found': { th: 'ไม่พบลิงก์นี้ หรือลิงก์หมดอายุแล้ว', en: 'Link not found or expired.' },

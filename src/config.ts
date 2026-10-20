@@ -180,6 +180,7 @@ export const paths = {
   versions: join(config.dataDir, 'versions'),
   /** favorites and recent files per user (favorites.ts) */
   userState: join(config.dataDir, 'user-state.json'),
+  grants: join(config.dataDir, 'grants.json'),
   tmp: join(config.dataDir, 'tmp'),
   branding: join(config.dataDir, 'branding'),
   /** installed web updates: state.json, releases/, staging/ (see release.ts) */

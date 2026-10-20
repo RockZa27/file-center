@@ -3,10 +3,11 @@ import { basename, dirname, join } from 'node:path'
 import { randomBytes } from 'node:crypto'
 import { Elysia, t } from 'elysia'
 import { audit } from '../audit'
+import { isForeignSpace } from '../auth'
 import { context, need } from '../context'
 import { recordRecent } from '../favorites'
 import { conflict, ensureSpace, normRel, notFound, resolveIn, storagePath } from '../fsx'
-import { holdNow, markStale, ownerOfPath, ready } from '../quota'
+import { holdNow, markStale, ownerOfPath, quotaUserOf, ready } from '../quota'
 import { indexTouched } from '../search-index'
 import { dropVersion, getVersion, listVersions, reserveVersion } from '../versions'
 import { fileResponse } from './files'
@@ -37,7 +38,7 @@ export const versionRoutes = new Elysia({ prefix: '/api/versions' })
     const a = need({ user, ip: '' }, query.space, 'download')
     const abs = fileOf(a.root, query.path)
     const v = getVersion(abs, params.id)
-    if (a.space.startsWith('user:')) audit({ user: user!.username, ip, action: 'download', target: storagePath(abs), detail: `${a.space}, เวอร์ชันเก่า` })
+    if (isForeignSpace(a.space)) audit({ user: user!.username, ip, action: 'download', target: storagePath(abs), detail: `${a.space}, เวอร์ชันเก่า` })
     return fileResponse(v.item, basename(abs), request, false)
   }, { query: fileQ })
 
@@ -47,7 +48,7 @@ export const versionRoutes = new Elysia({ prefix: '/api/versions' })
     // the counts are awaited first: from the check of the file to the write there is no await
     const owner = ownerOfPath(abs0)
     await ready(owner)
-    const q = a.space === 'home' ? user : null
+    const q = quotaUserOf(a, user)
     await ready(q)
     const abs = fileOf(a.root, body.path)
     const v = getVersion(abs, params.id)

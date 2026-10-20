@@ -1,13 +1,14 @@
 import { randomBytes } from 'node:crypto'
 import { existsSync, lstatSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
+import { allUsers, type User } from './auth'
 import { config, paths } from './config'
 import { holdNow, ownerOfPath, ready } from './quota'
 import { stashedBytes, stashVersions, unstashVersions } from './versions'
 import { log } from './logger'
 import { indexTouched } from './search-index'
 import {
-  conflict, ensureDir, moveTree, notFound, parentRel, resolveIn, storagePath, treeStats, uniquePath,
+  conflict, ensureDir, moveTree, normRel, notFound, parentRel, resolveIn, storagePath, treeStats, uniquePath, within,
 } from './fsx'
 
 export type TrashMeta = {
@@ -19,6 +20,35 @@ export type TrashMeta = {
   originalPath: string
   deletedAt: string
   deletedBy: string
+  /** username whose home held the item (null: the public folder or somewhere outside every home); absent in entries from before 1.10 */
+  owner?: string | null
+  /** 'home' (in a user's home), 'public' or 'other'; absent in entries from before 1.10 */
+  space?: 'home' | 'public' | 'other'
+}
+
+/** the plain user whose home holds `abs` (an admin's home is everything, so it never decides), or null */
+export function homeOwnerOf(abs: string): User | null {
+  let best: User | null = null
+  let bestLen = -1
+  for (const u of allUsers()) {
+    if (u.role === 'admin') continue
+    let root: string
+    try { root = resolveIn(config.storageDir, normRel(u.homedir)) } catch { continue }
+    // the deepest home wins when one sits inside another
+    if (within(root, abs) && root.length > bestLen) { best = u; bestLen = root.length }
+  }
+  return best
+}
+
+function spaceOf(abs: string, owner: User | null): NonNullable<TrashMeta['space']> {
+  if (owner) return 'home'
+  return within(paths.publicDir, abs) ? 'public' : 'other'
+}
+
+/** the owner of an entry: as recorded, or (entries from before 1.10) from where it was */
+export function trashOwner(meta: TrashMeta): string | null {
+  if (meta.owner !== undefined) return meta.owner
+  try { return homeOwnerOf(join(config.storageDir, normRel(meta.originalPath)))?.username ?? null } catch { return null }
 }
 
 const itemDir = (id: string) => join(paths.trash, id)
@@ -31,6 +61,7 @@ function safeId(id: unknown): string {
 export async function moveToTrash(abs: string, deletedBy: string): Promise<TrashMeta> {
   const st = lstatSync(abs)
   const isDir = st.isDirectory() && !st.isSymbolicLink()
+  const owner = homeOwnerOf(abs)
   const id = `${Date.now()}_${randomBytes(4).toString('hex')}`
   const meta: TrashMeta = {
     id,
@@ -41,6 +72,8 @@ export async function moveToTrash(abs: string, deletedBy: string): Promise<Trash
     originalPath: storagePath(abs),
     deletedAt: new Date().toISOString(),
     deletedBy,
+    owner: owner?.username ?? null,
+    space: spaceOf(abs, owner),
   }
   ensureDir(itemDir(id))
   try {
@@ -73,12 +106,28 @@ export function trashSummary() {
   return { count: items.length, size: items.reduce((s, i) => s + i.size, 0) }
 }
 
-export async function restore(idRaw: unknown): Promise<{ meta: TrashMeta; restoredTo: string }> {
+/** one entry as stored, or 404 */
+export function readTrash(idRaw: unknown): TrashMeta {
+  const id = safeId(idRaw)
+  if (!existsSync(join(itemDir(id), 'meta.json'))) throw notFound()
+  try {
+    return JSON.parse(readFileSync(join(itemDir(id), 'meta.json'), 'utf8')) as TrashMeta
+  } catch {
+    throw notFound()
+  }
+}
+
+/**
+ * `check` (a user restoring their own item) runs before anything moves and throws to refuse; the admin restore has none.
+ */
+export async function restore(
+  idRaw: unknown, check?: (meta: TrashMeta, target: string) => void,
+): Promise<{ meta: TrashMeta; restoredTo: string }> {
+  const meta = readTrash(idRaw)
   const id = safeId(idRaw)
   const dir = itemDir(id)
-  if (!existsSync(join(dir, 'meta.json'))) throw notFound()
-  const meta = JSON.parse(readFileSync(join(dir, 'meta.json'), 'utf8')) as TrashMeta
   const target = resolveIn(config.storageDir, meta.originalPath)
+  check?.(meta, target)
   ensureDir(dirname(target))
   // the item goes back into a home that may have a quota: it counts again (counted first, so nothing awaits between
   // choosing the name and moving)

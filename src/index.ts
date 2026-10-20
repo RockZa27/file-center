@@ -3,7 +3,7 @@ import { extname, join, normalize } from 'node:path'
 import { Elysia } from 'elysia'
 import { startAlerts } from './alerts'
 import { audit } from './audit'
-import { bootstrapAdmin, pruneLoginAttempts, purgeExpiredSessions } from './auth'
+import { bootstrapAdmin, findUser, pruneLoginAttempts, purgeExpiredSessions } from './auth'
 import { backupDue, backupRunning, runBackup } from './backup'
 import { compressedJson, compressibleRoute, withVary } from './compress'
 import { config, ensureDirs } from './config'
@@ -20,13 +20,17 @@ import { versionRoutes } from './routes/versions'
 import { logRoutes } from './routes/logs'
 import { officeRoutes } from './routes/office'
 import { sessionRoutes } from './routes/session'
+import { grantRoutes } from './routes/grants'
 import { shareRoutes } from './routes/shares'
+import { trashRoutes } from './routes/trash'
 import { updateRoutes } from './routes/update'
 import { uploadRoutes } from './routes/upload'
 import { startSearchIndex, stopSearchIndex } from './search-index'
 import { LINE_API, lineBase } from './line'
 import { smtpConfig } from './mail'
 import { checkNotifications } from './notify-checks'
+import { grantCreatedListeners } from './grants'
+import { notify } from './notify'
 import { purgeExpiredShares } from './shares'
 import { purgeExpired } from './trash'
 import { purgeExpiredVersions } from './versions'
@@ -34,6 +38,11 @@ import { cleanStaleUploads } from './uploads'
 import { officeConfig, officeOrigin } from './office'
 import { cleanStaging, signingKey } from './updater'
 import { sourceConfig } from './update-source'
+
+// a folder shared with someone rings their bell (and mail / LINE as they chose)
+grantCreatedListeners.push(g => {
+  notify(g.to, 'folder-shared', { from: findUser(g.owner)?.name || g.owner, name: g.path.split('/').filter(Boolean).at(-1) ?? '/' }, '/with-me')
+})
 import { compressedCopy, compressible, etagMatches, etagOf, pickEncoding } from './static'
 
 ensureDirs()
@@ -217,6 +226,8 @@ export const app = new Elysia({ serve: { idleTimeout: 255, maxRequestBodySize: c
   .use(fileRoutes)
   .use(meRoutes)
   .use(notifyRoutes)
+  .use(trashRoutes)
+  .use(grantRoutes)
   .use(versionRoutes)
   .use(uploadRoutes)
   .use(shareRoutes)

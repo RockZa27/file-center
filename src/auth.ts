@@ -6,6 +6,7 @@ import { audit } from './audit'
 import { COMMON_PASSWORDS, isRunOrRepeat } from './common-passwords'
 import { config, paths } from './config'
 import { bad, ensureDir, HttpError, normRel, resolveIn } from './fsx'
+import { GRANT_SPACE, grantSpace } from './grants'
 import { log } from './logger'
 import { open, seal } from './secret-box'
 import { cleanPerms, PERMISSIONS, settings, type Perm } from './settings'
@@ -487,18 +488,25 @@ export async function confirmPassword(
 
 export type Space = 'home' | 'public'
 /** `user:<username>`: read-only view of the home of a user the caller manages (accessFor) */
-export type AnySpace = Space | `user:${string}`
+/** `grant:<id>`: a folder another user shares with the caller (grants.ts) */
+export type AnySpace = Space | `user:${string}` | `grant:${string}`
 export const USER_SPACE = 'user:'
 
 export type Access = {
   space: AnySpace
   root: string
   perms: Set<Perm>
+  /** set for a grant space: the user whose home holds the folder, so what is written there counts against their quota */
+  quotaOwner?: User
 }
+
+/** a space that shows someone else's files (a staff view or a grant): looking into it leaves a line in the audit trail */
+export const isForeignSpace = (space: string) => space.startsWith(USER_SPACE) || space.startsWith(GRANT_SPACE)
 
 /** Which part of the storage may this visitor see for the given space, and with which rights. */
 export function accessFor(user: User | null, space: unknown): Access | null {
   if (typeof space === 'string' && space.startsWith(USER_SPACE)) return userSpace(user, space)
+  if (typeof space === 'string' && space.startsWith(GRANT_SPACE)) return grantSpace(user, space)
   if (space !== 'home' && space !== 'public') return null
   if (!user) {
     if (space !== 'public' || !settings.get().publicEnabled) return null
