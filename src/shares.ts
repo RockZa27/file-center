@@ -12,6 +12,7 @@ import { basename } from 'node:path'
 import { accessFor, findUser, type Lockout, type Space } from './auth'
 import { config, paths } from './config'
 import { notFound, resolveIn, storagePath } from './fsx'
+import { nameOf, notify } from './notify'
 import { open, seal } from './secret-box'
 import { JsonStore } from './store'
 
@@ -261,6 +262,10 @@ export function startDownload(share: Share): { finish(): void; release(): void }
     if (counted) {
       share.downloads++
       store.save()
+      // the last allowed download: the owner hears of it once (no more can start after this)
+      if (share.maxDownloads !== null && share.downloads === share.maxDownloads) {
+        notify(share.owner, 'link-limit-reached', { id: share.id, name: nameOf(share.path), max: share.maxDownloads }, '/links')
+      }
     }
   }
   return { finish: () => end(true), release: () => end(false) }

@@ -15,6 +15,7 @@ import { adminRoutes } from './routes/admin'
 import { backupRoutes } from './routes/backup'
 import { fileRoutes } from './routes/files'
 import { meRoutes } from './routes/me'
+import { notifyRoutes } from './routes/notify'
 import { versionRoutes } from './routes/versions'
 import { logRoutes } from './routes/logs'
 import { officeRoutes } from './routes/office'
@@ -23,6 +24,9 @@ import { shareRoutes } from './routes/shares'
 import { updateRoutes } from './routes/update'
 import { uploadRoutes } from './routes/upload'
 import { startSearchIndex, stopSearchIndex } from './search-index'
+import { LINE_API, lineBase } from './line'
+import { smtpConfig } from './mail'
+import { checkNotifications } from './notify-checks'
 import { purgeExpiredShares } from './shares'
 import { purgeExpired } from './trash'
 import { purgeExpiredVersions } from './versions'
@@ -45,6 +49,11 @@ if (source.error) log.warn('update-source-invalid', `UPDATE_SOURCE ${source.show
 // and for the office editor: a wrong OFFICE_* value keeps it off
 const office = officeConfig()
 if (office.error) log.warn('office-config-invalid', `ตั้งค่า ONLYOFFICE ไม่ถูกต้อง: ${office.error} ปิดการแก้ไขเอกสาร office ไว้จนกว่าจะแก้ค่านี้`)
+// and for e-mail: a wrong SMTP_* value keeps notification e-mail off
+const smtp = smtpConfig()
+if (smtp.error) log.warn('smtp-invalid', `ตั้งค่าอีเมล (SMTP) ไม่ถูกต้อง: ${smtp.error} ปิดการส่งอีเมลแจ้งเตือนไว้จนกว่าจะแก้ค่านี้`)
+if (config.lineApiBase && lineBase() === LINE_API) log.warn('line-api-base-ignored', 'LINE_API_BASE ใช้ได้เฉพาะ http://127.0.0.1, localhost หรือ [::1] (ไว้ทดสอบ) จึงไม่นำมาใช้')
+if (config.lineChannelToken && !config.lineChannelSecret) log.warn('line-no-secret', 'ตั้ง LINE_CHANNEL_TOKEN แล้วแต่ไม่มี LINE_CHANNEL_SECRET จึงยังเชื่อมบัญชีผ่าน webhook ไม่ได้')
 
 function housekeeping() {
   try {
@@ -55,6 +64,8 @@ function housekeeping() {
     cleanStaging()
     pruneLoginAttempts()
     if (trash || uploads || versions) log.info('housekeeping', { trash, staleUploads: uploads, versions })
+    // links about to expire, homes near their quota: told in the background, once each
+    void checkNotifications()
     // runs in the background; the result goes to backup-status.json, which the dashboard shows
     if (backupDue() && !backupRunning()) {
       runBackup().then(
@@ -205,6 +216,7 @@ export const app = new Elysia({ serve: { idleTimeout: 255, maxRequestBodySize: c
   .use(logRoutes)
   .use(fileRoutes)
   .use(meRoutes)
+  .use(notifyRoutes)
   .use(versionRoutes)
   .use(uploadRoutes)
   .use(shareRoutes)

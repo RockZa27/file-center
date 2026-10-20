@@ -8,10 +8,10 @@ import { pickEncoding } from './static'
  * so nothing here may carry a secret. Not on it, on purpose: /api/session (CSRF token), login and 2FA (codes),
  * /api/shares and /api/s/* (share tokens), /api/upload (upload ids), backups, update, office (tokens, paths of the
  * server), downloads, zips and streams (not JSON). Logs and the activity list are scrubbed of tokens by logger.ts
- * and audit.ts before they are stored; the rest is names, sizes, times and the settings of one's own account.
+ * and audit.ts before they are stored; the rest is names, sizes, times and the settings of one's own account (the notification list holds texts, never a link's token).
  */
 const ALLOWED = new Set([
-  '/api/list', '/api/folders', '/api/search', '/api/versions', '/api/me/favorites', '/api/me/recent',
+  '/api/list', '/api/folders', '/api/search', '/api/versions', '/api/me/favorites', '/api/me/recent', '/api/me/notifications',
   '/api/admin/users', '/api/admin/activity', '/api/admin/logs', '/api/admin/folders',
 ])
 const MIN_BYTES = 1024

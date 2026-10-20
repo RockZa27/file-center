@@ -417,6 +417,13 @@ OFFICE_SERVER_INTERNAL_URL=http://onlyoffice
 | `ALERT_TELEGRAM_CHAT_ID` | ว่าง | chat ที่บอท Telegram ส่งถึง (ต้องตั้งเมื่อใช้ `telegram`) |
 | `ALERT_LANG` | `th` | ภาษาของการแจ้งเตือน `th` หรือ `en` |
 | `ALERT_ERRORS_PER_HOUR` | 20 | แจ้งเตือนเมื่อมี error มากกว่านี้ในหนึ่งชั่วโมงที่ผ่านมา |
+| `PUBLIC_URL` | ว่าง | ที่อยู่ที่คนเปิด File Center เช่น `https://files.example.com` ใช้สร้างลิงก์ในอีเมล (ต้องมีเมื่อเปิดอีเมล) ไม่เอามาจากหัว `Host` ของคำขอ |
+| `SMTP_HOST` / `SMTP_PORT` | ว่าง (ปิด) / 587 | เซิร์ฟเวอร์อีเมลสำหรับส่งการแจ้งเตือนส่วนตัว (ดู การแจ้งเตือนส่วนตัว) |
+| `SMTP_SECURE` | `starttls` | `starttls` (พอร์ต 587), `tls` (พอร์ต 465) หรือ `none` (ใช้ได้กับ `SMTP_HOST` ที่เป็นเครื่องนี้เท่านั้นเมื่อมีรหัสผ่าน) |
+| `SMTP_USER` / `SMTP_PASS` / `SMTP_FROM` | ว่าง | บัญชีเข้าสู่เซิร์ฟเวอร์อีเมล (ตั้งคู่กัน) และผู้ส่ง เช่น `File Center <files@example.com>` |
+| `LINE_CHANNEL_TOKEN` / `LINE_CHANNEL_SECRET` | ว่าง (ปิด) | LINE Messaging API: Channel access token (ส่งข้อความ) และ Channel secret (ตรวจลายเซ็น webhook) |
+| `LINE_GROUP_ID` | ว่าง | กลุ่ม LINE ที่รับการแจ้งเตือนระบบของผู้ดูแล (ไม่บังคับ) |
+| `LINE_API_BASE` | ว่าง | **ไว้ทดสอบเท่านั้น** ชี้ไปที่เซิร์ฟเวอร์จำลองบนเครื่องนี้ (`http://127.0.0.1:<พอร์ต>`) ค่าอื่นถูกเมินและใช้ `https://api.line.me` เสมอ |
 | `TRUST_PROXY` | `false` | ที่มาของ IP ผู้ใช้: `cloudflare` = หัว `CF-Connecting-IP` (Cloudflare Tunnel), `true` = ค่าสุดท้ายของ `X-Forwarded-For` (nginx/Caddy ของคุณเอง), `false` = ไม่มี proxy |
 
 ## ความปลอดภัยเพิ่มเติม
@@ -496,6 +503,72 @@ ALERT_LANG=th
 - รับเฉพาะ `https://` (ยกเว้น `http://127.0.0.1` / `localhost` สำหรับทดสอบ) URL ของ webhook และ Telegram มีโทเคนอยู่ในตัว หน้าเว็บและ log จึงแสดงแค่ชื่อโฮสต์
 - `GET /api/admin/alerts` ตอบ `{ enabled, kind, host, lastSent: { <เรื่อง>: เวลา } }` · `POST /api/admin/alerts/test` ส่งข้อความทดสอบทันที ตอบ `{ ok: true }` หรือ error ที่บอกสาเหตุ
   (`admin.alert-off`, `admin.alert-status`, `admin.alert-timeout`, `admin.alert-unreachable`) และบันทึก `alert-test` ในประวัติการใช้งาน (เฉพาะ admin)
+
+## การแจ้งเตือนส่วนตัว (กระดิ่ง อีเมล LINE)
+
+ต่างจาก "การแจ้งเตือน" ของผู้ดูแลด้านบน อันนี้ส่งถึงผู้ใช้แต่ละคน (ตั้งแต่ 1.10) เห็นเฉพาะของตัวเอง เก็บไว้ที่ `data/notifications.json` คนละไม่เกิน 100 รายการ (เก่าสุดหลุดก่อน)
+ระบบเก็บแค่ชนิดกับค่าที่เกี่ยวข้อง ข้อความเขียนตอนอ่านตามภาษาของผู้อ่าน และไม่มีโทเคนของลิงก์แชร์ รหัสผ่าน หรือลิงก์ลับอยู่ในข้อความใด ๆ (ลิงก์ในข้อความเป็นพาธในแอป เช่น `/links`, `/files?path=...`)
+
+| ชนิด | ส่งเมื่อ |
+|---|---|
+| `upload-received` | มีคนอัปโหลดไฟล์ผ่านลิงก์รับไฟล์ของฉันเสร็จ (บอกเฉพาะเจ้าของลิงก์) |
+| `link-expiring` | ลิงก์แชร์ของฉันจะหมดอายุภายใน 24 ชั่วโมง (ตรวจรายชั่วโมง ครั้งเดียวต่อลิงก์ ลิงก์ที่ตั้งไว้ 1 วันไม่แจ้ง เพราะเจ้าของรู้อยู่แล้ว) |
+| `link-limit-reached` | ลิงก์แชร์ของฉันถูกดาวน์โหลดครบจำนวนที่ตั้งไว้ |
+| `quota-low` | พื้นที่ของฉันใช้เกิน 90% ของโควตา (ครั้งเดียวจนกว่าจะต่ำกว่า 90% แล้วเกินอีก) |
+| `folder-shared` | มีคนแชร์โฟลเดอร์ให้ฉัน |
+| `system-alert` | (admin) สิ่งเดียวกับที่ส่งไป webhook ของผู้ดูแล: สำรองข้อมูลล้มเหลว, error มาก, บัญชีถูกล็อก, ดิสก์วิกฤต, มีเวอร์ชันใหม่ ชั่วโมงละครั้งต่อเรื่อง แม้ไม่ได้ตั้ง `ALERT_WEBHOOK_URL` |
+
+ผู้ใช้เลือกต่อชนิดและต่อช่องทาง (`web` กระดิ่ง · `email` · `line`) ค่าเริ่มต้นเปิดเฉพาะกระดิ่ง ส่งทางอีเมลและ LINE เป็นงานเบื้องหลัง ไม่ทำให้คำขอใดช้า ลองใหม่ได้ 3 ครั้งแล้วเลิก (บันทึก `notify-delivery-failed` ใน log โดยไม่มีที่อยู่อีเมลหรือโทเคน)
+คิวอยู่ในหน่วยความจำ รีสตาร์ตแล้วข้อความที่ยังไม่ได้ส่งหายไป (กระดิ่งยังอยู่)
+
+### อีเมล
+
+```env
+PUBLIC_URL=https://files.example.com   # ใช้สร้างลิงก์ยืนยันในอีเมล
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_SECURE=starttls                   # หรือ tls (พอร์ต 465) / none (เฉพาะเซิร์ฟเวอร์ในเครื่องนี้)
+SMTP_USER=files@example.com
+SMTP_PASS=รหัสผ่านหรือ app password
+SMTP_FROM=File Center <files@example.com>
+```
+
+- ไม่ตั้ง `SMTP_HOST` = ไม่ส่งอีเมล ค่าที่ใช้ไม่ได้ ระบบยังเปิดได้แต่ปิดอีเมลและเตือนใน log ตอนเริ่ม
+- ใช้ SMTP client ในตัว (`src/mail.ts`, ไม่มีไลบรารีเพิ่ม): EHLO, STARTTLS หรือ TLS ทันที, AUTH PLAIN/LOGIN, ตรวจใบรับรองของเซิร์ฟเวอร์ รหัสผ่านส่งผ่านการเข้ารหัสเท่านั้น (หรือไปยังเครื่องนี้)
+  หัวจดหมายกัน CR/LF (ที่อยู่หรือหัวเรื่องที่มีขึ้นบรรทัดใหม่ถูกปฏิเสธ) หัวเรื่องภาษาไทยเข้ารหัส RFC 2047 เนื้อความ UTF-8 แบบ base64
+- ผู้ใช้ตั้งอีเมลที่ `PUT /api/me/email` ระบบส่งลิงก์ยืนยัน (โทเคนสุ่ม เก็บแบบแฮช ใช้ได้ 24 ชั่วโมง ใช้ได้ครั้งเดียว) **ก่อนยืนยัน ไม่มีจดหมายอื่นถูกส่งไปที่อยู่นั้น**
+- จำกัดต่อผู้ใช้: ไม่เกิน 20 ฉบับต่อชั่วโมง และลิงก์ยืนยันไม่เกิน 1 ฉบับต่อ 2 นาที
+
+### LINE
+
+LINE Notify เลิกให้บริการแล้ว ระบบจึงใช้ LINE Messaging API (บอท) ส่งข้อความ:
+
+1. ไปที่ [LINE Developers Console](https://developers.line.biz/console/) สร้าง Provider แล้วสร้างช่องทาง **Messaging API** (ต้องมี LINE Official Account)
+2. แท็บ **Messaging API** กด Issue ที่ *Channel access token (long-lived)* ใส่ใน `LINE_CHANNEL_TOKEN` และแท็บ **Basic settings** คัดลอก *Channel secret* ใส่ใน `LINE_CHANNEL_SECRET`
+3. ที่ **Webhook URL** ใส่ `https://<โดเมนของคุณ>/api/line/webhook` (ต้องเป็น https ที่ LINE เรียกถึงได้ เช่นผ่าน Cloudflare Tunnel) กด Verify แล้วเปิด **Use webhook**
+   ปิด *Auto-reply messages* และ *Greeting messages* ที่ LINE Official Account Manager เพื่อไม่ให้ตอบซ้ำ
+4. เพิ่มบอทเป็นเพื่อนด้วย QR code ในแท็บ Messaging API
+5. (ไม่บังคับ) ส่งการแจ้งเตือนระบบของ admin เข้ากลุ่ม: เชิญบอทเข้ากลุ่ม แล้วใส่ group id ใน `LINE_GROUP_ID` (ได้จาก `source.groupId` ของ event ที่ webhook รับ)
+
+ผู้ใช้เชื่อมบัญชีเอง: `POST /api/me/line/link` ได้รหัส 6 หลัก ใช้ได้ 10 นาที → ส่งรหัสนั้นให้บอทในแชต → webhook จับคู่ LINE ของผู้ส่งกับบัญชี (บอทตอบกลับ) · `DELETE /api/me/line` ยกเลิก (บล็อกหรือลบบอทก็ยกเลิกให้)
+webhook รับเฉพาะคำขอที่ลายเซ็น `X-Line-Signature` (HMAC-SHA256 ด้วย Channel secret) ถูกต้อง นอกนั้น 401 ไม่ต้องมี CSRF token เพราะไม่มี session · เดารหัสผิด 5 ครั้งจาก LINE เดียวจะถูกเมิน
+ที่อยู่ปลายทางคงที่ที่ `https://api.line.me` ไม่มีทางให้ผู้ใช้กำหนด host
+
+### API (ต้องเข้าสู่ระบบ ผู้เยี่ยมชมได้ 401)
+
+| | |
+|---|---|
+| `GET /api/me/notifications?unreadOnly=true` | `{ items: [{ id, kind, at, read, text, params, link }], unread }` ใหม่สุดก่อน `text` ตามภาษาของคำขอ (`X-Lang`) `unread` นับทั้งหมด ไม่ขึ้นกับ `unreadOnly` |
+| `POST /api/me/notifications/read` | `{ ids?: string[] }` ไม่ใส่ = ทั้งหมด → `{ ok, unread }` |
+| `DELETE /api/me/notifications/:id` | ลบของตัวเอง ของคนอื่นหรือไม่มี → 404 `notify.not-found` |
+| `GET /api/me/notify-prefs` | `{ lang, email: { enabled, address, verified }, line: { enabled, linked }, events: { <ชนิด>: { web, email, line } } }` |
+| `PUT /api/me/notify-prefs` | `{ lang?: "th"\|"en", events?: { <ชนิด>: { web?, email?, line? } } }` เปลี่ยนเฉพาะที่ส่ง → ตอบเหมือน GET ชนิดไม่รู้จัก 400 `notify.bad-kind` |
+| `PUT /api/me/email` · `DELETE /api/me/email` | `{ address }` → `{ address, verified: false }` และส่งลิงก์ยืนยัน (400 `notify.bad-address`, 409 `notify.email-off`, 429 `notify.verify-too-soon` / `notify.mail-limit`) |
+| `GET /api/me/email/verify?token=` | ลิงก์ในอีเมล: เปิดจากโปรแกรมอีเมลได้ redirect ไป `/?emailVerified=1` (หรือ `=0` ถ้าโทเคนใช้ไม่ได้) ถ้าเรียกด้วย fetch (มีหัว `X-Lang` หรือ `Accept: application/json`) ได้ JSON `{ ok, username }` หรือ 400 `notify.bad-token` |
+| `POST /api/me/line/link` · `DELETE /api/me/line` | `{ code, expiresAt, ttlSeconds }` (409 `notify.line-off` ถ้ายังไม่ตั้ง LINE) · ยกเลิกการเชื่อม |
+| `POST /api/line/webhook` | สำหรับ LINE เท่านั้น (ลายเซ็น ไม่ใช่ session) |
+
+หน้าเว็บควรถามรายการแบบ `?unreadOnly=true` ทุก 30-60 วินาทีขณะแท็บเปิดอยู่ (และเมื่อกลับมาที่แท็บ) แล้วโหลดรายการเต็มเมื่อเปิดกระดิ่ง ปลายทางนี้บีบอัดผลตอบได้เพราะไม่มีความลับในนั้น
 
 ## สิทธิ์
 
@@ -670,6 +743,8 @@ src/
   updater.ts, release.ts, routes/update.ts   ตรวจ/ติดตั้ง/ย้อนกลับแพ็กเกจอัปเดตจากหน้าเว็บ
   update-source.ts  ตรวจหาและดาวน์โหลดแพ็กเกจจาก UPDATE_SOURCE (latest.json)
   alerts.ts, routes/alerts.ts               แจ้งเตือนผู้ดูแลทาง Discord/Slack/Telegram/webhook และงานตรวจเบื้องหลัง (error, ดิสก์, เวอร์ชันใหม่)
+  notify.ts, notify-checks.ts, routes/notify.ts   การแจ้งเตือนส่วนตัว: กระดิ่ง (notifications.json), ตั้งค่าต่อผู้ใช้, ลิงก์ใกล้หมดอายุ/โควตา
+  mail.ts, line.ts, deliver.ts              ส่งอีเมล (SMTP ในตัว), ส่ง/รับ LINE Messaging API และคิวส่งเบื้องหลังที่ลองใหม่ได้
   backup.ts, routes/backup.ts               สำรองข้อมูลระบบอัตโนมัติ และกู้คืน
   config.ts         ค่าตั้งต้นและตำแหน่งโฟลเดอร์
   search-index.ts   ดัชนีค้นหา (SQLite) และตัวกรองของ /api/search
@@ -700,6 +775,7 @@ tests/update.test.ts, tests/backup.test.ts   ทดสอบอัปเดต�
 tests/update-source.test.ts, tests/release.test.ts   ตรวจหา/ดาวน์โหลดอัปเดตจาก server ทดสอบในเครื่อง และ bun run release กับ repo ชั่วคราว
 tests/office.test.ts  ONLYOFFICE กับ document server ปลอม: สิทธิ์ โทเคน JWT การบันทึกเป็นเวอร์ชัน CSP และ expectedMtime ของไฟล์ข้อความ
 tests/alerts.test.ts  การแจ้งเตือนกับ webhook ทดสอบในเครื่อง: รูปแบบแต่ละชนิด ชั่วโมงละครั้ง ตัดความลับ และการตรวจเวอร์ชันใหม่รายวัน
+tests/notify.test.ts  การแจ้งเตือนส่วนตัวกับเซิร์ฟเวอร์ SMTP และ LINE จำลองในเครื่อง: ไม่เห็นของคนอื่น ครั้งเดียวต่อเหตุการณ์ ไม่ส่งอีเมลก่อนยืนยัน กัน header injection ลายเซ็น webhook รหัสเชื่อม LINE และข้อจำกัดอัตรา
 tests/perf.test.ts  การนับไฟล์ 50,000 ไฟล์ การคัดลอก 20,000 ไฟล์ และการค้นหาต้องไม่ทำให้คำขออื่นช้า (โหมด `dashboard` ใน scripts/loadtest.ts ใช้ลองกับ server จริง)
 ```
 
@@ -752,6 +828,7 @@ tests/perf.test.ts  การนับไฟล์ 50,000 ไฟล์ การ
 | `GET /api/download` (รองรับ `Range`) · `POST /api/batch` + `GET /api/batch/:token` | ดาวน์โหลด |
 | `POST/GET /api/shares` · `DELETE /api/shares/:id` · `GET /api/s/:token` · `POST /api/s/:token/unlock` · `GET /api/s/:token/download` | ลิงก์แชร์ (ดู ลิงก์แชร์) |
 | `GET /api/me/usage` | พื้นที่ที่ใช้และโควตาของฉัน (ดู โควตาพื้นที่ต่อผู้ใช้) |
+| `/api/me/notifications` · `/api/me/notify-prefs` · `/api/me/email` · `/api/me/line` · `POST /api/line/webhook` | การแจ้งเตือนส่วนตัว: กระดิ่ง อีเมล LINE (ดู การแจ้งเตือนส่วนตัว) |
 | `GET /api/versions?space&path` (`read`) · `GET /api/versions/:id/download?space&path` (`download`) · `POST /api/versions/:id/restore { space, path, expectedMtime? }` (`write`) · `DELETE /api/versions/:id?space&path` (`write`) | เวอร์ชันเก่าของไฟล์ (เก็บทุกครั้งที่บันทึกทับ ดู `VERSIONS_KEEP`/`VERSIONS_DAYS`): รหัสเวอร์ชันใช้ได้กับไฟล์ของมันเท่านั้น, กู้คืนจะเก็บเนื้อหาปัจจุบันเป็นเวอร์ชันก่อน (409 `files.changed-elsewhere` ถ้า `expectedMtime` ล้าสมัย) ถ้าโควตาเต็มจะลบเวอร์ชันเก่าสุดของไฟล์นั้นก่อน ยังไม่พอก็ปฏิเสธ `quota.exceeded` |
 | `GET/POST/DELETE /api/me/favorites` (`{ space, path }`, สูงสุด 200) · `GET /api/me/recent` (50 ล่าสุด) | รายการโปรดและไฟล์ที่เปิดล่าสุดของผู้ใช้ (ผู้เยี่ยมชมได้ 401) ตรวจสิทธิ์ `read` และการมีอยู่ของไฟล์ทุกครั้งที่อ่าน |
 | `POST /api/s/:token/upload` → `PUT /api/s/:token/upload/:id/:n` → `POST /api/s/:token/upload/:id/complete` · `DELETE /api/s/:token/upload/:id` | ผู้เยี่ยมชมส่งไฟล์ผ่านลิงก์รับไฟล์ (ดู ลิงก์รับไฟล์) |

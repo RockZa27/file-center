@@ -951,5 +951,230 @@
         "replace": "if (false) await confirmPassword("
       }
     ]
+  },
+  {
+    "id": "notify-list-other-users",
+    "difficulty": "easy",
+    "category": "authz",
+    "severity": "critical",
+    "tests": "tests/notify.test.ts",
+    "description": "notifications of another user readable: the list returns every user's notifications",
+    "patches": [
+      {
+        "file": "src/notify.ts",
+        "find": "const all = listOf(username)",
+        "replace": "const all = Object.values(store.value).flat()"
+      }
+    ]
+  },
+  {
+    "id": "notify-delete-other-users",
+    "difficulty": "medium",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/notify.test.ts",
+    "description": "a user can delete a notification of another user by its id",
+    "patches": [
+      {
+        "file": "src/notify.ts",
+        "find": "const i = list.findIndex(n => n.id === id)\n  if (i < 0) return false\n  list.splice(i, 1)",
+        "replace": "const hit = Object.values(store.value).find(l => l.some(n => n.id === id))\n  if (!hit) return false\n  hit.splice(hit.findIndex(n => n.id === id), 1)"
+      }
+    ]
+  },
+  {
+    "id": "notify-read-other-users",
+    "difficulty": "medium",
+    "category": "authz",
+    "severity": "medium",
+    "tests": "tests/notify.test.ts",
+    "description": "marking notifications as read also marks those of other users",
+    "patches": [
+      {
+        "file": "src/notify.ts",
+        "find": "for (const n of list) if (!only || only.has(n.id)) n.read = true",
+        "replace": "for (const n of Object.values(store.value).flat()) if (!only || only.has(n.id)) n.read = true"
+      }
+    ]
+  },
+  {
+    "id": "notify-upload-wrong-owner",
+    "difficulty": "easy",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/notify.test.ts",
+    "description": "the notice of an upload through a request link goes to an admin, not to the owner of the link",
+    "patches": [
+      {
+        "file": "src/routes/shares.ts",
+        "find": "notify(share.owner, 'upload-received'",
+        "replace": "notify('admin', 'upload-received'"
+      }
+    ]
+  },
+  {
+    "id": "notify-mail-unverified",
+    "difficulty": "medium",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/notify.test.ts",
+    "description": "mail is sent to an e-mail address the user has not confirmed yet",
+    "patches": [
+      {
+        "file": "src/notify.ts",
+        "find": "if (ev.email && s?.email?.verified)",
+        "replace": "if (ev.email && s?.email)"
+      }
+    ]
+  },
+  {
+    "id": "notify-mail-limit-off",
+    "difficulty": "medium",
+    "category": "dos",
+    "severity": "medium",
+    "tests": "tests/notify.test.ts",
+    "description": "the limit of 20 mails an hour per user is not enforced",
+    "patches": [
+      {
+        "file": "src/notify.ts",
+        "find": "if (times.length >= MAILS_PER_HOUR)",
+        "replace": "if (false)"
+      }
+    ]
+  },
+  {
+    "id": "notify-verify-rate-off",
+    "difficulty": "medium",
+    "category": "dos",
+    "severity": "medium",
+    "tests": "tests/notify.test.ts",
+    "description": "verification mails can be requested without the two-minute wait (mail bombing of any address)",
+    "patches": [
+      {
+        "file": "src/notify.ts",
+        "find": "if (wait > 0) throw",
+        "replace": "if (false) throw"
+      }
+    ]
+  },
+  {
+    "id": "mail-address-injection",
+    "difficulty": "medium",
+    "category": "injection",
+    "severity": "high",
+    "tests": "tests/notify.test.ts",
+    "description": "an e-mail address with a line break is accepted, so a header or an SMTP command can be added",
+    "patches": [
+      {
+        "file": "src/mail.ts",
+        "find": "return a.length <= 254 && ADDRESS.test(a) ? a : null",
+        "replace": "return a.length <= 254 && a.includes('@') ? a : null"
+      }
+    ]
+  },
+  {
+    "id": "line-webhook-unsigned",
+    "difficulty": "easy",
+    "category": "auth",
+    "severity": "critical",
+    "tests": "tests/notify.test.ts",
+    "description": "the LINE webhook accepts events that carry no signature",
+    "patches": [
+      {
+        "file": "src/line.ts",
+        "find": "if (!config.lineChannelSecret || !signature) return false",
+        "replace": "if (!signature) return true"
+      }
+    ]
+  },
+  {
+    "id": "line-webhook-signature-ignored",
+    "difficulty": "medium",
+    "category": "auth",
+    "severity": "critical",
+    "tests": "tests/notify.test.ts",
+    "description": "the LINE webhook accepts any signature, not only the one made with the channel secret",
+    "patches": [
+      {
+        "file": "src/line.ts",
+        "find": "return got.length === want.length && timingSafeEqual(got, want)",
+        "replace": "return true"
+      }
+    ]
+  },
+  {
+    "id": "line-code-no-expiry",
+    "difficulty": "subtle",
+    "category": "auth",
+    "severity": "medium",
+    "tests": "tests/notify.test.ts",
+    "description": "a LINE link code works after its 10 minutes are over",
+    "patches": [
+      {
+        "file": "src/line.ts",
+        "find": "if (hit && hit.expires > now) {",
+        "replace": "if (hit) {"
+      }
+    ]
+  },
+  {
+    "id": "line-code-guessing",
+    "difficulty": "subtle",
+    "category": "auth",
+    "severity": "medium",
+    "tests": "tests/notify.test.ts",
+    "description": "wrong link codes are never counted against the guesser, so a code can be found by trying all million",
+    "patches": [
+      {
+        "file": "src/line.ts",
+        "find": "if (w && w.until > now && w.count >= MAX_WRONG_CODES) return 'locked'",
+        "replace": "if (false) return 'locked'"
+      }
+    ]
+  },
+  {
+    "id": "notify-expiry-repeats",
+    "difficulty": "medium",
+    "category": "logic",
+    "severity": "low",
+    "tests": "tests/notify.test.ts",
+    "description": "the warning that a link expires soon is sent again at every check",
+    "patches": [
+      {
+        "file": "src/notify-checks.ts",
+        "find": "if (!firstTime(EXPIRING + s.id)) continue",
+        "replace": "if (false) continue"
+      }
+    ]
+  },
+  {
+    "id": "notify-quota-repeats",
+    "difficulty": "medium",
+    "category": "logic",
+    "severity": "low",
+    "tests": "tests/notify.test.ts",
+    "description": "the quota warning is sent again at every check while the home stays above 90%",
+    "patches": [
+      {
+        "file": "src/notify.ts",
+        "find": "if (over && !s.quotaLow) {",
+        "replace": "if (over) {"
+      }
+    ]
+  },
+  {
+    "id": "notify-link-offsite",
+    "difficulty": "medium",
+    "category": "xss",
+    "severity": "medium",
+    "tests": "tests/notify.test.ts",
+    "description": "a notification link may point to another site (open redirect from the bell)",
+    "patches": [
+      {
+        "file": "src/notify.ts",
+        "find": "/^\\/(?![/\\\\])[^\\x00-\\x1f\\x7f\\\\]*$/",
+        "replace": "/^\\/[^\\x00-\\x1f\\x7f]*$/"
+      }
+    ]
   }
 ]

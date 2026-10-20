@@ -326,6 +326,38 @@ export const MESSAGES = {
     th: 'ไฟล์ที่ดาวน์โหลดไม่ตรงกับ SHA-256 หรือขนาดใน latest.json ไฟล์อาจเสียหายหรือถูกแก้ไข',
     en: 'The downloaded file does not match the SHA-256 or size in latest.json. It may be damaged or altered.',
   },
+  // ───────────── notify: the bell, e-mail and LINE ─────────────
+  // the texts of the notifications themselves (kind + params, written at read time in the reader's language)
+  'notify.upload-received': {
+    th: 'มีคนอัปโหลดไฟล์ {file} ({sizeText}) เข้าลิงก์รับไฟล์ "{link}" ของคุณ',
+    en: 'Someone uploaded {file} ({sizeText}) through your upload link "{link}".',
+  },
+  'notify.link-expiring': { th: 'ลิงก์แชร์ "{name}" ของคุณจะหมดอายุภายใน 24 ชั่วโมง', en: 'Your share link "{name}" expires within 24 hours.' },
+  'notify.link-limit-reached': { th: 'ลิงก์แชร์ "{name}" ของคุณถูกดาวน์โหลดครบ {max} ครั้งแล้ว', en: 'Your share link "{name}" has reached its limit of {max} downloads.' },
+  'notify.quota-low': {
+    th: 'พื้นที่ของคุณใช้ไปแล้ว {percent}% ของโควตา ({usedText} จาก {quotaText})',
+    en: 'You have used {percent}% of your storage quota ({usedText} of {quotaText}).',
+  },
+  'notify.folder-shared': { th: '{from} แชร์โฟลเดอร์ "{name}" ให้คุณ', en: '{from} shared the folder "{name}" with you.' },
+  // answers of the routes
+  'notify.not-found': { th: 'ไม่พบการแจ้งเตือนนี้', en: 'This notification was not found.' },
+  'notify.bad-kind': { th: 'ชนิดการแจ้งเตือนไม่ถูกต้อง', en: 'The notification type is not valid.' },
+  'notify.email-off': { th: 'ระบบยังไม่ได้ตั้งค่าการส่งอีเมล กรุณาติดต่อผู้ดูแลระบบ', en: 'E-mail is not set up on this server. Please contact the administrator.' },
+  'notify.bad-address': { th: 'อีเมลไม่ถูกต้อง', en: 'The e-mail address is not valid.' },
+  'notify.verify-too-soon': { th: 'ส่งอีเมลยืนยันไปแล้ว กรุณารอ {seconds} วินาทีแล้วลองใหม่', en: 'A verification e-mail was just sent. Wait {seconds} seconds and try again.' },
+  'notify.mail-limit': { th: 'ส่งอีเมลถึงบัญชีนี้ครบจำนวนต่อชั่วโมงแล้ว กรุณาลองใหม่ภายหลัง', en: 'The hourly limit of e-mails for this account is reached. Please try again later.' },
+  'notify.bad-token': { th: 'ลิงก์ยืนยันอีเมลไม่ถูกต้องหรือหมดอายุแล้ว', en: 'The e-mail verification link is not valid or has expired.' },
+  'notify.line-off': { th: 'ระบบยังไม่ได้ตั้งค่า LINE กรุณาติดต่อผู้ดูแลระบบ', en: 'LINE is not set up on this server. Please contact the administrator.' },
+  'notify.bad-signature': { th: 'ลายเซ็นของ LINE ไม่ถูกต้อง', en: 'The LINE signature is not valid.' },
+  // what the bot answers in the LINE chat, and the verification e-mail
+  'notify.line-linked': { th: 'เชื่อมบัญชี {name} กับ LINE แล้ว จากนี้การแจ้งเตือนที่เปิดไว้จะส่งมาที่นี่', en: 'LINE is now linked to the account {name}. Notifications you turned on will arrive here.' },
+  'notify.line-bad-code': { th: 'รหัสไม่ถูกต้องหรือหมดอายุแล้ว กรุณาขอรหัสใหม่ในหน้าตั้งค่าการแจ้งเตือน', en: 'The code is wrong or has expired. Please ask for a new one in the notification settings.' },
+  'notify.line-taken': { th: 'LINE นี้เชื่อมกับบัญชีอื่นอยู่แล้ว', en: 'This LINE account is already linked to another account.' },
+  'notify.verify-subject': { th: 'ยืนยันอีเมลสำหรับการแจ้งเตือน', en: 'Confirm your e-mail for notifications' },
+  'notify.verify-body': {
+    th: 'สวัสดี {name}\n\nกรุณาเปิดลิงก์นี้เพื่อยืนยันอีเมลสำหรับรับการแจ้งเตือนจาก {app} (ลิงก์ใช้ได้ 24 ชั่วโมง)\n{url}\n\nหากคุณไม่ได้ขอ ไม่ต้องทำอะไร',
+    en: 'Hello {name},\n\nOpen this link to confirm your e-mail for notifications from {app} (valid for 24 hours):\n{url}\n\nIf you did not ask for this, you can ignore this message.',
+  },
 } as const satisfies Record<string, { th: string; en: string }>
 
 export type MessageCode = keyof typeof MESSAGES

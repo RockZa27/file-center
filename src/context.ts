@@ -23,8 +23,9 @@ const DOWNLOAD_ROUTES = [
 
 // the password form of a share link: it works without an account or a session, and the cookie it sets opens only that link.
 // The ONLYOFFICE callback comes from the document server, which has no session: a signed token in the path and the
-// server's JWT (office.ts) take the place of the cookie, so a forged cross-site request has nothing to ride on
-const CSRF_EXEMPT = /^\/api\/(?:s\/[^/]+\/unlock|office\/callback\/[^/]+)$/
+// server's JWT (office.ts) take the place of the cookie, so a forged cross-site request has nothing to ride on. The same
+// for LINE's webhook: it comes from LINE's servers, signed with the channel secret (line.ts), and nothing else is read
+const CSRF_EXEMPT = /^\/api\/(?:s\/[^/]+\/unlock|office\/callback\/[^/]+|line\/webhook)$/
 // The upload routes of an upload-request link (announce, chunk, complete, cancel) are for visitors without an account.
 // They need no CSRF token because there is no session to ride on: an upload is tied to a random visitor key in an
 // HttpOnly, SameSite=Strict cookie that only that link's path receives (a request from another site does not carry it),

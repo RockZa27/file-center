@@ -143,6 +143,25 @@ export const config = {
   alertLang: (env('ALERT_LANG', 'th').trim().toLowerCase() === 'en' ? 'en' : 'th') as 'th' | 'en',
   /** more errors than this in the last hour sends an alert */
   alertErrorsPerHour: Math.max(1, Math.floor(num('ALERT_ERRORS_PER_HOUR', 20))),
+  /**
+   * Notifications (notify.ts). PUBLIC_URL is the address people open File Center at (https://files.example.com): the
+   * verification link in an e-mail and the links in messages are made from it, never from a request's Host header.
+   */
+  publicUrl: env('PUBLIC_URL', '').trim(),
+  /** e-mail (mail.ts), off while SMTP_HOST is empty. SMTP_SECURE: starttls (port 587) | tls (port 465) | none (this machine only) */
+  smtpHost: env('SMTP_HOST', '').trim(),
+  smtpPort: num('SMTP_PORT', 587),
+  smtpSecure: env('SMTP_SECURE', 'starttls').trim().toLowerCase(),
+  smtpUser: env('SMTP_USER', '').trim(),
+  smtpPass: env('SMTP_PASS', ''),
+  smtpFrom: env('SMTP_FROM', '').trim(),
+  /** LINE Messaging API (line.ts), off while LINE_CHANNEL_TOKEN is empty; the secret checks the webhook's signature */
+  lineChannelToken: env('LINE_CHANNEL_TOKEN', '').trim(),
+  lineChannelSecret: env('LINE_CHANNEL_SECRET', '').trim(),
+  /** a LINE group or room that gets the admins' system alerts */
+  lineGroupId: env('LINE_GROUP_ID', '').trim(),
+  /** FOR TESTS: http://127.0.0.1:<port> of a stand-in for api.line.me. Any other host is ignored (line.ts). */
+  lineApiBase: env('LINE_API_BASE', '').trim(),
 }
 
 export const paths = {
@@ -168,6 +187,10 @@ export const paths = {
   backupStatus: join(config.dataDir, 'backup-status.json'),
   /** what visitors uploaded today, so a restart does not hand out a fresh daily allowance */
   guestUploads: join(config.dataDir, 'guest-uploads.json'),
+  /** notifications per user (notify.ts): the bell, at most 100 each */
+  notifications: join(config.dataDir, 'notifications.json'),
+  /** notification settings per user: channels, e-mail address (+ hashed verification token), LINE id, once-only marks */
+  notifyState: join(config.dataDir, 'notify-state.json'),
   /** share links (only the SHA-256 of each token, never the token itself) */
   shares: join(config.dataDir, 'shares.json'),
   /** signs the links the office document server opens (office.ts); made on first use, never leaves this server */

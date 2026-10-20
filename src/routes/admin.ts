@@ -16,6 +16,7 @@ import { langOf, type MessageCode, type Params, text } from '../messages'
 import type { User } from '../auth'
 import { cleanQuota, forget, usage } from '../quota'
 import { settings } from '../settings'
+import { forgetNotifications } from '../notify'
 import { revokeSharesOf } from '../shares'
 import { DISK_CRITICAL_PERCENT, DISK_LOW_PERCENT, diskInfo, storageStats } from '../stats'
 import { removeUserState } from '../favorites'
@@ -182,6 +183,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     destroyUserSessions(target.username)
     revokeSharesOf(target.username)
     removeUserState(target.username)
+    forgetNotifications(target.username)
     audit({ user: admin.username, ip, action: 'user-delete', target: target.username })
     return { ok: true }
   })

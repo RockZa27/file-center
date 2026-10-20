@@ -759,6 +759,13 @@ describe('full system: CSRF', () => {
       ['POST', '/api/office/config', { ...files, path: '/matrix.txt', mode: 'edit' }],
       ['POST', '/api/me/favorites', { ...files, path: '/matrix.txt' }],
       ['DELETE', '/api/me/favorites', { ...files, path: '/matrix.txt' }],
+      ['PUT', '/api/me/notify-prefs', { events: { 'quota-low': { web: false } } }],
+      ['POST', '/api/me/notifications/read', {}],
+      ['DELETE', '/api/me/notifications/:id'],
+      ['PUT', '/api/me/email', { address: 'csrf@example.com' }],
+      ['DELETE', '/api/me/email'],
+      ['POST', '/api/me/line/link'],
+      ['DELETE', '/api/me/line'],
       ['POST', '/api/versions/:id/restore', { ...files, path: '/matrix.txt' }],
       ['DELETE', '/api/versions/:id'],
     ]
@@ -767,7 +774,9 @@ describe('full system: CSRF', () => {
     // in the path and a JWT signed with OFFICE_JWT_SECRET instead (tests/office.test.ts)
     // the upload routes of an upload-request link: a visitor's cookie (HttpOnly, SameSite=Strict, only that link's path)
     // takes the place of the session (tests/upload-links.test.ts)
+    // LINE's webhook comes from LINE's servers and is signed with the channel secret instead (tests/notify.test.ts)
     const exempt: [string, string][] = [
+      ['POST', '/api/line/webhook'],
       ['POST', '/api/s/:token/unlock'], ['POST', '/api/office/callback/:token'],
       ['POST', '/api/s/:token/upload'], ['PUT', '/api/s/:token/upload/:id/:n'],
       ['POST', '/api/s/:token/upload/:id/complete'], ['DELETE', '/api/s/:token/upload/:id'],

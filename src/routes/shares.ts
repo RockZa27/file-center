@@ -9,6 +9,7 @@ import { config } from '../config'
 import { context, need, requireStaff, requireUser } from '../context'
 import { bad, forbidden, HttpError, listDirAsync, normRel, notFound, resolveIn, storagePath, treeStats } from '../fsx'
 import { sizeText } from '../messages'
+import { nameOf, notify } from '../notify'
 import { limitOf as quotaOf, ready } from '../quota'
 import {
   allowedShareDays, allShares, createShare, findShare, isUnlocked, kindOf, lockoutKey, openShare, publicShare,
@@ -19,6 +20,9 @@ import {
 import { cancelUpload, checkUpload, completeUpload, initUpload, saveChunk, shareUploadLoad } from '../uploads'
 import { collectZipItems, zipStream } from '../zip'
 import { contentDisposition, fileResponse } from './files'
+
+/** where the owner finds what arrived: the folder of an upload link in the file browser (a path in the app, no token) */
+const filesLink = (s: Share) => `/files?${s.space === 'home' ? '' : `space=${encodeURIComponent(s.space)}&`}path=${encodeURIComponent(s.path)}`
 
 /**
  * A place inside a shared folder. normRel refuses "..", resolveIn keeps it under the shared folder, and no step of the
@@ -367,6 +371,8 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
     const done = await completeUpload(params.id, owner)
     const name = basename(done.path)
     recordUpload(share, key, name, done.size)
+    // only the owner of the link is told
+    notify(share.owner, 'upload-received', { link: nameOf(share.path), linkId: share.id, file: name, size: done.size }, filesLink(share))
     audit({
       user: 'guest', ip, action: 'share-upload', target: storagePath(done.path),
       detail: `ลิงก์ ${share.id} ของ ${share.owner}: ${name} (${done.size} ไบต์)`,

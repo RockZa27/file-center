@@ -12,6 +12,7 @@ import { config } from './config'
 import { conflict, HttpError } from './fsx'
 import { clean, errorsSince, log, scrub } from './logger'
 import { MESSAGES, text, type MessageCode, type Params } from './messages'
+import { mirrorAlert, resetNotifyLimits } from './notify'
 import { settings } from './settings'
 import { DISK_CRITICAL_PERCENT, diskInfo } from './stats'
 import { lookForNewVersion } from './update-source'
@@ -118,6 +119,8 @@ async function post(url: string, body: unknown): Promise<void> {
  * never waits: the caller is usually answering a request. Returns whether it was sent off.
  */
 export function alert(event: Exclude<AlertKind, 'test'>, code: MessageCode, params: Params = {}): boolean {
+  // the admins' bell (and LINE group) hear of it whether or not a webhook is set; notify.ts limits it to once an hour per kind
+  mirrorAlert(event, code, params)
   try {
     const t = alertTarget()
     if (!t.url || !t.kind) return false
@@ -154,6 +157,7 @@ export async function alertsIdle(): Promise<void> {
 /** forget when alerts went out (tests) */
 export function resetAlerts() {
   for (const k of Object.keys(lastSent)) delete lastSent[k as AlertKind]
+  resetNotifyLimits()
   notifiedVersion = null
 }
 
