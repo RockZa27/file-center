@@ -16,7 +16,7 @@ export const router = createRouter({
         { path: 'files', name: 'files', component: () => import('./views/FilesView.vue') },
         { path: 'favorites', name: 'favorites', component: () => import('./views/FavoritesView.vue') },
         { path: 'trash', name: 'my-trash', component: () => import('./views/MyTrashView.vue') },
-        // the list of folders other people share with the user; with an id, the folder itself (the server's notifications link to /with-me)
+        // the list of folders other people share with the user; with an id, the folder itself (a folder-shared notice links to /with-me/<id>)
         { path: 'with-me/:id?', name: 'with-me', component: () => import('./views/WithMeView.vue') },
         { path: 'shared', name: 'shared', component: () => import('./views/SharedView.vue') },
         { path: 'links', name: 'links', component: () => import('./views/SharesView.vue') },

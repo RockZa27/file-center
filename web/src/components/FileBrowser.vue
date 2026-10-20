@@ -825,6 +825,8 @@ function moveCursor(step, extend) {
 }
 function onKey(e) {
   if (e.defaultPrevented || e.isComposing || e.altKey) return
+  // a manual dropdown does not close itself on Escape
+  if (ctx.show && e.key === 'Escape') { ctx.show = false; e.preventDefault(); return }
   if (typing(e.target) || overlayOpen()) return
   // only while the focus is in the page's content (not the side menu or the top bar)
   if (e.target !== document.body && !root.value?.contains(e.target)) return

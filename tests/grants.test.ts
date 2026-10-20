@@ -420,7 +420,7 @@ describe('a new grant tells the recipient', () => {
     const mine = (got.data.items as any[]).filter(n => n.kind === 'folder-shared')
     expect(mine).toHaveLength(1)
     expect(mine[0].params).toEqual({ from: 'Name of gr-nt-o', name: 'proj' })
-    expect(mine[0].link).toBe('/with-me')
+    expect(mine[0].link).toMatch(/^\/with-me\/[A-Za-z0-9_-]+$/)
     const own = await owner.json('GET', '/api/me/notifications')
     expect((own.data.items as any[]).some(n => n.kind === 'folder-shared')).toBe(false)
   })

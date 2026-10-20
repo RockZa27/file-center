@@ -41,7 +41,7 @@ import { sourceConfig } from './update-source'
 
 // a folder shared with someone rings their bell (and mail / LINE as they chose)
 grantCreatedListeners.push(g => {
-  notify(g.to, 'folder-shared', { from: findUser(g.owner)?.name || g.owner, name: g.path.split('/').filter(Boolean).at(-1) ?? '/' }, '/with-me')
+  notify(g.to, 'folder-shared', { from: findUser(g.owner)?.name || g.owner, name: g.path.split('/').filter(Boolean).at(-1) ?? '/' }, `/with-me/${g.id}`)
 })
 import { compressedCopy, compressible, etagMatches, etagOf, pickEncoding } from './static'
 
