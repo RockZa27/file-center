@@ -1281,5 +1281,50 @@
         "replace": ""
       }
     ]
+  },
+  {
+    "id": "backup-space-guard-deletes-last",
+    "difficulty": "medium",
+    "category": "integrity",
+    "severity": "high",
+    "tests": "tests/backup-settings.test.ts",
+    "description": "the disk-full guard may delete the newest good backup to make room, leaving none",
+    "patches": [
+      {
+        "file": "src/backup.ts",
+        "find": "const victim = listBackups().slice(1).reverse().find(b => b.name !== protect)",
+        "replace": "const victim = listBackups().reverse().find(b => b.name !== protect)"
+      }
+    ]
+  },
+  {
+    "id": "backup-schedule-ignores-time",
+    "difficulty": "medium",
+    "category": "logic",
+    "severity": "medium",
+    "tests": "tests/backup-settings.test.ts",
+    "description": "a daily or weekly backup runs at 03:00 whatever time was chosen",
+    "patches": [
+      {
+        "file": "src/backup.ts",
+        "find": "const { h, m } = hhmm(schedule.time)",
+        "replace": "const { h, m } = hhmm('03:00')"
+      }
+    ]
+  },
+  {
+    "id": "backup-compression-ignored",
+    "difficulty": "easy",
+    "category": "logic",
+    "severity": "medium",
+    "tests": "tests/backup-settings.test.ts",
+    "description": "the compression chosen for backups is ignored: every zip is made at level 1",
+    "patches": [
+      {
+        "file": "src/zip.ts",
+        "find": "const level = options.level ?? DEFLATE_LEVEL",
+        "replace": "const level = DEFLATE_LEVEL"
+      }
+    ]
   }
 ]

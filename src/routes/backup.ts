@@ -3,7 +3,8 @@ import { Elysia, t } from 'elysia'
 import { audit } from '../audit'
 import { confirmPassword } from '../auth'
 import {
-  backupPath, backupSettings, BACKUP_NAME_RE, listBackups, restoreBackup, runBackup, statusIn,
+  backupPath, backupSettings, BACKUP_NAME_RE, estimateBackup, listBackupsDetailed, restoreBackup, runBackup, saveBackupSettings,
+  statusIn, turnsOnFiles,
 } from '../backup'
 import { context, requireAdmin } from '../context'
 import { fileResponse } from './files'
@@ -14,9 +15,33 @@ import { langOf } from '../messages'
 export const backupRoutes = new Elysia({ prefix: '/api/admin' })
   .use(context)
 
-  .get('/backups', ({ user, ip, request }) => {
+  .get('/backups', async ({ user, ip, request }) => {
     requireAdmin({ user, ip })
-    return { items: listBackups(), status: statusIn(langOf(request)), settings: backupSettings() }
+    return { items: await listBackupsDetailed(), status: statusIn(langOf(request)), settings: backupSettings() }
+  })
+
+  // how much room a backup would need now, and how much there is (the same check runs before every backup)
+  .get('/backups/estimate', async ({ user, ip }) => {
+    requireAdmin({ user, ip })
+    return await estimateBackup()
+  })
+
+  // compression, schedule (server local time), copies to keep, files included. A key left out stays; null = back to the default
+  .put('/backups/settings', async ({ user, ip, body }) => {
+    const admin = requireAdmin({ user, ip })
+    // the copies get as big as the whole storage: turning that on asks for the password
+    if (turnsOnFiles(body)) await confirmPassword(admin, ip, body.password ?? '', 'backup-settings-denied')
+    const changes = saveBackupSettings(body)
+    audit({ user: admin.username, ip, action: 'backup-settings', detail: changes.join(', ') })
+    return backupSettings()
+  }, {
+    body: t.Object({
+      compression: t.Optional(t.Union([t.String(), t.Null()])),
+      schedule: t.Optional(t.Union([t.Any(), t.Null()])),
+      keep: t.Optional(t.Union([t.Number(), t.Null()])),
+      includeFiles: t.Optional(t.Union([t.Boolean(), t.Null()])),
+      password: t.Optional(t.String({ maxLength: 1000 })),
+    }),
   })
 
   .post('/backups', async ({ user, ip }) => {

@@ -400,4 +400,29 @@ describe('restore (end to end)', () => {
     const login = await fetch(url('/api/login'), { method: 'POST', headers: { cookie, 'x-csrf-token': csrf, 'content-type': 'application/json' }, body: JSON.stringify({ username: 'carol', password: 'red-kite-flies-1' }) })
     expect(login.status).toBe(200)
   }, 60_000)
+
+  test('a backup of an older version (no sizes, normal deflate) and a level-9 one restore the same way', async () => {
+    const enc = new TextEncoder()
+    const users = JSON.parse(readFileSync(join(e2e.data, 'users.json'), 'utf8'))
+    const dave = { ...users.users.find((u: any) => u.role === 'admin'), username: 'dave', role: 'user' }
+    const files = (extra: string) => ({
+      'users.json': enc.encode(JSON.stringify({ ...users, users: [...users.users, dave] })),
+      'settings.json': enc.encode(JSON.stringify({ appName: extra })),
+      'backup.json': enc.encode(JSON.stringify({ version: '1.9.1', createdAt: new Date().toISOString(), includesFiles: false })),
+    })
+    // fflate level 6 = what 1.9.1 wrote with (it used level 1; both are plain deflate), level 9 = the new default
+    const old = 'file-center-backup-20000101-000000.zip'
+    const nine = 'file-center-backup-20000102-000000.zip'
+    writeFileSync(join(e2e.backups, old), zipSync(files('old-level-1'), { level: 1 }))
+    writeFileSync(join(e2e.backups, nine), zipSync(files('level-9'), { level: 9 }))
+    const listed = (await api('GET', '/api/admin/backups')).data.items
+    expect(listed.find((i: any) => i.name === old).parts).toBeNull()
+    for (const [name, appName] of [[old, 'old-level-1'], [nine, 'level-9']]) {
+      const before = (await health()).boot
+      expect((await api('POST', '/api/admin/backups/restore', { name, password: E2E_PASSWORD })).status).toBe(200)
+      await until(async () => { const h = await health(); return h && h.boot !== before ? h : null }, 30_000, 'restart')
+      expect((await api('GET', '/api/admin/settings')).data.appName).toBe(appName)
+      expect((await api('GET', '/api/admin/users')).data.users.map((u: any) => u.username)).toContain('dave')
+    }
+  }, 90_000)
 })

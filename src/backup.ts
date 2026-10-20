@@ -2,7 +2,7 @@
  * Backups of the system data: accounts and passwords, settings, logo and the activity log. Without them a dead
  * disk loses every account. One backup is one zip in config.backupDir:
  *
- *   users.json  settings.json  branding/  logs/audit.log  logs/system.log  backup.json  [storage/ with BACKUP_INCLUDE_FILES=true]
+ *   users.json  settings.json  branding/  logs/audit.log  logs/system.log  backup.json  [storage/ when files are included]
  *
  * Not in it: tmp/, trash/ and versions/ (temporary), app/ (installed updates), sessions.json (logins), rotated logs,
  * access.log and launcher.log, the backup folder itself, search.db (the search index, rebuilt from the disk), secret.key and office-links.key. Restoring puts back users.json, settings.json and branding/ only, never storage/.
@@ -12,19 +12,27 @@ import {
   writeFileSync, writeSync,
 } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { BlobReader, ZipReader } from '@zip.js/zip.js'
+import { BlobReader, TextWriter, ZipReader } from '@zip.js/zip.js'
+import { audit } from './audit'
 import { alert } from './alerts'
 import { config, paths } from './config'
-import { bad, cleanName, conflict, ensureSpace, fromFsError, HttpError, notFound, within } from './fsx'
+import { bad, cleanName, conflict, ensureSpace, freeSpace, fromFsError, HttpError, notFound, within } from './fsx'
 import { restartSoon } from './lifecycle'
 import { log } from './logger'
-import { type Lang, MESSAGES, type MessageCode, type Params, text } from './messages'
+import { type Lang, MESSAGES, type MessageCode, type Params, sizeText, text } from './messages'
+import { type BackupPrefs, settings } from './settings'
+import { recountStorage, storageStats } from './stats'
 import { JsonStore } from './store'
 import { collectZipItems, zipStream, type ZipItem } from './zip'
 
 export const BACKUP_NAME_RE = /^file-center-backup-\d{8}-\d{6}\.zip$/
 
-export type BackupItem = { name: string; size: number; createdAt: string }
+/** sizes of one part of a backup: files in it, bytes before and after compression */
+export type PartSizes = { files: number; size: number; compressed: number }
+/** data = users, settings, logo and the rest; logs = the activity and system log; storage = the uploaded files (only with includeFiles) */
+export type BackupParts = { data: PartSizes; logs: PartSizes; storage: PartSizes }
+/** `parts` is null for a backup made before 1.10 (its backup.json has no sizes) */
+export type BackupItem = { name: string; size: number; createdAt: string; parts: BackupParts | null }
 export type BackupStatus = {
   status: 'ok' | 'failed'
   lastSuccess: string | null
@@ -68,14 +76,53 @@ export function backupPath(name: unknown): string {
   return abs
 }
 
+type BackupFile = Omit<BackupItem, 'parts'>
+
 /** newest first */
-export function listBackups(): BackupItem[] {
+export function listBackups(): BackupFile[] {
   let names: string[]
   try { names = readdirSync(config.backupDir) } catch { return [] }
-  const out: BackupItem[] = []
+  const out: BackupFile[] = []
   for (const name of names.filter(n => BACKUP_NAME_RE.test(n)).sort().reverse()) {
     try { out.push({ name, size: statSync(join(config.backupDir, name)).size, createdAt: createdAtOf(name) }) } catch { /* just deleted */ }
   }
+  return out
+}
+
+// the sizes of each backup are read once from its backup.json (the end of the zip), then remembered while the file is unchanged
+const partsCache = new Map<string, { size: number; mtimeMs: number; parts: BackupParts | null }>()
+
+async function readParts(abs: string): Promise<BackupParts | null> {
+  const reader = new ZipReader(new BlobReader(Bun.file(abs)))
+  try {
+    const entry = (await reader.getEntries()).find(e => e.filename === 'backup.json')
+    if (!entry || entry.directory || entry.uncompressedSize > 1024 * 1024) return null
+    const meta = JSON.parse(await entry.getData(new TextWriter()))
+    const ok = (p: any): p is PartSizes => p && [p.files, p.size, p.compressed].every(n => typeof n === 'number')
+    return ok(meta?.parts?.data) && ok(meta.parts.logs) && ok(meta.parts.storage) ? meta.parts : null
+  } catch {
+    return null
+  } finally {
+    await reader.close().catch(() => {})
+  }
+}
+
+/** newest first, with the per-part sizes (null for a backup that has none: made by an older version, or unreadable) */
+export async function listBackupsDetailed(): Promise<BackupItem[]> {
+  const out: BackupItem[] = []
+  const alive = new Set<string>()
+  for (const f of listBackups()) {
+    alive.add(f.name)
+    let mtimeMs = 0
+    try { mtimeMs = statSync(join(config.backupDir, f.name)).mtimeMs } catch { continue }
+    let cached = partsCache.get(f.name)
+    if (!cached || cached.size !== f.size || cached.mtimeMs !== mtimeMs) {
+      cached = { size: f.size, mtimeMs, parts: await readParts(join(config.backupDir, f.name)) }
+      partsCache.set(f.name, cached)
+    }
+    out.push({ ...f, parts: cached.parts })
+  }
+  for (const n of partsCache.keys()) if (!alive.has(n)) partsCache.delete(n)
   return out
 }
 
@@ -108,24 +155,201 @@ function device(abs: string): number | null {
   }
 }
 
+export type Schedule = NonNullable<BackupPrefs['schedule']>
+export const COMPRESSION_LEVELS = { fast: 1, balanced: 6, smallest: 9 } as const
+export type Compression = keyof typeof COMPRESSION_LEVELS
+
+const pad2 = (n: number) => String(n).padStart(2, '0')
+const hhmm = (time: string) => { const [h, m] = time.split(':').map(Number); return { h, m } }
+
+/**
+ * What the backup uses now: what the admin saved on the backup page, and for anything not saved the BACKUP_* env
+ * values (BACKUP_HOUR as a daily schedule). With files in the backup and no saved count, only 2 copies are kept: each
+ * one is as big as the storage.
+ */
+export function effectiveBackup(): { compression: Compression; schedule: Schedule; keep: number; includeFiles: boolean } {
+  const saved = settings.get().backup ?? {}
+  const includeFiles = saved.includeFiles ?? config.backupIncludeFiles
+  return {
+    compression: saved.compression ?? 'smallest',
+    schedule: saved.schedule ?? (config.backupHour === null ? { mode: 'off' } : { mode: 'daily', time: `${pad2(config.backupHour)}:00` }),
+    keep: saved.keep ?? (includeFiles ? Math.min(2, config.backupKeep) : config.backupKeep),
+    includeFiles,
+  }
+}
+
+const serverTimezone = () => ({ name: Intl.DateTimeFormat().resolvedOptions().timeZone, offsetMinutes: -new Date().getTimezoneOffset() })
+
 export function backupSettings() {
   const a = device(config.backupDir)
+  const eff = effectiveBackup()
+  const { scheduleChangedAt: _, ...saved } = settings.get().backup ?? {}
   return {
     dir: config.backupDir,
-    keep: config.backupKeep,
-    hour: config.backupHour,
-    includesFiles: config.backupIncludeFiles,
+    keep: eff.keep,
+    /** the hour of a daily schedule, null for any other (kept for older pages) */
+    hour: eff.schedule.mode === 'daily' ? hhmm(eff.schedule.time).h : null,
+    includeFiles: eff.includeFiles,
+    /** the same as includeFiles (older pages) */
+    includesFiles: eff.includeFiles,
+    compression: eff.compression,
+    schedule: eff.schedule,
+    /** only what the admin saved: a missing key is using the default */
+    saved,
+    /** schedule times are in the server's time zone */
+    timezone: serverTimezone(),
+    serverTime: new Date().toISOString(),
+    nextRun: nextRun(),
     // a dead disk takes the backups on it along: the page warns about this
     sameDisk: a !== null && a === device(config.dataDir),
   }
 }
 
-/** the hourly housekeeping runs a backup once a day at BACKUP_HOUR, or whenever the last one is over 2 days old */
+const HOUR = 3600_000
+const DAY = 24 * HOUR
+/** a scheduled time is run when it is at most this old: the server being off for longer skips it (the 2-day net below covers that) */
+const SLOT_WINDOW = HOUR
+/** two scheduled runs are never closer than this (a manual backup shortly before the slot counts as the day's backup) */
+const MIN_GAP = 20 * HOUR
+
+/** the scheduled moment of a daily or weekly schedule on `day` (local time), or null when that day has none */
+function slotOn(schedule: Schedule, day: Date): Date | null {
+  if (schedule.mode !== 'daily' && schedule.mode !== 'weekly') return null
+  if (schedule.mode === 'weekly' && !schedule.days.includes(day.getDay())) return null
+  const { h, m } = hhmm(schedule.time)
+  return new Date(day.getFullYear(), day.getMonth(), day.getDate(), h, m, 0, 0)
+}
+
+/** the latest scheduled moment at or before `now` (daily and weekly only) */
+function lastSlot(schedule: Schedule, now: Date): Date | null {
+  for (let i = 0; i <= 7; i++) {
+    const slot = slotOn(schedule, new Date(now.getFullYear(), now.getMonth(), now.getDate() - i, 12))
+    if (slot && slot <= now) return slot
+  }
+  return null
+}
+
+/** the latest of: last success, last attempt, the last change of the schedule (ms), or null when none */
+function lastActivity(): number | null {
+  const s = readStatus()
+  const t = [s?.lastSuccess, s?.lastAttempt, settings.get().backup?.scheduleChangedAt].map(v => (v ? Date.parse(v) : NaN)).filter(Number.isFinite)
+  return t.length ? Math.max(...t) : null
+}
+
+/** the next scheduled time (ISO), or for an interval the end of the current one; null when off */
+function nextRun(now = new Date()): string | null {
+  const { schedule } = effectiveBackup()
+  if (schedule.mode === 'off') return null
+  if (schedule.mode === 'interval') {
+    const last = lastActivity()
+    return new Date(last === null ? now.getTime() : Math.max(now.getTime(), last + schedule.hours * HOUR)).toISOString()
+  }
+  for (let i = 0; i <= 8; i++) {
+    const slot = slotOn(schedule, new Date(now.getFullYear(), now.getMonth(), now.getDate() + i, 12))
+    if (slot && slot > now) return slot.toISOString()
+  }
+  return null
+}
+
+/** the longest wait the schedule means between two backups */
+function periodOf(schedule: Schedule): number {
+  if (schedule.mode === 'interval') return schedule.hours * HOUR
+  if (schedule.mode === 'weekly') {
+    const days = [...schedule.days].sort((x, y) => x - y)
+    return Math.max(...days.map((d, i) => ((days[(i + 1) % days.length] - d + 6) % 7 + 1) * DAY))
+  }
+  return DAY
+}
+
+/** no success for this long and a backup runs anyway (the dashboard warns at the same point) */
+export function staleAfterMs(): number {
+  const { schedule } = effectiveBackup()
+  return schedule.mode === 'off' ? 2 * DAY : Math.max(2 * DAY, 2 * periodOf(schedule))
+}
+
+/**
+ * Checked every minute (index.ts). Daily and weekly run in the hour after the chosen time (server local time) when the
+ * last backup is over 20 hours old; an interval runs when that many hours passed since the last one; a schedule saved
+ * after a time does not run it. Whatever the schedule, a last success older than 2 days (twice the period when that is
+ * longer) runs one, at most once an hour. Off never runs. A failed attempt counts as the last one, so a failure is not
+ * retried every minute.
+ */
 export function backupDue(now = new Date()): boolean {
-  if (config.backupHour === null) return false
-  const last = readStatus()?.lastSuccess
-  const age = last ? now.getTime() - Date.parse(last) : Infinity
-  return age > 48 * 3600_000 || (age > 20 * 3600_000 && now.getHours() === config.backupHour)
+  const { schedule } = effectiveBackup()
+  if (schedule.mode === 'off') return false
+  const s = readStatus()
+  const attempt = Math.max(Date.parse(s?.lastAttempt ?? '') || 0, Date.parse(s?.lastSuccess ?? '') || 0)
+  const success = Date.parse(s?.lastSuccess ?? '')
+  const age = Number.isFinite(success) ? now.getTime() - success : Infinity
+  if (age > staleAfterMs() && now.getTime() - attempt >= HOUR) return true
+  const last = lastActivity()
+  if (schedule.mode === 'interval') return last === null || now.getTime() - last >= schedule.hours * HOUR
+  const slot = lastSlot(schedule, now)
+  if (!slot || now.getTime() - slot.getTime() >= SLOT_WINDOW) return false
+  const changed = Date.parse(settings.get().backup?.scheduleChangedAt ?? '')
+  if (Number.isFinite(changed) && slot.getTime() <= changed) return false
+  return attempt === 0 || (slot.getTime() > attempt && now.getTime() - attempt >= MIN_GAP)
+}
+
+const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/
+const isInt = (v: unknown, min: number, max: number): v is number => typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max
+
+/** a schedule from the request, checked and cut down to the keys that count */
+export function parseSchedule(v: any): Schedule {
+  if (!v || typeof v !== 'object') throw bad('backup.bad-schedule')
+  if (v.mode === 'off') return { mode: 'off' }
+  if (v.mode === 'daily' || v.mode === 'weekly') {
+    if (typeof v.time !== 'string' || !TIME_RE.test(v.time)) throw bad('backup.bad-time')
+    if (v.mode === 'daily') return { mode: 'daily', time: v.time }
+    if (!Array.isArray(v.days) || !v.days.length || !v.days.every((d: unknown) => isInt(d, 0, 6))) throw bad('backup.bad-days')
+    return { mode: 'weekly', days: [...new Set<number>(v.days)].sort((x, y) => x - y), time: v.time }
+  }
+  if (v.mode === 'interval') {
+    if (!isInt(v.hours, 1, 168)) throw bad('backup.bad-interval')
+    return { mode: 'interval', hours: v.hours }
+  }
+  throw bad('backup.bad-schedule')
+}
+
+/**
+ * Save what the backup page sent: a key left out stays as it is, `null` goes back to the default (env). Everything is
+ * checked before anything is saved. Returns the changes in words for the activity log.
+ */
+export function saveBackupSettings(body: { compression?: unknown; schedule?: unknown; keep?: unknown; includeFiles?: unknown }): string[] {
+  const next: BackupPrefs = { ...(settings.get().backup ?? {}) }
+  const changes: string[] = []
+  if (body.compression !== undefined) {
+    if (body.compression === null) delete next.compression
+    else if (typeof body.compression === 'string' && Object.hasOwn(COMPRESSION_LEVELS, body.compression)) next.compression = body.compression as Compression
+    else throw bad('backup.bad-compression')
+    changes.push(`compression=${body.compression}`)
+  }
+  if (body.schedule !== undefined) {
+    if (body.schedule === null) delete next.schedule
+    else next.schedule = parseSchedule(body.schedule)
+    next.scheduleChangedAt = new Date().toISOString()
+    changes.push(`schedule=${JSON.stringify(next.schedule ?? null)}`)
+  }
+  if (body.keep !== undefined) {
+    if (body.keep === null) delete next.keep
+    else if (isInt(body.keep, 1, 30)) next.keep = body.keep
+    else throw bad('backup.bad-keep')
+    changes.push(`keep=${body.keep}`)
+  }
+  if (body.includeFiles !== undefined) {
+    if (body.includeFiles === null) delete next.includeFiles
+    else if (typeof body.includeFiles === 'boolean') next.includeFiles = body.includeFiles
+    else throw bad('backup.bad-schedule')
+    changes.push(`includeFiles=${body.includeFiles}`)
+  }
+  settings.update({ backup: next })
+  return changes
+}
+
+/** would these changes put the uploaded files into the backup when they are not in it now? (then the password is asked) */
+export function turnsOnFiles(body: { includeFiles?: unknown }): boolean {
+  if (body.includeFiles === undefined || effectiveBackup().includeFiles) return false
+  return body.includeFiles === true || (body.includeFiles === null && config.backupIncludeFiles)
 }
 
 // one backup or restore at a time
@@ -138,12 +362,18 @@ async function exclusive<T>(fn: () => Promise<T>): Promise<T> {
   try { return await fn() } finally { busy = false }
 }
 
-function collectItems(): ZipItem[] {
+/** the data folder's part of a backup (everything but the storage) */
+function collectDataItems(): ZipItem[] {
   const names = readdirSync(config.dataDir).filter(n => !SKIP.has(n) && !SEARCH_DB.test(n) && !n.endsWith('.tmp'))
-  // the storage may sit inside the data folder: its files only go in with BACKUP_INCLUDE_FILES, under storage/
-  const items = collectZipItems(config.dataDir, names)
+  // the storage may sit inside the data folder: its files only go in with includeFiles, under storage/
+  return collectZipItems(config.dataDir, names)
     .filter(i => (!i.name.startsWith('logs/') || LOGS_KEPT.has(i.name)) && !within(config.storageDir, i.abs))
-  if (config.backupIncludeFiles) {
+    .filter(i => !within(config.backupDir, i.abs))
+}
+
+function collectItems(includeFiles: boolean): ZipItem[] {
+  const items = collectDataItems()
+  if (includeFiles) {
     items.push({ name: 'storage/', abs: config.storageDir, dir: true, mtime: statSync(config.storageDir).mtimeMs, size: 0 })
     for (const i of collectZipItems(config.storageDir, readdirSync(config.storageDir))) {
       // the data folder may sit inside the storage: it is already in the backup, without sessions
@@ -153,6 +383,74 @@ function collectItems(): ZipItem[] {
   return items.filter(i => !within(config.backupDir, i.abs))
 }
 
+const partOf = (name: string): keyof BackupParts => (name.startsWith('storage/') ? 'storage' : name.startsWith('logs/') ? 'logs' : 'data')
+const emptyParts = (): BackupParts => ({ data: { files: 0, size: 0, compressed: 0 }, logs: { files: 0, size: 0, compressed: 0 }, storage: { files: 0, size: 0, compressed: 0 } })
+
+/** what the free-space checks look at; tests replace them */
+export const backupDeps = {
+  /** free bytes where `abs` is, or null when that can not be read (then nothing is checked) */
+  free: (abs: string): number | null => freeSpace(abs),
+  /** size of the uploaded files, as counted for the dashboard; a count older than a minute is redone, waiting a little for it */
+  async storageSize(): Promise<number> {
+    const { storage, stale } = storageStats()
+    if (storage && !stale) return storage.size
+    await Promise.race([recountStorage(), Bun.sleep(15_000)])
+    return storageStats().storage?.size ?? storage?.size ?? 0
+  },
+}
+
+/** the margin kept free on top of the estimate, and how many bytes are read between two looks at the free space */
+export const backupLimits = { margin: 1024 ** 3, safety: 1.05, checkEvery: 256 * 1024 ** 2 }
+
+/**
+ * How much room a backup needs: the data folder's files and (with includeFiles) the whole storage, counted as if
+ * compression saved nothing (uploaded rar, zip and video do not shrink), 5% on top and 1 GB of margin.
+ */
+export async function estimateBackup(includeFiles = effectiveBackup().includeFiles) {
+  const parts = { data: 0, logs: 0, storage: 0 }
+  for (const i of collectDataItems()) parts[partOf(i.name) === 'logs' ? 'logs' : 'data'] += i.size
+  if (includeFiles) parts.storage = await backupDeps.storageSize()
+  const estimate = parts.data + parts.logs + parts.storage
+  mkdirSync(config.backupDir, { recursive: true })
+  const free = backupDeps.free(config.backupDir)
+  const needed = Math.ceil(estimate * backupLimits.safety) + backupLimits.margin
+  return { estimate, free, needed, ok: free === null || free >= needed, parts }
+}
+
+/**
+ * Make room before a backup: delete the oldest backups one by one until it fits. The newest one always stays (at
+ * least one complete backup must remain), and so does `protect`. Still too little: nothing is started.
+ */
+async function makeRoom(includeFiles: boolean, protect?: string) {
+  let est = await estimateBackup(includeFiles)
+  while (!est.ok) {
+    // newest first: the newest stays, the oldest of the rest goes
+    const victim = listBackups().slice(1).reverse().find(b => b.name !== protect)
+    if (!victim) {
+      throw new HttpError(507, 'backup.no-space', { needed: sizeText(est.needed), free: sizeText(est.free ?? 0), neededBytes: est.needed, freeBytes: est.free ?? 0 })
+    }
+    rmSync(join(config.backupDir, victim.name), { force: true })
+    audit({ user: 'system', ip: '-', action: 'backup-delete', target: victim.name, detail: 'ลบอัตโนมัติ: พื้นที่ว่างไม่พอสำหรับไฟล์สำรองใหม่' })
+    log.warn('backup-pruned-for-space', { name: victim.name, needed: est.needed, free: est.free })
+    est = await estimateBackup(includeFiles)
+  }
+}
+
+/** called as the zip reads files: every `checkEvery` bytes the free space is looked at, and a backup that would fill the disk stops */
+function spaceWatch() {
+  let read = 0
+  let next = backupLimits.checkEvery
+  return (n: number) => {
+    read += n
+    if (read < next) return
+    next = read + backupLimits.checkEvery
+    const free = backupDeps.free(config.backupDir)
+    if (free !== null && free < backupLimits.margin) {
+      throw new HttpError(507, 'backup.aborted-no-space', { free: sizeText(free), freeBytes: free })
+    }
+  }
+}
+
 /** prune keeps `protect` even when it is among the oldest (the backup a restore is about to read) */
 async function writeBackup(protect?: string): Promise<BackupItem> {
   const attempt = new Date().toISOString()
@@ -160,44 +458,59 @@ async function writeBackup(protect?: string): Promise<BackupItem> {
     mkdirSync(config.backupDir, { recursive: true })
     // left over from a backup that was cut off (crash, power loss)
     for (const n of readdirSync(config.backupDir)) if (n.endsWith('.partial')) rmSync(join(config.backupDir, n), { force: true })
+    const prefs = effectiveBackup()
+    await makeRoom(prefs.includeFiles, protect)
     let name = nameFor(new Date())
     while (existsSync(join(config.backupDir, name))) {
       await Bun.sleep(200) // names have one-second precision
       name = nameFor(new Date())
     }
-    const items = collectItems()
-    if (config.backupIncludeFiles) ensureSpace(config.backupDir, items.reduce((sum, i) => sum + i.size, 0))
-    const meta = join(paths.tmp, `${name}.json`)
-    writeFileSync(meta, JSON.stringify({ version: config.version, createdAt: attempt, includesFiles: config.backupIncludeFiles }, null, 2))
-    items.push({ name: 'backup.json', abs: meta, dir: false, mtime: Date.now(), size: statSync(meta).size })
+    const items = collectItems(prefs.includeFiles)
+    if (prefs.includeFiles) ensureSpace(config.backupDir, items.reduce((sum, i) => sum + i.size, 0))
+    // backup.json goes last and is made when the zip gets there, so it can tell the sizes of everything before it
+    const parts = emptyParts()
+    for (const i of items) if (!i.dir) { parts[partOf(i.name)].files++; parts[partOf(i.name)].size += i.size }
+    const meta = () => new TextEncoder().encode(JSON.stringify({
+      version: config.version, createdAt: attempt, includesFiles: prefs.includeFiles, compression: prefs.compression, level: COMPRESSION_LEVELS[prefs.compression], parts,
+    }, null, 2))
+    items.push({ name: 'backup.json', abs: '', dir: false, mtime: Date.now(), size: meta().length, bytes: meta })
 
     const target = join(config.backupDir, name)
     // a half-written backup must never look complete: only a finished one gets the .zip name
     const partial = `${target}.partial`
     try {
-      await Bun.write(partial, new Response(zipStream(items)))
+      await Bun.write(partial, new Response(zipStream(items, {
+        level: COMPRESSION_LEVELS[prefs.compression],
+        onRead: spaceWatch(),
+        onEntry: (item, sizes) => {
+          if (item.name === 'backup.json') return
+          // the sizes read are what really went in: a file that grew or shrank while it was read is counted as it was
+          parts[partOf(item.name)].compressed += sizes.compressed
+        },
+      })))
       renameSync(partial, target)
     } catch (err) {
       rmSync(partial, { force: true })
       throw err
-    } finally {
-      rmSync(meta, { force: true })
     }
 
-    for (const old of listBackups().slice(config.backupKeep)) {
+    for (const old of listBackups().slice(prefs.keep)) {
       if (old.name !== protect) rmSync(join(config.backupDir, old.name), { force: true })
     }
     const size = statSync(target).size
     writeStatus({ status: 'ok', lastSuccess: attempt, lastAttempt: attempt, code: 'backup.done', params: {}, file: name, size })
-    return { name, size, createdAt: createdAtOf(name) }
+    return { name, size, createdAt: createdAtOf(name), parts: JSON.parse(JSON.stringify(parts)) }
   } catch (err) {
     const known = fromFsError(err)
     const why = known?.message ?? (err as Error).message
     log.error('backup-failed', err instanceof HttpError ? why : err)
+    // not enough room is its own status: the page says how much was needed and how much was free
+    const noSpace = err instanceof HttpError && (err.code === 'backup.no-space' || err.code === 'backup.aborted-no-space') ? err : null
     // a known reason (disk full...) is shown in the reader's language too; anything else as it was said
-    const params: Params = known && !Object.keys(known.params).length ? { reason: why, reasonCode: known.code } : { reason: why }
-    writeStatus({ status: 'failed', lastSuccess: readStatus()?.lastSuccess ?? null, lastAttempt: attempt, code: 'backup.failed', params, file: null, size: null })
-    alert('backup-failed', 'backup.failed', params)
+    const params: Params = noSpace ? noSpace.params : known && !Object.keys(known.params).length ? { reason: why, reasonCode: known.code } : { reason: why }
+    const code: MessageCode = noSpace ? noSpace.code : 'backup.failed'
+    writeStatus({ status: 'failed', lastSuccess: readStatus()?.lastSuccess ?? null, lastAttempt: attempt, code, params, file: null, size: null })
+    alert('backup-failed', code, params)
     throw err
   }
 }

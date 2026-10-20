@@ -235,6 +235,21 @@ export const MESSAGES = {
   // the outcome of the last backup (backup-status.json)
   'backup.done': { th: 'สำรองข้อมูลสำเร็จ', en: 'The backup was made.' },
   'backup.failed': { th: 'สำรองข้อมูลไม่สำเร็จ: {reason}', en: 'The backup failed: {reason}' },
+  'backup.no-space': {
+    th: 'พื้นที่ว่างสำหรับไฟล์สำรองไม่พอ: ต้องการ {needed} แต่เหลือ {free} (ลบไฟล์สำรองเก่าแล้วก็ยังไม่พอ) จึงไม่เริ่มสำรอง',
+    en: 'Not enough free space for the backup: {needed} needed, {free} free (even after deleting the older backups). The backup was not started.',
+  },
+  'backup.aborted-no-space': {
+    th: 'พื้นที่ว่างเหลือเพียง {free} ระหว่างสำรองข้อมูล จึงหยุดและลบไฟล์ที่เขียนไม่ครบทิ้ง',
+    en: 'Free space fell to {free} while the backup was being written, so it was stopped and the unfinished file was deleted.',
+  },
+  // the backup settings (PUT /api/admin/backups/settings)
+  'backup.bad-compression': { th: 'ระดับการบีบอัดต้องเป็น fast, balanced หรือ smallest', en: 'The compression must be fast, balanced or smallest.' },
+  'backup.bad-schedule': { th: 'ตารางเวลาสำรองข้อมูลไม่ถูกต้อง', en: 'The backup schedule is not valid.' },
+  'backup.bad-time': { th: 'เวลาต้องอยู่ในรูป HH:MM (00:00 ถึง 23:59)', en: 'The time must be HH:MM (00:00 to 23:59).' },
+  'backup.bad-days': { th: 'วันต้องเป็นตัวเลข 0 (อาทิตย์) ถึง 6 (เสาร์) อย่างน้อยหนึ่งวัน', en: 'Days must be numbers from 0 (Sunday) to 6 (Saturday), at least one.' },
+  'backup.bad-interval': { th: 'ช่วงเวลาต้องเป็นจำนวนชั่วโมง 1 ถึง 168', en: 'The interval must be 1 to 168 hours.' },
+  'backup.bad-keep': { th: 'จำนวนไฟล์สำรองที่เก็บต้องเป็น 1 ถึง 30', en: 'The number of backups to keep must be 1 to 30.' },
   // dashboard warnings
   'backup.never': { th: 'ยังไม่มีบันทึกการสำรองข้อมูล', en: 'No backup has been recorded yet.' },
   'backup.last-failed': { th: 'การสำรองข้อมูลครั้งล่าสุดล้มเหลว', en: 'The last backup failed.' },

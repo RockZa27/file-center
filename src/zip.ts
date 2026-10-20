@@ -5,7 +5,20 @@ import { bad, cleanName, uniquePath, within } from './fsx'
 
 configure({ useWebWorkers: false })
 
-export type ZipItem = { name: string; abs: string; dir: boolean; mtime: number; size: number }
+export type ZipItem = {
+  name: string; abs: string; dir: boolean; mtime: number; size: number
+  /** contents made when the entry is reached, instead of reading `abs` (a backup's backup.json knows the sizes of the entries before it) */
+  bytes?: () => Uint8Array
+}
+
+/** how hard deflate works: user downloads and zips stay at 1 (fast); backups pick their own (settings page) */
+export type ZipOptions = {
+  level?: number
+  /** called with the bytes read from every file as they go; throwing stops the zip with that error */
+  onRead?: (bytes: number) => void
+  /** called after each file entry is written, with its sizes in the archive */
+  onEntry?: (item: ZipItem, sizes: { uncompressed: number; compressed: number }) => void
+}
 
 /** expand files and folders into a flat list of archive entries (symlinks are skipped) */
 export function collectZipItems(baseAbs: string, names: string[]): ZipItem[] {
@@ -32,7 +45,7 @@ const ZIP64_FROM = 0xf000_0000
 const SAMPLE = 256 * 1024
 // zip.js has no native deflate for any level but 6, so it runs its own: level 1 is about 1.6x (text) to 2x faster than
 // 3, and its archives were 0.3% to 1.6% bigger when measured (README, "Speed")
-const DEFLATE_LEVEL = 1
+export const DEFLATE_LEVEL = 1
 
 /**
  * Deflate runs on one core at roughly 40 MB/s, so a 5 GB video would take two minutes and save nothing.
@@ -56,7 +69,8 @@ function worthCompressing(item: ZipItem): boolean {
  * Streams a zip archive. Writes ZIP64 records when an entry or the archive passes 4 GB, and the writer
  * waits for the reader, so memory stays flat even for huge files.
  */
-export function zipStream(items: ZipItem[]): ReadableStream<Uint8Array> {
+export function zipStream(items: ZipItem[], options: ZipOptions = {}): ReadableStream<Uint8Array> {
+  const level = options.level ?? DEFLATE_LEVEL
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>()
   const zip = new ZipWriter(writable)
   ;(async () => {
@@ -66,7 +80,18 @@ export function zipStream(items: ZipItem[]): ReadableStream<Uint8Array> {
         await zip.add(item.name, undefined, { directory: true, lastModDate })
         continue
       }
-      await zip.add(item.name, Bun.file(item.abs).stream(), { lastModDate, level: worthCompressing(item) ? DEFLATE_LEVEL : 0, zip64: item.size >= ZIP64_FROM })
+      let source: ReadableStream<Uint8Array> = item.bytes ? new Blob([item.bytes()]).stream() : Bun.file(item.abs).stream()
+      if (options.onRead) {
+        const onRead = options.onRead
+        source = source.pipeThrough(new TransformStream<Uint8Array, Uint8Array>({
+          transform(chunk, controller) {
+            onRead(chunk.length)
+            controller.enqueue(chunk)
+          },
+        }))
+      }
+      const entry = await zip.add(item.name, source, { lastModDate, level: item.bytes || worthCompressing(item) ? level : 0, zip64: item.size >= ZIP64_FROM })
+      options.onEntry?.(item, { uncompressed: entry.uncompressedSize ?? 0, compressed: entry.compressedSize ?? 0 })
     }
     await zip.close()
   })().catch(err => writable.abort(err).catch(() => {}))
