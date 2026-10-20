@@ -18,6 +18,7 @@ export const uploadRoutes = new Elysia({ prefix: '/api/upload' })
     await ready(quotaUser)
     return initUpload({
       quotaUser,
+      space: a.space,
       owner: user?.username ?? 'guest',
       guest: !user,
       root: a.root,
@@ -41,15 +42,15 @@ export const uploadRoutes = new Elysia({ prefix: '/api/upload' })
   .put('/:id/:index', async ({ user, params, request }) => {
     const owner = user?.username ?? 'guest'
     // before buffering a whole chunk in memory: a stranger without a valid upload id costs nothing
-    checkUpload(params.id, owner)
+    checkUpload(params.id, owner, user)
     const data = await request.arrayBuffer()
-    await saveChunk(params.id, owner, Number(params.index), data)
+    await saveChunk(params.id, owner, Number(params.index), data, user)
     return { ok: true }
   }, { parse: 'none' })
 
   .post('/:id/complete', async ({ user, ip, params }) => {
     const owner = user?.username ?? 'guest'
-    const done = await completeUpload(params.id, owner)
+    const done = await completeUpload(params.id, owner, user)
     audit({ user: owner, ip, action: 'upload', target: storagePath(done.path), detail: String(done.size) })
     return { ok: true, size: done.size }
   })

@@ -48,7 +48,35 @@ function spaceOf(abs: string, owner: User | null): NonNullable<TrashMeta['space'
 /** the owner of an entry: as recorded, or (entries from before 1.10) from where it was */
 export function trashOwner(meta: TrashMeta): string | null {
   if (meta.owner !== undefined) return meta.owner
-  try { return homeOwnerOf(join(config.storageDir, normRel(meta.originalPath)))?.username ?? null } catch { return null }
+  try {
+    const u = homeOwnerOf(join(config.storageDir, normRel(meta.originalPath)))
+    // an account made after the item was deleted is not its owner (the old account of that name was deleted)
+    if (u && Date.parse(u.createdAt) > Date.parse(meta.deletedAt)) return null
+    return u?.username ?? null
+  } catch { return null }
+}
+
+/** the name an account's trash entries get when the account is deleted; "~" is not allowed in a username, so no account ever matches it */
+const tombstone = (username: string) => `~${username}@${Date.now()}`
+
+/**
+ * An account that is deleted must not pass its trash to a new account of the same name: its entries (owner and deleter)
+ * get a name nobody can have, so only the admin's trash shows them. Call it before the account leaves the list (an entry
+ * from before 1.10 finds its owner from where it was).
+ */
+export function tombstoneTrashOf(username: string): number {
+  const same = (a: string | null | undefined) => !!a && a.toLowerCase() === username.toLowerCase()
+  const mark = tombstone(username)
+  let n = 0
+  for (const meta of listTrash()) {
+    const owner = same(trashOwner(meta))
+    const by = same(meta.deletedBy)
+    if (!owner && !by) continue
+    if (owner) meta.owner = mark
+    if (by) meta.deletedBy = mark
+    try { writeFileSync(join(itemDir(meta.id), 'meta.json'), JSON.stringify(meta)); n++ } catch (err) { log.warn('trash-tombstone-failed', { id: meta.id, error: err }) }
+  }
+  return n
 }
 
 const itemDir = (id: string) => join(paths.trash, id)

@@ -537,7 +537,7 @@ SMTP_FROM=File Center <files@example.com>
 - ใช้ SMTP client ในตัว (`src/mail.ts`, ไม่มีไลบรารีเพิ่ม): EHLO, STARTTLS หรือ TLS ทันที, AUTH PLAIN/LOGIN, ตรวจใบรับรองของเซิร์ฟเวอร์ รหัสผ่านส่งผ่านการเข้ารหัสเท่านั้น (หรือไปยังเครื่องนี้)
   หัวจดหมายกัน CR/LF (ที่อยู่หรือหัวเรื่องที่มีขึ้นบรรทัดใหม่ถูกปฏิเสธ) หัวเรื่องภาษาไทยเข้ารหัส RFC 2047 เนื้อความ UTF-8 แบบ base64
 - ผู้ใช้ตั้งอีเมลที่ `PUT /api/me/email` ระบบส่งลิงก์ยืนยัน (โทเคนสุ่ม เก็บแบบแฮช ใช้ได้ 24 ชั่วโมง ใช้ได้ครั้งเดียว) **ก่อนยืนยัน ไม่มีจดหมายอื่นถูกส่งไปที่อยู่นั้น**
-- จำกัดต่อผู้ใช้: ไม่เกิน 20 ฉบับต่อชั่วโมง และลิงก์ยืนยันไม่เกิน 1 ฉบับต่อ 2 นาที
+- จำกัดต่อผู้ใช้: แจ้งเตือนไม่เกิน 20 ฉบับต่อชั่วโมง และลิงก์ยืนยันไม่เกิน 1 ฉบับต่อ 2 นาที (โควตาของอีเมลยืนยันแยกจากอีเมลแจ้งเตือน แจ้งเตือนท่วมแล้วก็ไม่กินโควตาของการยืนยัน) การอัปโหลดผ่านลิงก์รับไฟล์เดียวกันภายใน 10 นาทีรวมเป็นรายการเดียวในระฆัง (ยังไม่อ่าน: `params.n` = จำนวนไฟล์, `size` = ขนาดรวม, `file` = ไฟล์ล่าสุด) และส่งอีเมล/LINE ไม่เกิน 1 ครั้งต่อลิงก์ต่อ 10 นาที ชื่อไฟล์จากผู้เยี่ยมชมถูกตัดเหลือ 80 ตัวอักษรในข้อความ
 
 ### LINE
 
@@ -553,6 +553,7 @@ LINE Notify เลิกให้บริการแล้ว ระบบจ�
 ผู้ใช้เชื่อมบัญชีเอง: `POST /api/me/line/link` ได้รหัส 6 หลัก ใช้ได้ 10 นาที → ส่งรหัสนั้นให้บอทในแชต → webhook จับคู่ LINE ของผู้ส่งกับบัญชี (บอทตอบกลับ) · `DELETE /api/me/line` ยกเลิก (บล็อกหรือลบบอทก็ยกเลิกให้)
 webhook รับเฉพาะคำขอที่ลายเซ็น `X-Line-Signature` (HMAC-SHA256 ด้วย Channel secret) ถูกต้อง นอกนั้น 401 ไม่ต้องมี CSRF token เพราะไม่มี session · เดารหัสผิด 5 ครั้งจาก LINE เดียวจะถูกเมิน
 ที่อยู่ปลายทางคงที่ที่ `https://api.line.me` ไม่มีทางให้ผู้ใช้กำหนด host
+ข้อความ LINE ถึงผู้ใช้แต่ละคนไม่เกิน 30 ข้อความต่อชั่วโมง (ที่เหลือยังอยู่ในระฆัง)
 
 ### API (ต้องเข้าสู่ระบบ ผู้เยี่ยมชมได้ 401)
 
@@ -678,7 +679,7 @@ admin กำหนดโควตาให้ผู้ใช้แต่ละ�
 ## ถังขยะของผู้ใช้เอง
 
 การลบยังย้ายไปถังขยะกลางเหมือนเดิม (admin ดูและกู้คืนได้ที่ `/api/admin/trash`) แต่แต่ละรายการจดเพิ่ม `owner` (ผู้ใช้ที่โฟลเดอร์ของเขาเก็บรายการนั้นอยู่; `null` = โฟลเดอร์สาธารณะหรือที่อื่น) และ `space` (`home` / `public` / `other`)
-รายการเก่าที่ไม่มีสองค่านี้หา `owner` จาก `originalPath` ตอนอ่าน ผู้ใช้เห็นได้เฉพาะ
+รายการเก่าที่ไม่มีสองค่านี้หา `owner` จาก `originalPath` ตอนอ่าน (ไม่นับบัญชีที่สร้างหลังเวลาที่รายการถูกลบ) เมื่อลบบัญชีผู้ใช้ รายการในถังขยะที่เป็นของเขาหรือที่เขาลบ (`owner`, `deletedBy`) จะถูกเปลี่ยนเป็นชื่อ `~<ชื่อ>@<เวลา>` ซึ่งไม่มีบัญชีไหนใช้ได้ (`~` ใช้ในชื่อผู้ใช้ไม่ได้) บัญชีใหม่ชื่อเดิมจึงไม่เห็น เหลือเฉพาะ admin ที่ `/api/admin/trash` ผู้ใช้เห็นได้เฉพาะ
 
 - รายการที่ **ตัวเองเป็นเจ้าของ** (ลบโดยใครก็ตาม รวมถึงผู้รับแชร์ที่ลบในโฟลเดอร์ที่ได้รับ) หรือ
 - รายการที่ **ตัวเองลบ** และที่เดิมยังอยู่ใน space ที่ตัวเองเขียนได้ตอนนี้ (home, โฟลเดอร์สาธารณะที่มี `write`, โฟลเดอร์ที่ได้รับสิทธิ์ `edit`)
@@ -687,8 +688,8 @@ admin กำหนดโควตาให้ผู้ใช้แต่ละ�
 |---|---|
 | `GET /api/me/trash` | `{ items: [{ id, name, type, size, deletedAt, deletedBy, owner, space, path, restorable }], retentionDays }` `space`/`path` คือที่ที่จะกู้คืนไป (ใน space ของผู้เรียก) เป็น `null` และ `restorable: false` ถ้ากลับไปที่เดิมไม่ได้แล้ว (เช่นโฟลเดอร์ home ถูกย้าย) |
 | `POST /api/me/trash/:id/restore` | กู้คืนไปที่เดิม ชื่อซ้ำได้ชื่อใหม่ (`name (1).ext`) เวอร์ชันเก่ากลับมาด้วย นับโควตาเหมือนการเขียนอื่น (507 `quota.exceeded`) ตอบ `{ ok, restoredTo, space, path }` ที่เดิมอยู่นอกพื้นที่ของผู้เรียก หรือไม่มี `write` ที่นั่น = 403 `trash.cannot-restore-here` |
-| `DELETE /api/me/trash/:id` | ลบถาวร (ไม่ต้องใส่รหัสผ่าน) ตอบ `{ ok, removed: 1 }` |
-| `DELETE /api/me/trash` | ล้างถังขยะของตัวเอง ตอบ `{ ok, removed }` |
+| `DELETE /api/me/trash/:id` | ลบถาวร (ไม่ต้องใส่รหัสผ่าน) ตอบ `{ ok, removed: 1 }` ลบถาวรได้เฉพาะเจ้าของรายการ (รายการในโฟลเดอร์สาธารณะ/ที่อื่นที่ไม่มีเจ้าของ: คนที่ลบ) ผู้รับแชร์ที่ลบในโฟลเดอร์ของคนอื่นกู้คืนได้แต่ลบถาวรไม่ได้ = 403 `trash.cannot-purge` |
+| `DELETE /api/me/trash` | ล้างถังขยะของตัวเอง ตอบ `{ ok, removed }` (นับเฉพาะรายการที่ลบถาวรได้ตามข้างบน) |
 
 รายการที่ไม่ใช่ของผู้เรียกตอบ 404 เหมือนรหัสที่ไม่มีอยู่ ประวัติการใช้งานมี `trash-restore-own` และ `trash-delete-own`
 `POST /api/delete` ที่ส่ง `withTrash: true` ตอบ `trashed: [{ path, id }]` เพิ่ม (หน้าเว็บใช้ทำปุ่ม "เลิกลบ" ที่เรียก restore ทันที; ไม่ส่งก็ได้คำตอบเดิม `{ done, failed }`)
@@ -704,12 +705,12 @@ admin กำหนดโควตาให้ผู้ใช้แต่ละ�
 
 | | |
 |---|---|
-| `POST /api/grants` `{ space: "home", path, to, perms }` | ให้สิทธิ์ (ต้องมี `share` ที่ home; `path` เป็นโฟลเดอร์จริงใน home ไม่ใช่ `/` ไม่ใช่ลิงก์) ตอบ `{ ok, created, grant }` ซ้ำ (เจ้าของ+โฟลเดอร์+ผู้รับ เดียวกัน) = แก้ `perms` (`created: false`) · 400 `grants.to-self` / `grants.folder-only` / `grants.too-many` · 404 `admin.user-not-found` / `files.folder-not-found` |
+| `POST /api/grants` `{ space: "home", path, to, perms }` | ให้สิทธิ์ (ต้องมี `share` ที่ home; `path` เป็นโฟลเดอร์จริงใน home ไม่ใช่ `/` ไม่ใช่ลิงก์) ตอบ `{ ok, created, grant }` ซ้ำ (เจ้าของ+โฟลเดอร์+ผู้รับ เดียวกัน) = แก้ `perms` (`created: false`) · จำกัด 30 ครั้งต่อนาทีต่อคน (429 `grants.create-rate`) เพื่อไม่ให้ใช้เดาชื่อผู้ใช้ · 400 `grants.to-self` / `grants.folder-only` / `grants.too-many` · 404 `admin.user-not-found` / `files.folder-not-found` |
 | `GET /api/grants/mine` | `{ items: [{ id, path, name, to, toName, perms, createdAt, active }] }` สิทธิ์ที่ฉันให้ (`path` สัมพันธ์กับ home; `active: false` = ใช้ไม่ได้แล้ว ควรให้ลบ) |
 | `GET /api/grants/to-me` | `{ items: [{ id, space, name, owner, ownerName, perms, createdAt }] }` โฟลเดอร์ที่ได้รับและใช้ได้อยู่ (ไม่มีพาธของเจ้าของ) |
 | `PATCH /api/grants/:id` `{ perms }` | เจ้าของเท่านั้น (คนอื่น 404) |
 | `DELETE /api/grants/:id` | เจ้าของยกเลิก หรือผู้รับออกจากการแชร์ (คนอื่น 404) |
-| `GET /api/users/lookup?q=` | เลือกผู้รับ: ต้องเข้าสู่ระบบและมี `share` (admin ได้) `q` อย่างน้อย 2 ตัวอักษร (400 `grants.query-short`) ค้นจากชื่อผู้ใช้และชื่อที่แสดง ตอบ `{ users: [{ username, name }] }` ไม่เกิน 10 คน ไม่รวมตัวเอง ไม่มีข้อมูลอื่น จำกัด 40 ครั้งต่อนาทีต่อคน (429 `grants.lookup-rate`) |
+| `GET /api/users/lookup?q=` | เลือกผู้รับ: ต้องเข้าสู่ระบบและมี `share` (admin ได้) `q` อย่างน้อย 3 ตัวอักษร (400 `grants.query-short`, `params.min` = 3) ค้นจากชื่อผู้ใช้และชื่อที่แสดง ตอบ `{ users: [{ username, name }] }` ไม่เกิน 10 คน ไม่รวมตัวเอง ไม่ระบุบัญชี admin/manager ให้ผู้ใช้ทั่วไป (ผู้ใช้ทั่วไปแชร์ให้เจ้าหน้าที่ได้โดยพิมพ์ชื่อผู้ใช้เต็มใน `POST /api/grants`) ไม่มีข้อมูลอื่น จำกัด 20 ครั้งต่อนาทีต่อคน (429 `grants.lookup-rate`) |
 
 ประวัติการใช้งานมี `grant-create`, `grant-update`, `grant-delete` ในโค้ด `onGrantCreated(grant)` ใน `src/grants.ts` เรียกทุกครั้งที่สร้างสิทธิ์ใหม่ (ไม่รวมการแก้) โมดูลอื่น (เช่นการแจ้งเตือน) เพิ่มฟังก์ชันใน `grantCreatedListeners` เพื่อรับรู้
 
@@ -885,7 +886,7 @@ tests/perf.test.ts  การนับไฟล์ 50,000 ไฟล์ การ
 | `GET /api/versions?space&path` (`read`) · `GET /api/versions/:id/download?space&path` (`download`) · `POST /api/versions/:id/restore { space, path, expectedMtime? }` (`write`) · `DELETE /api/versions/:id?space&path` (`write`) | เวอร์ชันเก่าของไฟล์ (เก็บทุกครั้งที่บันทึกทับ ดู `VERSIONS_KEEP`/`VERSIONS_DAYS`): รหัสเวอร์ชันใช้ได้กับไฟล์ของมันเท่านั้น, กู้คืนจะเก็บเนื้อหาปัจจุบันเป็นเวอร์ชันก่อน (409 `files.changed-elsewhere` ถ้า `expectedMtime` ล้าสมัย) ถ้าโควตาเต็มจะลบเวอร์ชันเก่าสุดของไฟล์นั้นก่อน ยังไม่พอก็ปฏิเสธ `quota.exceeded` |
 | `GET/POST/DELETE /api/me/favorites` (`{ space, path }`, สูงสุด 200) · `GET /api/me/recent` (50 ล่าสุด) | รายการโปรดและไฟล์ที่เปิดล่าสุดของผู้ใช้ (ผู้เยี่ยมชมได้ 401) ตรวจสิทธิ์ `read` และการมีอยู่ของไฟล์ทุกครั้งที่อ่าน |
 | `POST /api/s/:token/upload` → `PUT /api/s/:token/upload/:id/:n` → `POST /api/s/:token/upload/:id/complete` · `DELETE /api/s/:token/upload/:id` | ผู้เยี่ยมชมส่งไฟล์ผ่านลิงก์รับไฟล์ (ดู ลิงก์รับไฟล์) |
-| `POST /api/upload` → `PUT /api/upload/:id/:n` → `POST /api/upload/:id/complete` | อัปโหลดแบบแบ่งชิ้น |
+| `POST /api/upload` → `PUT /api/upload/:id/:n` → `POST /api/upload/:id/complete` | อัปโหลดแบบแบ่งชิ้น เก็บ space ที่ประกาศไว้ และตรวจสิทธิ์ `upload` ในที่นั้นใหม่ทุกชิ้นและตอนจบ (ยกเลิกสิทธิ์/แชร์ระหว่างอัปโหลด = 403 และงานถูกทิ้ง คืนโควตา) |
 | `/api/admin/*` | ผู้ใช้, ภาพรวม, ประวัติ, ลิงก์ที่แชร์ (admin และ manager ตามขอบเขตในหัวข้อ สิทธิ์) · ถังขยะ, ตั้งค่า, โลโก้, `folders` (เฉพาะ admin) |
 | `GET/POST /api/admin/backups` · `PUT /api/admin/backups/settings` · `GET /api/admin/backups/estimate` · `GET /api/admin/backups/:name/download` · `DELETE /api/admin/backups/:name` · `POST /api/admin/backups/restore` | สำรองข้อมูลระบบ: รายการ, ตั้งค่า (บีบอัด ตารางเวลา จำนวนที่เก็บ รวมไฟล์), ประมาณขนาด, สำรองทันที, ดาวน์โหลด, ลบ, กู้คืน (ต้องใส่รหัสผ่าน `{ name, password }`) (เฉพาะ admin) |
 | `GET /api/admin/logs` (`level=info\|warn\|error`, `q`, `page`, `pageSize`) | log ของระบบ ใหม่สุดก่อน อ่านต่อไปยังไฟล์ที่หมุนแล้ว ตอบ `{ items, hasMore }` (เฉพาะ admin) |

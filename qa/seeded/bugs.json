@@ -1022,8 +1022,8 @@
     "patches": [
       {
         "file": "src/notify.ts",
-        "find": "if (ev.email && s?.email?.verified)",
-        "replace": "if (ev.email && s?.email)"
+        "find": "if (ev.email && s?.email?.verified && !quiet('email'))",
+        "replace": "if (ev.email && s?.email && !quiet('email'))"
       }
     ]
   },
@@ -1037,7 +1037,7 @@
     "patches": [
       {
         "file": "src/notify.ts",
-        "find": "if (times.length >= MAILS_PER_HOUR)",
+        "find": "if (recent.length >= max)",
         "replace": "if (false)"
       }
     ]
@@ -1324,6 +1324,56 @@
         "file": "src/zip.ts",
         "find": "const level = options.level ?? DEFLATE_LEVEL",
         "replace": "const level = DEFLATE_LEVEL"
+      }
+    ]
+  },
+  {
+    "id": "trash-passes-to-same-name",
+    "difficulty": "medium",
+    "category": "authz",
+    "severity": "low",
+    "tests": "tests/security-110.test.ts",
+    "description": "deleting an account leaves its trash entries under its name, so a new account of the same name gets them",
+    "patches": [
+      {
+        "file": "src/routes/admin.ts",
+        "find": "tombstoneTrashOf(target.username)",
+        "replace": "void target.username"
+      }
+    ]
+  },
+  {
+    "id": "recipient-purges-owner-trash",
+    "difficulty": "medium",
+    "category": "authz",
+    "severity": "low",
+    "tests": "tests/security-110.test.ts",
+    "description": "someone with edit on a shared folder can destroy for good what they deleted from it (single and empty)",
+    "patches": [
+      {
+        "file": "src/routes/trash.ts",
+        "find": "if (!purgeable(u, meta, spaces)) throw forbidden('trash.cannot-purge')",
+        "replace": "void spaces"
+      },
+      {
+        "file": "src/routes/trash.ts",
+        "find": "visible(u, m, spaces) && purgeable(u, m, spaces)",
+        "replace": "visible(u, m, spaces)"
+      }
+    ]
+  },
+  {
+    "id": "upload-outlives-grant",
+    "difficulty": "medium",
+    "category": "authz",
+    "severity": "low",
+    "tests": "tests/security-110.test.ts",
+    "description": "an upload that was announced keeps working after the right to upload was taken away",
+    "patches": [
+      {
+        "file": "src/uploads.ts",
+        "find": "if (!meta.space) return",
+        "replace": "return"
       }
     ]
   }

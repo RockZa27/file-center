@@ -12,21 +12,28 @@ import {
 } from '../grants'
 
 /** letters needed before a search for a user starts, and the most names one answer holds */
-const LOOKUP_MIN = 2
+const LOOKUP_MIN = 3
 const LOOKUP_MAX = 10
 /** a light limit: this many searches per user per minute (a search box sends one per pause in typing) */
-const LOOKUP_PER_MINUTE = 40
-const lookups = new Map<string, { start: number; count: number }>()
+const LOOKUP_PER_MINUTE = 20
+/** giving a folder to a name tells whether the name exists: that many tries per user per minute, so it is no free search */
+const GIVE_PER_MINUTE = 30
 
-function lookupAllowed(username: string): number {
-  const now = Date.now()
-  const key = username.toLowerCase()
-  if (lookups.size > 5000) for (const [k, v] of lookups) if (now - v.start >= 60_000) lookups.delete(k)
-  let e = lookups.get(key)
-  if (!e || now - e.start >= 60_000) { e = { start: now, count: 0 }; lookups.set(key, e) }
-  e.count++
-  return e.count > LOOKUP_PER_MINUTE ? Math.max(1, Math.ceil((e.start + 60_000 - now) / 1000)) : 0
+/** `max` calls per minute and user; 0 when this one may go on, else the seconds to wait */
+function minuteLimit(max: number) {
+  const seen = new Map<string, { start: number; count: number }>()
+  return (username: string): number => {
+    const now = Date.now()
+    const key = username.toLowerCase()
+    if (seen.size > 5000) for (const [k, v] of seen) if (now - v.start >= 60_000) seen.delete(k)
+    let e = seen.get(key)
+    if (!e || now - e.start >= 60_000) { e = { start: now, count: 0 }; seen.set(key, e) }
+    e.count++
+    return e.count > max ? Math.max(1, Math.ceil((e.start + 60_000 - now) / 1000)) : 0
+  }
 }
+const lookupAllowed = minuteLimit(LOOKUP_PER_MINUTE)
+const giveAllowed = minuteLimit(GIVE_PER_MINUTE)
 
 const permsT = t.Union([t.Literal('view'), t.Literal('edit')])
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
@@ -72,8 +79,10 @@ export const grantRoutes = new Elysia({ prefix: '/api' })
     if (wait) throw new HttpError(429, 'grants.lookup-rate', { seconds: wait })
     const q = query.q.trim().toLowerCase()
     if ([...q].length < LOOKUP_MIN) throw bad('grants.query-short', { min: LOOKUP_MIN })
+    const staff = u.role === 'admin' || u.role === 'manager'
     const users = allUsers()
-      .filter(x => !same(x.username, u.username) && (x.username.toLowerCase().includes(q) || x.name.toLowerCase().includes(q)))
+      // staff are not listed to plain users (the list of who runs the server); the exact name still works in POST /grants
+      .filter(x => !same(x.username, u.username) && (staff || x.role === 'user') && (x.username.toLowerCase().includes(q) || x.name.toLowerCase().includes(q)))
       .sort((a, b) => a.username.localeCompare(b.username))
       .slice(0, LOOKUP_MAX)
       .map(x => ({ username: x.username, name: x.name }))
@@ -86,6 +95,8 @@ export const grantRoutes = new Elysia({ prefix: '/api' })
     // a folder of the caller's own home only: not a staff view, not a folder somebody shared with them
     if (a.space !== 'home') throw forbidden()
     const owner = requireUser({ user, ip })
+    const wait = giveAllowed(owner.username)
+    if (wait) throw new HttpError(429, 'grants.create-rate', { seconds: wait })
     const rel = normRel(body.path)
     if (rel === '/') throw bad('grants.folder-only')
     const abs = resolveIn(a.root, rel)

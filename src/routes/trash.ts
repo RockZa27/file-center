@@ -44,6 +44,16 @@ function visible(user: User, meta: TrashMeta, spaces: Access[]): boolean {
   return !!locate(spaces, join(config.storageDir, normRel(meta.originalPath)))
 }
 
+/**
+ * who may remove an entry for good: its owner; and, for what lay outside every home (the public folder), whoever deleted
+ * it. Someone who deleted it from a folder shared with them may undo that (restore) but not destroy it.
+ */
+function purgeable(user: User, meta: TrashMeta, spaces: Access[]): boolean {
+  const owner = trashOwner(meta)
+  if (owner) return same(owner, user.username)
+  return visible(user, meta, spaces)
+}
+
 /** the entry, or the same 404 as an unknown id */
 function mine(user: User, id: unknown, spaces: Access[]): TrashMeta {
   const meta = readTrash(id)
@@ -90,7 +100,9 @@ export const trashRoutes = new Elysia({ prefix: '/api/me' })
 
   .delete('/trash/:id', ({ user, ip, params }) => {
     const u = requireUser({ user, ip })
-    const meta = mine(u, params.id, writableSpaces(u))
+    const spaces = writableSpaces(u)
+    const meta = mine(u, params.id, spaces)
+    if (!purgeable(u, meta, spaces)) throw forbidden('trash.cannot-purge')
     purge(meta.id)
     audit({ user: u.username, ip, action: 'trash-delete-own', target: meta.originalPath })
     return { ok: true, removed: 1 }
@@ -99,7 +111,7 @@ export const trashRoutes = new Elysia({ prefix: '/api/me' })
   .delete('/trash', ({ user, ip }) => {
     const u = requireUser({ user, ip })
     const spaces = writableSpaces(u)
-    const own = listTrash().filter(m => visible(u, m, spaces))
+    const own = listTrash().filter(m => visible(u, m, spaces) && purgeable(u, m, spaces))
     for (const m of own) purge(m.id)
     audit({ user: u.username, ip, action: 'trash-delete-own', detail: `${own.length} รายการ` })
     return { ok: true, removed: own.length }
