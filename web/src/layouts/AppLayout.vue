@@ -24,6 +24,7 @@
         </n-button>
         <div class="title">{{ pageTitle }}</div>
         <div class="right">
+          <notification-bell @settings="openProfile('notify')" />
           <preference-controls />
           <n-dropdown trigger="click" :options="userOptions" @select="onSelect">
             <button type="button" class="user-btn">
@@ -35,7 +36,7 @@
       </header>
       <main><router-view :key="viewKey" /></main>
     </div>
-    <profile-modal v-model:show="profileOpen" />
+    <profile-modal v-model:show="profileOpen" :open-tab="profileTab" />
   </div>
 </template>
 
@@ -50,6 +51,7 @@ import {
 } from '@vicons/ionicons5'
 import { api } from '../api'
 import AppLogo from '../components/AppLogo.vue'
+import NotificationBell from '../components/NotificationBell.vue'
 import PreferenceControls from '../components/PreferenceControls.vue'
 import ProfileModal from '../components/ProfileModal.vue'
 import { useAppStore } from '../store'
@@ -63,6 +65,8 @@ const router = useRouter()
 
 const drawer = ref(false)
 const profileOpen = ref(false)
+const profileTab = ref('password')
+function openProfile(tab = 'password') { profileTab.value = tab; profileOpen.value = true }
 const warnings = ref([])
 let timer = null
 
@@ -110,7 +114,7 @@ const userOptions = computed(() => [
 ])
 
 async function onSelect(key) {
-  if (key === 'profile') profileOpen.value = true
+  if (key === 'profile') openProfile()
   if (key === 'logout') {
     await app.logout()
     router.push({ name: app.publicAvailable ? 'public' : 'login' })

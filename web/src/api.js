@@ -174,6 +174,20 @@ export const api = {
   backupDelete: name => call('DELETE', `/api/admin/backups/${encodeURIComponent(name)}`),
   backupRestore: (name, password) => post('/api/admin/backups/restore', { name, password }),
   backupUrl: name => `/api/admin/backups/${encodeURIComponent(name)}/download`,
+  backupEstimate: () => get('/api/admin/backups/estimate'),
+  /** body: any of compression, schedule, keep, includeFiles (null = back to the default) and password; answers the new settings */
+  backupSettings: body => call('PUT', '/api/admin/backups/settings', body),
+
+  // the bell, e-mail and LINE of the signed-in user
+  notifications: unreadOnly => get('/api/me/notifications', unreadOnly ? { unreadOnly: 'true' } : undefined),
+  notificationsRead: ids => post('/api/me/notifications/read', ids ? { ids } : {}),
+  notificationDelete: id => call('DELETE', `/api/me/notifications/${encodeURIComponent(id)}`),
+  notifyPrefs: () => get('/api/me/notify-prefs'),
+  saveNotifyPrefs: body => call('PUT', '/api/me/notify-prefs', body),
+  setEmail: address => call('PUT', '/api/me/email', { address }),
+  removeEmail: () => call('DELETE', '/api/me/email'),
+  lineLink: () => post('/api/me/line/link'),
+  lineUnlink: () => call('DELETE', '/api/me/line'),
 
   /** { space, path, days, password?, maxDownloads? } -> { share, token, url }: the token is told this once only */
   createShare: body => post('/api/shares', body),
