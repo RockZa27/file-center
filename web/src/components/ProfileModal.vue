@@ -25,6 +25,9 @@
         <!-- made when the tab opens (not before), so the lists are fresh each time -->
         <security-panel v-if="show" @lock="v => (locked = v)" @signedout="signedOut" />
       </n-tab-pane>
+      <n-tab-pane v-if="!app.user?.mustChangePassword" name="notify" :tab="t('profile.notifyTab')">
+        <notify-panel v-if="show && tab === 'notify'" />
+      </n-tab-pane>
     </n-tabs>
     <template v-if="tab === 'password'" #footer>
       <div class="foot">
@@ -44,9 +47,10 @@ import { api } from '../api'
 import { useFeedback, useRoleLabel } from '../composables'
 import { useAppStore } from '../store'
 import PasswordRules from './PasswordRules.vue'
+import NotifyPanel from './NotifyPanel.vue'
 import SecurityPanel from './SecurityPanel.vue'
 
-const props = defineProps({ show: Boolean })
+const props = defineProps({ show: Boolean, /** the tab to open on: 'password' (default), 'security' or 'notify' */ openTab: { type: String, default: 'password' } })
 const emit = defineEmits(['update:show'])
 const { t } = useI18n()
 const app = useAppStore()
@@ -69,7 +73,7 @@ const mismatch = computed(() => form.again && form.again !== form.next)
 // the length and username hints are shown live, but the server judges the password (its common-password list too)
 const valid = computed(() => form.current && form.next && form.next === form.again)
 
-watch(() => props.show, v => { if (v) { Object.assign(form, { current: '', next: '', again: '' }); tab.value = 'password'; locked.value = false } })
+watch(() => props.show, v => { if (v) { Object.assign(form, { current: '', next: '', again: '' }); tab.value = app.user?.mustChangePassword ? 'password' : props.openTab; locked.value = false } })
 
 async function save() {
   if (!valid.value || busy.value) return

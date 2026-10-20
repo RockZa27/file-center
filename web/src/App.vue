@@ -12,6 +12,7 @@
             </n-result>
           </div>
           <router-view v-else />
+          <url-notice />
         </n-message-provider>
       </n-dialog-provider>
     </n-loading-bar-provider>
@@ -25,6 +26,7 @@ import {
   NButton, NConfigProvider, NDialogProvider, NGlobalStyle, NLoadingBarProvider, NMessageProvider, NResult,
   darkTheme, dateEnUS, dateThTH, enUS, thTH, useOsTheme,
 } from 'naive-ui'
+import UrlNotice from './components/UrlNotice.vue'
 import { useAppStore } from './store'
 import { shade } from './utils'
 
