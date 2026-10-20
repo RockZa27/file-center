@@ -602,6 +602,44 @@ admin กำหนดโควตาให้ผู้ใช้แต่ละ�
   ลิงก์ที่ไม่ได้กำหนดข้อจำกัดใช้ค่าเริ่มต้น `UPLOAD_REQUEST_MAX_FILE` / `UPLOAD_REQUEST_MAX_TOTAL` ลิงก์ในพื้นที่ public หรือของผู้ใช้ที่ไม่มีโควตา (รวมผู้ดูแล) นับกับโควตารายวันของผู้เยี่ยมชม (`GUEST_UPLOAD_DAILY_BYTES`) เหมือนการอัปโหลดแบบไม่ล็อกอิน
   งานที่ประกาศแล้วแต่ไม่มีชิ้นใหม่เกิน `UPLOAD_REQUEST_IDLE_MINUTES` ถูกลบและคืนที่ว่างของลิงก์ ประวัติการใช้งานบันทึก `share-upload` (เจ้าของ รหัสลิงก์ ชื่อไฟล์ ขนาด) ลิงก์เก็บแค่แฮชของ cookie ผู้ส่ง ไม่เก็บตัว cookie
 
+## ถังขยะของผู้ใช้เอง
+
+การลบยังย้ายไปถังขยะกลางเหมือนเดิม (admin ดูและกู้คืนได้ที่ `/api/admin/trash`) แต่แต่ละรายการจดเพิ่ม `owner` (ผู้ใช้ที่โฟลเดอร์ของเขาเก็บรายการนั้นอยู่; `null` = โฟลเดอร์สาธารณะหรือที่อื่น) และ `space` (`home` / `public` / `other`)
+รายการเก่าที่ไม่มีสองค่านี้หา `owner` จาก `originalPath` ตอนอ่าน ผู้ใช้เห็นได้เฉพาะ
+
+- รายการที่ **ตัวเองเป็นเจ้าของ** (ลบโดยใครก็ตาม รวมถึงผู้รับแชร์ที่ลบในโฟลเดอร์ที่ได้รับ) หรือ
+- รายการที่ **ตัวเองลบ** และที่เดิมยังอยู่ใน space ที่ตัวเองเขียนได้ตอนนี้ (home, โฟลเดอร์สาธารณะที่มี `write`, โฟลเดอร์ที่ได้รับสิทธิ์ `edit`)
+
+| | |
+|---|---|
+| `GET /api/me/trash` | `{ items: [{ id, name, type, size, deletedAt, deletedBy, owner, space, path, restorable }], retentionDays }` `space`/`path` คือที่ที่จะกู้คืนไป (ใน space ของผู้เรียก) เป็น `null` และ `restorable: false` ถ้ากลับไปที่เดิมไม่ได้แล้ว (เช่นโฟลเดอร์ home ถูกย้าย) |
+| `POST /api/me/trash/:id/restore` | กู้คืนไปที่เดิม ชื่อซ้ำได้ชื่อใหม่ (`name (1).ext`) เวอร์ชันเก่ากลับมาด้วย นับโควตาเหมือนการเขียนอื่น (507 `quota.exceeded`) ตอบ `{ ok, restoredTo, space, path }` ที่เดิมอยู่นอกพื้นที่ของผู้เรียก หรือไม่มี `write` ที่นั่น = 403 `trash.cannot-restore-here` |
+| `DELETE /api/me/trash/:id` | ลบถาวร (ไม่ต้องใส่รหัสผ่าน) ตอบ `{ ok, removed: 1 }` |
+| `DELETE /api/me/trash` | ล้างถังขยะของตัวเอง ตอบ `{ ok, removed }` |
+
+รายการที่ไม่ใช่ของผู้เรียกตอบ 404 เหมือนรหัสที่ไม่มีอยู่ ประวัติการใช้งานมี `trash-restore-own` และ `trash-delete-own`
+`POST /api/delete` ที่ส่ง `withTrash: true` ตอบ `trashed: [{ path, id }]` เพิ่ม (หน้าเว็บใช้ทำปุ่ม "เลิกลบ" ที่เรียก restore ทันที; ไม่ส่งก็ได้คำตอบเดิม `{ done, failed }`)
+
+## แชร์โฟลเดอร์ให้ผู้ใช้อื่นในระบบ (grants)
+
+เจ้าของโฟลเดอร์ (ต้องมีสิทธิ์ `share` ใน home) เลือกโฟลเดอร์ของตัวเองให้ผู้ใช้อีกคนเปิดได้ เก็บใน `DATA_DIR/grants.json` ผู้รับเปิดผ่าน space `grant:<id>` ที่ใช้กับ `/api/list`, `/api/download`, `/api/upload` ฯลฯ ได้เหมือน space อื่น โดยราก (`/`) คือโฟลเดอร์ที่แชร์
+
+- `perms: "view"` = `read`, `download`, `batchdownload`, `zip` · `"edit"` = view + `write`, `upload` ไม่มี `share` เสมอ (ผู้รับแชร์ต่อไม่ได้)
+- เปิดได้เฉพาะผู้รับ (`to`) คนที่สามและเจ้าของเองได้คำตอบเหมือนรหัสที่ไม่มีอยู่ (403) สิทธิ์ตรวจใหม่ทุกครั้งที่ใช้: ถ้าเจ้าของหรือผู้รับถูกลบ เจ้าของไม่มี `share` แล้ว โฟลเดอร์ home ของเจ้าของถูกย้าย หรือโฟลเดอร์หายไป ถูกย้ายออก กลายเป็นไฟล์หรือลิงก์ สิทธิ์นั้นใช้ไม่ได้ทันที (ลบผู้ใช้ลบสิทธิ์ที่ให้และได้รับออกจากไฟล์ด้วย)
+- ที่ที่ผู้รับเขียนนับโควตาของ **เจ้าของ** ไม่ใช่ของผู้รับ ของที่ผู้รับลบเข้าถังขยะของเจ้าของ (ผู้รับกู้คืนได้เองตราบที่ยังมีสิทธิ์ `edit`)
+- การเปิดดูโฟลเดอร์ของผู้รับแชร์ลงประวัติ `browse` (ครั้งเดียวต่อนาทีต่อโฟลเดอร์) ส่วนดาวน์โหลด/เปิดอ่านลงประวัติพร้อม `detail` = space
+
+| | |
+|---|---|
+| `POST /api/grants` `{ space: "home", path, to, perms }` | ให้สิทธิ์ (ต้องมี `share` ที่ home; `path` เป็นโฟลเดอร์จริงใน home ไม่ใช่ `/` ไม่ใช่ลิงก์) ตอบ `{ ok, created, grant }` ซ้ำ (เจ้าของ+โฟลเดอร์+ผู้รับ เดียวกัน) = แก้ `perms` (`created: false`) · 400 `grants.to-self` / `grants.folder-only` / `grants.too-many` · 404 `admin.user-not-found` / `files.folder-not-found` |
+| `GET /api/grants/mine` | `{ items: [{ id, path, name, to, toName, perms, createdAt, active }] }` สิทธิ์ที่ฉันให้ (`path` สัมพันธ์กับ home; `active: false` = ใช้ไม่ได้แล้ว ควรให้ลบ) |
+| `GET /api/grants/to-me` | `{ items: [{ id, space, name, owner, ownerName, perms, createdAt }] }` โฟลเดอร์ที่ได้รับและใช้ได้อยู่ (ไม่มีพาธของเจ้าของ) |
+| `PATCH /api/grants/:id` `{ perms }` | เจ้าของเท่านั้น (คนอื่น 404) |
+| `DELETE /api/grants/:id` | เจ้าของยกเลิก หรือผู้รับออกจากการแชร์ (คนอื่น 404) |
+| `GET /api/users/lookup?q=` | เลือกผู้รับ: ต้องเข้าสู่ระบบและมี `share` (admin ได้) `q` อย่างน้อย 2 ตัวอักษร (400 `grants.query-short`) ค้นจากชื่อผู้ใช้และชื่อที่แสดง ตอบ `{ users: [{ username, name }] }` ไม่เกิน 10 คน ไม่รวมตัวเอง ไม่มีข้อมูลอื่น จำกัด 40 ครั้งต่อนาทีต่อคน (429 `grants.lookup-rate`) |
+
+ประวัติการใช้งานมี `grant-create`, `grant-update`, `grant-delete` ในโค้ด `onGrantCreated(grant)` ใน `src/grants.ts` เรียกทุกครั้งที่สร้างสิทธิ์ใหม่ (ไม่รวมการแก้) โมดูลอื่น (เช่นการแจ้งเตือน) เพิ่มฟังก์ชันใน `grantCreatedListeners` เพื่อรับรู้
+
 ## ค้นหาไฟล์
 
 `GET /api/search?space=home&q=report` หาจากชื่อไฟล์/โฟลเดอร์ (ตัวพิมพ์เล็กใหญ่ไม่ต่างกัน) ใต้ `path` ที่ระบุ เฉพาะภายในพื้นที่ของผู้เรียกที่มีสิทธิ์ `read`
@@ -752,6 +790,8 @@ tests/perf.test.ts  การนับไฟล์ 50,000 ไฟล์ การ
 | `GET /api/download` (รองรับ `Range`) · `POST /api/batch` + `GET /api/batch/:token` | ดาวน์โหลด |
 | `POST/GET /api/shares` · `DELETE /api/shares/:id` · `GET /api/s/:token` · `POST /api/s/:token/unlock` · `GET /api/s/:token/download` | ลิงก์แชร์ (ดู ลิงก์แชร์) |
 | `GET /api/me/usage` | พื้นที่ที่ใช้และโควตาของฉัน (ดู โควตาพื้นที่ต่อผู้ใช้) |
+| `GET /api/me/trash` · `POST /api/me/trash/:id/restore` · `DELETE /api/me/trash/:id` · `DELETE /api/me/trash` | ถังขยะของฉัน (ดู ถังขยะของผู้ใช้เอง) |
+| `POST /api/grants` · `GET /api/grants/mine\|to-me` · `PATCH/DELETE /api/grants/:id` · `GET /api/users/lookup?q=` | แชร์โฟลเดอร์ให้ผู้ใช้อื่น space `grant:<id>` (ดู แชร์โฟลเดอร์ให้ผู้ใช้อื่นในระบบ) |
 | `GET /api/versions?space&path` (`read`) · `GET /api/versions/:id/download?space&path` (`download`) · `POST /api/versions/:id/restore { space, path, expectedMtime? }` (`write`) · `DELETE /api/versions/:id?space&path` (`write`) | เวอร์ชันเก่าของไฟล์ (เก็บทุกครั้งที่บันทึกทับ ดู `VERSIONS_KEEP`/`VERSIONS_DAYS`): รหัสเวอร์ชันใช้ได้กับไฟล์ของมันเท่านั้น, กู้คืนจะเก็บเนื้อหาปัจจุบันเป็นเวอร์ชันก่อน (409 `files.changed-elsewhere` ถ้า `expectedMtime` ล้าสมัย) ถ้าโควตาเต็มจะลบเวอร์ชันเก่าสุดของไฟล์นั้นก่อน ยังไม่พอก็ปฏิเสธ `quota.exceeded` |
 | `GET/POST/DELETE /api/me/favorites` (`{ space, path }`, สูงสุด 200) · `GET /api/me/recent` (50 ล่าสุด) | รายการโปรดและไฟล์ที่เปิดล่าสุดของผู้ใช้ (ผู้เยี่ยมชมได้ 401) ตรวจสิทธิ์ `read` และการมีอยู่ของไฟล์ทุกครั้งที่อ่าน |
 | `POST /api/s/:token/upload` → `PUT /api/s/:token/upload/:id/:n` → `POST /api/s/:token/upload/:id/complete` · `DELETE /api/s/:token/upload/:id` | ผู้เยี่ยมชมส่งไฟล์ผ่านลิงก์รับไฟล์ (ดู ลิงก์รับไฟล์) |

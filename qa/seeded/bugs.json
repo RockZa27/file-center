@@ -951,5 +951,110 @@
         "replace": "if (false) await confirmPassword("
       }
     ]
+  },
+  {
+    "id": "own-trash-lists-others",
+    "difficulty": "easy",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/own-trash.test.ts",
+    "description": "a user's own trash lists (and offers to restore or delete) every user's deleted items",
+    "patches": [
+      {
+        "file": "src/routes/trash.ts",
+        "find": "if (same(trashOwner(meta), user.username)) return true",
+        "replace": "if (true) return true"
+      }
+    ]
+  },
+  {
+    "id": "own-trash-restore-others",
+    "difficulty": "medium",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/own-trash.test.ts",
+    "description": "a user can restore another user's trashed item by its id",
+    "patches": [
+      {
+        "file": "src/routes/trash.ts",
+        "find": "if (!visible(u, meta, spaces)) throw notFound()",
+        "replace": "if (false) throw notFound()"
+      }
+    ]
+  },
+  {
+    "id": "own-trash-restore-outside-root",
+    "difficulty": "medium",
+    "category": "path-traversal",
+    "severity": "high",
+    "tests": "tests/own-trash.test.ts",
+    "description": "an item whose original place is outside the caller's folders (the home moved, no write right on public) is restored there anyway",
+    "patches": [
+      {
+        "file": "src/routes/trash.ts",
+        "find": "if (!at) throw forbidden('trash.cannot-restore-here')",
+        "replace": "if (!at) return"
+      }
+    ]
+  },
+  {
+    "id": "grant-other-user-opens",
+    "difficulty": "easy",
+    "category": "authz",
+    "severity": "critical",
+    "tests": "tests/grants.test.ts",
+    "description": "anyone who knows the id of a grant can open the shared folder, not only the user it was given to",
+    "patches": [
+      {
+        "file": "src/grants.ts",
+        "find": "if (!user || !g || !same(g.to, user.username)) return null",
+        "replace": "if (!user || !g) return null"
+      }
+    ]
+  },
+  {
+    "id": "grant-view-can-write",
+    "difficulty": "easy",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/grants.test.ts",
+    "description": "a view-only grant also lets the recipient write and upload",
+    "patches": [
+      {
+        "file": "src/grants.ts",
+        "find": "  view: ['read', 'download', 'batchdownload', 'zip'],",
+        "replace": "  view: ['read', 'download', 'batchdownload', 'zip', 'upload', 'write'],"
+      }
+    ]
+  },
+  {
+    "id": "grant-upload-not-counted",
+    "difficulty": "subtle",
+    "category": "logic",
+    "severity": "medium",
+    "tests": "tests/grants.test.ts",
+    "description": "what a recipient uploads into a shared folder counts against nobody's quota instead of the owner's",
+    "patches": [
+      {
+        "file": "src/quota.ts",
+        "find": "return a.quotaOwner ?? null",
+        "replace": "return null"
+      }
+    ]
+  },
+  {
+    "id": "grant-survives-owner-delete",
+    "difficulty": "subtle",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/grants.test.ts",
+    "description": "deleting a user leaves the grants they gave and received in grants.json, so a new account by the same name gets them back",
+    "patches": [
+      {
+        "file": "src/routes/admin.ts",
+        "find": "    removeGrantsOf(target.username)\n",
+        "replace": ""
+      }
+    ]
   }
 ]

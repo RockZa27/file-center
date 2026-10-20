@@ -4,6 +4,7 @@ import { existsSync, lstatSync, mkdirSync, rmSync, statSync, writeFileSync } fro
 import { basename, dirname, extname, join } from 'node:path'
 import { Elysia, t } from 'elysia'
 import { audit, auditOnce } from '../audit'
+import { isForeignSpace } from '../auth'
 import { config, paths } from '../config'
 import { context, need, requireUser } from '../context'
 import {
@@ -13,7 +14,7 @@ import {
 import { log } from '../logger'
 import { type Lang, langOf, type MessageCode, text } from '../messages'
 import { recordRecent, moveState } from '../favorites'
-import { exceeded, holdNow, markStale, ownerOfPath, ready, roomLeft, usage } from '../quota'
+import { exceeded, holdNow, markStale, markStaleFor, ownerOfPath, quotaUserOf, ready, roomLeft, usage } from '../quota'
 import { indexTouched, parseFilters, searchEntries } from '../search-index'
 import { moveToTrash } from '../trash'
 import { moveVersions, reserveVersion } from '../versions'
@@ -107,11 +108,11 @@ type Batch = { owner: string; space: string; root: string; dir: string; names: s
 const batches = new Map<string, Batch>()
 
 /** set when the space is a staff member's read-only view of someone's home (user:<name>): the audit names whose files */
-const viewDetail = (a: { space: string }) => (a.space.startsWith('user:') ? { detail: a.space } : {})
+const viewDetail = (a: { space: string }) => (isForeignSpace(a.space) ? { detail: a.space } : {})
 
 /** looking into a managed user's home leaves a line (once a minute per folder); a normal space does not */
 function browsed(user: { username: string } | null, ip: string, a: { space: string }, abs: string) {
-  if (!user || !a.space.startsWith('user:')) return
+  if (!user || !isForeignSpace(a.space)) return
   const target = storagePath(abs)
   auditOnce(`browse|${user.username}|${a.space}|${target}`, { user: user.username, ip, action: 'browse', target, detail: a.space })
 }
@@ -194,14 +195,14 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     if (!st || !st.isFile()) throw notFound()
     if (st.size > MAX_TEXT) throw new HttpError(413, 'files.too-big-to-open')
     recordRecent(user, query.space, normRel(query.path))
-    if (a.space.startsWith('user:')) audit({ user: user!.username, ip, action: 'view', target: storagePath(abs), ...viewDetail(a) })
+    if (isForeignSpace(a.space)) audit({ user: user!.username, ip, action: 'view', target: storagePath(abs), ...viewDetail(a) })
     return { content: await Bun.file(abs).text(), mtime: Math.round(st.mtimeMs) }
   }, { query: spaceQ })
 
   .put('/content', async ({ user, ip, body }) => {
     const a = need({ user, ip }, body.space, 'write')
     // the count is awaited first: from the check of the version to the write there is no await
-    const q = a.space === 'home' ? user : null
+    const q = quotaUserOf(a, user)
     await ready(q)
     const rel = normRel(body.path)
     const abs = resolveIn(a.root, rel)
@@ -268,13 +269,16 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
   .post('/delete', async ({ user, ip, body, request }) => {
     const a = need({ user, ip }, body.space, 'write')
     const failed: { path: string; error: string }[] = []
+    // the trash entry of each deleted item, so the page can offer "undo" (POST /api/me/trash/:id/restore); sent only on request, so older callers get the answer they always got
+    const trashed: { path: string; id: string }[] = []
     let done = 0
     for (const rel of items(body.items)) {
       try {
         const abs = resolveIn(a.root, rel)
         if (!existsSync(abs) && !lstatExists(abs)) throw notFound()
         guardSystemFolder(abs)
-        await moveToTrash(abs, user?.username ?? 'guest')
+        const entry = await moveToTrash(abs, user?.username ?? 'guest')
+        trashed.push({ path: rel, id: entry.id })
         done++
         audit({ user: user?.username ?? 'guest', ip, action: 'delete', target: storagePath(abs) })
       } catch (e) {
@@ -282,14 +286,14 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
       }
     }
     // the trash is outside the home: the space is free again. An admin works in every home.
-    if (done && a.space === 'home') markStale(user?.role === 'admin' ? undefined : user?.username)
-    return { done, failed }
-  }, { body: t.Object({ space: t.String(), items: itemList }) })
+    if (done) markStaleFor(a, user)
+    return body.withTrash ? { done, failed, trashed } : { done, failed }
+  }, { body: t.Object({ space: t.String(), items: itemList, withTrash: t.Optional(t.Boolean()) }) })
 
   // ───────────── zip / unzip ─────────────
   .post('/zip', async ({ user, ip, body }) => {
     const a = need({ user, ip }, body.space, 'zip', 'write')
-    const q = a.space === 'home' ? user : null
+    const q = quotaUserOf(a, user)
     await ready(q)
     const dirRel = normRel(body.path)
     const dir = resolveIn(a.root, dirRel)
@@ -319,7 +323,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
 
   .post('/unzip', async ({ user, ip, body }) => {
     const a = need({ user, ip }, body.space, 'zip', 'write')
-    const q = a.space === 'home' ? user : null
+    const q = quotaUserOf(a, user)
     await ready(q)
     const rel = normRel(body.path)
     const abs = resolveIn(a.root, rel)
@@ -359,7 +363,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     const range = request.headers.get('range')
     if (!range || range.startsWith('bytes=0-')) {
       // a staff member reading someone's files is always recorded, a preview included
-      if (query.inline !== '1' || a.space.startsWith('user:')) audit({ user: user?.username ?? 'guest', ip, action: 'download', target: storagePath(abs), ...viewDetail(a) })
+      if (query.inline !== '1' || isForeignSpace(a.space)) audit({ user: user?.username ?? 'guest', ip, action: 'download', target: storagePath(abs), ...viewDetail(a) })
       recordRecent(user, query.space, rel)
     }
     return fileResponse(abs, basename(abs), request, query.inline === '1')
@@ -387,7 +391,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     if (a.root !== b.root) throw new HttpError(403, 'files.download-forbidden')
     const dir = resolveIn(b.root, b.dir)
     const list = collectZipItems(dir, b.names)
-    audit({ user: b.owner, ip, action: 'download-zip', target: storagePath(dir), detail: `${b.names.length} รายการ${b.space.startsWith('user:') ? `, ${b.space}` : ''}` })
+    audit({ user: b.owner, ip, action: 'download-zip', target: storagePath(dir), detail: `${b.names.length} รายการ${isForeignSpace(b.space) ? `, ${b.space}` : ''}` })
     const name = b.names.length === 1 ? `${b.names[0]}.zip` : `${basename(b.dir === '/' ? 'files' : b.dir)}.zip`
     return new Response(zipStream(list), {
       headers: {
@@ -422,7 +426,7 @@ async function transfer(
   if (a.space.startsWith('user:')) throw forbidden()
   const d = cross ? need({ user, ip }, body.destSpace, 'write', 'upload') : a
   // a move inside one space does not change what a home holds; a copy (or a move into another space) adds the size
-  const q = d.space === 'home' ? user : null
+  const q = quotaUserOf(d, user)
   if (kind === 'copy' || cross) await ready(q)
   const destRel = normRel(body.dest)
   const destAbs = resolveIn(d.root, destRel)
@@ -472,7 +476,7 @@ async function transfer(
             markStale(q?.username)
             throw err
           }
-          if (a.space === 'home') markStale(user?.role === 'admin' ? undefined : user?.username)
+          markStaleFor(a, user)
         }
       }
       done++

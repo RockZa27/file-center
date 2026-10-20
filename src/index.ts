@@ -19,7 +19,9 @@ import { versionRoutes } from './routes/versions'
 import { logRoutes } from './routes/logs'
 import { officeRoutes } from './routes/office'
 import { sessionRoutes } from './routes/session'
+import { grantRoutes } from './routes/grants'
 import { shareRoutes } from './routes/shares'
+import { trashRoutes } from './routes/trash'
 import { updateRoutes } from './routes/update'
 import { uploadRoutes } from './routes/upload'
 import { startSearchIndex, stopSearchIndex } from './search-index'
@@ -205,6 +207,8 @@ export const app = new Elysia({ serve: { idleTimeout: 255, maxRequestBodySize: c
   .use(logRoutes)
   .use(fileRoutes)
   .use(meRoutes)
+  .use(trashRoutes)
+  .use(grantRoutes)
   .use(versionRoutes)
   .use(uploadRoutes)
   .use(shareRoutes)

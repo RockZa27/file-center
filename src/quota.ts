@@ -7,7 +7,7 @@
  * can not both pass on the last bytes. Whatever ends the write gives the reservation back: done, failed, cancelled
  * or cleaned up as stale.
  */
-import { accessFor, allUsers, type User } from './auth'
+import { accessFor, allUsers, type Access, type User } from './auth'
 import { bad, HttpError, treeStats, within } from './fsx'
 import { sizeText } from './messages'
 import { versionBytesUnder } from './versions'
@@ -176,4 +176,19 @@ export function holdNow(user: User | null | undefined, bytes: number): Hold {
     commit(delta = bytes) { if (!done) { done = true; commitBytes(user.username, bytes, delta) } },
     release() { if (!done) { done = true; releaseBytes(user.username, bytes) } },
   }
+}
+
+/**
+ * Whose quota what is written into this space counts against: the caller's in their home, the owner's in a folder
+ * shared with the caller (a grant), nobody's elsewhere.
+ */
+export function quotaUserOf(a: Access, user: User | null): User | null {
+  if (a.space === 'home') return user
+  return a.quotaOwner ?? null
+}
+
+/** something left this space (deleted, moved away): the count of whose home it was is out of date. An admin works in all homes. */
+export function markStaleFor(a: Access, user: User | null) {
+  if (a.space === 'home') markStale(user?.role === 'admin' ? undefined : user?.username)
+  else if (a.quotaOwner) markStale(a.quotaOwner.username)
 }
