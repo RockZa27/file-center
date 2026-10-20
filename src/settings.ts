@@ -6,6 +6,20 @@ import { JsonStore } from './store'
 export const PERMISSIONS = ['read', 'write', 'upload', 'download', 'batchdownload', 'zip', 'share'] as const
 export type Perm = (typeof PERMISSIONS)[number]
 
+/** how the backup runs, saved from the backup page (backup.ts reads it; a missing key falls back to the BACKUP_* env values) */
+export type BackupPrefs = {
+  compression?: 'fast' | 'balanced' | 'smallest'
+  schedule?:
+    | { mode: 'off' }
+    | { mode: 'daily'; time: string }
+    | { mode: 'weekly'; days: number[]; time: string }
+    | { mode: 'interval'; hours: number }
+  keep?: number
+  includeFiles?: boolean
+  /** ISO time the schedule was last changed: a time slot before it is not run */
+  scheduleChangedAt?: string
+}
+
 export type Settings = {
   appName: string
   primaryColor: string
@@ -18,6 +32,7 @@ export type Settings = {
   /** what a visitor may do in the public folder */
   guestPermissions: Perm[]
   logo: string | null
+  backup: BackupPrefs
 }
 
 const defaults = (): Settings => ({
@@ -29,6 +44,7 @@ const defaults = (): Settings => ({
   publicEnabled: true,
   guestPermissions: ['read', 'download', 'batchdownload'],
   logo: null,
+  backup: {},
 })
 
 const store = new JsonStore<Settings>(paths.settings, defaults, { onCorrupt: 'fail' })

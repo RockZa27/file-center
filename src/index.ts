@@ -55,6 +55,16 @@ function housekeeping() {
     cleanStaging()
     pruneLoginAttempts()
     if (trash || uploads || versions) log.info('housekeeping', { trash, staleUploads: uploads, versions })
+  } catch (err) {
+    log.error('housekeeping-failed', err)
+  }
+}
+housekeeping()
+setInterval(housekeeping, 60 * 60 * 1000).unref()
+
+// every minute, so a schedule can name a time to the minute; the check reads one small file and does nothing most of the time
+function backupTick() {
+  try {
     // runs in the background; the result goes to backup-status.json, which the dashboard shows
     if (backupDue() && !backupRunning()) {
       runBackup().then(
@@ -63,11 +73,11 @@ function housekeeping() {
       )
     }
   } catch (err) {
-    log.error('housekeeping-failed', err)
+    log.error('backup-check-failed', err)
   }
 }
-housekeeping()
-setInterval(housekeeping, 60 * 60 * 1000).unref()
+backupTick()
+setInterval(backupTick, 60 * 1000).unref()
 
 // share links that ran out leave the store at start and once a day
 function cleanShares() {

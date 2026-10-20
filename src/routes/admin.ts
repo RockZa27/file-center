@@ -7,7 +7,7 @@ import {
   allUsers, canManage, checkPasswordStrength, cleanHomedir, cleanPerms, confirmPassword, defaultHome, destroyUserSessions,
   dropLoginTickets, findUser, hashPassword, homeIsTaken, isAdmin, isReservedUsername, listUserSessions, publicUser, saveUsers, USERNAME_RE,
 } from '../auth'
-import { statusIn } from '../backup'
+import { staleAfterMs, statusIn } from '../backup'
 import { config, paths } from '../config'
 import { context, manageable, requireAdmin, requireStaff } from '../context'
 import { bad, conflict, ensureDir, forbidden, HttpError, isDir, listDirAsync, normRel, notFound, resolveIn } from '../fsx'
@@ -259,7 +259,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     }
     if (!backup) warn('info', 'backup.never')
     else if (backup.status === 'failed') warn('critical', 'backup.last-failed')
-    else if (backup.lastSuccess && Date.now() - Date.parse(backup.lastSuccess) > 48 * 3600_000) warn('warning', 'backup.stale', { days: 2 })
+    else if (backup.lastSuccess && Date.now() - Date.parse(backup.lastSuccess) > staleAfterMs()) warn('warning', 'backup.stale', { days: Math.ceil(staleAfterMs() / 86400_000) })
     if (allUsers().some(u => u.mustChangePassword)) warn('warning', 'admin.default-password')
     const errors = errorsSince(Date.now() - 24 * 3600_000)
     if (errors) warn('warning', 'errors', { count: errors })
