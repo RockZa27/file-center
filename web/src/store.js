@@ -32,6 +32,8 @@ export const useAppStore = defineStore('app', {
     hasSpace: s => space => !!s.spaces[space],
     publicAvailable: s => !!s.spaces.public,
     // a share link needs `share` and `download` in the same space; visitors never make links
+    // a folder to another user needs `share` alone, in the personal folder
+    canGrant: s => !!s.user && !!s.spaces.home?.includes('share'),
     canShare: s => !!s.user && Object.values(s.spaces).some(p => p.includes('share') && (p.includes('download') || p.includes('upload'))),
   },
   actions: {

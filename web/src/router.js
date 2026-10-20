@@ -15,6 +15,9 @@ export const router = createRouter({
       children: [
         { path: 'files', name: 'files', component: () => import('./views/FilesView.vue') },
         { path: 'favorites', name: 'favorites', component: () => import('./views/FavoritesView.vue') },
+        { path: 'trash', name: 'my-trash', component: () => import('./views/MyTrashView.vue') },
+        // the list of folders other people share with the user; with an id, the folder itself (the server's notifications link to /with-me)
+        { path: 'with-me/:id?', name: 'with-me', component: () => import('./views/WithMeView.vue') },
         { path: 'shared', name: 'shared', component: () => import('./views/SharedView.vue') },
         { path: 'links', name: 'links', component: () => import('./views/SharesView.vue') },
         { path: 'admin', name: 'dashboard', component: () => import('./views/DashboardView.vue'), meta: { staff: true } },
@@ -41,5 +44,5 @@ router.beforeEach(to => {
   if (to.meta.admin && !app.isAdmin) return { name: 'files' }
   if (to.meta.staff && !app.isStaff) return { name: 'files' }
   if (to.name === 'shared' && !app.hasSpace('public')) return { name: 'files' }
-  if (to.name === 'links' && !app.canShare && !app.isStaff) return { name: 'files' }
+  if (to.name === 'links' && !app.canShare && !app.canGrant && !app.isStaff) return { name: 'files' }
 })

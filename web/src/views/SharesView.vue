@@ -1,8 +1,8 @@
 <template>
   <div class="page">
     <div class="page-header">
-      <div><h1>{{ t('nav.shareLinks') }}</h1><p>{{ t('share.subtitle') }}</p></div>
-      <div class="head-actions">
+      <div><h1>{{ t('nav.shareLinks') }}</h1><p>{{ tab === 'users' ? t('grants.usersSubtitle') : t('share.subtitle') }}</p></div>
+      <div v-if="tab === 'links'" class="head-actions">
         <label v-if="app.isStaff" class="all">
           <n-switch v-model:value="all" :disabled="loading" @update:value="load" />
           <span>{{ t('share.showAll') }}</span>
@@ -10,7 +10,13 @@
         <n-button :loading="loading" @click="load"><template #icon><n-icon :component="RefreshOutline" /></template>{{ t('common.refresh') }}</n-button>
       </div>
     </div>
-    <div class="surface">
+    <!-- links for people without an account, and folders shared with users: two lists, tabs only when the user may use both -->
+    <n-tabs v-if="showLinks && app.canGrant" v-model:value="tab" type="line" class="tabs">
+      <n-tab name="links">{{ t('grants.tabLinks') }}</n-tab>
+      <n-tab name="users">{{ t('grants.tabUsers') }}</n-tab>
+    </n-tabs>
+    <grants-given-panel v-if="tab === 'users'" />
+    <div v-show="tab === 'links'" class="surface">
       <n-data-table :columns="columns" :data="rows" :loading="loading" :bordered="false" :single-line="false"
         :scroll-x="narrow ? undefined : (all ? 1080 : 980)" table-layout="fixed" :row-key="r => r.id" :pagination="{ pageSize: 25 }"
       >
@@ -23,10 +29,11 @@
 <script setup>
 import { computed, h, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NButton, NDataTable, NEmpty, NIcon, NSwitch, NTag } from 'naive-ui'
+import { NButton, NDataTable, NEmpty, NIcon, NSwitch, NTab, NTabs, NTag } from 'naive-ui'
 import { CloseCircleOutline, CloudUploadOutline, CopyOutline, DownloadOutline, LockClosedOutline, OpenOutline, RefreshOutline } from '@vicons/ionicons5'
 import { api } from '../api'
 import FileIcon from '../components/FileIcon.vue'
+import GrantsGivenPanel from '../components/GrantsGivenPanel.vue'
 import { useFeedback, useNarrow } from '../composables'
 import { useAppStore } from '../store'
 import { formatBytes, formatDate, parentPath } from '../utils'
@@ -36,6 +43,9 @@ const app = useAppStore()
 const fb = useFeedback()
 const rows = ref([])
 const loading = ref(false)
+// a link needs `share` and `download` (or `upload`), a folder for a user only `share`: someone with the second alone sees that list only
+const showLinks = computed(() => app.canShare || app.isStaff)
+const tab = ref(showLinks.value ? 'links' : 'users')
 // administrators: everybody's links (with the owner) instead of their own
 const all = ref(false)
 
@@ -173,10 +183,11 @@ const columns = computed(() => (narrow.value
       { title: '', key: 'a', width: 290, align: 'right', fixed: 'right', render: actions },
     ]))
 
-onMounted(load)
+onMounted(() => { if (showLinks.value) load() })
 </script>
 
 <style scoped>
+.tabs { margin-bottom: 14px; }
 .head-actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .all { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
 :deep(.item-cell) { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }

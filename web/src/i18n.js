@@ -21,6 +21,7 @@ const th = {
     settings: 'ตั้งค่า', update: 'อัปเดตระบบ', backup: 'สำรองข้อมูล', logs: 'บันทึกระบบ', login: 'เข้าสู่ระบบ', logout: 'ออกจากระบบ', changePassword: 'เปลี่ยนรหัสผ่าน', account: 'บัญชีและความปลอดภัย',
     language: 'ภาษา', theme: 'ธีม', themeLight: 'โหมดสว่าง', themeDark: 'โหมดมืด', themeAuto: 'ตามระบบ',
     publicPage: 'หน้าสาธารณะ', publicFolder: 'โฟลเดอร์สาธารณะ', admin: 'ผู้ดูแลระบบ', shareLinks: 'ลิงก์ที่แชร์', favorites: 'รายการโปรด',
+    withMe: 'แชร์กับฉัน', myTrash: 'ถังขยะของฉัน', trashAll: 'ถังขยะทั้งระบบ',
   },
   login: {
     codeHelp: 'เปิดแอปยืนยันตัวตนบนมือถือ แล้วกรอกรหัส 6 หลัก', backupHelp: 'กรอกรหัสสำรองหนึ่งรหัส (ใช้ได้ครั้งเดียว)', code: 'รหัส 6 หลัก', backupCode: 'รหัสสำรอง',
@@ -49,7 +50,7 @@ const th = {
     selected: 'เลือกแล้ว {n} รายการ', clearSelection: 'ยกเลิกการเลือก', copyTo: 'คัดลอกไปที่...', moveTo: 'ย้ายไปที่...',
     copyHere: 'คัดลอกมาที่นี่', moveHere: 'ย้ายมาที่นี่', zip: 'บีบอัดเป็น zip', unzip: 'แตกไฟล์ zip',
     archiveName: 'ชื่อไฟล์ zip', unzipConfirm: 'แตกไฟล์ {name} ลงในโฟลเดอร์ใหม่ข้างไฟล์นี้?',
-    deleteConfirm: 'ลบ {n} รายการที่เลือก?', deleteToTrash: 'รายการจะถูกย้ายไปที่ถังขยะ ผู้ดูแลระบบกู้คืนได้ภายใน {days} วัน',
+    deleteConfirm: 'ลบ {n} รายการที่เลือก?', deleteToTrash: 'รายการจะถูกย้ายไปที่ถังขยะ กู้คืนได้ภายใน {days} วัน',
     newName: 'ชื่อใหม่', folderName: 'ชื่อโฟลเดอร์', fileName: 'ชื่อไฟล์', preview: 'ดูตัวอย่าง',
     viewList: 'แบบรายการ', viewGrid: 'แบบตาราง', batchReady: 'กำลังดาวน์โหลดไฟล์ zip', itemCount: '{n} รายการ',
     chooseDestination: 'เลือกโฟลเดอร์ปลายทาง', noSubfolders: 'ไม่มีโฟลเดอร์ย่อย', hiddenCount: 'ซ่อนไฟล์ที่ขึ้นต้นด้วยจุด {n} รายการ',
@@ -60,6 +61,11 @@ const th = {
     publicHint: 'ไฟล์ในโฟลเดอร์นี้ผู้เยี่ยมชมทุกคนเห็นและดาวน์โหลดได้ สิ่งที่คุณทำได้ในโฟลเดอร์นี้:',
     folderNotFound: 'ไม่พบโฟลเดอร์ {path} จึงกลับไปที่หน้าแรก',
     destSpace: 'ปลายทาง', addFavorite: 'เพิ่มในรายการโปรด', removeFavorite: 'เอาออกจากรายการโปรด',
+    deletedN: 'ลบ {n} รายการแล้ว', undo: 'เลิกทำ', undone: 'กู้คืน {n} รายการแล้ว',
+    movedTo: 'ย้าย {n} รายการไปที่ {folder} แล้ว', copiedTo: 'คัดลอก {n} รายการไปที่ {folder} แล้ว',
+    dropRefused: 'ย้ายโฟลเดอร์เข้าไปในตัวมันเองหรือในโฟลเดอร์ย่อยของมันไม่ได้', dropHint: 'ปล่อยเพื่อย้ายไปที่นี่ (กด Ctrl ค้างไว้เพื่อคัดลอก)',
+    clipCopy: 'คัดลอกไว้ {n} รายการ', clipCut: 'ตัดไว้ {n} รายการ', clipPaste: 'วางที่นี่', clipClear: 'ล้าง', clipTip: 'วางด้วย Ctrl+V ในโฟลเดอร์ที่ต้องการ',
+    shortcuts: 'คีย์ลัด',
   },
   // previous versions of a file (VersionsModal)
   versions: {
@@ -206,6 +212,39 @@ const th = {
     emptyConfirm: 'ลบถาวร {n} รายการในถังขยะ? ไม่สามารถกู้คืนได้อีก', none: 'ถังขยะว่างเปล่า', deletedBy: 'ลบโดย',
     deletedAt: 'ลบเมื่อ', left: 'เหลือเวลา', days: '{n} วัน', restore: 'กู้คืน', restored: 'กู้คืนไปที่ {path} แล้ว',
     purge: 'ลบถาวร', purgeConfirm: 'ลบ {name} ถาวร? ไม่สามารถกู้คืนได้อีก',
+  },
+  // the keyboard shortcuts of the file list (FileBrowser)
+  keys: {
+    title: 'คีย์ลัดในรายการไฟล์', hint: 'ใช้ได้เมื่อไม่ได้พิมพ์อยู่ในช่องกรอกข้อความ และไม่มีหน้าต่างเปิดอยู่',
+    open: 'เปิดไฟล์หรือโฟลเดอร์ที่เลือก', up: 'ขึ้นไปโฟลเดอร์ด้านบน', move: 'เลื่อนแถวขึ้น / ลง', extend: 'เลือกต่อเนื่องหลายแถว',
+    all: 'เลือกทั้งหมด', clear: 'ยกเลิกการเลือก (หรือล้างที่คัดลอกไว้)', rename: 'เปลี่ยนชื่อ', delete: 'ลบ',
+    copy: 'คัดลอก', cut: 'ตัด', paste: 'วางในโฟลเดอร์นี้', search: 'ค้นหา', help: 'แสดงหน้าต่างนี้',
+    drag: 'ลากแถวไปวางบนโฟลเดอร์หรือชื่อโฟลเดอร์ด้านบนเพื่อย้าย กด Ctrl (Cmd) ค้างไว้เพื่อคัดลอก',
+  },
+  // the user's own trash (MyTrashView)
+  myTrash: {
+    subtitle: 'สิ่งที่คุณลบจะอยู่ที่นี่ {days} วันก่อนถูกลบถาวร กู้คืนกลับตำแหน่งเดิมได้',
+    from: 'มาจาก', spaceHome: 'ไฟล์ของฉัน', spacePublic: 'โฟลเดอร์สาธารณะ', spaceGrant: 'โฟลเดอร์ที่แชร์', unknownPlace: 'ตำแหน่งเดิม',
+    cannotRestore: 'กู้คืนไม่ได้ เพราะคุณไม่มีสิทธิ์เขียนในตำแหน่งเดิมแล้ว หรือตำแหน่งนั้นถูกย้ายไป',
+  },
+  // sharing a folder with other users (GrantModal, WithMeView, the tab in SharesView)
+  grants: {
+    shareAction: 'แชร์กับผู้ใช้', title: 'แชร์โฟลเดอร์ {name} กับผู้ใช้',
+    hint: 'ผู้ใช้ที่คุณเลือกจะเห็นโฟลเดอร์นี้ในเมนู "แชร์กับฉัน" และไม่เห็นไฟล์อื่นของคุณ',
+    search: 'ค้นหาผู้ใช้', searchPlaceholder: 'พิมพ์ชื่อหรือชื่อผู้ใช้ (อย่างน้อย {n} ตัวอักษร)', searchShort: 'พิมพ์อย่างน้อย {n} ตัวอักษรเพื่อค้นหา',
+    noUsers: 'ไม่พบผู้ใช้', pickedTitle: 'แชร์ให้', clearPick: 'เลือกคนอื่น',
+    permView: 'ดูอย่างเดียว', permEdit: 'แก้ไขได้', permViewHelp: 'เปิด ดู และดาวน์โหลดไฟล์ได้', permEditHelp: 'เพิ่ม แก้ไข และลบไฟล์ได้ด้วย แต่แชร์ต่อไม่ได้',
+    share: 'แชร์', created: 'แชร์ให้ {name} แล้ว', updated: 'ปรับสิทธิ์ของ {name} แล้ว',
+    current: 'แชร์อยู่กับ', currentNone: 'ยังไม่ได้แชร์โฟลเดอร์นี้กับใคร',
+    remove: 'เลิกแชร์', removeTitle: 'เลิกแชร์กับ {name}?', removeBody: '{name} จะเปิดโฟลเดอร์ {folder} ไม่ได้อีก ไฟล์ในโฟลเดอร์ไม่ถูกลบ', removed: 'เลิกแชร์แล้ว',
+    withMeSubtitle: 'โฟลเดอร์ที่ผู้ใช้อื่นแชร์ให้คุณ', withMeNone: 'ยังไม่มีใครแชร์โฟลเดอร์ให้คุณ',
+    from: 'จาก {name}', open: 'เปิด', leave: 'ออกจากการแชร์', leaveTitle: 'ออกจากการแชร์นี้?',
+    leaveBody: 'คุณจะไม่เห็นโฟลเดอร์ {name} ของ {owner} อีก เจ้าของแชร์ให้ใหม่ได้', left: 'ออกจากการแชร์แล้ว',
+    back: 'กลับไปรายการแชร์กับฉัน', viewing: 'โฟลเดอร์ {name} ที่ {owner} แชร์ให้คุณ', notFound: 'ไม่พบการแชร์นี้ อาจถูกยกเลิกหรือโฟลเดอร์ถูกลบแล้ว',
+    sharedFolder: 'โฟลเดอร์ที่แชร์', since: 'แชร์เมื่อ {date}',
+    tabLinks: 'ลิงก์', tabUsers: 'แชร์กับผู้ใช้', usersSubtitle: 'โฟลเดอร์ที่คุณแชร์ให้ผู้ใช้อื่น เปลี่ยนสิทธิ์หรือเลิกแชร์ได้ที่นี่',
+    colFolder: 'โฟลเดอร์', colTo: 'แชร์ให้', colPerms: 'สิทธิ์', usersNone: 'ยังไม่ได้แชร์โฟลเดอร์กับผู้ใช้ เลือก "แชร์กับผู้ใช้" จากเมนูของโฟลเดอร์เพื่อเริ่ม',
+    inactive: 'ใช้ไม่ได้แล้ว', inactiveHint: 'โฟลเดอร์ถูกลบหรือย้าย หรือคุณไม่มีสิทธิ์แชร์แล้ว',
   },
   share: {
     action: 'แชร์ลิงก์', title: 'แชร์ลิงก์ให้คนที่ไม่มีบัญชี', expires: 'อายุของลิงก์', days: '{n} วัน',
@@ -360,6 +399,7 @@ const en = {
     settings: 'Settings', update: 'System update', backup: 'Backup', logs: 'System log', login: 'Sign in', logout: 'Sign out', changePassword: 'Change password', account: 'Account and security',
     language: 'Language', theme: 'Theme', themeLight: 'Light', themeDark: 'Dark', themeAuto: 'System',
     publicPage: 'Public page', publicFolder: 'Public folder', admin: 'Administrator', shareLinks: 'Shared links', favorites: 'Favorites',
+    withMe: 'Shared with me', myTrash: 'My trash', trashAll: 'All trash',
   },
   login: {
     codeHelp: 'Open the authenticator app on your phone and enter the 6-digit code', backupHelp: 'Enter one of your backup codes (each works once)', code: '6-digit code', backupCode: 'Backup code',
@@ -388,7 +428,7 @@ const en = {
     selected: '{n} selected', clearSelection: 'Clear selection', copyTo: 'Copy to...', moveTo: 'Move to...',
     copyHere: 'Copy here', moveHere: 'Move here', zip: 'Compress to zip', unzip: 'Extract zip',
     archiveName: 'Zip file name', unzipConfirm: 'Extract {name} into a new folder next to it?',
-    deleteConfirm: 'Delete {n} selected item(s)?', deleteToTrash: 'Items go to the trash; an administrator can restore them within {days} days.',
+    deleteConfirm: 'Delete {n} selected item(s)?', deleteToTrash: 'Items go to the trash; you can restore them within {days} days.',
     newName: 'New name', folderName: 'Folder name', fileName: 'File name', preview: 'Preview',
     viewList: 'List view', viewGrid: 'Grid view', batchReady: 'Downloading zip file', itemCount: '{n} items',
     chooseDestination: 'Choose destination folder', noSubfolders: 'No sub folders', hiddenCount: '{n} dot-files hidden',
@@ -399,6 +439,11 @@ const en = {
     publicHint: 'Everybody can see and download files in this folder. What you can do here:',
     folderNotFound: 'Folder not found: {path}. Showing the top folder instead.',
     destSpace: 'Destination', addFavorite: 'Add to favorites', removeFavorite: 'Remove from favorites',
+    deletedN: 'Deleted {n} item(s)', undo: 'Undo', undone: 'Restored {n} item(s)',
+    movedTo: 'Moved {n} item(s) to {folder}', copiedTo: 'Copied {n} item(s) to {folder}',
+    dropRefused: 'A folder cannot be moved into itself or into one of its sub folders', dropHint: 'Release to move here (hold Ctrl to copy)',
+    clipCopy: '{n} item(s) copied', clipCut: '{n} item(s) cut', clipPaste: 'Paste here', clipClear: 'Clear', clipTip: 'Paste with Ctrl+V in the folder you want',
+    shortcuts: 'Shortcuts',
   },
   // previous versions of a file (VersionsModal)
   versions: {
@@ -542,6 +587,39 @@ const en = {
     empty: 'Empty trash', emptyConfirm: 'Permanently delete {n} item(s) in the trash? This cannot be undone.', none: 'The trash is empty',
     deletedBy: 'Deleted by', deletedAt: 'Deleted', left: 'Time left', days: '{n} day | {n} days', restore: 'Restore', restored: 'Restored to {path}',
     purge: 'Delete forever', purgeConfirm: 'Permanently delete {name}? This cannot be undone.',
+  },
+  // the keyboard shortcuts of the file list (FileBrowser)
+  keys: {
+    title: 'Keyboard shortcuts in the file list', hint: 'They work when you are not typing in a text box and no window is open.',
+    open: 'Open the selected file or folder', up: 'Go up to the parent folder', move: 'Move the row up / down', extend: 'Select several rows in a row',
+    all: 'Select all', clear: 'Clear the selection (or what was copied)', rename: 'Rename', delete: 'Delete',
+    copy: 'Copy', cut: 'Cut', paste: 'Paste into this folder', search: 'Search', help: 'Show this window',
+    drag: 'Drag a row onto a folder, or onto a folder name above, to move it. Hold Ctrl (Cmd) to copy.',
+  },
+  // the user's own trash (MyTrashView)
+  myTrash: {
+    subtitle: 'What you delete stays here for {days} days before it is removed for good. You can restore it to its original place.',
+    from: 'From', spaceHome: 'My files', spacePublic: 'Public folder', spaceGrant: 'Shared folder', unknownPlace: 'Original place',
+    cannotRestore: 'It cannot be restored: you can no longer write to its original place, or that place was moved.',
+  },
+  // sharing a folder with other users (GrantModal, WithMeView, the tab in SharesView)
+  grants: {
+    shareAction: 'Share with a user', title: 'Share the folder {name} with a user',
+    hint: 'The person you pick sees this folder under "Shared with me", and none of your other files.',
+    search: 'Find a user', searchPlaceholder: 'Type a name or username (at least {n} letters)', searchShort: 'Type at least {n} letters to search',
+    noUsers: 'No users found', pickedTitle: 'Share with', clearPick: 'Pick someone else',
+    permView: 'View only', permEdit: 'Can edit', permViewHelp: 'Open, view and download files', permEditHelp: 'Also add, change and delete files, but not share on',
+    share: 'Share', created: 'Shared with {name}', updated: 'Changed the access of {name}',
+    current: 'Shared with', currentNone: 'This folder is not shared with anybody yet',
+    remove: 'Stop sharing', removeTitle: 'Stop sharing with {name}?', removeBody: '{name} will no longer be able to open {folder}. The files in the folder are not deleted.', removed: 'Sharing stopped',
+    withMeSubtitle: 'Folders other users share with you', withMeNone: 'Nobody has shared a folder with you yet',
+    from: 'From {name}', open: 'Open', leave: 'Leave', leaveTitle: 'Leave this share?',
+    leaveBody: 'You will no longer see the folder {name} from {owner}. The owner can share it again.', left: 'You left the share',
+    back: 'Back to Shared with me', viewing: 'The folder {name} that {owner} shared with you', notFound: 'This share was not found. It may have been withdrawn, or the folder deleted.',
+    sharedFolder: 'Shared folder', since: 'Shared {date}',
+    tabLinks: 'Links', tabUsers: 'Shared with users', usersSubtitle: 'Folders you share with other users. Change their access or stop sharing here.',
+    colFolder: 'Folder', colTo: 'Shared with', colPerms: 'Access', usersNone: 'No folder is shared with a user yet. Choose "Share with a user" in the menu of a folder to start.',
+    inactive: 'Not working', inactiveHint: 'The folder was deleted or moved, or you can no longer share.',
   },
   share: {
     action: 'Share link', title: 'Share a link with someone without an account', expires: 'Link lasts', days: '{n} day | {n} days',

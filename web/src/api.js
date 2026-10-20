@@ -106,7 +106,8 @@ export const api = {
   /** `destSpace` (another space than `space`): copy or move between spaces, needs write and upload there */
   copy: (space, items, dest, destSpace) => post('/api/copy', { space, items, dest, destSpace }),
   move: (space, items, dest, destSpace) => post('/api/move', { space, items, dest, destSpace }),
-  remove: (space, items) => post('/api/delete', { space, items }),
+  /** `withTrash`: the answer also holds `trashed: [{ path, id }]`, the trash entry of each item, for "undo" */
+  remove: (space, items, withTrash) => post('/api/delete', { space, items, withTrash }),
   zip: (space, path, items, name) => post('/api/zip', { space, path, items, name }),
   unzip: (space, path) => post('/api/unzip', { space, path }),
   batch: (space, path, items) => post('/api/batch', { space, path, items }),
@@ -147,6 +148,24 @@ export const api = {
   trash: () => get('/api/admin/trash'),
   restore: id => post('/api/admin/trash/restore', { id }),
   purge: id => post('/api/admin/trash/purge', id ? { id } : {}),
+  /** a user's own trash: { items: [{ id, name, type, size, deletedAt, deletedBy, owner, space, path, restorable }], retentionDays } */
+  myTrash: () => get('/api/me/trash'),
+  /** -> { ok, restoredTo, space, path } */
+  restoreMine: id => post(`/api/me/trash/${encodeURIComponent(id)}/restore`),
+  purgeMine: id => call('DELETE', `/api/me/trash/${encodeURIComponent(id)}`),
+  emptyMine: () => call('DELETE', '/api/me/trash'),
+
+  /** at least two letters: { users: [{ username, name }] }, ten at most */
+  lookupUsers: q => get('/api/users/lookup', { q }),
+  /** a folder of the caller's home to another user: perms 'view' | 'edit' -> { ok, created, grant } */
+  createGrant: (path, to, perms) => post('/api/grants', { space: 'home', path, to, perms }),
+  /** { items: [{ id, path, name, to, toName, perms, createdAt, active }] } */
+  myGrants: () => get('/api/grants/mine'),
+  /** { items: [{ id, space: 'grant:<id>', name, owner, ownerName, perms, createdAt }] } */
+  grantsToMe: () => get('/api/grants/to-me'),
+  updateGrant: (id, perms) => call('PATCH', `/api/grants/${encodeURIComponent(id)}`, { perms }),
+  /** the owner takes the share back; the person it was shared with leaves */
+  deleteGrant: id => call('DELETE', `/api/grants/${encodeURIComponent(id)}`),
   settings: () => get('/api/admin/settings'),
   saveSettings: s => call('PUT', '/api/admin/settings', s),
   uploadLogo: file => call('PUT', '/api/admin/logo', file, { 'content-type': file.type }),
