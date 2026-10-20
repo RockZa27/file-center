@@ -1022,8 +1022,8 @@
     "patches": [
       {
         "file": "src/notify.ts",
-        "find": "if (ev.email && s?.email?.verified)",
-        "replace": "if (ev.email && s?.email)"
+        "find": "if (ev.email && s?.email?.verified && !quiet('email'))",
+        "replace": "if (ev.email && s?.email && !quiet('email'))"
       }
     ]
   },
@@ -1037,7 +1037,7 @@
     "patches": [
       {
         "file": "src/notify.ts",
-        "find": "if (times.length >= MAILS_PER_HOUR)",
+        "find": "if (recent.length >= max)",
         "replace": "if (false)"
       }
     ]
