@@ -72,8 +72,10 @@ const critical = computed(() => warnings.value.some(w => w.level === 'critical')
 const navItems = computed(() => {
   const items = [{ name: 'files', label: t('nav.files'), icon: FolderOutline }]
   items.push({ name: 'favorites', label: t('nav.favorites'), icon: StarOutline })
+  items.push({ name: 'with-me', label: t('nav.withMe'), icon: PeopleOutline })
+  items.push({ name: 'my-trash', label: app.isAdmin ? t('nav.myTrash') : t('nav.trash'), icon: TrashOutline })
   if (!app.isAdmin && app.hasSpace('public')) items.push({ name: 'shared', label: t('nav.publicFolder'), icon: GlobeOutline })
-  if (app.canShare || app.isStaff) items.push({ name: 'links', label: t('nav.shareLinks'), icon: LinkOutline })
+  if (app.canShare || app.canGrant || app.isStaff) items.push({ name: 'links', label: t('nav.shareLinks'), icon: LinkOutline })
   if (app.isStaff) {
     items.push(
       { name: 'dashboard', label: t('nav.dashboard'), icon: SpeedometerOutline, badge: alertCount.value, badgeType: critical.value ? 'error' : 'warning' },
@@ -84,7 +86,7 @@ const navItems = computed(() => {
   if (app.isAdmin) {
     items.push(
       { name: 'logs', label: t('nav.logs'), icon: DocumentTextOutline },
-      { name: 'trash', label: t('nav.trash'), icon: TrashOutline },
+      { name: 'trash', label: t('nav.trashAll'), icon: TrashOutline },
       { name: 'update', label: t('nav.update'), icon: CloudUploadOutline },
       { name: 'backup', label: t('nav.backup'), icon: ArchiveOutline },
       { name: 'settings', label: t('nav.settings'), icon: SettingsOutline },

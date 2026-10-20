@@ -1,5 +1,5 @@
-import { onBeforeUnmount, onMounted, ref } from 'vue'
-import { useDialog, useMessage } from 'naive-ui'
+import { h, onBeforeUnmount, onMounted, ref } from 'vue'
+import { NButton, useDialog, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 import { download } from './api'
 
@@ -59,6 +59,13 @@ export function useFeedback() {
     warn: text => message.warning(text, { duration: 6000 }),
     /** a message that stays until the returned function is called (something finishing in the background) */
     busy: text => { const m = message.loading(text, { duration: 0 }); return () => m.destroy() },
+    /** a message with one button (for "undo"): it stays `ms` long, and the button closes it before running `onClick` */
+    undo: (text, label, onClick, ms = 8000) => {
+      const m = message.success(() => h('span', { class: 'undo-msg' }, [
+        h('span', { style: 'overflow-wrap:anywhere' }, text),
+        h(NButton, { text: true, type: 'primary', style: 'margin-left:12px;font-weight:600', onClick: () => { m.destroy(); onClick() } }, () => label),
+      ]), { duration: ms, closable: true, keepAliveOnHover: true })
+    },
     fail: (e, fallback) => message.error(errorText(e, fallback || t('common.unknownError')), { duration: 6000 }),
     confirm: ({ title, content, positive, danger = false }) =>
       new Promise(resolve => {
