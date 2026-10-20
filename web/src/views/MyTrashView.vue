@@ -73,12 +73,16 @@ const nameCell = r => h('div', { class: 'name-cell' }, [
     r.restorable ? null : h('div', { class: 'warn small' }, t('myTrash.cannotRestore')),
   ]),
 ])
+// only the owner deletes for good (what someone else deleted from your shared folder stays theirs to keep);
+// an item of no one's home (the public folder) can be purged by whoever deleted it
+const me = () => (app.user?.username || '').toLowerCase()
+const canPurge = r => (r.owner ? r.owner.toLowerCase() === me() : (r.deletedBy || '').toLowerCase() === me())
 const leftTag = r => h(NTag, { size: 'small', round: true, type: daysLeft(r) <= 3 ? 'warning' : 'default' }, () => t('trash.days', daysLeft(r)))
 const actions = r => h('div', { class: 'row-actions' }, [
   h('span', { title: r.restorable ? undefined : t('myTrash.cannotRestore') }, [
     h(NButton, { size: 'small', secondary: true, type: 'primary', disabled: !r.restorable, onClick: () => restore(r) }, { default: () => t('trash.restore'), icon: () => h(NIcon, { component: ArrowUndoOutline }) }),
   ]),
-  h(NButton, { size: 'small', quaternary: true, type: 'error', title: t('trash.purge'), 'aria-label': t('trash.purge'), onClick: () => purge(r) }, { icon: () => h(NIcon, { component: CloseOutline }) }),
+  canPurge(r) ? h(NButton, { size: 'small', quaternary: true, type: 'error', title: t('trash.purge'), 'aria-label': t('trash.purge'), onClick: () => purge(r) }, { icon: () => h(NIcon, { component: CloseOutline }) }) : null,
 ])
 const when = r => h('div', { class: 'when' }, [
   h('div', { class: 'nowrap' }, formatDate(r.deletedAt)),

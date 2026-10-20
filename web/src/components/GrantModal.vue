@@ -63,7 +63,7 @@ const { t } = useI18n()
 const fb = useFeedback()
 
 /** letters before a search starts (the server's own minimum) */
-const MIN = 2
+const MIN = 3
 const query = ref('')
 const found = ref([])
 const searching = ref(false)
