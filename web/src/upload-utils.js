@@ -1,3 +1,20 @@
+/** Linux (and macOS) keep a name in 255 bytes, not letters: a Thai letter takes 3 of them, so about 85 fit (the server's NAME_MAX) */
+export const NAME_MAX_BYTES = 255
+export const utf8Bytes = text => new TextEncoder().encode(text).length
+
+/**
+ * Why the server would refuse this name before any byte is sent: null when it is fine, else
+ * { kind: 'file' } for the file's own name or { kind: 'folder', name } for a folder of its path (`relativeDir`).
+ * (The server trims a name before it counts, so this does too.)
+ */
+export function nameProblem(name, relativeDir = '') {
+  if (utf8Bytes(String(name).trim()) > NAME_MAX_BYTES) return { kind: 'file' }
+  for (const seg of String(relativeDir || '').split('/').filter(Boolean)) {
+    if (utf8Bytes(seg.trim()) > NAME_MAX_BYTES) return { kind: 'folder', name: seg }
+  }
+  return null
+}
+
 /** Turn a drop event's data into [{ file, relativeDir }]. Must be called synchronously from the drop handler. */
 export function collectDropped(dataTransfer) {
   const entries = [...(dataTransfer.items || [])].map(i => i.webkitGetAsEntry?.()).filter(Boolean)

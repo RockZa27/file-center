@@ -127,6 +127,18 @@ export const api = {
     `/api/download?${qs({ space, path, inline: inline ? '1' : undefined })}`,
   batchUrl: token => `/api/batch/${token}`,
 
+  /** { image, pdf, video }: which kinds the server can make a small picture of (signed-in users only) */
+  thumbStatus: () => get('/api/thumbs/status'),
+  /** `version` (the file's mtime) only makes a changed file a new address: the browser keeps a picture for a day */
+  thumbUrl: (space, path, size = 256, version) => `/api/thumb?${qs({ space, path, size, v: version })}`,
+  shareThumbUrl: (token, path, size = 256, version) => `/api/s/${encodeURIComponent(token)}/thumb?${qs({ path: path && path !== '/' ? path : undefined, size, v: version })}`,
+
+  /** the entries of a .zip without unpacking it: { entries: [{ name, dir, size, compressed, modified, encrypted }], truncated } */
+  archiveList: (space, path) => get('/api/archive/list', { space, path }),
+  archiveFileUrl: (space, path, entry, inline = false) => `/api/archive/file?${qs({ space, path, entry, inline: inline ? '1' : undefined })}`,
+  shareArchiveList: (token, path) => get(`/api/s/${encodeURIComponent(token)}/archive/list`, path && path !== '/' ? { path } : undefined),
+  shareArchiveFileUrl: (token, path, entry) => `/api/s/${encodeURIComponent(token)}/archive/file?${qs({ path: path && path !== '/' ? path : undefined, entry })}`,
+
   uploadInit: (space, path, name, size, relativeDir) => post('/api/upload', { space, path, name, size, relativeDir }),
   uploadComplete: id => post(`/api/upload/${id}/complete`),
   uploadCancel: id => call('DELETE', `/api/upload/${id}`),

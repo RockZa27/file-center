@@ -14,7 +14,7 @@ export const useAppStore = defineStore('app', {
     config: { appName: 'File Center', primaryColor: '#2563eb', uploadChunkSize: 8 * 1024 * 1024, uploadMaxSize: 0, uploadSimultaneous: 3 },
     theme: read('fc.theme', 'auto'),
     lang: read('fc.lang', 'th'),
-    view: read('fc.view', 'list'),
+    view: ['list', 'grid', 'gallery'].includes(read('fc.view', 'list')) ? read('fc.view', 'list') : 'list',
     /** the signed-in user's starred places, as `space:path` */
     favorites: [],
     /** the group folders the signed-in user is a member of (the side menu shows them only then) */

@@ -110,6 +110,9 @@
         <n-button tag="a" type="primary" size="large" :href="api.shareDownloadUrl(token)" class="big">
           <template #icon><n-icon :component="DownloadOutline" /></template>{{ t('common.download') }}
         </n-button>
+        <n-button v-if="isZip(info.name)" secondary @click="openZip('/', info.name)">
+          <template #icon><n-icon :component="ArchiveOutline" /></template>{{ t('zip.lookInside') }}
+        </n-button>
         <div class="muted small">{{ t('shareView.expires', { date: formatDate(info.expiresAt) }) }}</div>
       </div>
 
@@ -135,18 +138,61 @@
               <span class="crumb"><n-icon v-if="c.path === '/'" :component="FolderOpenOutline" />{{ c.name }}</span>
             </n-breadcrumb-item>
           </n-breadcrumb>
+          <n-button-group size="small" class="views">
+            <n-button :type="mode === 'list' ? 'primary' : 'default'" :secondary="mode === 'list'" :title="t('files.viewList')" :aria-label="t('files.viewList')" @click="setMode('list')"><template #icon><n-icon :component="ListOutline" /></template></n-button>
+            <n-button :type="mode === 'gallery' ? 'primary' : 'default'" :secondary="mode === 'gallery'" :title="t('files.viewGallery')" :aria-label="t('files.viewGallery')" @click="setMode('gallery')"><template #icon><n-icon :component="ImagesOutline" /></template></n-button>
+          </n-button-group>
         </div>
 
-        <div class="surface list">
+        <div v-if="mode === 'gallery'" class="surface gallery">
+          <n-spin :show="loading">
+            <n-empty v-if="!info.entries.length" :description="t('shareView.empty')" class="empty" />
+            <template v-else>
+              <div v-if="galleryDirs.length" class="g-folders" role="list" :aria-label="t('gallery.folders')">
+                <router-link v-for="d in galleryDirs" :key="d.path" :to="{ query: { path: d.path } }" class="g-folder" role="listitem">
+                  <n-icon :component="Folder" color="#f59e0b" :size="18" /><span>{{ d.name }}</span>
+                </router-link>
+              </div>
+              <div v-if="!galleryMedia.length" class="muted g-empty">{{ t('gallery.empty') }}</div>
+              <div v-else class="g-grid">
+                <div v-for="(m, i) in galleryMedia" :key="m.path" class="g-tile">
+                  <button type="button" class="g-main" :aria-label="`${t('gallery.open')} ${m.name}`" @click="openLightbox(i)">
+                    <span class="g-img">
+                      <thumb-img v-if="thumbOf(m, tileSize)" :src="thumbOf(m, tileSize)" alt="">
+                        <template #fallback><file-icon :item="m" :size="40" /></template>
+                      </thumb-img>
+                      <file-icon v-else :item="m" :size="40" />
+                      <span v-if="m.kind === 'video'" class="play" aria-hidden="true"><n-icon :component="PlayOutline" :size="22" /></span>
+                    </span>
+                  </button>
+                  <div class="g-name">{{ m.name }}</div>
+                </div>
+              </div>
+            </template>
+          </n-spin>
+        </div>
+
+        <div v-else class="surface list">
           <n-spin :show="loading">
             <n-empty v-if="!info.entries.length" :description="t('shareView.empty')" class="empty" />
             <div v-for="e in info.entries" :key="e.path" class="entry">
-              <file-icon :item="e" :size="24" />
+              <span class="entry-thumb">
+                <thumb-img v-if="thumbOf(e, 256)" :src="thumbOf(e, 256)" alt="">
+                  <template #fallback><file-icon :item="e" :size="24" /></template>
+                </thumb-img>
+                <file-icon v-else :item="e" :size="24" />
+              </span>
               <div class="entry-text">
                 <router-link v-if="e.type === 'dir'" :to="{ query: { path: e.path } }" class="entry-name">{{ e.name }}</router-link>
+                <button v-else-if="isZip(e.name)" type="button" class="entry-name link" @click="openZip(e.path, e.name)">{{ e.name }}</button>
                 <a v-else :href="api.shareDownloadUrl(token, e.path)" class="entry-name">{{ e.name }}</a>
                 <div class="muted small">{{ e.type === 'dir' ? t('common.folder') : formatBytes(e.size) }} · {{ formatDate(e.mtime) }}</div>
               </div>
+              <n-button
+                v-if="e.type === 'file' && isZip(e.name)" quaternary circle :title="t('zip.lookInside')" :aria-label="t('zip.lookInside')" @click="openZip(e.path, e.name)"
+              >
+                <template #icon><n-icon :component="ArchiveOutline" /></template>
+              </n-button>
               <n-button
                 tag="a" :href="api.shareDownloadUrl(token, e.path)" quaternary circle
                 :title="e.type === 'dir' ? t('shareView.downloadZip') : t('common.download')" :aria-label="e.type === 'dir' ? t('shareView.downloadZip') : t('common.download')"
@@ -158,6 +204,12 @@
         </div>
       </template>
     </main>
+
+    <lightbox
+      v-model:show="lb.show" v-model:index="lb.index" :items="lightboxItems" :file-url="lightboxFile" :thumb-url="lightboxThumb"
+      :download-url="lightboxFile" :auto-original="false"
+    />
+    <zip-viewer v-model:show="zip.show" :name="zip.name" :source="zipSource" />
   </div>
 </template>
 
@@ -165,16 +217,21 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { NAlert, NBreadcrumb, NBreadcrumbItem, NButton, NEmpty, NIcon, NInput, NProgress, NResult, NSpin } from 'naive-ui'
-import { ArrowBackOutline, CheckmarkCircleOutline, CloudUploadOutline, DownloadOutline, FolderOpenOutline, LockClosedOutline } from '@vicons/ionicons5'
+import { NAlert, NBreadcrumb, NBreadcrumbItem, NButton, NButtonGroup, NEmpty, NIcon, NInput, NProgress, NResult, NSpin } from 'naive-ui'
+import { ArchiveOutline, ArrowBackOutline, CheckmarkCircleOutline, CloudUploadOutline, DownloadOutline, Folder, FolderOpenOutline, ImagesOutline, ListOutline, LockClosedOutline, PlayOutline } from '@vicons/ionicons5'
 import { api, ApiError, putChunk } from '../api'
 import AppLogo from '../components/AppLogo.vue'
 import FileIcon from '../components/FileIcon.vue'
+import Lightbox from '../components/Lightbox.vue'
 import PreferenceControls from '../components/PreferenceControls.vue'
+import ThumbImg from '../components/ThumbImg.vue'
+import ZipViewer from '../components/ZipViewer.vue'
 import { errorText, useFeedback } from '../composables'
+import { loadThumbStatus, mediaKindOf, sharpScreen, wantsThumb } from '../media'
 import { useAppStore } from '../store'
+import { NAME_MAX_BYTES, nameProblem } from '../upload-utils'
 import { createPool } from '../uploadPool'
-import { formatBytes, formatDate, parentPath } from '../utils'
+import { extOf, formatBytes, formatDate, parentPath } from '../utils'
 
 const { t, locale } = useI18n()
 const app = useAppStore()
@@ -255,6 +312,40 @@ async function unlock() {
   }
 }
 
+// ───── pictures, gallery and the look inside a zip (download links of a folder) ─────
+// A visitor can not ask what the server can make a picture of: every kind is tried and the icon stays where it fails.
+onMounted(() => loadThumbStatus(false))
+const tileSize = sharpScreen() ? 1024 : 256
+const readMode = () => { try { return localStorage.getItem('fc.shareView') === 'gallery' ? 'gallery' : 'list' } catch { return 'list' } }
+const mode = ref(readMode())
+function setMode(v) {
+  mode.value = v
+  try { localStorage.setItem('fc.shareView', v) } catch { /* private mode */ }
+}
+const isZip = name => extOf(name || '') === 'zip'
+const thumbOf = (e, size) => (e.type === 'file' && wantsThumb(e.name) ? api.shareThumbUrl(token.value, e.path, size, e.mtime) : '')
+
+const galleryDirs = computed(() => (info.value?.entries || []).filter(e => e.type === 'dir'))
+const galleryMedia = computed(() => (info.value?.entries || []).filter(e => e.type === 'file' && mediaKindOf(e.name)).map(e => ({ ...e, kind: mediaKindOf(e.name) })))
+const lb = reactive({ show: false, index: 0 })
+const lightboxItems = computed(() => galleryMedia.value.map(m => ({ key: m.path, name: m.name, kind: m.kind, path: m.path, mtime: m.mtime })))
+const openLightbox = i => { lb.index = i; lb.show = true }
+// the original of a picture or video is a download of the link (it counts); the preview picture is not
+const lightboxFile = it => api.shareDownloadUrl(token.value, it.path)
+const lightboxThumb = (it, size) => (wantsThumb(it.name) ? api.shareThumbUrl(token.value, it.path, size, it.mtime) : '')
+
+const zip = reactive({ show: false, path: '/', name: '' })
+function openZip(path, name) {
+  Object.assign(zip, { show: true, path, name })
+}
+const zipSource = computed(() => {
+  const path = zip.path
+  const tk = token.value
+  return { list: () => api.shareArchiveList(tk, path), fileUrl: entry => api.shareArchiveFileUrl(tk, path, entry) }
+})
+// another folder or link: nothing of the old one stays open
+watch(() => [token.value, here.value], () => { lb.show = false; zip.show = false })
+
 // ───── request link: send files in ─────
 const pickInput = ref(null)
 const dropOver = ref(false)
@@ -290,7 +381,11 @@ function addFiles(files) {
   const max = info.value?.maxFileBytes
   for (const file of files) {
     const it = reactive({ key: ++seq, file, loaded: 0, status: 'queued', error: '', retryable: false, id: null, canceled: false, aborts: new Set(), savedAs: '' })
-    if (max && file.size > max) {
+    if (nameProblem(file.name)) {
+      // the file system holds 255 bytes of a name: say so before sending, trying again changes nothing
+      it.status = 'error'
+      it.error = t('upload.nameTooLong', { max: NAME_MAX_BYTES })
+    } else if (max && file.size > max) {
       it.status = 'error'
       it.error = t('shareView.errTooBig', { max: formatBytes(max) })
     }
@@ -488,7 +583,29 @@ h1 { margin: 0; font-weight: 600; }
 .entry-name { color: var(--text); text-decoration: none; font-weight: 500; overflow-wrap: anywhere; }
 .entry-name:hover { color: var(--primary); text-decoration: underline; }
 
+.views { margin-left: auto; }
+.entry-thumb { position: relative; flex: none; width: 44px; height: 44px; border-radius: 8px; overflow: hidden; display: grid; place-items: center; background: var(--surface-2); }
+.entry-name.link { all: unset; cursor: pointer; color: var(--text); font-weight: 500; overflow-wrap: anywhere; }
+.entry-name.link:hover { color: var(--primary); text-decoration: underline; }
+.entry-name.link:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.play { position: absolute; right: 8px; bottom: 8px; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: rgba(0, 0, 0, 0.55); pointer-events: none; }
+.gallery { padding: 14px 16px 16px; }
+.g-folders { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.g-folder { display: inline-flex; align-items: center; gap: 8px; max-width: 100%; padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); color: var(--text); text-decoration: none; font-size: 13.5px; }
+.g-folder span { overflow-wrap: anywhere; min-width: 0; }
+.g-folder:hover { border-color: var(--primary); }
+.g-empty { padding: 36px 8px; text-align: center; }
+.g-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+.g-tile { min-width: 0; }
+.g-main { all: unset; box-sizing: border-box; display: block; width: 100%; cursor: pointer; border-radius: 10px; }
+.g-main:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.g-img { position: relative; display: block; aspect-ratio: 1; border-radius: 10px; overflow: hidden; background: var(--surface-2); border: 1px solid var(--border); }
+.g-img > :deep(.n-icon) { position: absolute; inset: 0; margin: auto; }
+.g-name { margin-top: 4px; font-size: 12px; line-height: 1.35; color: var(--muted); overflow-wrap: anywhere; }
+
 @media (max-width: 640px) {
+  .gallery { padding: 10px; }
+  .g-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
   .bar { padding: 0 12px; }
   .wrap { padding: 16px 12px 32px; }
   .panel { padding: 24px 16px; }

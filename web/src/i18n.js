@@ -52,7 +52,7 @@ const th = {
     archiveName: 'ชื่อไฟล์ zip', unzipConfirm: 'แตกไฟล์ {name} ลงในโฟลเดอร์ใหม่ข้างไฟล์นี้?',
     deleteConfirm: 'ลบ {n} รายการที่เลือก?', deleteToTrash: 'รายการจะถูกย้ายไปที่ถังขยะ กู้คืนได้ภายใน {days} วัน',
     newName: 'ชื่อใหม่', folderName: 'ชื่อโฟลเดอร์', fileName: 'ชื่อไฟล์', preview: 'ดูตัวอย่าง',
-    viewList: 'แบบรายการ', viewGrid: 'แบบตาราง', batchReady: 'กำลังดาวน์โหลดไฟล์ zip', itemCount: '{n} รายการ',
+    viewList: 'แบบรายการ', viewGrid: 'แบบตาราง', viewGallery: 'แบบแกลเลอรี', batchReady: 'กำลังดาวน์โหลดไฟล์ zip', itemCount: '{n} รายการ',
     chooseDestination: 'เลือกโฟลเดอร์ปลายทาง', noSubfolders: 'ไม่มีโฟลเดอร์ย่อย', hiddenCount: 'ซ่อนไฟล์ที่ขึ้นต้นด้วยจุด {n} รายการ',
     show: 'แสดง', showHidden: 'แสดงไฟล์ที่ซ่อน', hideHidden: 'ซ่อนไฟล์ที่ขึ้นต้นด้วยจุด', showMore: 'แสดงอีก {n} รายการ',
     done: 'ทำรายการเรียบร้อย', partial: 'สำเร็จ {ok} รายการ ไม่สำเร็จ {failed} รายการ ({reason})',
@@ -124,6 +124,9 @@ const th = {
     queued: 'รอคิว', paused: 'หยุดชั่วคราว', done: 'เสร็จแล้ว', canceled: 'ยกเลิกแล้ว', pause: 'พัก', resume: 'ทำต่อ',
     remaining: 'เหลือประมาณ {time}', tooBig: '{name} ใหญ่เกินกำหนด (สูงสุด {max})',
     quotaFailed: 'ส่ง {name} ไม่ได้: {message}',
+    nameTooLong: 'ชื่อไฟล์ยาวเกินไป (สูงสุด {max} ไบต์ ≈ 85 ตัวอักษรไทย) — เปลี่ยนชื่อก่อนอัปโหลด',
+    folderNameTooLong: 'ชื่อโฟลเดอร์ "{name}" ยาวเกินไป (สูงสุด {max} ไบต์ ≈ 85 ตัวอักษรไทย) — เปลี่ยนชื่อก่อนอัปโหลด',
+    dropFailed: 'อ่านไฟล์ที่ลากมาวางไม่ได้ ลองเลือกไฟล์ด้วยปุ่มอัปโหลดแทน',
   },
   search: {
     title: 'ค้นหาไฟล์', placeholder: 'พิมพ์ชื่อไฟล์หรือโฟลเดอร์', noResults: 'ไม่พบรายการที่ตรงกัน',
@@ -458,6 +461,30 @@ const th = {
     parts: { data: 'ข้อมูล', logs: 'ประวัติ', storage: 'ไฟล์' }, partFiles: '{n} ไฟล์',
     scheduleNow: 'ตารางปัจจุบัน', everyDay: 'ทุกวัน {time}', everyWeek: 'ทุกสัปดาห์ {days} {time}', everyHours: 'ทุก {n} ชั่วโมง',
   },
+  // gallery view, the full-screen viewer and the look inside a zip (FileBrowser, Lightbox, ZipViewer)
+  gallery: {
+    view: 'แบบแกลเลอรี', empty: 'ไม่มีรูปภาพหรือวิดีโอในโฟลเดอร์นี้', folders: 'โฟลเดอร์', mediaCount: '{n} รูปและวิดีโอ',
+    open: 'เปิดดู', video: 'วิดีโอ', tileFolder: 'โฟลเดอร์ {name}',
+  },
+  lightbox: {
+    play: 'เล่นสไลด์โชว์', pause: 'หยุดสไลด์โชว์', interval: 'ระยะเวลาต่อภาพ', seconds: '{n} วิ',
+    zoomIn: 'ซูมเข้า', zoomOut: 'ซูมออก', noImage: 'แสดงรูปนี้ในเบราว์เซอร์ไม่ได้ กรุณาดาวน์โหลดเพื่อเปิดดู',
+    noVideo: 'เบราว์เซอร์เล่นวิดีโอนี้ไม่ได้ กรุณาดาวน์โหลดเพื่อเปิดดู', noPlay: 'บัญชีนี้ดูได้เฉพาะภาพตัวอย่าง ไม่มีสิทธิ์ดาวน์โหลดไฟล์ต้นฉบับ',
+  },
+  zip: {
+    lookInside: 'ดูไฟล์ข้างใน', extract: 'แตกไฟล์ที่นี่', encrypted: 'ตั้งรหัสผ่านไว้ เปิดในหน้าเว็บไม่ได้',
+    folderInfo: '{n} ไฟล์', empty: 'ไฟล์ zip นี้ว่างเปล่า', textCut: 'แสดงเฉพาะส่วนแรกของไฟล์ ดาวน์โหลดเพื่อดูทั้งหมด',
+    truncated: 'ไฟล์ zip นี้มีรายการมาก แสดงเพียง {n} รายการแรก ดาวน์โหลดหรือแตกไฟล์เพื่อดูทั้งหมด',
+    notZipHint: 'ดูข้างในได้เฉพาะไฟล์ .zip ที่ไม่เสียหาย (ไม่รองรับ .rar และ .7z) ลองดาวน์โหลดไฟล์ไปเปิดบนเครื่องแทน',
+    err: {
+      archive_not_zip: 'ไม่ใช่ไฟล์ zip หรืออ่านไม่ได้ (รองรับเฉพาะ .zip ไม่รองรับ .rar และ .7z)',
+      archive_bad_entry: 'ชื่อรายการในไฟล์ zip ไม่ถูกต้อง',
+      archive_entry_not_found: 'ไม่พบรายการนี้ในไฟล์ zip',
+      archive_encrypted: 'รายการนี้ตั้งรหัสผ่านไว้ เปิดดูหรือดาวน์โหลดในหน้าเว็บไม่ได้ กรุณาดาวน์โหลดไฟล์ zip แล้วแตกด้วยรหัสผ่านบนเครื่อง',
+      archive_damaged: 'อ่านรายการนี้ไม่ได้ ไฟล์ zip อาจเสียหายหรือใช้วิธีบีบอัดที่ไม่รองรับ',
+      archive_too_big: 'รายการนี้ใหญ่เกินกำหนดหรือบีบอัดมากผิดปกติ จึงไม่แตกออกให้',
+    },
+  },
 }
 
 const en = {
@@ -510,7 +537,7 @@ const en = {
     archiveName: 'Zip file name', unzipConfirm: 'Extract {name} into a new folder next to it?',
     deleteConfirm: 'Delete {n} selected item(s)?', deleteToTrash: 'Items go to the trash; you can restore them within {days} days.',
     newName: 'New name', folderName: 'Folder name', fileName: 'File name', preview: 'Preview',
-    viewList: 'List view', viewGrid: 'Grid view', batchReady: 'Downloading zip file', itemCount: '{n} items',
+    viewList: 'List view', viewGrid: 'Grid view', viewGallery: 'Gallery view', batchReady: 'Downloading zip file', itemCount: '{n} items',
     chooseDestination: 'Choose destination folder', noSubfolders: 'No sub folders', hiddenCount: '{n} dot-files hidden',
     show: 'Show', showHidden: 'Show hidden files', hideHidden: 'Hide dot-files', showMore: 'Show {n} more',
     done: 'Done', partial: '{ok} succeeded, {failed} failed ({reason})',
@@ -579,6 +606,9 @@ const en = {
     queued: 'Queued', paused: 'Paused', done: 'Done', canceled: 'Canceled', pause: 'Pause', resume: 'Resume',
     remaining: '{time} left', tooBig: '{name} is too large (max {max})',
     quotaFailed: '{name} could not be sent: {message}',
+    nameTooLong: 'The file name is too long (at most {max} bytes, about 85 Thai letters). Rename it before uploading.',
+    folderNameTooLong: 'The folder name "{name}" is too long (at most {max} bytes, about 85 Thai letters). Rename it before uploading.',
+    dropFailed: 'The dropped files could not be read. Try choosing them with the Upload button instead.',
   },
   search: {
     title: 'Search files', placeholder: 'Type a file or folder name', noResults: 'Nothing found',
@@ -911,6 +941,30 @@ const en = {
     noSpaceTodo: 'To fix it', todoKeep: 'Keep fewer backups', todoFiles: 'Turn off including uploaded files', todoDir: 'Move BACKUP_DIR to another, bigger disk and start the system again',
     parts: { data: 'Data', logs: 'Log', storage: 'Files' }, partFiles: '{n} files',
     scheduleNow: 'Current schedule', everyDay: 'Every day {time}', everyWeek: 'Every week {days} {time}', everyHours: 'Every {n} hours',
+  },
+  // gallery view, the full-screen viewer and the look inside a zip (FileBrowser, Lightbox, ZipViewer)
+  gallery: {
+    view: 'Gallery view', empty: 'There are no pictures or videos in this folder', folders: 'Folders', mediaCount: '{n} pictures and videos',
+    open: 'Open', video: 'Video', tileFolder: 'Folder {name}',
+  },
+  lightbox: {
+    play: 'Start slideshow', pause: 'Pause slideshow', interval: 'Time per picture', seconds: '{n} s',
+    zoomIn: 'Zoom in', zoomOut: 'Zoom out', noImage: 'The browser cannot show this picture. Please download it to open it.',
+    noVideo: 'The browser cannot play this video. Please download it to open it.', noPlay: 'This account may look at the preview only; it has no right to download the original.',
+  },
+  zip: {
+    lookInside: 'Look inside', extract: 'Extract here', encrypted: 'Password-protected, cannot be opened here',
+    folderInfo: '{n} files', empty: 'This zip file is empty', textCut: 'Only the start of the file is shown. Download it to see all.',
+    truncated: 'This zip file has many items; only the first {n} are listed. Download or extract it to see all.',
+    notZipHint: 'Only intact .zip files can be looked into (not .rar or .7z). Download the file and open it on your device instead.',
+    err: {
+      archive_not_zip: 'This is not a readable zip file (only .zip is supported, not .rar or .7z).',
+      archive_bad_entry: 'The name of the item inside the zip file is not valid.',
+      archive_entry_not_found: 'That item is not in the zip file.',
+      archive_encrypted: 'This item is password-protected and cannot be opened or downloaded here. Download the zip file and extract it with the password on your device.',
+      archive_damaged: 'This item could not be read. The zip file may be damaged or use an unsupported method.',
+      archive_too_big: 'This item is too big or compressed suspiciously well, so it is not extracted.',
+    },
   },
 }
 

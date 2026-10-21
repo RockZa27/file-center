@@ -23,6 +23,7 @@
         <n-button-group size="small">
           <n-button :type="app.view === 'list' ? 'primary' : 'default'" :secondary="app.view === 'list'" :title="t('files.viewList')" @click="app.setView('list')"><template #icon><n-icon :component="ListOutline" /></template></n-button>
           <n-button :type="app.view === 'grid' ? 'primary' : 'default'" :secondary="app.view === 'grid'" :title="t('files.viewGrid')" @click="app.setView('grid')"><template #icon><n-icon :component="GridOutline" /></template></n-button>
+          <n-button :type="app.view === 'gallery' ? 'primary' : 'default'" :secondary="app.view === 'gallery'" :title="t('files.viewGallery')" :aria-label="t('files.viewGallery')" @click="app.setView('gallery')"><template #icon><n-icon :component="ImagesOutline" /></template></n-button>
         </n-button-group>
       </div>
     </div>
@@ -89,6 +90,39 @@
           :bordered="false" :single-line="false" :scroll-x="620"
           @update:checked-row-keys="k => (checked = k)" @update:sorter="onSorter"
         />
+        <div v-else-if="app.view === 'gallery'" class="gallery">
+          <div v-if="galleryDirs.length" class="g-folders" role="list" :aria-label="t('gallery.folders')">
+            <button
+              v-for="d in galleryDirs" :key="d.path" type="button" class="g-folder" role="listitem" :data-path="d.path" :class="{ cursor: cursor === d.path, 'drop-on': dropKey === d.path }"
+              @click="go(d.path)" @contextmenu.prevent.stop="openContext($event, d)"
+              @dragover="dropOver($event, d.path)" @dragleave="dropLeave($event, d.path)" @drop="dropDo($event, d.path)"
+            ><n-icon :component="Folder" color="#f59e0b" :size="18" /><span>{{ d.name }}</span></button>
+          </div>
+          <div v-if="!galleryMedia.length" class="muted g-empty">{{ t('gallery.empty') }}</div>
+          <div v-else class="g-grid">
+            <div
+              v-for="it in galleryShown" :key="it.path" class="g-tile" :data-path="it.path" :draggable="can('write')"
+              :class="{ on: checked.includes(it.path), cursor: cursor === it.path }"
+              @contextmenu.prevent.stop="openContext($event, it)" @click="cursor = it.path" @dragstart="dragStart($event, it)" @dragend="dragEnd"
+            >
+              <button type="button" class="g-main" :aria-label="`${t('gallery.open')} ${it.name}`" @click="openLightbox(it)">
+                <span class="g-img">
+                  <thumb-img v-if="thumbOf(it, tileSize)" :src="thumbOf(it, tileSize)" alt="">
+                    <template #fallback><file-icon :item="it" :size="40" /></template>
+                  </thumb-img>
+                  <file-icon v-else :item="it" :size="40" />
+                  <span v-if="isVideo(it)" class="play" aria-hidden="true"><n-icon :component="PlayOutline" :size="22" /></span>
+                </span>
+              </button>
+              <div class="g-name">{{ it.name }}</div>
+              <n-checkbox v-if="selectable" class="g-check" :checked="checked.includes(it.path)" @update:checked="v => toggle(it, v)" />
+              <n-dropdown v-if="actionsFor(it).length" trigger="click" placement="bottom-end" :options="actionsFor(it)" @select="k => run(k, it)">
+                <n-button class="g-menu" quaternary circle size="small"><template #icon><n-icon :component="EllipsisHorizontal" /></template></n-button>
+              </n-dropdown>
+            </div>
+            <div v-if="galleryShown.length < galleryMedia.length" class="more"><n-button secondary @click="gridLimit += 120">{{ t('files.showMore', { n: galleryMedia.length - galleryShown.length }) }}</n-button></div>
+          </div>
+        </div>
         <div v-else class="grid">
           <div
             v-for="it in gridItems" :key="it.path" class="card" :data-path="it.path" :draggable="can('write')"
@@ -99,8 +133,11 @@
           >
             <button type="button" class="card-main" @click="open(it)">
               <div class="thumb">
-                <img v-if="hasThumb(it)" :src="api.downloadUrl(space, it.path, true)" loading="lazy" :alt="it.name">
+                <thumb-img v-if="thumbOf(it, 256)" :src="thumbOf(it, 256)" alt="">
+                  <template #fallback><file-icon :item="it" :size="44" /></template>
+                </thumb-img>
                 <file-icon v-else :item="it" :size="44" />
+                <span v-if="isVideo(it) && thumbOf(it, 256)" class="play" aria-hidden="true"><n-icon :component="PlayOutline" :size="18" /></span>
               </div>
               <div class="card-name" :title="it.name">{{ it.name }}</div>
               <div class="card-meta muted">{{ it.type === 'dir' ? t('common.folder') : formatBytes(it.size) }}</div>
@@ -148,6 +185,11 @@
       <template #footer><div class="foot"><n-button @click="keysOpen = false">{{ t('common.close') }}</n-button></div></template>
     </n-modal>
     <preview-modal v-model:show="preview.show" :space="space" :item="preview.item" :siblings="visible" :can-edit="can('write')" :can-download="can('download')" :office-mode-of="officeModeOf" @saved="load(true)" @office="openOffice" @versions="openVersions" />
+    <lightbox
+      v-model:show="lightbox.show" :index="lightboxIndex" :items="lightboxItems" :file-url="lightboxFile" :thumb-url="lightboxThumb"
+      :download-url="lightboxDownload" :can-original="can('download')" @update:index="setLightboxIndex"
+    />
+    <zip-viewer v-model:show="zip.show" :name="zip.item?.name || ''" :source="zipSource" :can-extract="can('zip') && can('write')" @extract="extractFromViewer" />
     <office-editor v-model:show="office.show" :space="space" :item="office.item" :mode="office.mode" @closed="onOfficeClosed" />
 
     <n-modal v-model:show="prompt.show" preset="card" :title="prompt.title" style="width: min(440px, 94vw)">
@@ -168,24 +210,28 @@ import {
   NModal, NProgress, NResult, NSpin,
 } from 'naive-ui'
 import {
-  AddOutline, ArchiveOutline, ArrowBackOutline, ClipboardOutline, CloudUploadOutline, CopyOutline, CreateOutline, CutOutline, DocumentTextOutline,
+  AddOutline, ArchiveOutline, Folder, ArrowBackOutline, ClipboardOutline, CloudUploadOutline, CopyOutline, CreateOutline, CutOutline, DocumentTextOutline,
   DownloadOutline, EllipsisHorizontal, EyeOffOutline, EyeOutline, FolderOpenOutline, GridOutline, HomeOutline, KeypadOutline, LinkOutline, ListOutline, PeopleOutline,
-  OpenOutline, RefreshOutline, ReturnUpForwardOutline, SearchOutline, Star, StarOutline, TimeOutline, TrashOutline, FolderOutline, EyeOutline as ViewIcon, ExpandOutline,
+  ImagesOutline, PlayOutline, OpenOutline, RefreshOutline, ReturnUpForwardOutline, SearchOutline, Star, StarOutline, TimeOutline, TrashOutline, FolderOutline, EyeOutline as ViewIcon, ExpandOutline,
 } from '@vicons/ionicons5'
 import { api } from '../api'
 import { useFeedback } from '../composables'
 import { useAppStore } from '../store'
 import { collectDropped, fromInput } from '../upload-utils'
-import { baseName, extOf, formatBytes, formatDate, isImage, joinPath, kindOf, officeModeFor, parentPath } from '../utils'
+import { loadThumbStatus, mediaKindOf, sharpScreen, wantsThumb } from '../media'
+import { baseName, extOf, formatBytes, formatDate, kindOf, officeModeFor, parentPath } from '../utils'
 import FileIcon from './FileIcon.vue'
 import FolderPicker from './FolderPicker.vue'
 import GrantModal from './GrantModal.vue'
+import Lightbox from './Lightbox.vue'
 import OfficeEditor from './OfficeEditor.vue'
 import PreviewModal from './PreviewModal.vue'
 import SearchModal from './SearchModal.vue'
 import ShareModal from './ShareModal.vue'
+import ThumbImg from './ThumbImg.vue'
 import UploadPanel from './UploadPanel.vue'
 import VersionsModal from './VersionsModal.vue'
+import ZipViewer from './ZipViewer.vue'
 
 const props = defineProps({ space: { type: String, required: true }, emptyText: { type: String, default: '' } })
 const { t, locale } = useI18n()
@@ -207,9 +253,6 @@ const canShare = computed(() => !!app.user && can('share') && (can('download') |
 const canShareItem = it => canShare.value && (can('download') || (it.type === 'dir' && can('upload')))
 // a folder of the personal space to another user needs `share` alone (the server's rule for POST /api/grants)
 const canGrant = computed(() => !!app.user && props.space === 'home' && can('share'))
-// the grid shows the original picture as its thumbnail, so leave out the big ones
-const THUMB_MAX = 5 * 1024 * 1024
-const hasThumb = it => it.type === 'file' && isImage(it.name) && it.size <= THUMB_MAX && can('download')
 const location = computed(() => {
   const q = route.query.path
   return typeof q === 'string' && q.startsWith('/') ? q : '/'
@@ -278,6 +321,59 @@ const sorted = computed(() => {
   })
 })
 const gridItems = computed(() => sorted.value.slice(0, gridLimit.value))
+
+// ───── small pictures of images, PDFs and videos (the grid and the gallery never load the files themselves) ─────
+const isVideo = it => mediaKindOf(it.name) === 'video'
+// the version (mtime) is in the address: the browser keeps a picture for a day, so a changed file must ask for a new one
+const thumbOf = (it, size) => (it.type === 'file' && can('read') && wantsThumb(it.name) ? api.thumbUrl(props.space, it.path, size, it.mtime) : '')
+const tileSize = sharpScreen() ? 1024 : 256
+onMounted(() => loadThumbStatus(!!app.user))
+
+// ───── gallery: the pictures and videos of the folder as big tiles, the folders as a small row above ─────
+const galleryDirs = computed(() => sorted.value.filter(i => i.type === 'dir'))
+const galleryMedia = computed(() => sorted.value.filter(i => i.type === 'file' && mediaKindOf(i.name) && can('read')))
+const galleryShown = computed(() => galleryMedia.value.slice(0, gridLimit.value))
+
+const lightbox = reactive({ show: false, path: '' })
+const lightboxItems = computed(() => galleryMedia.value.map(i => ({ key: i.path, name: i.name, kind: mediaKindOf(i.name), path: i.path, mtime: i.mtime })))
+const lightboxIndex = computed(() => lightboxItems.value.findIndex(i => i.key === lightbox.path))
+function openLightbox(it) {
+  cursor.value = it.path
+  lightbox.path = it.path
+  lightbox.show = true
+}
+function setLightboxIndex(i) {
+  const it = lightboxItems.value[i]
+  if (!it) return
+  lightbox.path = it.key
+  cursor.value = it.key
+}
+const lightboxFile = it => api.downloadUrl(props.space, it.path, true)
+const lightboxDownload = it => api.downloadUrl(props.space, it.path)
+const lightboxThumb = (it, size) => thumbOf({ ...it, type: 'file' }, size)
+// the file went away (deleted elsewhere) while the viewer was open
+watch(lightboxIndex, i => { if (lightbox.show && i < 0) lightbox.show = false })
+
+// ───── look inside a zip ─────
+const zip = reactive({ show: false, item: null })
+/** the server's rule for the listing: read + download */
+const canLook = computed(() => can('read') && can('download'))
+const isZip = it => it.type === 'file' && extOf(it.name) === 'zip'
+function openZip(it) {
+  zip.item = it
+  zip.show = true
+}
+const zipSource = computed(() => {
+  const it = zip.item
+  if (!it) return null
+  const space = props.space
+  return { list: () => api.archiveList(space, it.path), fileUrl: name => api.archiveFileUrl(space, it.path, name), inlineUrl: name => api.archiveFileUrl(space, it.path, name, true) }
+})
+function extractFromViewer() {
+  const it = zip.item
+  zip.show = false
+  if (it) unzip(it)
+}
 
 function onSorter(s) {
   if (!s || !s.order) { sortKey.value = 'name'; sortOrder.value = 'ascend' } else { sortKey.value = s.columnKey; sortOrder.value = s.order }
@@ -370,6 +466,8 @@ function triggerDownload(url) {
 
 function open(it) {
   if (it.type === 'dir') return go(it.path)
+  if (app.view === 'gallery' && mediaKindOf(it.name) && can('read')) return openLightbox(it)
+  if (isZip(it) && canLook.value) return openZip(it)
   if (kindOf(it.name) !== 'other' && can('download')) { preview.item = it; preview.show = true; return }
   // no viewer in the page (doc, xls, ppt ...): the office editor reads it when it is set up
   const mode = officeModeOf(it.name)
@@ -513,9 +611,10 @@ async function onPicked2(dest, destSpace) {
 const ico = c => () => h(NIcon, { component: c })
 function actionsFor(it) {
   const list = []
-  const isZip = it.type === 'file' && extOf(it.name) === 'zip'
+  const zipFile = isZip(it)
   if (it.type === 'dir') list.push({ key: 'open', label: t('common.open'), icon: ico(FolderOpenOutline) })
   else if (kindOf(it.name) !== 'other' && can('download')) list.push({ key: 'open', label: t('files.preview'), icon: ico(ViewIcon) })
+  if (zipFile && canLook.value) list.push({ key: 'inside', label: t('zip.lookInside'), icon: ico(ArchiveOutline) })
   const officeMode = it.type === 'file' ? officeModeOf(it.name) : null
   if (officeMode) list.push({ key: 'office', label: officeMode === 'edit' ? t('office.edit') : t('office.open'), icon: ico(officeMode === 'edit' ? CreateOutline : OpenOutline) })
   if (it.type === 'file' && can('read')) list.push({ key: 'versions', label: t('versions.menu'), icon: ico(TimeOutline) })
@@ -532,7 +631,7 @@ function actionsFor(it) {
   else if (copyOut.value) list.push({ key: 'copy', label: t('files.copyTo'), icon: ico(CopyOutline) })
   if (can('zip') && can('write')) {
     list.push({ key: 'zip', label: t('files.zip'), icon: ico(ArchiveOutline) })
-    if (isZip) list.push({ key: 'unzip', label: t('files.unzip'), icon: ico(ExpandOutline) })
+    if (zipFile) list.push({ key: 'unzip', label: t('files.unzip'), icon: ico(ExpandOutline) })
   }
   if (can('write')) list.push({ type: 'divider', key: 'd' }, { key: 'delete', label: t('common.delete'), icon: ico(TrashOutline) })
   return list
@@ -540,6 +639,7 @@ function actionsFor(it) {
 
 function run(key, it) {
   if (key === 'open') return open(it)
+  if (key === 'inside') return openZip(it)
   if (key === 'office') return openOffice(it, officeModeOf(it.name))
   if (key === 'download') return it.type === 'dir' ? downloadMany([it]) : triggerDownload(api.downloadUrl(props.space, it.path))
   if (key === 'versions') return openVersions(it)
@@ -685,7 +785,8 @@ function onDrop(e) {
   dragging.value = false
   dragDepth = 0
   if (!can('upload') || !hasFiles(e) || isOurs(e)) return
-  collectDropped(e.dataTransfer).then(list => list.length && uploader.value?.add(list, location.value))
+  // a folder that can not be read (or a file that vanished) used to end here without a word
+  collectDropped(e.dataTransfer).then(list => list.length && uploader.value?.add(list, location.value)).catch(() => fb.warn(t('upload.dropFailed')))
 }
 
 // ───── drag & drop: move (Ctrl / Cmd = copy) a row or the selection onto a folder or a breadcrumb ─────
@@ -784,7 +885,7 @@ const shortcutList = computed(() => {
 })
 
 /** the rows the arrow keys walk over, in the order they are shown */
-const rowsInOrder = () => (app.view === 'list' ? sorted.value : gridItems.value)
+const rowsInOrder = () => (app.view === 'list' ? sorted.value : app.view === 'gallery' ? [...galleryDirs.value, ...galleryShown.value] : gridItems.value)
 /** what a key acts on: the selection, else the row the arrow keys are on */
 function targets() {
   if (selected.value.length) return selected.value
@@ -793,7 +894,7 @@ function targets() {
 }
 /** a modal, a dialog, a menu or a drop-down list is open: the keys belong to it */
 function overlayOpen() {
-  if (preview.show || office.show || versions.show || share.show || grant.show || picker.show || prompt.show || searchOpen.value || keysOpen.value || ctx.show) return true
+  if (lightbox.show || zip.show || preview.show || office.show || versions.show || share.show || grant.show || picker.show || prompt.show || searchOpen.value || keysOpen.value || ctx.show) return true
   // (the empty `.n-modal-container` stays behind after a close, so look for what is inside it)
   return !!document.querySelector('.n-modal-mask, .n-modal, .n-dialog, .n-dropdown-menu, .n-base-select-menu, .n-popover, .n-drawer-mask, .n-drawer')
 }
@@ -930,7 +1031,32 @@ function onSearchSelect(it) {
 .card.on { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft); }
 .card-main { all: unset; box-sizing: border-box; display: block; width: 100%; cursor: pointer; padding: 10px; }
 .thumb { height: 104px; border-radius: 8px; display: grid; place-items: center; overflow: hidden; background: var(--surface); }
-.thumb img { width: 100%; height: 100%; object-fit: cover; }
+.thumb { position: relative; border: 1px solid var(--border); }
+.play { position: absolute; right: 6px; bottom: 6px; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; color: #fff; background: rgba(0, 0, 0, 0.55); pointer-events: none; }
+/* gallery */
+.gallery { padding: 14px 16px 16px; }
+.g-folders { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.g-folder { all: unset; box-sizing: border-box; display: inline-flex; align-items: center; gap: 8px; max-width: 100%; padding: 6px 12px; border: 1px solid var(--border); border-radius: 999px; background: var(--surface-2); cursor: pointer; font-size: 13.5px; }
+.g-folder span { overflow-wrap: anywhere; min-width: 0; }
+.g-folder:hover, .g-folder.cursor { border-color: var(--primary); }
+.g-folder:focus-visible { outline: 2px solid var(--primary); }
+.g-folder.drop-on { outline: 2px solid var(--primary); background: var(--primary-soft); }
+.g-empty { padding: 36px 8px; text-align: center; }
+.g-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
+.g-tile { position: relative; min-width: 0; border-radius: 10px; transition: box-shadow 0.15s; }
+.g-tile.on, .g-tile.cursor { box-shadow: 0 0 0 2px var(--primary); }
+.g-main { all: unset; box-sizing: border-box; display: block; width: 100%; cursor: pointer; border-radius: 10px; }
+.g-main:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.g-img { position: relative; display: block; aspect-ratio: 1; border-radius: 10px; overflow: hidden; background: var(--surface-2); border: 1px solid var(--border); }
+.g-img > .play { right: 8px; bottom: 8px; width: 32px; height: 32px; }
+.g-img > :deep(.n-icon) { position: absolute; inset: 0; margin: auto; }
+.g-name { margin-top: 4px; font-size: 12px; line-height: 1.35; color: var(--muted); overflow-wrap: anywhere; }
+.g-check { position: absolute; top: 8px; left: 8px; }
+.g-menu { position: absolute; top: 6px; right: 6px; background: var(--surface); }
+@media (max-width: 640px) {
+  .gallery { padding: 10px; }
+  .g-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+}
 .card-name { margin-top: 8px; font-size: 13.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card-meta { font-size: 12px; }
 .card-check { position: absolute; top: 14px; left: 14px; }

@@ -13,7 +13,7 @@
       <div v-show="!collapsed" class="list">
         <div v-for="it in queue" :key="it.key" class="item">
           <div class="line">
-            <span class="name truncate" :title="it.displayName">{{ it.displayName }}</span>
+            <span class="name" :title="it.displayName">{{ it.displayName }}</span>
             <span class="muted size">{{ formatBytes(it.size) }}</span>
           </div>
           <n-progress type="line" :percentage="percent(it)" :status="statusOf(it)" :show-indicator="false" :height="6" :processing="it.status === 'uploading'" />
@@ -22,8 +22,8 @@
             <span class="actions">
               <n-button v-if="it.status === 'uploading'" text size="tiny" @click="it.paused = true; it.status = 'paused'">{{ t('upload.pause') }}</n-button>
               <n-button v-if="it.status === 'paused'" text type="primary" size="tiny" @click="it.paused = false; it.status = 'uploading'">{{ t('upload.resume') }}</n-button>
-              <n-button v-if="it.status === 'error'" text type="primary" size="tiny" @click="retry(it)">{{ t('common.retry') }}</n-button>
-              <n-button v-if="['queued', 'uploading', 'paused', 'error'].includes(it.status)" text type="error" size="tiny" @click="cancel(it)">{{ t('common.cancel') }}</n-button>
+              <n-button v-if="it.status === 'error' && !it.final" text type="primary" size="tiny" @click="retry(it)">{{ t('common.retry') }}</n-button>
+              <n-button v-if="['queued', 'uploading', 'paused', 'error'].includes(it.status)" text type="error" size="tiny" @click="cancel(it)">{{ it.final ? t('common.remove') : t('common.cancel') }}</n-button>
             </span>
           </div>
         </div>
@@ -40,6 +40,7 @@ import { ChevronDownOutline, ChevronUpOutline, CloseOutline, CloudUploadOutline 
 import { api, putChunk } from '../api'
 import { useFeedback } from '../composables'
 import { useAppStore } from '../store'
+import { NAME_MAX_BYTES, nameProblem } from '../upload-utils'
 import { createPool } from '../uploadPool'
 import { formatBytes, formatDuration } from '../utils'
 
@@ -90,10 +91,20 @@ function add(list, path) {
       fb.warn(t('upload.tooBig', { name: file.name, max: formatBytes(max) }))
       continue
     }
-    queue.value.push(reactive({
+    const item = reactive({
       key: ++seq, file, displayName, relativeDir, path, space: props.space, size: file.size,
-      loaded: 0, status: 'queued', error: '', id: null, paused: false, canceled: false, aborts: new Set(), started: 0,
-    }))
+      loaded: 0, status: 'queued', error: '', id: null, paused: false, canceled: false, aborts: new Set(), started: 0, final: false,
+    })
+    // a name the file system can not hold is told here, per file, before anything is sent (trying again changes nothing)
+    const bad = nameProblem(file.name, relativeDir)
+    if (bad) {
+      item.status = 'error'
+      item.final = true
+      item.error = bad.kind === 'folder'
+        ? t('upload.folderNameTooLong', { name: bad.name, max: NAME_MAX_BYTES })
+        : t('upload.nameTooLong', { max: NAME_MAX_BYTES })
+    }
+    queue.value.push(item)
   }
   collapsed.value = false
   pump()
@@ -188,6 +199,8 @@ function scheduleRefresh() {
 }
 
 function cancel(it) {
+  // a file that was never sent just leaves the list
+  if (it.final) { queue.value = queue.value.filter(i => i !== it); return }
   it.canceled = true
   it.status = 'canceled'
   it.aborts.forEach(a => a())
@@ -219,11 +232,11 @@ defineExpose({ add })
 .sub { font-size: 12px; }
 .list { max-height: 320px; overflow-y: auto; }
 .item { padding: 10px 14px; border-top: 1px solid var(--border); }
-.line { display: flex; justify-content: space-between; gap: 10px; align-items: center; font-size: 13px; margin-bottom: 6px; }
+.line { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; font-size: 13px; margin-bottom: 6px; }
 .line.meta { margin: 6px 0 0; font-size: 12px; }
-.name { min-width: 0; }
+.name { min-width: 0; overflow-wrap: anywhere; line-height: 1.4; }
 .size { flex: none; font-size: 12px; }
-.err { color: var(--danger); }
+.err { color: var(--danger); overflow-wrap: anywhere; min-width: 0; }
 .actions { display: flex; gap: 10px; flex: none; }
 .slide-enter-active, .slide-leave-active { transition: transform 0.2s ease, opacity 0.2s; }
 .slide-enter-from, .slide-leave-to { transform: translateY(16px); opacity: 0; }
