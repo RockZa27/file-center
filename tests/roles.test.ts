@@ -371,10 +371,14 @@ describe('roles: the last admin', () => {
     expect((await admin.json('POST', '/api/admin/users', mk('tmp-admin', 'admin'))).status).toBe(200)
     expect((await admin.json('DELETE', '/api/admin/users/tmp-admin')).status).toBe(200)
     expect((await admin.json('DELETE', '/api/admin/users/boss2')).status).toBe(200)
+    // other test files may have made admins: they step down for this check, and come back after
+    const others = ((await admin.json('GET', '/api/admin/users')).data.users as any[]).filter(u => u.role === 'admin' && u.username !== 'admin').map(u => u.username)
+    for (const name of others) expect((await admin.json('PUT', `/api/admin/users/${name}`, { role: 'user' })).status).toBe(200)
     expect((await admin.json('PUT', '/api/admin/users/admin', { role: 'manager' })).data.code).toBe('admin.last-admin')
     expect((await admin.json('PUT', '/api/admin/users/admin', { role: 'user' })).data.code).toBe('admin.last-admin')
     expect((await admin.json('DELETE', '/api/admin/users/admin')).status).toBe(400)
     expect((await row(admin, 'admin')).role).toBe('admin')
+    for (const name of others) expect((await admin.json('PUT', `/api/admin/users/${name}`, { role: 'admin' })).status).toBe(200)
   })
   test('an admin may make a manager', async () => {
     expect((await admin.json('PUT', '/api/admin/users/ann', { role: 'manager' })).status).toBe(200)

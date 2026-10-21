@@ -65,6 +65,9 @@ beforeAll(async () => {
   ;({ config, paths } = await import('../src/config'))
   ;({ MESSAGES } = await import('../src/messages'))
   alerts = await import('../src/alerts')
+  // other files of the run may have sent alerts (backups, sign-in failures): start from none sent
+  await alerts.alertsIdle()
+  alerts.resetAlerts()
   saved.timing = { ...alerts.ALERT_TIMING }
   saved.backupDir = config.backupDir
   saved.status = existsSync(paths.backupStatus) ? readFileSync(paths.backupStatus, 'utf8') : null

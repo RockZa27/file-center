@@ -146,21 +146,30 @@ describe('roles fixes: what a manager sees', () => {
     expect((await row(admin, 'rf-s2')).homedir).toBe('/users/rf-s1')
   })
   test('the dashboard counts the managed users and the space of their homes only', async () => {
+    // other test files leave files in their users' homes (pictures, zips): measure what this test adds
+    const settle = async (min = 0) => {
+      let s: any
+      for (let i = 0; i < 40; i++) {
+        s = (await mgr.json('GET', '/api/admin/status')).data
+        if (!s.stale && s.storage.size >= min) break
+        await Bun.sleep(100)
+      }
+      return s
+    }
+    const before = (await settle()).storage.size as number
     writeFileSync(join(storage(), 'users', 'rf-fresh', 'a.bin'), Buffer.alloc(100))
     writeFileSync(join(storage(), 'users', 'rf-pw', 'b.bin'), Buffer.alloc(50))
     writeFileSync(join(storage(), 'team-share', 'big.bin'), Buffer.alloc(5000))
+    // written past the API: the counts of those homes are asked for again
+    const quota = await import('../src/quota')
+    quota.forget('rf-fresh')
+    quota.forget('rf-pw')
     const managed = (await mgr.json('GET', '/api/admin/users')).data.users.filter((u: any) => u.manageable).length
-    let last: any
-    for (let i = 0; i < 40; i++) {
-      last = (await mgr.json('GET', '/api/admin/status')).data
-      if (!last.stale && last.storage.size >= 150) break
-      await Bun.sleep(100)
-    }
+    const last = await settle(before + 150)
     expect(last.users).toBe(managed)
-    // other test files leave small files in their users' homes: at least ours, never the 5000 bytes outside the managed homes
+    // our 150 bytes are counted, never the 5000 bytes outside the managed homes
     expect(Object.keys(last.storage)).toEqual(['size'])
-    expect(last.storage.size).toBeGreaterThanOrEqual(150)
-    expect(last.storage.size).toBeLessThan(5000)
+    expect(last.storage.size - before).toBe(150)
     expect(last.manageableUsers).toBeUndefined()
   })
 })
