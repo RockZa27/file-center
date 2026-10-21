@@ -46,7 +46,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { NAvatar, NBadge, NButton, NDropdown, NIcon } from 'naive-ui'
 import {
-  ArchiveOutline, CloudUploadOutline, DocumentTextOutline, FolderOutline, GlobeOutline, KeyOutline, LinkOutline, LogOutOutline, MenuOutline, PeopleOutline, SettingsOutline,
+  ArchiveOutline, CloudUploadOutline, DocumentTextOutline, FolderOpenOutline, FolderOutline, GlobeOutline, KeyOutline, LinkOutline, LogOutOutline, MenuOutline, PeopleCircleOutline, PeopleOutline, SettingsOutline,
   SpeedometerOutline, StarOutline, TimeOutline, TrashOutline,
 } from '@vicons/ionicons5'
 import { api } from '../api'
@@ -77,6 +77,7 @@ const navItems = computed(() => {
   const items = [{ name: 'files', label: t('nav.files'), icon: FolderOutline }]
   items.push({ name: 'favorites', label: t('nav.favorites'), icon: StarOutline })
   items.push({ name: 'with-me', label: t('nav.withMe'), icon: PeopleOutline })
+  if (app.groups.length) items.push({ name: 'groups', label: t('nav.groupFolders'), icon: FolderOpenOutline })
   items.push({ name: 'my-trash', label: app.isAdmin ? t('nav.myTrash') : t('nav.trash'), icon: TrashOutline })
   if (!app.isAdmin && app.hasSpace('public')) items.push({ name: 'shared', label: t('nav.publicFolder'), icon: GlobeOutline })
   if (app.canShare || app.canGrant || app.isStaff) items.push({ name: 'links', label: t('nav.shareLinks'), icon: LinkOutline })
@@ -84,6 +85,7 @@ const navItems = computed(() => {
     items.push(
       { name: 'dashboard', label: t('nav.dashboard'), icon: SpeedometerOutline, badge: alertCount.value, badgeType: critical.value ? 'error' : 'warning' },
       { name: 'users', label: t('nav.users'), icon: PeopleOutline },
+      { name: 'admin-groups', label: t('nav.groupsAdmin'), icon: PeopleCircleOutline },
       { name: 'activity', label: t('nav.activity'), icon: TimeOutline },
     )
   }
@@ -99,7 +101,7 @@ const navItems = computed(() => {
   return items
 })
 
-const pageTitle = computed(() => (route.name === 'user-files' ? t('nav.users') : route.name === 'shared' ? t('nav.publicFolder') : navItems.value.find(i => i.name === route.name)?.label || ''))
+const pageTitle = computed(() => (route.name === 'user-files' ? t('nav.users') : route.name === 'shared' ? t('nav.publicFolder') : route.name === 'groups' ? t('nav.groupFolders') : navItems.value.find(i => i.name === route.name)?.label || ''))
 const initial = computed(() => (app.user?.name || '?').trim().slice(0, 1).toUpperCase())
 
 const userOptions = computed(() => [
@@ -132,6 +134,7 @@ async function loadWarnings() {
 async function checkSession() {
   try { await app.refresh() } catch { return }
   if (!app.user) router.replace({ name: 'login' })
+  else app.loadGroups()
 }
 // whatever call noticed that the session is gone, leave the protected area at once
 watch(() => app.user, u => { if (!u) router.replace({ name: 'login' }) })
@@ -145,6 +148,7 @@ const onVisible = () => document.visibilityState === 'visible' && checkSession()
 onMounted(() => {
   if (app.user?.mustChangePassword) profileOpen.value = true
   loadWarnings()
+  app.loadGroups()
   timer = setInterval(() => { checkSession(); loadWarnings() }, 2 * 60 * 1000)
   document.addEventListener('visibilitychange', onVisible)
 })

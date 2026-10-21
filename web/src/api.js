@@ -159,13 +159,35 @@ export const api = {
   lookupUsers: q => get('/api/users/lookup', { q }),
   /** a folder of the caller's home to another user: perms 'view' | 'edit' -> { ok, created, grant } */
   createGrant: (path, to, perms) => post('/api/grants', { space: 'home', path, to, perms }),
-  /** { items: [{ id, path, name, to, toName, perms, createdAt, active }] } */
+  /** the same to a group the caller belongs to (an admin: any group) */
+  createGroupGrant: (path, toGroup, perms) => post('/api/grants', { space: 'home', path, toGroup, perms }),
+  /** { items: [{ id, path, name, to, toName, perms, createdAt, active }] }; a grant to a group has to/toName null and toGroup, toGroupName */
   myGrants: () => get('/api/grants/mine'),
   /** { items: [{ id, space: 'grant:<id>', name, owner, ownerName, perms, createdAt }] } */
   grantsToMe: () => get('/api/grants/to-me'),
   updateGrant: (id, perms) => call('PATCH', `/api/grants/${encodeURIComponent(id)}`, { perms }),
   /** the owner takes the share back; the person it was shared with leaves */
   deleteGrant: id => call('DELETE', `/api/grants/${encodeURIComponent(id)}`),
+
+  /** { items: [{ id, name, perms: 'view' | 'edit', space, quotaBytes, used }] }: the groups the caller is in */
+  myGroups: () => get('/api/groups/mine'),
+  /** { groups: [{ id, name }] } for the share dialog */
+  lookupGroups: q => get('/api/groups/lookup', { q }),
+  /** { items: [{ id, name, space, quotaBytes, used, createdAt, createdBy, members: [{ username, name, perms }] }] } */
+  adminGroups: () => get('/api/admin/groups'),
+  createGroup: body => post('/api/admin/groups', body),
+  updateGroup: (id, body) => call('PATCH', `/api/admin/groups/${encodeURIComponent(id)}`, body),
+  deleteGroup: (id, password) => call('DELETE', `/api/admin/groups/${encodeURIComponent(id)}`, { password }),
+  /** adds the member, or changes the rights of one who is in already -> { ok, added, member } */
+  setGroupMember: (id, username, perms) => call('PUT', `/api/admin/groups/${encodeURIComponent(id)}/members`, { username, perms }),
+  removeGroupMember: (id, username) => call('DELETE', `/api/admin/groups/${encodeURIComponent(id)}/members/${encodeURIComponent(username)}`),
+
+  /** WebDAV app passwords of the signed-in user: { items: [{ id, name, scope, hint, createdAt, lastUsedAt, lastIp }], max, enabled } */
+  appPasswords: () => get('/api/me/app-passwords'),
+  /** -> the item plus `secret`, told this once only */
+  createAppPassword: (name, scope, password) => post('/api/me/app-passwords', { name, scope, password }),
+  deleteAppPassword: id => call('DELETE', `/api/me/app-passwords/${encodeURIComponent(id)}`),
+
   settings: () => get('/api/admin/settings'),
   saveSettings: s => call('PUT', '/api/admin/settings', s),
   uploadLogo: file => call('PUT', '/api/admin/logo', file, { 'content-type': file.type }),

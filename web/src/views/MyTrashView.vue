@@ -50,7 +50,7 @@ async function load() {
 
 const daysLeft = row => Math.max(0, Math.ceil(retention.value - (Date.now() - Date.parse(row.deletedAt)) / 86_400_000))
 const spaceLabel = s => (s === 'home' ? t('myTrash.spaceHome') : s === 'public' ? t('myTrash.spacePublic') : `${t('myTrash.spaceGrant')}${grantNames.value[s] ? ` ${grantNames.value[s]}` : ''}`)
-const placeOf = r => (r.restorable ? `${spaceLabel(r.space)} · ${r.path}` : t('myTrash.unknownPlace'))
+const placeOf = r => (r.group ? `${t('myTrash.spaceGroup')} ${r.group.name}${r.restorable ? ` · ${r.path}` : ''}` : r.restorable ? `${spaceLabel(r.space)} · ${r.path}` : t('myTrash.unknownPlace'))
 
 async function restore(row) {
   try { const r = await api.restoreMine(row.id); fb.ok(t('trash.restored', { path: r.restoredTo })); await load() } catch (e) { fb.fail(e); await load() }
@@ -76,7 +76,7 @@ const nameCell = r => h('div', { class: 'name-cell' }, [
 // only the owner deletes for good (what someone else deleted from your shared folder stays theirs to keep);
 // an item of no one's home (the public folder) can be purged by whoever deleted it
 const me = () => (app.user?.username || '').toLowerCase()
-const canPurge = r => (r.owner ? r.owner.toLowerCase() === me() : (r.deletedBy || '').toLowerCase() === me())
+const canPurge = r => (r.group ? (r.deletedBy || '').toLowerCase() === me() : r.owner ? r.owner.toLowerCase() === me() : (r.deletedBy || '').toLowerCase() === me())
 const leftTag = r => h(NTag, { size: 'small', round: true, type: daysLeft(r) <= 3 ? 'warning' : 'default' }, () => t('trash.days', daysLeft(r)))
 const actions = r => h('div', { class: 'row-actions' }, [
   h('span', { title: r.restorable ? undefined : t('myTrash.cannotRestore') }, [

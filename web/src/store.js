@@ -17,6 +17,8 @@ export const useAppStore = defineStore('app', {
     view: read('fc.view', 'list'),
     /** the signed-in user's starred places, as `space:path` */
     favorites: [],
+    /** the group folders the signed-in user is a member of (the side menu shows them only then) */
+    groups: [],
   }),
   getters: {
     /** the super admin: sees everything */
@@ -42,7 +44,11 @@ export const useAppStore = defineStore('app', {
       this.user = snapshot.user
       this.spaces = snapshot.spaces
       this.config = snapshot.config
-      if (!snapshot.user) this.favorites = []
+      if (!snapshot.user) { this.favorites = []; this.groups = [] }
+    },
+    async loadGroups() {
+      if (!this.user) return
+      try { this.groups = (await api.myGroups()).items } catch { /* the menu item just stays as it was */ }
     },
     async loadFavorites() {
       if (!this.user) return

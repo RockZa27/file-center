@@ -33,15 +33,17 @@ async function load() {
 
 async function setPerms(g, v) {
   if (v === g.perms) return
-  try { await api.updateGrant(g.id, v); g.perms = v; fb.ok(t('grants.updated', { name: g.toName || g.to })) } catch (e) { fb.fail(e); await load() }
+  try { await api.updateGrant(g.id, v); g.perms = v; fb.ok(t('grants.updated', { name: targetName(g) })) } catch (e) { fb.fail(e); await load() }
 }
 async function remove(g) {
-  const name = g.toName || g.to
+  const name = targetName(g)
   if (!(await fb.confirm({ title: t('grants.removeTitle', { name }), content: t('grants.removeBody', { name, folder: g.name }), positive: t('grants.remove'), danger: true }))) return
   try { await api.deleteGrant(g.id); fb.ok(t('grants.removed')) } catch (e) { fb.fail(e) }
   await load()
 }
 
+// a grant to a group has no `to`: the group's name stands for the recipient
+const targetName = g => (g.toGroup ? g.toGroupName || t('groups.groupLabel') : g.toName || g.to)
 const dim = g => (g.active ? '' : ' dim')
 const folderCell = g => h('div', { class: `g-folder${dim(g)}` }, [
   h(NIcon, { component: FolderOutline, size: 20, color: '#f59e0b' }),
@@ -52,7 +54,10 @@ const folderCell = g => h('div', { class: `g-folder${dim(g)}` }, [
     g.active ? null : h('div', { class: 'muted small' }, t('grants.inactiveHint')),
   ]),
 ])
-const toCell = g => h('div', { class: `g-text${dim(g)}` }, [h('div', { class: 'g-name' }, g.toName || g.to), h('div', { class: 'muted mono wrap' }, g.to)])
+const toCell = g => h('div', { class: `g-text${dim(g)}` }, [
+  h('div', { class: 'g-name' }, targetName(g)),
+  g.toGroup ? h(NTag, { size: 'small', round: true, bordered: false, type: 'info' }, () => t('groups.groupLabel')) : h('div', { class: 'muted mono wrap' }, g.to),
+])
 const permsCell = g => h('div', { class: dim(g).trim() }, [
   h(NRadioGroup, { value: g.perms, size: 'small', name: `perm-${g.id}`, 'onUpdate:value': v => setPerms(g, v) }, () => [
     h(NRadioButton, { value: 'view', label: t('grants.permView') }),
@@ -67,7 +72,7 @@ const columns = computed(() => (narrow.value
       title: t('grants.colFolder'), key: 'name',
       render: g => h('div', { class: 'stacked' }, [
         folderCell(g),
-        h('div', { class: `stacked-meta${dim(g)}` }, [h('span', {}, `${t('grants.colTo')}: ${g.toName || g.to} (${g.to})`), h('span', {}, t('grants.since', { date: formatDate(g.createdAt) }))]),
+        h('div', { class: `stacked-meta${dim(g)}` }, [h('span', {}, g.toGroup ? `${t('grants.colTo')}: ${t('groups.groupLabel')} ${targetName(g)}` : `${t('grants.colTo')}: ${g.toName || g.to} (${g.to})`), h('span', {}, t('grants.since', { date: formatDate(g.createdAt) }))]),
         h('div', { class: 'stacked-meta' }, [permsCell(g)]),
         h('div', { class: 'stacked-meta' }, [removeBtn(g)]),
       ]),

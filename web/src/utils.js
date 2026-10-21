@@ -94,3 +94,8 @@ export function shade(hex, amount) {
   const b = mix(n & 255)
   return '#' + [r, g, b].map(v => v.toString(16).padStart(2, '0')).join('')
 }
+
+/** copies text; answers false when the browser would not (plain http that is not localhost) so the caller can show it to copy by hand */
+export async function copyText(text) {
+  try { await navigator.clipboard.writeText(text); return true } catch { return false }
+}

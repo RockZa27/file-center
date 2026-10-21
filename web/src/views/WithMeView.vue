@@ -8,6 +8,7 @@
             <span class="banner-text">
               {{ t('grants.viewing', { name: current.name, owner: ownerText(current) }) }}
               <n-tag size="small" round :bordered="false" :type="current.perms === 'edit' ? 'success' : 'default'">{{ permLabel(current.perms) }}</n-tag>
+              <span v-if="current.viaGroup" class="via-pill">{{ t('groups.via', { name: current.viaGroup.name }) }}</span>
             </span>
             <router-link :to="{ name: 'with-me' }" class="back">← {{ t('grants.back') }}</router-link>
           </div>
@@ -37,12 +38,13 @@
               <span class="grant-text">
                 <span class="grant-name">{{ g.name }}</span>
                 <span class="muted grant-meta">{{ t('grants.from', { name: ownerText(g) }) }} · {{ t('grants.since', { date: formatDate(g.createdAt) }) }}</span>
+                <span v-if="g.viaGroup" class="via"><span class="via-pill">{{ t('groups.via', { name: g.viaGroup.name }) }}</span></span>
               </span>
             </router-link>
             <n-tag size="small" round :bordered="false" :type="g.perms === 'edit' ? 'success' : 'default'">{{ permLabel(g.perms) }}</n-tag>
             <div class="grant-actions">
               <n-button size="small" type="primary" secondary @click="open(g)"><template #icon><n-icon :component="FolderOpenOutline" /></template>{{ t('grants.open') }}</n-button>
-              <n-button size="small" quaternary type="error" @click="leave(g)"><template #icon><n-icon :component="ExitOutline" /></template>{{ t('grants.leave') }}</n-button>
+              <n-button v-if="!g.viaGroup" size="small" quaternary type="error" @click="leave(g)"><template #icon><n-icon :component="ExitOutline" /></template>{{ t('grants.leave') }}</n-button>
             </div>
           </div>
         </n-spin>
@@ -107,5 +109,8 @@ watch(id, () => { if (!current.value) load() })
 .grant-name { font-weight: 600; overflow-wrap: anywhere; }
 .grant-main:hover .grant-name { color: var(--primary); text-decoration: underline; }
 .grant-meta { font-size: 12.5px; overflow-wrap: anywhere; }
+.via { margin-top: 2px; }
+/* a tag would not wrap: a group name can be long, and a phone has no hover */
+.via-pill { display: inline-block; max-width: 100%; padding: 1px 10px; border-radius: 999px; font-size: 12.5px; background: var(--primary-soft); color: var(--primary); overflow-wrap: anywhere; }
 .grant-actions { display: flex; gap: 6px; flex-wrap: wrap; }
 </style>

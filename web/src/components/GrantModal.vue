@@ -2,8 +2,23 @@
   <n-modal :show="show" preset="card" :title="t('grants.title', { name: item?.name || '' })" style="width: min(520px, 94vw)" @update:show="v => emit('update:show', v)">
     <p class="muted hint">{{ t('grants.hint') }}</p>
 
-    <!-- who: a search box, then the one person picked -->
-    <div v-if="!picked" class="field">
+    <!-- who: a user or (when the caller is in one, or is an admin) a group -->
+    <n-tabs v-if="groups.length && !picked" v-model:value="kind" type="segment" size="small" class="kinds">
+      <n-tab name="user">{{ t('groups.tabUser') }}</n-tab>
+      <n-tab name="group">{{ t('groups.tabGroup') }}</n-tab>
+    </n-tabs>
+    <!-- a search box, then the one recipient picked -->
+    <div v-if="!picked && kind === 'group'" class="field">
+      <n-input v-model:value="groupQuery" :placeholder="t('groups.searchGroup')" clearable :input-props="{ autocomplete: 'off', 'aria-label': t('groups.searchGroup') }" />
+      <div class="results">
+        <button v-for="g in shownGroups" :key="g.id" type="button" class="user" @click="picked = { group: true, id: g.id, name: g.name }">
+          <n-icon :component="PeopleCircleOutline" size="18" />
+          <span class="user-text"><span class="uname">{{ g.name }}</span></span>
+        </button>
+        <div v-if="!shownGroups.length" class="muted note">{{ t('groups.noGroups') }}</div>
+      </div>
+    </div>
+    <div v-else-if="!picked" class="field">
       <n-input v-model:value="query" :placeholder="t('grants.searchPlaceholder', { n: MIN })" clearable :input-props="{ autocomplete: 'off', 'aria-label': t('grants.search') }" />
       <div class="results">
         <div v-if="[...query.trim()].length < MIN" class="muted note">{{ t('grants.searchShort', { n: MIN }) }}</div>
@@ -19,7 +34,8 @@
     </div>
     <div v-else class="picked">
       <span class="muted">{{ t('grants.pickedTitle') }}</span>
-      <span class="user-text"><span class="uname">{{ picked.name || picked.username }}</span><span class="muted mono">{{ picked.username }}</span></span>
+      <span v-if="picked.group" class="user-text"><span class="uname">{{ picked.name }}</span><span class="muted">{{ t('groups.groupLabel') }}</span></span>
+      <span v-else class="user-text"><span class="uname">{{ picked.name || picked.username }}</span><span class="muted mono">{{ picked.username }}</span></span>
       <n-button size="tiny" quaternary @click="picked = null">{{ t('grants.clearPick') }}</n-button>
     </div>
 
@@ -35,7 +51,8 @@
     <n-spin :show="loading" size="small">
       <div v-if="!rows.length" class="muted note">{{ t('grants.currentNone') }}</div>
       <div v-for="g in rows" :key="g.id" class="row-g">
-        <span class="user-text"><span class="uname">{{ g.toName || g.to }}</span><span class="muted mono">{{ g.to }}</span></span>
+        <span v-if="g.toGroup" class="user-text"><span class="uname">{{ g.toGroupName }}</span><span class="muted">{{ t('groups.groupLabel') }}</span></span>
+        <span v-else class="user-text"><span class="uname">{{ g.toName || g.to }}</span><span class="muted mono">{{ g.to }}</span></span>
         <n-radio-group :value="g.perms" size="small" :name="`perm-${g.id}`" @update:value="v => setPerms(g, v)">
           <n-radio-button value="view" :label="t('grants.permView')" />
           <n-radio-button value="edit" :label="t('grants.permEdit')" />
@@ -50,10 +67,10 @@
 </template>
 
 <script setup>
-import { onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NButton, NIcon, NInput, NModal, NRadio, NRadioButton, NRadioGroup, NSpin } from 'naive-ui'
-import { CloseOutline, PersonOutline } from '@vicons/ionicons5'
+import { NButton, NIcon, NInput, NModal, NRadio, NRadioButton, NRadioGroup, NSpin, NTab, NTabs } from 'naive-ui'
+import { CloseOutline, PeopleCircleOutline, PersonOutline } from '@vicons/ionicons5'
 import { api } from '../api'
 import { useFeedback } from '../composables'
 
@@ -73,6 +90,12 @@ const perms = ref('view')
 const busy = ref(false)
 const rows = ref([])
 const loading = ref(false)
+// the groups the caller may share with (their own; an admin: all); no tabs when there are none
+const groups = ref([])
+const kind = ref('user')
+const groupQuery = ref('')
+const shownGroups = computed(() => groups.value.filter(g => g.name.toLowerCase().includes(groupQuery.value.trim().toLowerCase())))
+const targetName = g => (g.toGroup ? g.toGroupName : g.toName || g.to)
 
 let timer = null
 let seq = 0
@@ -111,6 +134,10 @@ watch(() => props.show, v => {
   searchError.value = ''
   picked.value = null
   perms.value = 'view'
+  kind.value = 'user'
+  groupQuery.value = ''
+  groups.value = []
+  api.lookupGroups('').then(r => { groups.value = r.groups }).catch(() => { /* no groups to offer */ })
   loadRows()
 })
 
@@ -118,8 +145,9 @@ async function create() {
   if (!picked.value || busy.value) return
   busy.value = true
   try {
-    const r = await api.createGrant(props.item.path, picked.value.username, perms.value)
-    const name = picked.value.name || picked.value.username
+    const p = picked.value
+    const r = p.group ? await api.createGroupGrant(props.item.path, p.id, perms.value) : await api.createGrant(props.item.path, p.username, perms.value)
+    const name = p.group ? p.name : p.name || p.username
     fb.ok(r.created ? t('grants.created', { name }) : t('grants.updated', { name }))
     picked.value = null
     query.value = ''
@@ -132,12 +160,12 @@ async function setPerms(g, v) {
   try {
     await api.updateGrant(g.id, v)
     g.perms = v
-    fb.ok(t('grants.updated', { name: g.toName || g.to }))
+    fb.ok(t('grants.updated', { name: targetName(g) }))
   } catch (e) { fb.fail(e); await loadRows() }
 }
 
 async function remove(g) {
-  const name = g.toName || g.to
+  const name = targetName(g)
   if (!(await fb.confirm({ title: t('grants.removeTitle', { name }), content: t('grants.removeBody', { name, folder: props.item?.name || '' }), positive: t('grants.remove'), danger: true }))) return
   try { await api.deleteGrant(g.id); fb.ok(t('grants.removed')) } catch (e) { fb.fail(e) }
   await loadRows()
@@ -146,6 +174,7 @@ async function remove(g) {
 
 <style scoped>
 .hint { margin: 0 0 12px; font-size: 13.5px; }
+.kinds { margin-bottom: 10px; }
 .field { display: flex; flex-direction: column; gap: 8px; }
 .results { min-height: 40px; max-height: 240px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-2); }
 .note { padding: 10px 12px; font-size: 13px; }

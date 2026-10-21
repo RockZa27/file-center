@@ -197,7 +197,7 @@ const fb = useFeedback()
 // a managed user's folder (`user:<name>`) is looked at, never changed; a folder another user shares (`grant:<id>`) may
 // be changed when it was shared for editing. The session knows neither: the rights come with each listing. Nothing
 // else here may offer a write
-const viewing = computed(() => props.space.startsWith('user:') || props.space.startsWith('grant:'))
+const viewing = computed(() => props.space.startsWith('user:') || props.space.startsWith('grant:') || props.space.startsWith('group:'))
 const inGrant = computed(() => props.space.startsWith('grant:'))
 const viewPerms = ref([])
 const can = p => (viewing.value ? viewPerms.value.includes(p) : app.can(props.space, p))

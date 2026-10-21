@@ -42,7 +42,7 @@ const hasMore = ref(false)
 const page = ref(1)
 const f = reactive({ q: '', user: '', action: null })
 
-const ACTIONS = ['login', 'login-failed', 'logout', 'upload', 'download', 'download-zip', 'view', 'delete', 'restore', 'purge', 'mkdir', 'create', 'edit', 'rename', 'copy', 'move', 'zip', 'unzip', 'password-change', 'user-create', 'user-update', 'user-delete', 'user-password-reset', 'browse', 'settings-update', 'logo-update', 'logo-remove', 'update-stage', 'update-apply', 'update-apply-unsigned', 'update-rollback', 'update-denied', 'backup-create', 'backup-download', 'backup-delete', 'backup-restore', 'backup-restore-denied', 'logs-download', 'activity-export', 'update-fetch', 'share-create', 'share-download', 'share-revoke', 'share-link-view', 'alert-test']
+const ACTIONS = ['login', 'login-failed', 'logout', 'upload', 'download', 'download-zip', 'view', 'delete', 'restore', 'purge', 'mkdir', 'create', 'edit', 'rename', 'copy', 'move', 'zip', 'unzip', 'password-change', 'user-create', 'user-update', 'user-delete', 'user-password-reset', 'browse', 'settings-update', 'logo-update', 'logo-remove', 'update-stage', 'update-apply', 'update-apply-unsigned', 'update-rollback', 'update-denied', 'backup-create', 'backup-download', 'backup-delete', 'backup-restore', 'backup-restore-denied', 'logs-download', 'activity-export', 'update-fetch', 'share-create', 'share-download', 'share-revoke', 'share-link-view', 'alert-test', 'group-create', 'group-update', 'group-delete', 'group-delete-denied', 'group-member-add', 'group-member-remove', 'app-password-create', 'app-password-delete', 'app-password-denied']
 // the file holds what the filter boxes show; the click also applies them, so the table matches the file
 const exportUrl = computed(() => api.activityExportUrl({ q: f.q, user: f.user, action: f.action || '' }))
 const { busy: saving, follow } = useDownload()
@@ -51,7 +51,7 @@ async function exportCsv(e) {
   if (await follow(e, exportUrl.value, { admin: true })) apply()
 }
 const actionOptions = computed(() => ACTIONS.map(a => ({ value: a, label: t(`action.${a}`) })))
-const tone = a => (a.includes('failed') || a === 'delete' || a === 'purge' || a === 'user-delete' || a === 'update-denied' || a === 'backup-delete' || a === 'backup-restore-denied' ? 'error' : a.startsWith('login') || a === 'logout' ? 'info' : a === 'upload' || a === 'restore' || a === 'backup-create' || a === 'backup-restore' ? 'success' : 'default')
+const tone = a => (a.includes('failed') || a === 'delete' || a === 'purge' || a === 'user-delete' || a === 'update-denied' || a === 'backup-delete' || a === 'backup-restore-denied' || a === 'group-delete' || a.endsWith('-denied') ? 'error' : a.startsWith('login') || a === 'logout' ? 'info' : a === 'upload' || a === 'restore' || a === 'backup-create' || a === 'backup-restore' ? 'success' : 'default')
 
 // the table hands row-key only the row, and several events can share one timestamp: number the rows instead
 const keyed = (items, start) => items.map((e, i) => ({ ...e, key: start + i }))

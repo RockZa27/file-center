@@ -18,11 +18,14 @@ export const router = createRouter({
         { path: 'trash', name: 'my-trash', component: () => import('./views/MyTrashView.vue') },
         // the list of folders other people share with the user; with an id, the folder itself (a folder-shared notice links to /with-me/<id>)
         { path: 'with-me/:id?', name: 'with-me', component: () => import('./views/WithMeView.vue') },
+        // the group folders the user is in: a list, or with an id the group's folder (a group-added notice links to /groups/<id>)
+        { path: 'groups/:id?', name: 'groups', component: () => import('./views/GroupFoldersView.vue') },
         { path: 'shared', name: 'shared', component: () => import('./views/SharedView.vue') },
         { path: 'links', name: 'links', component: () => import('./views/SharesView.vue') },
         { path: 'admin', name: 'dashboard', component: () => import('./views/DashboardView.vue'), meta: { staff: true } },
         { path: 'admin/users', name: 'users', component: () => import('./views/UsersView.vue'), meta: { staff: true } },
         { path: 'admin/users/:username/files', name: 'user-files', component: () => import('./views/UserFilesView.vue'), meta: { staff: true } },
+        { path: 'admin/groups', name: 'admin-groups', component: () => import('./views/GroupsAdminView.vue'), meta: { staff: true } },
         { path: 'admin/activity', name: 'activity', component: () => import('./views/ActivityView.vue'), meta: { staff: true } },
         { path: 'admin/logs', name: 'logs', component: () => import('./views/LogsView.vue'), meta: { admin: true } },
         { path: 'admin/trash', name: 'trash', component: () => import('./views/TrashView.vue'), meta: { admin: true } },

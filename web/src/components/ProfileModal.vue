@@ -28,6 +28,9 @@
       <n-tab-pane v-if="!app.user?.mustChangePassword" name="notify" :tab="t('profile.notifyTab')">
         <notify-panel v-if="show && tab === 'notify'" />
       </n-tab-pane>
+      <n-tab-pane v-if="!app.user?.mustChangePassword && app.config.webdav" name="dav" :tab="t('dav.tab')">
+        <app-passwords-panel v-if="show && tab === 'dav'" @lock="v => (locked = v)" />
+      </n-tab-pane>
     </n-tabs>
     <template v-if="tab === 'password'" #footer>
       <div class="foot">
@@ -47,10 +50,11 @@ import { api } from '../api'
 import { useFeedback, useRoleLabel } from '../composables'
 import { useAppStore } from '../store'
 import PasswordRules from './PasswordRules.vue'
+import AppPasswordsPanel from './AppPasswordsPanel.vue'
 import NotifyPanel from './NotifyPanel.vue'
 import SecurityPanel from './SecurityPanel.vue'
 
-const props = defineProps({ show: Boolean, /** the tab to open on: 'password' (default), 'security' or 'notify' */ openTab: { type: String, default: 'password' } })
+const props = defineProps({ show: Boolean, /** the tab to open on: 'password' (default), 'security', 'notify' or 'dav' */ openTab: { type: String, default: 'password' } })
 const emit = defineEmits(['update:show'])
 const { t } = useI18n()
 const app = useAppStore()
