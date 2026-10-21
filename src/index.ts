@@ -13,6 +13,7 @@ import { onStop, shutdown } from './lifecycle'
 import { accessLine, log } from './logger'
 import { adminRoutes } from './routes/admin'
 import { appPasswordRoutes } from './routes/app-passwords'
+import { archiveRoutes } from './routes/archive'
 import { backupRoutes } from './routes/backup'
 import { fileRoutes } from './routes/files'
 import { meRoutes } from './routes/me'
@@ -23,6 +24,7 @@ import { officeRoutes } from './routes/office'
 import { sessionRoutes } from './routes/session'
 import { grantRoutes } from './routes/grants'
 import { shareRoutes } from './routes/shares'
+import { thumbRoutes } from './routes/thumbs'
 import { trashRoutes } from './routes/trash'
 import { updateRoutes } from './routes/update'
 import { uploadRoutes } from './routes/upload'
@@ -33,6 +35,7 @@ import { checkNotifications } from './notify-checks'
 import { grantCreatedListeners } from './grants'
 import { notify } from './notify'
 import { purgeExpiredShares } from './shares'
+import { pruneThumbs } from './thumbs'
 import { purgeExpired } from './trash'
 import { purgeExpiredVersions } from './versions'
 import { cleanStaleUploads } from './uploads'
@@ -73,6 +76,8 @@ function housekeeping() {
     const uploads = cleanStaleUploads()
     purgeExpiredSessions()
     cleanStaging()
+    // the thumbnail cache is trimmed in the background (it may hold many small files)
+    void pruneThumbs().catch(err => log.error('thumbs-prune-failed', err))
     pruneLoginAttempts()
     if (trash || uploads || versions) log.info('housekeeping', { trash, staleUploads: uploads, versions })
     // links about to expire, homes near their quota: told in the background, once each
@@ -264,6 +269,8 @@ export const app = new Elysia({ serve: { idleTimeout: 255, maxRequestBodySize: s
   .use(versionRoutes)
   .use(uploadRoutes)
   .use(shareRoutes)
+  .use(thumbRoutes)
+  .use(archiveRoutes)
   .use(officeRoutes)
   .get('/*', ({ request }) => {
     const { pathname } = new URL(request.url)

@@ -136,6 +136,17 @@ export const MESSAGES = {
   'zip.not-zip': { th: 'ต้องเป็นไฟล์ .zip', en: 'This must be a .zip file.' },
   'zip.extract-failed': { th: 'แตกไฟล์ไม่สำเร็จ ไฟล์ zip อาจเสียหายหรือไม่รองรับ', en: 'Could not extract. The zip file may be damaged or not supported.' },
 
+  // ───────────── thumbnails and the inside of a zip ─────────────
+  'thumb.unavailable': { th: 'ไม่มีภาพตัวอย่างสำหรับไฟล์นี้', en: 'There is no preview image for this file.' },
+  'thumb.too-big': { th: 'ไฟล์นี้ใหญ่เกินกว่าจะสร้างภาพตัวอย่าง', en: 'This file is too big to make a preview image from.' },
+  'thumb.busy': { th: 'กำลังสร้างภาพตัวอย่างอยู่มาก กรุณาลองใหม่อีกครู่', en: 'Many preview images are being made right now. Please try again in a moment.' },
+  'archive.not-zip': { th: 'ไม่ใช่ไฟล์ zip หรืออ่านไม่ได้ (รองรับเฉพาะ .zip ไม่รองรับ .rar และ .7z)', en: 'This is not a readable zip file (only .zip is supported, not .rar or .7z).' },
+  'archive.bad-entry': { th: 'ชื่อรายการในไฟล์ zip ไม่ถูกต้อง', en: 'The name of the item inside the zip file is not valid.' },
+  'archive.entry-not-found': { th: 'ไม่พบรายการนี้ในไฟล์ zip', en: 'That item is not in the zip file.' },
+  'archive.encrypted': { th: 'รายการนี้ถูกเข้ารหัสด้วยรหัสผ่าน เปิดดูในหน้าเว็บไม่ได้', en: 'This item is password-protected and cannot be opened here.' },
+  'archive.too-big': { th: 'รายการนี้ใหญ่เกินกำหนดหรือบีบอัดมากผิดปกติ จึงไม่แตกออกให้', en: 'This item is too big or compressed suspiciously well, so it is not extracted.' },
+  'archive.damaged': { th: 'อ่านรายการนี้จากไฟล์ zip ไม่ได้ ไฟล์อาจเสียหายหรือใช้วิธีบีบอัดที่ไม่รองรับ', en: 'This item could not be read from the zip file. It may be damaged or use an unsupported method.' },
+
   // ───────────── admin ─────────────
   'admin.bad-username': { th: 'ชื่อผู้ใช้ใช้ได้เฉพาะ a-z 0-9 . _ - ยาว 3-32 ตัว', en: 'A username may only use a-z 0-9 . _ - and be 3-32 characters long.' },
   'admin.reserved-username': { th: 'ชื่อผู้ใช้นี้สงวนไว้สำหรับผู้เยี่ยมชม กรุณาใช้ชื่ออื่น', en: 'This username is reserved for visitors. Please choose another one.' },

@@ -387,6 +387,8 @@ OFFICE_SERVER_INTERNAL_URL=http://onlyoffice
 | `MIN_FREE_SPACE` | 2 GB | ปฏิเสธการอัปโหลด คัดลอก บีบอัด และแตก zip เมื่อดิสก์จะเหลือว่างน้อยกว่านี้ (ไบต์) |
 | `SEARCH_RESCAN_MINUTES` | 30 | สแกนดัชนีค้นหา (`DATA_DIR/search.db`) ใหม่จากดิสก์ทุกกี่นาที `0` = สแกนตอนเริ่มครั้งเดียว |
 | `SEARCH_INDEX` | `true` | `false` = ปิดดัชนีค้นหา `/api/search` เดินดิสก์ทุกครั้ง |
+| `THUMBNAILS` | `on` | `off` = ไม่สร้างภาพตัวอย่างเลย (หน้าเว็บแสดงไอคอน) ดู [ภาพตัวอย่าง](#ภาพตัวอย่าง-thumbnail-และดูรายการในไฟล์-zip) |
+| `THUMB_CACHE_MAX_MB` | 1024 | ขนาดสูงสุดของแคชภาพตัวอย่าง (`DATA_DIR/thumbs`) เกินแล้วลบอันที่ไม่ได้ใช้นานที่สุดก่อน (ตรวจทุกชั่วโมง) ไม่อยู่ในไฟล์สำรอง |
 | `UNZIP_MAX_BYTES` / `UNZIP_MAX_FILES` | 20 GB / 50,000 | ขนาดรวมและจำนวนไฟล์สูงสุดที่แตกจาก zip หนึ่งไฟล์ได้ (กัน zip bomb) |
 | `TRASH_RETENTION_DAYS` | 30 | เก็บถังขยะกี่วัน |
 | `VERSIONS_KEEP` / `VERSIONS_DAYS` | 10 / 30 | เก็บเนื้อหาเดิมของไฟล์ไว้ทุกครั้งที่บันทึกทับ (แก้ข้อความ, ONLYOFFICE, กู้คืนฉบับเก่า): กี่ฉบับต่อไฟล์ (0 = ปิด) / กี่วัน (0 = ไม่หมดอายุตามวัน) ฉบับเก่านับรวมในโควตาของเจ้าของโฟลเดอร์ ไม่อยู่ในข้อมูลสำรอง และย้ายไปกับไฟล์เมื่อเปลี่ยนชื่อ/ย้าย/ลบลงถังขยะ |
@@ -813,6 +815,39 @@ rclone sync ./backup filecenter:backup --transfers 4
 คำค้นตั้งแต่ 3 ตัวอักษรใช้ตาราง `entries_fts` (FTS5 `trigram`) หาแถวที่เป็นไปได้ก่อน คำค้นใส่เป็น phrase ใน `"..."` โดยเติม `"` เป็น `""` และส่งเป็นพารามิเตอร์ จึงไม่มีทางถูกอ่านเป็นไวยากรณ์ FTS
 แถวที่ได้ยังถูกตรวจด้วย `instr` กับชื่อจริงอีกครั้ง; คำค้น 1–2 ตัวอักษร หรือคำค้นที่พบเกิน 1,000 แถว ใช้ `instr` เรียงตามชื่อเหมือนเดิม
 
+## ภาพตัวอย่าง (thumbnail) และดูรายการในไฟล์ zip
+
+### ภาพตัวอย่างฝั่งเซิร์ฟเวอร์
+
+หน้ารายการไฟล์แสดงภาพเล็กของรูป, หน้าแรกของ PDF และเฟรมหนึ่งของวิดีโอ แทนไอคอนได้ สร้างโดย **เครื่องมือของระบบในอิมเมจ Docker** (ไม่ใช่ไลบรารีในแอป):
+
+| ชนิด | นามสกุล | เครื่องมือ (แพ็กเกจ Debian) |
+|---|---|---|
+| รูป | jpg jpeg png webp gif (เฟรมแรก) bmp tif tiff และ heic heif avif ถ้า libvips ในเครื่องอ่านได้ | `vipsthumbnail` + `vipsheader` (`libvips-tools`) |
+| PDF | pdf (หน้าแรก) | `pdftoppm` (`poppler-utils`) |
+| วิดีโอ | mp4 m4v mov 3gp webm mkv avi mpg mpeg wmv flv (เฟรมที่ 1 วินาที ถ้าคลิปสั้นกว่านั้นใช้เฟรมแรก) | `ffmpeg` |
+
+**หลังอัปเดตจากหน้าเว็บ ให้รัน `docker compose up -d --build` หนึ่งครั้ง** เพื่อให้อิมเมจมีเครื่องมือเหล่านี้: การอัปเดตจากหน้าเว็บส่งเฉพาะโค้ดของแอป ไม่ส่งโปรแกรมของระบบ ถ้าไม่มีเครื่องมือ (หรืออิมเมจเก่า) ระบบไม่พัง หน้าเว็บแค่แสดงไอคอนเหมือนเดิม (`GET /api/thumbs/status` บอกว่าชนิดไหนทำได้) `docker compose build` ใช้ฐาน Debian และลงเครื่องมือด้วย `apt-get` (ปิดได้ด้วย `--build-arg THUMB_TOOLS=false` เฉพาะเครื่องที่เข้า mirror ของ Debian ไม่ได้) 
+
+**ขนาดอิมเมจ:** เครื่องมือทั้งหมดเพิ่มพื้นที่ราว 500 MB (ประมาณ: libvips-tools + poppler-utils + ฟอนต์ ≈ 155 MB, ffmpeg ≈ 350 MB) ถ้าไม่ต้องการภาพตัวอย่างของวิดีโอ ตั้ง `THUMB_VIDEO=false` ใน `.env` แล้ว `docker compose up -d --build` อิมเมจจะไม่มี ffmpeg (`/api/thumbs/status` จะรายงาน `video: false`)
+
+**ทำไมใช้โปรแกรมของระบบ ไม่ใช้ไลบรารี `sharp`:** `sharp` ใช้งานได้ใน Bun (วัดแล้ว: jpg 4000×3000 → 256 px ใน ~60 ms, ติดตั้ง ~19 MB) แต่เป็น native addon ที่ต้องอยู่ใน `node_modules` ของอิมเมจ ขณะที่การอัปเดตจากหน้าเว็บส่งแต่ `server.js` ที่รวมไลบรารีไว้แล้ว addon จึงไม่ถูกส่งไปด้วยและโหลดไม่ได้หลังอัปเดต ส่วน `vipsthumbnail` เป็นโพรเซสแยก (ถ้าไฟล์ทำให้มันค้างหรือพัง กระทบแค่โพรเซสนั้น และฆ่าทิ้งเมื่อหมดเวลาได้) เร็วใกล้เคียงกัน (~120–200 ms ต่อรูป jpg 4000×3000) และถ้าไม่มีก็แค่ปิดภาพตัวอย่างโดยแอปไม่พัง
+
+- `GET /api/thumb?space=&path=&size=256|1024` (ต้องมีสิทธิ์ `read`; `size` ไม่ใส่ = 256) ตอบ `image/webp` (PDF เป็น `image/jpeg`) ด้านยาวไม่เกิน `size` พิกเซล ไม่ขยายรูปเล็ก มี `ETag` (คีย์ของแคช) และ `Cache-Control: private, max-age=86400` ส่ง `If-None-Match` ได้ 304
+  ลิงก์แชร์โฟลเดอร์: `GET /api/s/:token/thumb?path=&size=` ตรวจเหมือนดาวน์โหลดของลิงก์นั้น (รหัสผ่าน, ต้องอยู่ในโฟลเดอร์ที่แชร์, ไม่ตามลิงก์ symlink) แต่ **ไม่นับเป็นการดาวน์โหลด**
+- ตอบ 404 `thumb.unavailable` เมื่อไม่มีเครื่องมือ, ชนิดไฟล์ไม่รองรับ, สร้างไม่ได้ (ไฟล์เสีย, หมดเวลา) หรือเพิ่งล้มเหลว (ไม่ลองซ้ำ 5 นาที) · 422 `thumb.too-big` ไฟล์รูปเกิน 500 MB หรือเกิน 100 ล้านพิกเซล (อ่านขนาดก่อนสร้าง) · 503 `thumb.busy` พร้อม `Retry-After: 3` เมื่อคิวสร้างเต็ม
+- `GET /api/thumbs/status` (ต้องเข้าสู่ระบบ) → `{ "image": true, "pdf": true, "video": false }` หน้าเว็บใช้ตัดสินว่าจะขอภาพหรือแสดงไอคอน
+- **ความปลอดภัย:** เครื่องมือรันเป็นโพรเซสลูกด้วยอาร์กิวเมนต์แบบอาร์เรย์ (ไม่ผ่าน shell) สภาพแวดล้อมขั้นต่ำ (ไม่มีความลับของแอป) ตัดทิ้งเมื่อเกิน 10 วินาที (ฆ่าเฉพาะตัวนั้น) พร้อมกันได้ 2 งาน คิวรอ 16 งาน เกินนั้นตอบ 503 ทันที เครื่องมือไม่เคยได้พาธที่ผู้ใช้ตั้งชื่อ: ระบบสร้าง symlink ชื่อเรียบ ๆ ใน `DATA_DIR/thumbs/tmp` ชี้ไปไฟล์จริง (ชื่อเช่น `-x[page=2].png` จึงไม่ถูกอ่านเป็นตัวเลือก) `VIPS_BLOCK_UNTRUSTED=1` กัน libvips ส่งไฟล์ที่ไม่ใช่รูปจริงให้ ImageMagick/rsvg/poppler ffmpeg ถูกกำหนดตัวอ่านตามนามสกุลและเปิดเฉพาะโปรโตคอล `file` (playlist ที่ตั้งชื่อ `.mp4` จึงไม่ถูกตามไปยังไฟล์หรือ URL อื่น) และทุกเส้นทางผ่านการตรวจสิทธิ์ + `resolveIn` เหมือนการดาวน์โหลด
+- **แคช:** `DATA_DIR/thumbs/<sha1(พาธ|ขนาด|mtime|ขนาดไฟล์)>.webp` (PDF เป็น `.jpg`) ไฟล์ที่แก้ไขแล้วได้ภาพใหม่เอง ตัดให้ไม่เกิน `THUMB_CACHE_MAX_MB` (1024 MB) ทุกชั่วโมง ลบอันที่ใช้ล่าสุดนานที่สุดก่อน (ทุกครั้งที่มีคนขอ ระบบ touch เวลาของไฟล์) **ไม่อยู่ในไฟล์สำรอง** สร้างใหม่ได้เสมอ ปิดทั้งหมดด้วย `THUMBNAILS=off`
+
+### ดูรายการในไฟล์ zip โดยไม่แตกไฟล์
+
+- `GET /api/archive/list?space=&path=` (ต้องมี `read` + `download`) → `{ entries: [{ name, dir, size, compressed, modified, encrypted }], truncated }` อ่านเฉพาะสารบัญท้ายไฟล์ (central directory) ไม่แตกอะไรลงดิสก์ รองรับ ZIP64 และชื่อภาษาไทย (UTF-8) `name` คือพาธเต็มในไฟล์ zip (โฟลเดอร์ลงท้าย `/`) `modified` เป็น ms สูงสุด 10,000 รายการ เกินนั้น `truncated: true` ไม่ใช่ zip หรืออ่านไม่ได้ → 400 `archive.not-zip` (ดูจากเนื้อไฟล์ ไม่ใช่นามสกุล) **ไม่รองรับ .rar และ .7z**
+- `GET /api/archive/file?space=&path=&entry=&inline=1` (ต้องมี `read` + `download`) ส่งรายการเดียวแบบสตรีม (ไม่มี Range) `entry` ต้องตรงกับชื่อในสารบัญ ชื่อที่มี `..` ขึ้นต้นด้วย `/` มี `\` หรือ NUL → 400 `archive.bad-entry` · ไม่พบหรือเป็นโฟลเดอร์ → 404 `archive.entry-not-found` · เข้ารหัสด้วยรหัสผ่าน → 422 `archive.encrypted` · อ่านไม่ได้ (วิธีบีบอัดที่ไม่รองรับ) → 422 `archive.damaged`
+  **กัน zip bomb:** ขนาดที่ประกาศเกิน `UPLOAD_MAX_SIZE` หรือ (เกิน 100 MB และบีบอัดเกิน 100:1) → 413 `archive.too-big` ก่อนแตกแม้แต่ไบต์เดียว ระหว่างส่งนับไบต์จริงและตัดทิ้งถ้าเกินขนาดที่ประกาศ (และ zip.js ตรวจ CRC)
+  `Content-Type` ตามนามสกุล, `X-Content-Type-Options: nosniff`, `Content-Security-Policy: default-src 'none'; sandbox` (เว้น PDF ที่เปิดในแท็บ เหมือน `/api/download`) และเปิดในแท็บ (`inline=1`) ได้เฉพาะรูป (ไม่รวม svg), PDF และ `.txt` ที่เหลือเป็น `attachment` เสมอ บันทึกในประวัติการใช้งานเป็น `download` (รายการละครั้งต่อนาที) และ `browse` เมื่อผู้ดูแลเปิดดูใน `space=user:<ชื่อ>`
+- ลิงก์แชร์โฟลเดอร์ (ลิงก์ดาวน์โหลดเท่านั้น): `GET /api/s/:token/archive/list?path=` และ `GET /api/s/:token/archive/file?path=&entry=` ตรวจเหมือนดาวน์โหลดของลิงก์ (รหัสผ่าน, อยู่ในโฟลเดอร์ที่แชร์) การเอารายการออกจาก zip **นับเป็นการดาวน์โหลดของลิงก์หนึ่งครั้ง** (ลิงก์ที่จำกัดจำนวนครั้งจึงเลี่ยงด้วยการเปิดทีละรายการใน zip ไม่ได้) ส่วนการดูรายการไม่นับ
+
 ## ตรวจคุณภาพอัตโนมัติ (CI)
 
 GitHub Actions (`.github/workflows/qa.yml`) ทำงานทุก push และ pull request ไม่ใช้ secret:
@@ -868,6 +903,8 @@ src/
   messages.ts       ข้อความทุกข้อที่แสดงต่อผู้ใช้ ตามรหัส (code) เป็นภาษาไทยและอังกฤษ
   fsx.ts            จัดการพาธอย่างปลอดภัย (กัน ../ และ symlink), คัดลอก/ย้าย
   zip.ts            สร้างและแตก zip ด้วย zip.js (ZIP64 ไฟล์เกิน 4 GB, ตรวจ CRC, กัน zip-slip / zip bomb)
+  archive.ts        ดูรายการและดึงรายการเดียวออกจาก zip โดยไม่แตกไฟล์ (สารบัญท้ายไฟล์, กัน zip bomb) routes/archive.ts
+  thumbs.ts         ภาพตัวอย่างด้วยเครื่องมือของระบบ (vips, pdftoppm, ffmpeg): คิว 2 งาน, timeout, แคชใน DATA_DIR/thumbs routes/thumbs.ts
   uploads.ts        อัปโหลดแบบแบ่งชิ้น กลับมาต่อได้
   logger.ts         log ของระบบ (logs/system.log), หมุนไฟล์ log, ตัดความลับออกก่อนเขียน
   stats.ts          นับจำนวนและขนาดไฟล์ให้หน้าภาพรวม (เบื้องหลัง เก็บผลไว้ใน stats-cache.json)
@@ -902,7 +939,7 @@ tests/perf.test.ts  การนับไฟล์ 50,000 ไฟล์ การ
 ถ้าดิสก์เสีย บัญชีผู้ใช้ รหัสผ่าน และการตั้งค่าจะหายทั้งหมด ระบบจึงสำรองข้อมูลระบบให้เองทุกวัน
 
 - **สำรองอะไรบ้าง:** หนึ่งครั้ง = ไฟล์เดียว `file-center-backup-YYYYMMDD-HHMMSS.zip` (เวลาของเครื่อง server) มี `users.json` (ผู้ใช้และรหัสผ่านที่เข้ารหัสแล้ว), `settings.json`, `branding/` (โลโก้), `logs/audit.log`, `logs/system.log` และ `backup.json` (`{ version, createdAt, includesFiles }`)
-  ไม่รวม session, ถังขยะ, ไฟล์อัปโหลดที่ยังไม่เสร็จ, เวอร์ชันที่อัปเดตผ่านเว็บ log เก่าที่หมุนไฟล์แล้ว (`audit.log.N`, `system.log.N`), `access.log` และ `launcher.log`
+  ไม่รวม session, ถังขยะ, ไฟล์อัปโหลดที่ยังไม่เสร็จ, แคชภาพตัวอย่าง (`thumbs/`), เวอร์ชันที่อัปเดตผ่านเว็บ log เก่าที่หมุนไฟล์แล้ว (`audit.log.N`, `system.log.N`), `access.log` และ `launcher.log`
   ไฟล์ที่ผู้ใช้อัปโหลด (`storage`) ไม่รวมโดยค่าเริ่มต้นเพราะอาจใหญ่มาก เปิดได้ในหน้าสำรองข้อมูล (หรือ `BACKUP_INCLUDE_FILES=true`) ไฟล์จะอยู่ในโฟลเดอร์ `storage/` ของ zip (ระบบตรวจพื้นที่ว่างก่อนตาม `MIN_FREE_SPACE`)
   **ถ้ารวมไฟล์ ไฟล์สำรองแต่ละชุดจะใหญ่เท่ากับพื้นที่เก็บไฟล์ทั้งหมด** (ไฟล์ rar, zip, วิดีโอบีบอัดไม่ลงอีก) แนะนำให้เก็บแค่ 1–2 ชุด และชี้ `BACKUP_DIR` ไปดิสก์อีกลูก
   `backup.json` ใน zip บอกขนาดแต่ละส่วนด้วย (`parts.data`, `parts.logs`, `parts.storage` แต่ละส่วนมี `files`, `size` ก่อนบีบ, `compressed` หลังบีบ) ไฟล์สำรองของเวอร์ชันก่อน 1.10 ไม่มีส่วนนี้ (รายการตอบ `parts: null`) และกู้คืนได้ตามเดิม
@@ -954,6 +991,8 @@ tests/perf.test.ts  การนับไฟล์ 50,000 ไฟล์ การ
 | `POST /api/mkdir` · `/newfile` · `/rename` · `/copy` · `/move` · `/delete` · `/zip` · `/unzip` | จัดการไฟล์ (ลบ = ย้ายไปถังขยะ) `/copy` และ `/move` มี `destSpace` (ไม่ใส่ = space เดิม) เพื่อข้าม space: ต้องมี `read` (+`download` ถ้าคัดลอก, +`write` ถ้าย้าย) ที่ต้นทาง และ `write` + `upload` ที่ปลายทาง นับโควตาปลายทาง; ย้ายข้าม space = คัดลอกก่อนแล้วลบต้นทางลงถังขยะ (คัดลอกไม่สำเร็จต้นทางไม่ถูกแตะ) |
 | `GET/PUT /api/content` | อ่าน/บันทึกไฟล์ข้อความ (≤ 2 MB) `GET` ตอบ `mtime` ส่งกลับใน `PUT` เป็น `expectedMtime` ถ้าไฟล์ถูกแก้จากที่อื่นหลังจากเปิดจะได้ 409 `files.changed-elsewhere` และไม่บันทึก `PUT` ตอบ `mtime` ใหม่ |
 | `POST /api/office/config` · `GET /api/office/file/:token` · `POST /api/office/callback/:token` | แก้ไขเอกสาร office ด้วย ONLYOFFICE (ดู แก้ไขเอกสาร office) สองตัวหลังเรียกโดย document server เท่านั้น |
+| `GET /api/thumb?space&path&size=256\|1024` · `GET /api/thumbs/status` · `GET /api/s/:token/thumb?path&size` | ภาพตัวอย่างของรูป/PDF/วิดีโอ (ดู ภาพตัวอย่าง) |
+| `GET /api/archive/list?space&path` · `GET /api/archive/file?space&path&entry[&inline=1]` · `GET /api/s/:token/archive/list\|file` | ดูรายการใน zip และดึงรายการเดียวออกมา โดยไม่แตกไฟล์ |
 | `GET /api/download` (รองรับ `Range`) · `POST /api/batch` + `GET /api/batch/:token` | ดาวน์โหลด |
 | `POST/GET /api/shares` · `DELETE /api/shares/:id` · `GET /api/s/:token` · `POST /api/s/:token/unlock` · `GET /api/s/:token/download` | ลิงก์แชร์ (ดู ลิงก์แชร์) |
 | `GET /api/me/usage` | พื้นที่ที่ใช้และโควตาของฉัน (ดู โควตาพื้นที่ต่อผู้ใช้) |

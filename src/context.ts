@@ -19,6 +19,7 @@ export function clientIp(request: Request, socketIp: string): string {
 const DOWNLOAD_ROUTES = [
   /^\/api\/download$/, /^\/api\/batch\/[^/]+$/, /^\/api\/admin\/logs\/download$/, /^\/api\/admin\/activity\/export$/,
   /^\/api\/admin\/backups\/[^/]+\/download$/, /^\/api\/s\/[^/]+\/download$/,
+  /^\/api\/archive\/file$/, /^\/api\/s\/[^/]+\/archive\/file$/,
 ]
 
 // the password form of a share link: it works without an account or a session, and the cookie it sets opens only that link.

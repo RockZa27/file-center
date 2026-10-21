@@ -72,6 +72,10 @@ export const config = {
   logMaxFiles: Math.max(2, Math.floor(num('LOG_MAX_FILES', 5))),
   /** "true" writes one line per request to logs/access.log (method, path without tokens or query, status, ms, ip, user) */
   accessLog: env('ACCESS_LOG', 'false') === 'true',
+  /** "off" turns server-side thumbnails (thumbs.ts) off: the page then shows icons */
+  thumbnails: !['off', 'false', '0'].includes(env('THUMBNAILS', 'on').trim().toLowerCase()),
+  /** the thumbnail cache (DATA_DIR/thumbs) is trimmed to this size, oldest used first */
+  thumbCacheMax: Math.max(1, num('THUMB_CACHE_MAX_MB', 1024)) * 1024 ** 2,
   unzipMaxBytes: num('UNZIP_MAX_BYTES', 20 * 1024 ** 3),
   unzipMaxFiles: num('UNZIP_MAX_FILES', 50_000),
   /** set to "true" behind HTTPS so the session cookie is marked Secure */
@@ -186,6 +190,8 @@ export const paths = {
   /** app passwords for WebDAV (app-passwords.ts): only an argon2 hash of each, never the password */
   appPasswords: join(config.dataDir, 'app-passwords.json'),
   tmp: join(config.dataDir, 'tmp'),
+  /** thumbnail cache (thumbs.ts): <sha1>.webp|jpg, and tmp/ for the one being made; rebuilt on demand, so not in backups */
+  thumbs: join(config.dataDir, 'thumbs'),
   branding: join(config.dataDir, 'branding'),
   /** installed web updates: state.json, releases/, staging/ (see release.ts) */
   app: join(config.dataDir, 'app'),

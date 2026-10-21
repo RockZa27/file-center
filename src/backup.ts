@@ -49,8 +49,9 @@ export type BackupStatus = {
 
 // top-level names in DATA_DIR that never go into a backup
 // secret.key opens the sealed 2FA secrets in users.json: a backup with both would give them away, so it is kept apart;
-// office-links.key signs short-lived ONLYOFFICE links: a restored server simply makes a new one
-const SKIP = new Set(['tmp', 'trash', 'versions', 'app', 'sessions.json', 'backup-status.json', 'stats-cache.json', 'cli-changed', 'secret.key', 'office-links.key'])
+// office-links.key signs short-lived ONLYOFFICE links: a restored server simply makes a new one;
+// thumbs is a cache made again on demand
+const SKIP = new Set(['tmp', 'trash', 'versions', 'thumbs', 'app', 'sessions.json', 'backup-status.json', 'stats-cache.json', 'cli-changed', 'secret.key', 'office-links.key'])
 // search.db* (the search index and its WAL files) is rebuilt from the disk
 const SEARCH_DB = /^search\.db(?:-wal|-shm|-journal)?$/
 // of the logs only the current activity and system log go in: rotated ones, access.log and launcher.log stay out
