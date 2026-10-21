@@ -1517,8 +1517,8 @@
     "patches": [
       {
         "file": "src/routes/thumbs.ts",
-        "find": "const a = need({ user, ip }, query.space, 'read')",
-        "replace": "const a = need({ user, ip }, query.space)"
+        "find": ": need({ user, ip }, query.space, 'read')",
+        "replace": ": need({ user, ip }, query.space)"
       }
     ]
   },
@@ -1549,6 +1549,66 @@
         "file": "src/archive.ts",
         "find": "(declared > BOMB_MIN_BYTES && ratio > BOMB_RATIO)",
         "replace": "false"
+      }
+    ]
+  },
+  {
+    "id": "zip-directory-size-unchecked",
+    "difficulty": "medium",
+    "category": "dos",
+    "severity": "high",
+    "tests": "tests/archive.test.ts",
+    "description": "a zip whose end record declares a huge central directory (or over 100,000 entries) is handed to zip.js, which reads it all into memory, instead of being refused with 413",
+    "patches": [
+      {
+        "file": "src/archive.ts",
+        "find": "if (bytes > BigInt(DIRECTORY_MAX_BYTES) || entries > BigInt(DIRECTORY_MAX_ENTRIES)) throw",
+        "replace": "if (false) throw"
+      }
+    ]
+  },
+  {
+    "id": "thumb-1024-without-download",
+    "difficulty": "easy",
+    "category": "authz",
+    "severity": "medium",
+    "tests": "tests/thumbs.test.ts",
+    "description": "a user who may read but not download gets 1024 px renderings of files",
+    "patches": [
+      {
+        "file": "src/routes/thumbs.ts",
+        "find": "Number(query.size) === 1024 ?",
+        "replace": "false ?"
+      }
+    ]
+  },
+  {
+    "id": "dav-proto-property",
+    "difficulty": "easy",
+    "category": "logic",
+    "severity": "medium",
+    "tests": "tests/webdav.test.ts",
+    "description": "PROPFIND looks property names up on a plain object, so __proto__ or constructor as a property name breaks the answer with a 500",
+    "patches": [
+      {
+        "file": "src/webdav.ts",
+        "find": "w.ns === DAV_NS && Object.hasOwn(PROPS, w.name)",
+        "replace": "w.ns === DAV_NS"
+      }
+    ]
+  },
+  {
+    "id": "revoke-keeps-app-passwords",
+    "difficulty": "easy",
+    "category": "auth",
+    "severity": "medium",
+    "tests": "tests/account.test.ts",
+    "description": "the admin action that ends all of a user's sessions leaves their WebDAV app passwords working",
+    "patches": [
+      {
+        "file": "src/routes/admin.ts",
+        "find": "const appPasswords = removeAppPasswordsOf(target.username)",
+        "replace": "const appPasswords = 0"
       }
     ]
   }

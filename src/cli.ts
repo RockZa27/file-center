@@ -1,10 +1,11 @@
 /**
  * Commands for the server's operator, run on the server itself against DATA_DIR (the same settings as the app):
  *   bun src/cli.ts reset-2fa <user>         turns 2FA off for a user who lost the phone and the backup codes
- *   bun src/cli.ts sessions-revoke <user>   signs the user out everywhere
+ *   bun src/cli.ts sessions-revoke <user>   signs the user out everywhere and removes their app passwords (WebDAV)
  * Works while the app is running: the app notices the change on its next request (see reloadIfChangedByCli).
  */
 import { writeFileSync } from 'node:fs'
+import { removeAppPasswordsOf } from './app-passwords'
 import { audit } from './audit'
 import { destroyUserSessions, dropLoginTickets, findUser, saveUsers } from './auth'
 import { paths } from './config'
@@ -35,8 +36,9 @@ if (command === 'reset-2fa') {
   console.log(`${had ? 'Two-factor sign-in turned off' : 'Two-factor sign-in was not on'} for ${user.username}; ${n} session(s) ended.`)
 } else {
   const n = destroyUserSessions(user.username)
-  audit({ user: 'cli', ip: '-', action: 'sessions-revoke', target: user.username, detail: String(n) })
-  console.log(`${n} session(s) of ${user.username} ended.`)
+  const apps = removeAppPasswordsOf(user.username)
+  audit({ user: 'cli', ip: '-', action: 'sessions-revoke', target: user.username, detail: `${n} session, ${apps} app password` })
+  console.log(`${n} session(s) of ${user.username} ended, ${apps} app password(s) removed.`)
 }
 
 await JsonStore.flushAll()

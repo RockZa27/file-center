@@ -13,7 +13,8 @@
  * deleting an app password (or the account, or changing its password) works at once, not after the minute.
  */
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
-import { findUser, type User } from './auth'
+import { existsSync, readFileSync } from 'node:fs'
+import { findUser, onCliChange, type User } from './auth'
 import { paths } from './config'
 import { bad } from './fsx'
 import { JsonStore } from './store'
@@ -94,6 +95,13 @@ export function removeAppPasswordsOf(username: string): number {
   forgetCached(p => same(p.username, username))
   return n
 }
+
+// `bun src/cli.ts sessions-revoke` removes app passwords too: the running app reads the file again, so it neither
+// keeps honouring them nor writes its old list back over the change
+onCliChange(() => {
+  store.replace(existsSync(paths.appPasswords) ? JSON.parse(readFileSync(paths.appPasswords, 'utf8')) : { items: [] })
+  forgetCached(() => true)
+})
 
 // ───────────── checking a sign-in ─────────────
 

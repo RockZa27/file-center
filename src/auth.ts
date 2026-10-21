@@ -280,6 +280,9 @@ export function destroySessionById(username: string, id: string, currentSid?: st
 // cli-changed. The running app notices that on its next request and reads both files again.
 const markerStamp = () => { try { return String(statSync(paths.cliChanged).mtimeMs) } catch { return '' } }
 let seenMarker = markerStamp()
+/** other files the command line changes (app-passwords.ts registers its own) are read again at the same moment */
+const cliReloaders: (() => void)[] = []
+export const onCliChange = (fn: () => void) => { cliReloaders.push(fn) }
 export function reloadIfChangedByCli() {
   const now = markerStamp()
   if (now === seenMarker) return
@@ -288,6 +291,7 @@ export function reloadIfChangedByCli() {
     userStore.replace(JSON.parse(readFileSync(paths.users, 'utf8')))
     sessionStore.replace(existsSync(paths.sessions) ? JSON.parse(readFileSync(paths.sessions, 'utf8')) : {})
     ensureSessionIds()
+    for (const fn of cliReloaders) fn()
   } catch (err) {
     log.error('cli-reload-failed', err)
   }

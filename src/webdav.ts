@@ -79,7 +79,8 @@ registerDavFolder('shared', user =>
 function entriesOf(fn: (user: User) => DavEntry[], user: User): DavEntry[] {
   const seen = new Set<string>()
   return fn(user).map(e => {
-    const base = e.name.replace(/[\\/\u0000-\u001f]/g, '_').trim() || '_'
+    // a name of only dots ("." and "..", from a group made before they were refused) would be a dot segment in an href
+    const base = e.name.replace(/[\\/\u0000-\u001f]/g, '_').trim().replace(/^\.+$/, '_') || '_'
     let name = base
     for (let i = 2; seen.has(name); i++) name = `${base} (${i})`
     seen.add(name)
@@ -295,7 +296,7 @@ const LOCK_ENTRIES = '<D:lockentry><D:lockscope><D:exclusive/></D:lockscope><D:l
   '<D:lockentry><D:lockscope><D:shared/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockentry>'
 
 type Quota = { used: number; available: number } | null
-type Env = { user: User; quota: () => Quota }
+type Env = { user: User; quota: () => Quota; locksAt: (segs: string[]) => Lock[] }
 
 const PROPS: Record<string, (it: Item, env: Env) => string | null> = {
   displayname: it => esc(it.name),
@@ -306,12 +307,17 @@ const PROPS: Record<string, (it: Item, env: Env) => string | null> = {
   getcontenttype: it => (it.dir ? 'httpd/unix-directory' : esc(Bun.file(it.name).type || 'application/octet-stream')),
   getetag: it => (it.virtual ? null : esc(fileTag({ size: it.size, mtimeMs: it.mtime }))),
   supportedlock: it => (it.virtual ? null : LOCK_ENTRIES),
-  lockdiscovery: (it, env) => (it.virtual ? null : locksAt(env.user, it.segs).map(activeLock).join('')),
+  lockdiscovery: (it, env) => (it.virtual ? null : env.locksAt(it.segs).map(activeLock).join('')),
   'quota-used-bytes': (it, env) => (it.dir && it.space ? env.quota()?.used.toString() ?? null : null),
   'quota-available-bytes': (it, env) => (it.dir && it.space ? env.quota()?.available.toString() ?? null : null),
 }
 // what a request for "all properties" gets: the quota ones only when asked for by name (RFC 4331)
 const ALL = ['displayname', 'resourcetype', 'getlastmodified', 'creationdate', 'getcontentlength', 'getcontenttype', 'getetag', 'supportedlock', 'lockdiscovery']
+
+/** a PROPFIND may name this many properties, and answers for fewer than this many items (the answer is items x properties) */
+export const PROPFIND_MAX_PROPS = 50
+export const PROPFIND_MAX_ITEMS = 10_000
+const tooMany = () => xmlResponse(507, '<D:error xmlns:D="DAV:"><D:number-of-matches-within-limits/></D:error>')
 
 type Wanted = { ns: string; name: string }
 
@@ -319,7 +325,8 @@ function propstat(it: Item, wanted: Wanted[], env: Env, namesOnly: boolean, expl
   const ok: string[] = []
   const missing: string[] = []
   for (const w of wanted) {
-    const def = w.ns === DAV_NS ? PROPS[w.name] : undefined
+    // own keys only: a property called __proto__, constructor or toString is simply unknown
+    const def = w.ns === DAV_NS && Object.hasOwn(PROPS, w.name) ? PROPS[w.name] : undefined
     const value = def ? def(it, env) : null
     if (value === null) {
       // "all properties" lists what there is; only a name that was asked for can be answered with "not found"
@@ -347,6 +354,7 @@ async function propfind(ctx: Ctx, segs: string[], place: Place | null): Promise<
   if (doc) {
     if (doc.name !== 'propfind' || doc.ns !== DAV_NS) throw bad('files.dav-bad-xml')
     const prop = child(doc, 'prop')
+    if (prop && prop.children.length > PROPFIND_MAX_PROPS) throw bad('files.dav-too-many-props', { max: PROPFIND_MAX_PROPS })
     if (prop) { wanted = prop.children.map(c => ({ ns: c.ns, name: c.name })); explicit = true }
     else if (child(doc, 'propname')) { wanted = Object.keys(PROPS).map(name => ({ ns: DAV_NS, name })); namesOnly = true }
   }
@@ -378,14 +386,18 @@ async function propfind(ctx: Ctx, segs: string[], place: Place | null): Promise<
     const name = place.rel === '/' ? place.mount.at(-1)! : basename(place.abs)
     items.push(itemOf(segs, name, st, place))
     if (st.isDirectory() && depth === '1') {
+      // more than the limit is refused whole (507), not cut off: a client that is shown half a folder believes it is all there
+      if (readdirSync(place.abs).length >= PROPFIND_MAX_ITEMS) return tooMany()
       for (const [n, cst] of await listStats(place.abs)) items.push(itemOf([...segs, n], n, cst, place))
     }
   }
 
   let quota: Quota | undefined
+  let byPath: Map<string, Lock[]> | undefined
   const env: Env = {
     user,
     quota: () => (quota === undefined ? (quota = quotaOf(ctx, items[0]?.space)) : quota),
+    locksAt: segs => (byPath ??= lockMap(user)).get(pathKey(segs)) ?? [],
   }
   const body = items.map(it => `<D:response><D:href>${esc(hrefOf(it.segs, it.dir))}</D:href>${propstat(it, wanted, env, namesOnly, explicit)}</D:response>`)
   return xmlResponse(207, `<D:multistatus xmlns:D="DAV:">${body.join('')}</D:multistatus>`)
@@ -429,9 +441,16 @@ function liveLocks(): void {
   for (const [k, l] of locks) if (l.expires <= now) locks.delete(k)
 }
 
-function locksAt(user: User, segs: string[]): Lock[] {
+/** this user's locks by path, made once per request (not one scan of all locks per item) */
+function lockMap(user: User): Map<string, Lock[]> {
   liveLocks()
-  return [...locks.values()].filter(l => l.username === user.username && pathKey(l.segs) === pathKey(segs))
+  const map = new Map<string, Lock[]>()
+  for (const l of locks.values()) {
+    if (l.username !== user.username) continue
+    const k = pathKey(l.segs)
+    map.set(k, [...(map.get(k) ?? []), l])
+  }
+  return map
 }
 
 function activeLock(l: Lock): string {

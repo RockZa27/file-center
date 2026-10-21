@@ -109,6 +109,7 @@ export const MESSAGES = {
   'files.dav-precondition': { th: 'เงื่อนไขของคำขอไม่เป็นจริง (If-Match, If-None-Match หรือ Overwrite)', en: 'A condition of the request is not met (If-Match, If-None-Match or Overwrite).' },
   'files.dav-virtual': { th: 'ที่นี่เป็นโฟลเดอร์จัดกลุ่มของระบบ สร้าง แก้ไข หรือลบอะไรในนี้ไม่ได้', en: 'This is a folder that only groups other folders; nothing can be created, changed or deleted here.' },
   'files.dav-unsupported-body': { th: 'คำขอนี้ต้องไม่มีเนื้อหา', en: 'This request must not have a body.' },
+  'files.dav-too-many-props': { th: 'ขอคุณสมบัติ (property) มากเกินไป ขอได้ไม่เกิน {max} รายการต่อคำขอ', en: 'Too many properties asked for; at most {max} per request.' },
   'files.dav-is-folder': { th: 'นี่คือโฟลเดอร์ ใช้ PROPFIND เพื่อดูรายการ', en: 'This is a folder. Use PROPFIND to list it.' },
   'files.dav-bad-method': { th: 'ไม่รองรับคำสั่งนี้', en: 'This method is not supported.' },
   'files.dav-lock-not-found': { th: 'ไม่พบ lock ที่ระบุ', en: 'The lock was not found.' },
@@ -145,6 +146,8 @@ export const MESSAGES = {
   'archive.entry-not-found': { th: 'ไม่พบรายการนี้ในไฟล์ zip', en: 'That item is not in the zip file.' },
   'archive.encrypted': { th: 'รายการนี้ถูกเข้ารหัสด้วยรหัสผ่าน เปิดดูในหน้าเว็บไม่ได้', en: 'This item is password-protected and cannot be opened here.' },
   'archive.too-big': { th: 'รายการนี้ใหญ่เกินกำหนดหรือบีบอัดมากผิดปกติ จึงไม่แตกออกให้', en: 'This item is too big or compressed suspiciously well, so it is not extracted.' },
+  'archive.directory-too-big': { th: 'ไฟล์ zip นี้มีรายการมากหรือสารบัญใหญ่เกินกว่าจะเปิดดูในหน้าเว็บ', en: 'This zip file has too many items or too large a directory to be looked into here.' },
+  'archive.busy': { th: 'กำลังเปิดไฟล์ zip อยู่หลายไฟล์ กรุณาลองใหม่อีกครู่', en: 'Several zip files are being opened right now. Please try again in a moment.' },
   'archive.damaged': { th: 'อ่านรายการนี้จากไฟล์ zip ไม่ได้ ไฟล์อาจเสียหายหรือใช้วิธีบีบอัดที่ไม่รองรับ', en: 'This item could not be read from the zip file. It may be damaged or use an unsupported method.' },
 
   // ───────────── admin ─────────────
@@ -230,7 +233,7 @@ export const MESSAGES = {
 
   // ───────────── groups ─────────────
   'groups.not-found': { th: 'ไม่พบกลุ่มที่ระบุ', en: 'The group was not found.' },
-  'groups.bad-name': { th: 'ชื่อกลุ่มต้องยาว 1–{max} ตัวอักษร และไม่มีเครื่องหมาย / \\ หรืออักขระควบคุม', en: 'The group name must be 1–{max} characters long, without / \\ or control characters.' },
+  'groups.bad-name': { th: 'ชื่อกลุ่มต้องยาว 1–{max} ตัวอักษร ไม่มีเครื่องหมาย / \\ หรืออักขระควบคุม และต้องไม่ใช่จุดล้วน', en: 'The group name must be 1–{max} characters long, without / \\ or control characters, and not only dots.' },
   'groups.name-taken': { th: 'มีกลุ่มชื่อนี้อยู่แล้ว', en: 'A group with this name already exists.' },
   'groups.member-not-found': { th: 'ผู้ใช้นี้ไม่ได้เป็นสมาชิกของกลุ่ม', en: 'This user is not a member of the group.' },
   'groups.not-manageable': { th: 'คุณเพิ่มหรือนำผู้ใช้นี้ออกจากกลุ่มไม่ได้ (ผู้ดูแลจัดการได้เฉพาะผู้ใช้ทั่วไปที่ตัวเองดูแล)', en: 'You cannot add this user to a group or remove them (a manager handles only the plain users they manage).' },

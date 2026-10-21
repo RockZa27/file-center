@@ -180,6 +180,15 @@ describe('groups: what a member may do', () => {
 })
 
 describe('groups: making and changing', () => {
+  test('a name of only dots is refused, on create and on rename ("..", "." and "..." are dot segments in a WebDAV path)', async () => {
+    const make = (name: unknown) => admin.json('POST', '/api/admin/groups', { name })
+    for (const n of ['.', '..', '...', ' .. ']) expect([n, code(await make(n))]).toEqual([n, '400 groups.bad-name'])
+    const g = await makeGroup('gp dots base')
+    for (const n of ['.', '..']) expect(code(await admin.json('PATCH', `/api/admin/groups/${g.id}`, { name: n }))).toBe('400 groups.bad-name')
+    // dots inside a name are fine
+    expect((await make('gp v1.0..x')).status).toBe(200)
+  })
+
   test('names: 1 to 64 characters, unique in any letter case, no slash', async () => {
     const g = await makeGroup('gp Name One')
     const make = (name: unknown) => admin.json('POST', '/api/admin/groups', { name })

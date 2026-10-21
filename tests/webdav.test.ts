@@ -1189,3 +1189,88 @@ describe('webdav: group folders', () => {
     expect((await e.dav.get(`/dav/groups/${enc('ทีมบัญชี')}/a.txt`)).status).toBe(404)
   })
 })
+
+describe('webdav: security fixes (1.11)', () => {
+  const propBody = (...names: string[]) =>
+    `<?xml version="1.0"?><D:propfind xmlns:D="DAV:"><D:prop>${names.map(n => `<D:${n}/>`).join('')}</D:prop></D:propfind>`
+
+  test('property names that are names on every object are unknown properties, not errors', async () => {
+    const u = await davUser('dv-proto')
+    writeFileSync(home('dv-proto', 'f.txt'), 'x')
+    const names = ['__proto__', 'hasOwnProperty', 'constructor', 'toString', 'valueOf', 'isPrototypeOf', 'displayname']
+    const r = await u.dav.propfind('/dav/home/f.txt', '0', propBody(...names))
+    expect(r.status).toBe(207)
+    const [x] = responsesOf(parseXml(r.text))
+    expect(x.props.displayname.status).toContain('200')
+    for (const n of names.slice(0, -1)) {
+      // a name that is no plain element name (__proto__ is one) is answered 404 where it can be written back
+      if (x.props[n]) expect([n, x.props[n].status]).toEqual([n, expect.stringContaining('404')])
+    }
+    expect(r.text).not.toContain('[object')
+    expect(r.text).not.toContain('function')
+    // entities of that kind in a value are left as they are, not looked up on Object.prototype
+    const doc = parseXml('<a>&constructor; &__proto__; &toString; &amp;</a>')
+    expect(doc.text).toBe('&constructor; &__proto__; &toString; &')
+  })
+
+  test('more than 50 properties asked for is a 400; 50 is fine', async () => {
+    const u = await davUser('dv-many')
+    writeFileSync(home('dv-many', 'f.txt'), 'x')
+    const fifty = Array.from({ length: 50 }, (_, i) => `p${i}`)
+    expect((await u.dav.propfind('/dav/home/f.txt', '0', propBody(...fifty))).status).toBe(207)
+    const r = await u.dav.propfind('/dav/home/f.txt', '0', propBody(...fifty, 'p50'))
+    expect(r.status).toBe(400)
+    expect(r.res.headers.get('x-error-code')).toBe('files.dav-too-many-props')
+  })
+
+  test('a folder with 10,000 entries or more is refused whole with 507 and a DAV error body; one under the limit answers', async () => {
+    const u = await davUser('dv-big')
+    mkdirSync(home('dv-big', 'big'), { recursive: true })
+    const limit = dav.PROPFIND_MAX_ITEMS
+    for (let i = 0; i < limit; i++) writeFileSync(home('dv-big', 'big', `f${i}`), '')
+    const big = await u.dav.propfind('/dav/home/big/', '1')
+    expect(big.status).toBe(507)
+    expect(big.res.headers.get('content-type')).toContain('xml')
+    expect(big.text).toContain('number-of-matches-within-limits')
+    // one entry less (the folder itself is the other item) is the most that is answered
+    rmSync(home('dv-big', 'big', 'f0'))
+    const ok = await u.dav.propfind('/dav/home/big/', '1', propBody('getcontentlength'))
+    expect(ok.status).toBe(207)
+    expect(ok.text.match(/<D:response>/g)!.length).toBe(limit)
+    // Depth 0 on the same folder is still fine
+    expect((await u.dav.propfind('/dav/home/big/', '0')).status).toBe(207)
+    rmSync(home('dv-big'), { recursive: true, force: true })
+  })
+
+  test('locks are shown on their own item only, and only to their owner, in a Depth 1 listing', async () => {
+    const u = await davUser('dv-lkd')
+    const o = await davUser('dv-lko')
+    for (const n of ['a.txt', 'b.txt', 'c.txt']) writeFileSync(home('dv-lkd', n), 'x')
+    const info = '<?xml version="1.0"?><D:lockinfo xmlns:D="DAV:"><D:lockscope><D:exclusive/></D:lockscope><D:locktype><D:write/></D:locktype></D:lockinfo>'
+    expect(await u.dav.status('LOCK', '/dav/home/a.txt', { body: info })).toBe(200)
+    expect(await u.dav.status('LOCK', '/dav/home/c.txt', { body: info })).toBe(200)
+    writeFileSync(home('dv-lko', 'a.txt'), 'x')
+    expect(await o.dav.status('LOCK', '/dav/home/a.txt', { body: info })).toBe(200)
+    const r = await u.dav.propfind('/dav/home/', '1', propBody('lockdiscovery'))
+    const by = Object.fromEntries(responsesOf(parseXml(r.text)).map(x => [x.href, x.props.lockdiscovery?.value.children.length ?? 0]))
+    expect(by).toMatchObject({ '/dav/home/a.txt': 1, '/dav/home/b.txt': 0, '/dav/home/c.txt': 1 })
+  })
+
+  test('a legacy group called ".." or "." is listed under a safe name', async () => {
+    const groups = await import('../src/groups')
+    const u = await davUser('dv-dots')
+    const made = [groups.createGroup('..', 0, 'admin'), groups.createGroup('.', 0, 'admin'), groups.createGroup('...', 0, 'admin')]
+    try {
+      for (const g of made) groups.setMember(g, 'dv-dots', 'edit')
+      const hrefs = await u.dav.hrefs('/dav/groups/')
+      expect(hrefs.length).toBe(4)
+      for (const h of hrefs) expect(h.split('/').filter(s => s === '.' || s === '..' || /^\.+$/.test(s))).toEqual([])
+      expect(hrefs).toContain('/dav/groups/_/')
+      expect(hrefs).toContain('/dav/groups/_ (2)/')
+      // the folder under the safe name opens
+      expect((await u.dav.propfind('/dav/groups/_/', '1')).status).toBe(207)
+    } finally {
+      for (const g of made) groups.removeGroup(g)
+    }
+  })
+})

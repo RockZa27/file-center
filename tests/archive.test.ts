@@ -368,3 +368,73 @@ describe('folder links', () => {
     expect((await sList('a'.repeat(43), '/in.zip')).status).toBe(404)
   })
 })
+
+/** a zip that is only an end record: it says what it says about its central directory, and holds none of it */
+function eocdOnly(entries: number, dirBytes: number, zip64 = false): Uint8Array {
+  const eocd = new DataView(new ArrayBuffer(22))
+  eocd.setUint32(0, 0x06054b50, true)
+  if (!zip64) {
+    eocd.setUint16(10, entries, true)
+    eocd.setUint32(12, dirBytes, true)
+    return new Uint8Array(eocd.buffer)
+  }
+  eocd.setUint16(8, 0xffff, true); eocd.setUint16(10, 0xffff, true)
+  eocd.setUint32(12, 0xffffffff, true); eocd.setUint32(16, 0xffffffff, true)
+  const rec = new DataView(new ArrayBuffer(56))
+  rec.setUint32(0, 0x06064b50, true); rec.setBigUint64(4, 44n, true)
+  rec.setBigUint64(24, BigInt(entries), true); rec.setBigUint64(32, BigInt(entries), true); rec.setBigUint64(40, BigInt(dirBytes), true)
+  const loc = new DataView(new ArrayBuffer(20))
+  loc.setUint32(0, 0x07064b50, true); loc.setBigUint64(8, 4n, true); loc.setUint32(16, 1, true)
+  return new Uint8Array([0x50, 0x4b, 3, 4, ...new Uint8Array(rec.buffer), ...new Uint8Array(loc.buffer), ...new Uint8Array(eocd.buffer)])
+}
+
+describe('a central directory that is too big is refused unread', () => {
+  const GB = 1024 ** 3
+  test('the end record says 1 GB (plain, with a comment after it, and ZIP64): 413 archive.directory-too-big', async () => {
+    writeFileSync(home('ar-owner', 'huge.zip'), eocdOnly(10, GB))
+    const withComment = eocdOnly(10, GB)
+    withComment.set([30, 0], 20) // comment length
+    writeFileSync(home('ar-owner', 'huge-comment.zip'), new Uint8Array([...withComment, ...new Uint8Array(30).fill(65)]))
+    writeFileSync(home('ar-owner', 'huge64.zip'), eocdOnly(10, 2 * GB, true))
+    writeFileSync(home('ar-owner', 'proj', 'huge.zip'), eocdOnly(10, GB))
+    for (const name of ['/huge.zip', '/huge-comment.zip', '/huge64.zip']) {
+      const l = await list(owner, name)
+      expect([name, l.status, l.data.code]).toEqual([name, 413, 'archive.directory-too-big'])
+      const f = await file(owner, name, 'a.txt')
+      expect([name, f.status]).toEqual([name, 413])
+    }
+    const { token } = (await owner.json('POST', '/api/shares', { space: 'home', days: 7, path: '/proj' })).data
+    expect((await anon.json('GET', `/api/s/${token}/archive/list?${q({ path: '/huge.zip' })}`)).status).toBe(413)
+    expect((await anon.raw('GET', `/api/s/${token}/archive/file?${q({ path: '/huge.zip', entry: 'a.txt' })}`)).status).toBe(413)
+  })
+
+  test('more than 100,000 entries are refused, 100,000 are not', async () => {
+    writeFileSync(home('ar-owner', 'count.zip'), eocdOnly(100_001, 1000, true))
+    const l = await list(owner, '/count.zip')
+    expect([l.status, l.data.code]).toEqual([413, 'archive.directory-too-big'])
+    writeFileSync(home('ar-owner', 'small-count.zip'), eocdOnly(100_000, 1000, true))
+    // past the size check: zip.js finds no directory there and says not-zip
+    expect((await list(owner, '/small-count.zip')).data.code).toBe('archive.not-zip')
+  })
+
+  test('a normal ZIP64 file still works', async () => {
+    const z = await list(owner, '/zip64.zip')
+    expect(z.status).toBe(200)
+    expect(z.data.entries.length).toBe(2)
+  })
+})
+
+describe('only a few archives are opened at a time', () => {
+  test('the ones past the limit wait outside: 503 archive.busy with Retry-After, and the places come back', async () => {
+    const results = await Promise.all(Array.from({ length: 14 }, () => owner.raw('GET', `/api/archive/list?${q({ space: 'home', path: '/many.zip' })}`)))
+    const codes = results.map(r => r.status)
+    expect(codes.filter(c => c === 200).length).toBeGreaterThan(0)
+    const busy = results.filter(r => r.status === 503)
+    expect(busy.length).toBeGreaterThan(0)
+    expect(busy[0].headers.get('retry-after')).toBeTruthy()
+    expect((await busy[0].json()).code).toBe('archive.busy')
+    expect(codes.every(c => c === 200 || c === 503)).toBe(true)
+    expect((await import('../src/archive')).archiveBusy()).toBe(0)
+    expect((await list(owner, '/main.zip')).status).toBe(200)
+  })
+})

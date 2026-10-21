@@ -1,4 +1,6 @@
 import { Elysia, t } from 'elysia'
+import { auditOnce } from '../audit'
+import { isForeignSpace } from '../auth'
 import { context, need, requireUser } from '../context'
 import { HttpError, normRel, resolveIn, storagePath } from '../fsx'
 import { etagMatches } from '../static'
@@ -44,11 +46,17 @@ export const thumbRoutes = new Elysia({ prefix: '/api' })
   })
 
   .get('/thumb', ({ user, ip, query, request, set }) => {
-    const a = need({ user, ip }, query.space, 'read')
-    return thumbResponse(resolveIn(a.root, normRel(query.path)), query.size, request, set)
+    // 1024 px is nearly the file itself: it needs the right to download, 256 px only the right to read
+    const a = Number(query.size) === 1024 ? need({ user, ip }, query.space, 'read', 'download') : need({ user, ip }, query.space, 'read')
+    const abs = resolveIn(a.root, normRel(query.path))
+    // a picture of a file in a managed user's home leaves a line (once a minute per file), like browsing a folder there
+    if (user && isForeignSpace(a.space)) {
+      auditOnce(`browse|${user.username}|${a.space}|${storagePath(abs)}`, { user: user.username, ip, action: 'browse', target: storagePath(abs), detail: a.space })
+    }
+    return thumbResponse(abs, query.size, request, set)
   }, { query: t.Object({ space: t.String(), path: t.String(), size: sizeQ }) })
 
-  // a folder link: the same checks as its download, and no download is counted
+  // a folder link: the same checks as its download (a used-up or expired link is 404, and every link here is a download link, so 1024 is fine), and no download is counted
   .get('/s/:token/thumb', ({ params, query, request, set }) => {
     const { abs } = shareFile(params.token, query.path, request)
     return thumbResponse(abs, query.size, request, set)

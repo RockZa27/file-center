@@ -60,6 +60,7 @@ describe('backups (API)', () => {
     writeFileSync(join(paths.logs, 'audit.log.1'), '{"rotated":true}\n')
     ;(await import('../src/secret-box')).seal('2fa secret') // makes secret.key
     if (!existsSync(paths.officeKey)) writeFileSync(paths.officeKey, 'k'.repeat(43), { mode: 0o600 }) // what office.ts makes on first use
+    if (!existsSync(paths.appPasswords)) writeFileSync(paths.appPasswords, JSON.stringify({ items: [] })) // what the first app password makes
     const made = await admin.json('POST', '/api/admin/backups')
     expect(made.status).toBe(200)
     expect(made.data.name).toMatch(NAME_RE)
@@ -90,6 +91,7 @@ describe('backups (API)', () => {
     expect(files).not.toContain('sessions.json')
     expect(files).not.toContain('secret.key')
     expect(files).not.toContain('office-links.key')
+    expect(files).not.toContain('app-passwords.json')
     expect(files).not.toContain('logs/audit.log.1')
     expect(files.filter(f => /^(tmp|trash|app|storage)\//.test(f))).toEqual([])
     const meta = JSON.parse(new TextDecoder().decode((await zipOf(admin, made.data.name))['backup.json']))
