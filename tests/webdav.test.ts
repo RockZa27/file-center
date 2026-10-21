@@ -1163,3 +1163,29 @@ describe('webdav: over a real connection', () => {
     expect(statSync(home('dv-net3', 'over-limit.bin')).size).toBe(20 * MB)
   }, 60_000)
 })
+
+describe('webdav: group folders', () => {
+  test('/dav/groups lists my groups; view reads only, edit writes and fills the group quota', async () => {
+    const v = await davUser('dv-gv')
+    const e = await davUser('dv-ge')
+    const out = await davUser('dv-go')
+    const made = await admin.json('POST', '/api/admin/groups', { name: 'ทีมบัญชี', quotaBytes: 1000 })
+    expect(made.status).toBe(200)
+    const id = made.data.group.id as string
+    expect((await admin.json('PUT', `/api/admin/groups/${id}/members`, { username: 'dv-gv', perms: 'view' })).status).toBe(200)
+    expect((await admin.json('PUT', `/api/admin/groups/${id}/members`, { username: 'dv-ge', perms: 'edit' })).status).toBe(200)
+    expect(await e.dav.hrefs('/dav/')).toEqual(['/dav/', '/dav/home/', '/dav/groups/'])
+    expect(await e.dav.hrefs('/dav/groups/')).toEqual(['/dav/groups/', '/dav/groups/ทีมบัญชี/'])
+    expect((await e.dav.put(`/dav/groups/${enc('ทีมบัญชี')}/a.txt`, new Uint8Array(600))).status).toBe(201)
+    expect((await e.dav.put(`/dav/groups/${enc('ทีมบัญชี')}/b.txt`, new Uint8Array(600))).status).toBe(507)
+    expect((await v.dav.get(`/dav/groups/${enc('ทีมบัญชี')}/a.txt`)).status).toBe(200)
+    expect((await v.dav.put(`/dav/groups/${enc('ทีมบัญชี')}/c.txt`, 'c')).status).toBe(403)
+    expect(await v.dav.status('DELETE', `/dav/groups/${enc('ทีมบัญชี')}/a.txt`)).toBe(403)
+    // not a member: no groups folder at all
+    expect(await out.dav.hrefs('/dav/')).toEqual(['/dav/', '/dav/home/'])
+    expect((await out.dav.get(`/dav/groups/${enc('ทีมบัญชี')}/a.txt`)).status).toBe(404)
+    // removed from the group: gone at once
+    expect((await admin.json('DELETE', `/api/admin/groups/${id}/members/dv-ge`)).status).toBe(200)
+    expect((await e.dav.get(`/dav/groups/${enc('ทีมบัญชี')}/a.txt`)).status).toBe(404)
+  })
+})

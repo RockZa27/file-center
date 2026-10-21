@@ -2,10 +2,10 @@
  * Backups of the system data: accounts and passwords, settings, logo and the activity log. Without them a dead
  * disk loses every account. One backup is one zip in config.backupDir:
  *
- *   users.json  settings.json  branding/  logs/audit.log  logs/system.log  backup.json  [storage/ when files are included]
+ *   users.json  settings.json  groups.json  grants.json (and the other small data files)  branding/  logs/audit.log  logs/system.log  backup.json  [storage/ when files are included]
  *
  * Not in it: tmp/, trash/ and versions/ (temporary), app/ (installed updates), sessions.json (logins), rotated logs,
- * access.log and launcher.log, the backup folder itself, search.db (the search index, rebuilt from the disk), secret.key and office-links.key. Restoring puts back users.json, settings.json and branding/ only, never storage/.
+ * access.log and launcher.log, the backup folder itself, search.db (the search index, rebuilt from the disk), secret.key and office-links.key. Restoring puts back users.json, settings.json and branding/ only, never storage/ (groups.json is in the zip but is not restored: a group is its folder in storage/ plus its list of members, and the two must stay together).
  */
 import {
   closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync,

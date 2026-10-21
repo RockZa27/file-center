@@ -462,7 +462,7 @@ describe('notifications: settings', () => {
     const p = (await c.json('GET', '/api/me/notify-prefs')).data
     expect(p.email).toEqual({ enabled: false, address: null, verified: false })
     expect(p.line).toEqual({ enabled: false, linked: false })
-    expect(Object.keys(p.events).sort()).toEqual(['folder-shared', 'link-expiring', 'link-limit-reached', 'quota-low', 'upload-received'])
+    expect(Object.keys(p.events).sort()).toEqual(['folder-shared', 'group-added', 'link-expiring', 'link-limit-reached', 'quota-low', 'upload-received'])
     for (const e of Object.values(p.events)) expect(e).toEqual({ web: true, email: false, line: false })
   })
 

@@ -516,7 +516,8 @@ ALERT_LANG=th
 | `link-expiring` | ลิงก์แชร์ของฉันจะหมดอายุภายใน 24 ชั่วโมง (ตรวจรายชั่วโมง ครั้งเดียวต่อลิงก์ ลิงก์ที่ตั้งไว้ 1 วันไม่แจ้ง เพราะเจ้าของรู้อยู่แล้ว) |
 | `link-limit-reached` | ลิงก์แชร์ของฉันถูกดาวน์โหลดครบจำนวนที่ตั้งไว้ |
 | `quota-low` | พื้นที่ของฉันใช้เกิน 90% ของโควตา (ครั้งเดียวจนกว่าจะต่ำกว่า 90% แล้วเกินอีก) |
-| `folder-shared` | มีคนแชร์โฟลเดอร์ให้ฉัน |
+| `folder-shared` | มีคนแชร์โฟลเดอร์ให้ฉัน (แชร์ให้กลุ่ม = สมาชิกทุกคนยกเว้นผู้แชร์) |
+| `group-added` | ฉันถูกเพิ่มเข้ากลุ่ม (ลิงก์ `/groups/<id>`; เปลี่ยนสิทธิ์ในกลุ่มไม่แจ้ง) |
 | `system-alert` | (admin) สิ่งเดียวกับที่ส่งไป webhook ของผู้ดูแล: สำรองข้อมูลล้มเหลว, error มาก, บัญชีถูกล็อก, ดิสก์วิกฤต, มีเวอร์ชันใหม่ ชั่วโมงละครั้งต่อเรื่อง แม้ไม่ได้ตั้ง `ALERT_WEBHOOK_URL` |
 
 ผู้ใช้เลือกต่อชนิดและต่อช่องทาง (`web` กระดิ่ง · `email` · `line`) ค่าเริ่มต้นเปิดเฉพาะกระดิ่ง ส่งทางอีเมลและ LINE เป็นงานเบื้องหลัง ไม่ทำให้คำขอใดช้า ลองใหม่ได้ 3 ครั้งแล้วเลิก (บันทึก `notify-delivery-failed` ใน log โดยไม่มีที่อยู่อีเมลหรือโทเคน)
@@ -788,6 +789,32 @@ rclone sync ./backup filecenter:backup --transfers 4
 - `PROPFIND` รองรับ `Depth: 0` และ `1` เท่านั้น (`infinity` ตอบ 403) · `PROPPATCH` ตั้งเวลาแก้ไขล่าสุดได้ (`getlastmodified`, `lastmodified` ของ rclone/ownCloud, `Win32LastModifiedTime`) รับแต่ไม่เก็บค่า `Win32*` อื่น ๆ และปฏิเสธ property อื่นทั้งหมด (ไม่มี dead properties) · `PUT` รองรับ `If-Match` / `If-None-Match` และ `X-OC-Mtime`
 - **lock ไม่บังคับ:** `LOCK`/`UNLOCK` แจก token ให้ (ไม่เกิน 1 ชั่วโมง) และเก็บไว้ในหน่วยความจำเท่านั้น เพื่อให้ Windows Explorer, Finder และ Office ยอมเขียนไฟล์ แต่ไม่ได้กันไม่ให้คนอื่นเขียนทับไฟล์ที่ล็อกอยู่ และรีสตาร์ตแล้ว lock หายหมด (ผ่าน litmus ชุด `basic` 16/16 และ `copymove` 13/13 ส่วนชุด `locks` และ `props` ที่ตรวจการบังคับ lock และ dead properties ไม่ผ่านตามที่ออกแบบไว้)
 - `GET` ที่โฟลเดอร์ตอบ 405 (ใช้ `PROPFIND`)
+## กลุ่ม (โฟลเดอร์ร่วมของสมาชิก)
+
+admin สร้างกลุ่มและเพิ่มสมาชิก ทุกกลุ่มมีโฟลเดอร์ `<storage>/groups/<id>` (สร้างพร้อมกลุ่ม `id` สุ่มเป็นตัวพิมพ์เล็กและตัวเลข) และ space `group:<id>` ที่ใช้กับ `/api/list`, `/api/download`, `/api/upload` ฯลฯ ได้เหมือน space อื่น ข้อมูลกลุ่มเก็บใน `DATA_DIR/groups.json`: `{ id, name, members: [{ username, perms }], quotaBytes, createdAt, createdBy }`
+
+- **สิทธิ์:** `view` = `read`, `download`, `batchdownload`, `zip` · `edit` = view + `write`, `upload` ไม่มี `share` เสมอ: **ยังไม่มีลิงก์แชร์ออกจากโฟลเดอร์กลุ่ม** (`POST /api/shares` ตอบ 403) admin เข้าได้ทุกกลุ่มด้วยสิทธิ์เต็ม (เห็นเป็น `/groups/<id>` ใต้ `/` ของตัวเองด้วย) สมาชิกถูกตรวจใหม่ทุกคำขอ ถอดสมาชิกหรือลบกลุ่ม = เข้าไม่ได้ทันที (ถึงอัปโหลดที่ประกาศไว้แล้วก็หยุดที่ chunk ถัดไป) คนนอกกลุ่มได้คำตอบเหมือนรหัสที่ไม่มีอยู่ (403)
+- **ชื่อกลุ่ม** 1–64 ตัวอักษร ไม่ซ้ำ (ไม่สนตัวพิมพ์) ไม่มี `/` `\` หรืออักขระควบคุม (เพราะเป็นชื่อโฟลเดอร์ใน WebDAV) เปลี่ยนชื่อได้ id และโฟลเดอร์ไม่เปลี่ยน
+- **โควตา:** `quotaBytes` ของกลุ่ม (0 = ไม่จำกัด) นับจากทั้งโฟลเดอร์กลุ่มรวมเวอร์ชันเก่าของไฟล์ อัปโหลด บันทึก คัดลอก แตก zip และกู้คืนจากถังขยะนับกับ **กลุ่ม** ไม่ใช่โควตาส่วนตัวของสมาชิก เต็มแล้ว 507 `quota.exceeded` (ข้อยกเว้น: admin ที่เขียนผ่าน `/` ของตัวเองไม่ผ่าน space ของกลุ่ม จึงไม่ถูกจำกัด และการบันทึกจาก ONLYOFFICE ในโฟลเดอร์กลุ่มยังไม่นับกับกลุ่ม)
+- **ถังขยะ:** ของที่ลบจากโฟลเดอร์กลุ่มเป็นของกลุ่ม (`owner` = `group:<id>`) สมาชิกที่มีสิทธิ์ `edit` ทุกคนเห็นใน `GET /api/me/trash` (มี `group: { id, name }`) และกู้คืนได้ แต่ลบถาวรได้เฉพาะคนที่ลบรายการนั้น (คนอื่น 403 `trash.cannot-purge`) หรือ admin จากถังขยะของ admin สมาชิกที่เป็น `view` ไม่เห็นถังขยะของกลุ่ม ลบกลุ่ม = ย้ายโฟลเดอร์ทั้งโฟลเดอร์ไปถังขยะของ admin (ไม่ลบถาวร กู้คืนกลับเป็นโฟลเดอร์ `/groups/<id>` ได้ แต่กลุ่มไม่กลับมา) รายการในถังขยะที่เคยเป็นของกลุ่มจะเห็นเฉพาะ admin
+- **โฟลเดอร์บ้านห้ามอยู่ใน `/groups`:** admin ตั้ง `homedir` ของผู้ใช้เป็น `/groups` หรือข้างในไม่ได้ (400 `admin.home-in-groups`) และ `canManage`/การตรวจโฟลเดอร์ซ้อนกันถือว่าที่นั่นเป็นของกลุ่ม
+- **แชร์โฟลเดอร์ให้กลุ่ม:** `POST /api/grants` ใส่ `toGroup: <id>` แทน `to` (ใส่ทั้งสองหรือไม่ใส่เลย = 400 `grants.to-one`) ผู้ใช้ที่มี `share` แชร์ให้ **กลุ่มที่ตัวเองเป็นสมาชิก** ได้ (admin ให้กลุ่มไหนก็ได้) กลุ่มอื่น/ไม่มี = 404 `groups.not-found` สมาชิกทุกคนเห็นใน `GET /api/grants/to-me` (ยกเว้นเจ้าของเอง) ผู้ที่เป็นสมาชิก `view` ได้ไม่เกิน `view` แม้แชร์แบบ `edit` สมาชิกที่ถูกถอดหรือกลุ่มที่ถูกลบ = เสียสิทธิ์ทันที (ลบกลุ่ม = ลบสิทธิ์ที่ให้กลุ่มนั้นด้วย) สมาชิก **ออกจากการแชร์ของกลุ่มเองไม่ได้** (`DELETE /api/grants/:id` ของผู้รับกลุ่ม = 404) เฉพาะเจ้าของยกเลิกได้ เจ้าของเห็นใน `/api/grants/mine` พร้อม `toGroup` และ `toGroupName` (`to` เป็น `null`)
+- **ผู้ดูแล (manager)** จัดการกลุ่มไม่ได้ ยกเว้นเพิ่ม/ถอด/เปลี่ยนสิทธิ์สมาชิกที่เป็น "ผู้ใช้ทั่วไปที่ตัวเองดูแล" (`canManage`) ในกลุ่มที่ตัวเองเป็นสมาชิกอยู่ และให้สิทธิ์ได้ไม่เกินของตัวเอง (สมาชิก `view` ให้ได้แค่ `view`) สร้าง/แก้/ลบกลุ่มไม่ได้ ไม่เห็นกลุ่มที่ตัวเองไม่ได้อยู่ (404)
+- ผู้ใช้ที่ถูกลบจะถูกถอดจากทุกกลุ่ม (บัญชีใหม่ชื่อเดิมไม่ได้ที่เดิมคืน) การเปิดดูโฟลเดอร์กลุ่มลงประวัติ `browse` (ครั้งเดียวต่อนาทีต่อโฟลเดอร์) เหมือน space ของคนอื่น
+- ไฟล์สำรองมี `groups.json` แต่การกู้คืนจากหน้าเว็บยังคืนเฉพาะ `users.json`, `settings.json`, `branding/` (กลุ่มคือโฟลเดอร์ใน `storage/` กับรายชื่อสมาชิก ต้องกู้คู่กันด้วยมือ)
+
+| | |
+|---|---|
+| `GET /api/groups/mine` | `{ items: [{ id, name, perms, space, quotaBytes, used }] }` กลุ่มที่ฉันเป็นสมาชิก (admin ที่ไม่ได้เป็นสมาชิกไม่อยู่ในนี้) |
+| `GET /api/groups/lookup?q=` | เลือกกลุ่มตอนแชร์: ต้องมี `share` (admin ได้) `q` ไม่ใส่ = ทั้งหมด ตอบ `{ groups: [{ id, name }] }` เฉพาะกลุ่มของฉัน (admin: ทุกกลุ่ม) ไม่เกิน 20 |
+| `GET /api/admin/groups` | admin: ทุกกลุ่ม · manager: เฉพาะกลุ่มที่เป็นสมาชิก `{ items: [{ id, name, space, quotaBytes, used, createdAt, createdBy, members: [{ username, name, perms }] }] }` |
+| `POST /api/admin/groups` `{ name, quotaBytes? }` | admin เท่านั้น ตอบ `{ ok, group }` · 400 `groups.bad-name` · 409 `groups.name-taken` · 400 `admin.bad-quota` |
+| `PATCH /api/admin/groups/:id` `{ name?, quotaBytes? }` | admin เท่านั้น ตอบ `{ ok, group }` · 404 `groups.not-found` |
+| `DELETE /api/admin/groups/:id` `{ password }` | admin เท่านั้น ต้องใส่รหัสผ่านตัวเองซ้ำ (403 `auth.wrong-password`, 429 `auth.confirm-locked`) |
+| `PUT /api/admin/groups/:id/members` `{ username, perms: "view"\|"edit" }` | เพิ่มสมาชิกหรือเปลี่ยนสิทธิ์ ตอบ `{ ok, added, member }` · 404 `admin.user-not-found` · manager: 403 `groups.not-manageable` |
+| `DELETE /api/admin/groups/:id/members/:username` | ถอดสมาชิก · 404 `groups.member-not-found` |
+
+ประวัติการใช้งานมี `group-create`, `group-update`, `group-delete`, `group-member-add` (รวมเปลี่ยนสิทธิ์), `group-member-remove` และ `browse`/`download`/`view` ใน space `group:<id>` โมดูลอื่น (เช่น WebDAV) ใช้ `groupSpacesOf(user)` จาก `src/groups.ts` ได้: คืน `[{ name, space }]` ของกลุ่มที่ผู้ใช้เป็นสมาชิก แล้วเรียก `accessFor(user, space)` ตามปกติ
 
 ## ค้นหาไฟล์
 
@@ -901,7 +928,7 @@ tests/perf.test.ts  การนับไฟล์ 50,000 ไฟล์ การ
 
 ถ้าดิสก์เสีย บัญชีผู้ใช้ รหัสผ่าน และการตั้งค่าจะหายทั้งหมด ระบบจึงสำรองข้อมูลระบบให้เองทุกวัน
 
-- **สำรองอะไรบ้าง:** หนึ่งครั้ง = ไฟล์เดียว `file-center-backup-YYYYMMDD-HHMMSS.zip` (เวลาของเครื่อง server) มี `users.json` (ผู้ใช้และรหัสผ่านที่เข้ารหัสแล้ว), `settings.json`, `branding/` (โลโก้), `logs/audit.log`, `logs/system.log` และ `backup.json` (`{ version, createdAt, includesFiles }`)
+- **สำรองอะไรบ้าง:** หนึ่งครั้ง = ไฟล์เดียว `file-center-backup-YYYYMMDD-HHMMSS.zip` (เวลาของเครื่อง server) มี `users.json` (ผู้ใช้และรหัสผ่านที่เข้ารหัสแล้ว), `settings.json`, `groups.json` (กลุ่มและสมาชิก), `branding/` (โลโก้), `logs/audit.log`, `logs/system.log` และ `backup.json` (`{ version, createdAt, includesFiles }`)
   ไม่รวม session, ถังขยะ, ไฟล์อัปโหลดที่ยังไม่เสร็จ, เวอร์ชันที่อัปเดตผ่านเว็บ log เก่าที่หมุนไฟล์แล้ว (`audit.log.N`, `system.log.N`), `access.log` และ `launcher.log`
   ไฟล์ที่ผู้ใช้อัปโหลด (`storage`) ไม่รวมโดยค่าเริ่มต้นเพราะอาจใหญ่มาก เปิดได้ในหน้าสำรองข้อมูล (หรือ `BACKUP_INCLUDE_FILES=true`) ไฟล์จะอยู่ในโฟลเดอร์ `storage/` ของ zip (ระบบตรวจพื้นที่ว่างก่อนตาม `MIN_FREE_SPACE`)
   **ถ้ารวมไฟล์ ไฟล์สำรองแต่ละชุดจะใหญ่เท่ากับพื้นที่เก็บไฟล์ทั้งหมด** (ไฟล์ rar, zip, วิดีโอบีบอัดไม่ลงอีก) แนะนำให้เก็บแค่ 1–2 ชุด และชี้ `BACKUP_DIR` ไปดิสก์อีกลูก
@@ -959,6 +986,7 @@ tests/perf.test.ts  การนับไฟล์ 50,000 ไฟล์ การ
 | `GET /api/me/usage` | พื้นที่ที่ใช้และโควตาของฉัน (ดู โควตาพื้นที่ต่อผู้ใช้) |
 | `/api/me/notifications` · `/api/me/notify-prefs` · `/api/me/email` · `/api/me/line` · `POST /api/line/webhook` | การแจ้งเตือนส่วนตัว: กระดิ่ง อีเมล LINE (ดู การแจ้งเตือนส่วนตัว) |
 | `GET /api/me/trash` · `POST /api/me/trash/:id/restore` · `DELETE /api/me/trash/:id` · `DELETE /api/me/trash` | ถังขยะของฉัน (ดู ถังขยะของผู้ใช้เอง) |
+| `GET /api/groups/mine\|lookup` · `/api/admin/groups*` | กลุ่มและโฟลเดอร์กลุ่ม space `group:<id>` (ดู กลุ่ม) |
 | `POST /api/grants` · `GET /api/grants/mine\|to-me` · `PATCH/DELETE /api/grants/:id` · `GET /api/users/lookup?q=` | แชร์โฟลเดอร์ให้ผู้ใช้อื่น space `grant:<id>` (ดู แชร์โฟลเดอร์ให้ผู้ใช้อื่นในระบบ) |
 | `GET /api/versions?space&path` (`read`) · `GET /api/versions/:id/download?space&path` (`download`) · `POST /api/versions/:id/restore { space, path, expectedMtime? }` (`write`) · `DELETE /api/versions/:id?space&path` (`write`) | เวอร์ชันเก่าของไฟล์ (เก็บทุกครั้งที่บันทึกทับ ดู `VERSIONS_KEEP`/`VERSIONS_DAYS`): รหัสเวอร์ชันใช้ได้กับไฟล์ของมันเท่านั้น, กู้คืนจะเก็บเนื้อหาปัจจุบันเป็นเวอร์ชันก่อน (409 `files.changed-elsewhere` ถ้า `expectedMtime` ล้าสมัย) ถ้าโควตาเต็มจะลบเวอร์ชันเก่าสุดของไฟล์นั้นก่อน ยังไม่พอก็ปฏิเสธ `quota.exceeded` |
 | `GET/POST/DELETE /api/me/favorites` (`{ space, path }`, สูงสุด 200) · `GET /api/me/recent` (50 ล่าสุด) | รายการโปรดและไฟล์ที่เปิดล่าสุดของผู้ใช้ (ผู้เยี่ยมชมได้ 401) ตรวจสิทธิ์ `read` และการมีอยู่ของไฟล์ทุกครั้งที่อ่าน |

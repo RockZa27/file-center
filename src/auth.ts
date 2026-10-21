@@ -7,6 +7,7 @@ import { COMMON_PASSWORDS, isRunOrRepeat } from './common-passwords'
 import { config, paths } from './config'
 import { bad, ensureDir, HttpError, normRel, resolveIn } from './fsx'
 import { GRANT_SPACE, grantSpace } from './grants'
+import { GROUP_SPACE, GROUPS_TOP, groupSpace } from './groups'
 import { log } from './logger'
 import { open, seal } from './secret-box'
 import { cleanPerms, PERMISSIONS, settings, type Perm } from './settings'
@@ -32,6 +33,8 @@ const overlaps = (a: string, b: string) => {
 }
 /** does a folder of another account (not an admin: their "/" is no share) equal, hold or sit inside `home`? */
 export function homeOverlapsOther(home: string, except?: string): boolean {
+  // the group folders are nobody's home: whoever writes in a home inside /groups would reach a group's files
+  if (insideOrSame(home.toLowerCase(), GROUPS_TOP)) return true
   return allUsers().some(u => u.role !== 'admin' && u.username !== except && overlaps(u.homedir, home))
 }
 /** a manager may only start a home that is new: nothing there yet (in any letter case) and no other account's folder near it */
@@ -165,6 +168,8 @@ export function cleanHomedir(input: unknown, username: string): string {
   // inside the public folder the user would get full rights there through their own space
   const pub = `/${config.publicDirName}`
   if (p === pub || p.startsWith(`${pub}/`)) throw bad('admin.home-in-public')
+  // the folders of the groups (groups.ts) belong to the groups, not to an account
+  if (insideOrSame(p.toLowerCase(), GROUPS_TOP)) throw bad('admin.home-in-groups')
   return p
 }
 
@@ -489,24 +494,26 @@ export async function confirmPassword(
 export type Space = 'home' | 'public'
 /** `user:<username>`: read-only view of the home of a user the caller manages (accessFor) */
 /** `grant:<id>`: a folder another user shares with the caller (grants.ts) */
-export type AnySpace = Space | `user:${string}` | `grant:${string}`
+/** `group:<id>`: the folder of a group the caller belongs to (groups.ts) */
+export type AnySpace = Space | `user:${string}` | `grant:${string}` | `group:${string}`
 export const USER_SPACE = 'user:'
 
 export type Access = {
   space: AnySpace
   root: string
   perms: Set<Perm>
-  /** set for a grant space: the user whose home holds the folder, so what is written there counts against their quota */
+  /** set for a grant space: the user whose home holds the folder, so what is written there counts against their quota (a group space: the group, see groups.ts) */
   quotaOwner?: User
 }
 
-/** a space that shows someone else's files (a staff view or a grant): looking into it leaves a line in the audit trail */
-export const isForeignSpace = (space: string) => space.startsWith(USER_SPACE) || space.startsWith(GRANT_SPACE)
+/** a space that shows someone else's files (a staff view, a grant or a group folder): looking into it leaves a line in the audit trail */
+export const isForeignSpace = (space: string) => space.startsWith(USER_SPACE) || space.startsWith(GRANT_SPACE) || space.startsWith(GROUP_SPACE)
 
 /** Which part of the storage may this visitor see for the given space, and with which rights. */
 export function accessFor(user: User | null, space: unknown): Access | null {
   if (typeof space === 'string' && space.startsWith(USER_SPACE)) return userSpace(user, space)
   if (typeof space === 'string' && space.startsWith(GRANT_SPACE)) return grantSpace(user, space)
+  if (typeof space === 'string' && space.startsWith(GROUP_SPACE)) return groupSpace(user, space)
   if (space !== 'home' && space !== 'public') return null
   if (!user) {
     if (space !== 'public' || !settings.get().publicEnabled) return null

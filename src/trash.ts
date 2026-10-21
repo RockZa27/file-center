@@ -3,6 +3,7 @@ import { existsSync, lstatSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { basename, dirname, join } from 'node:path'
 import { allUsers, type User } from './auth'
 import { config, paths } from './config'
+import { groupOwners } from './groups'
 import { holdNow, ownerOfPath, ready } from './quota'
 import { stashedBytes, stashVersions, unstashVersions } from './versions'
 import { log } from './logger'
@@ -26,11 +27,11 @@ export type TrashMeta = {
   space?: 'home' | 'public' | 'other'
 }
 
-/** the plain user whose home holds `abs` (an admin's home is everything, so it never decides), or null */
+/** the plain user (or the group, as its pseudo account `group:<id>`) whose home holds `abs` (an admin's home is everything, so it never decides), or null */
 export function homeOwnerOf(abs: string): User | null {
   let best: User | null = null
   let bestLen = -1
-  for (const u of allUsers()) {
+  for (const u of [...allUsers(), ...groupOwners()]) {
     if (u.role === 'admin') continue
     let root: string
     try { root = resolveIn(config.storageDir, normRel(u.homedir)) } catch { continue }

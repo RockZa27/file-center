@@ -10,6 +10,7 @@ import {
   activeGrantsTo, findGrant, type Grant, grantsOf, grantTarget, GRANTS_PER_USER, onGrantCreated, removeGrant, saveGrant,
   setGrantPerms,
 } from '../grants'
+import { findGroup, memberOf } from '../groups'
 
 /** letters needed before a search for a user starts, and the most names one answer holds */
 const LOOKUP_MIN = 3
@@ -53,8 +54,10 @@ function given(g: Grant) {
     id: g.id,
     path: homePath(owner, g),
     name: basename(g.path),
-    to: g.to,
-    toName: findUser(g.to)?.name ?? null,
+    // a grant to a group has no `to` (null): toGroup (id) and toGroupName say who gets it, and are left out for a grant to a user
+    to: g.toGroup ? null : g.to,
+    toName: g.toGroup ? null : findUser(g.to)?.name ?? null,
+    ...(g.toGroup ? { toGroup: g.toGroup, toGroupName: findGroup(g.toGroup)?.name ?? null } : {}),
     perms: g.perms,
     createdAt: g.createdAt,
     active: !!grantTarget(g),
@@ -101,20 +104,32 @@ export const grantRoutes = new Elysia({ prefix: '/api' })
     if (rel === '/') throw bad('grants.folder-only')
     const abs = resolveIn(a.root, rel)
     if (!existsSync(abs)) throw notFound('files.folder-not-found')
-    const to = findUser(body.to.trim())
-    if (!to) throw notFound('admin.user-not-found')
-    if (same(to.username, owner.username)) throw bad('grants.to-self')
+    // one recipient: a user, or a group the caller belongs to (an admin may use any group). An unknown group, or one the
+    // caller is not in, is the same 404 as an unknown id
+    if ((body.to === undefined) === (body.toGroup === undefined)) throw bad('grants.to-one')
+    let to: User | undefined
+    const group = body.toGroup === undefined ? undefined : findGroup(body.toGroup)
+    if (body.toGroup !== undefined) {
+      if (!group || (owner.role !== 'admin' && !memberOf(group, owner.username))) throw notFound('groups.not-found')
+    } else {
+      to = findUser(body.to!.trim())
+      if (!to) throw notFound('admin.user-not-found')
+      if (same(to.username, owner.username)) throw bad('grants.to-self')
+    }
     const path = storagePath(abs)
+    const recipient = group ? { group } : to!
+    const toName = to?.username ?? ''
     // a file, a link or a path through a link is no folder of this home
-    if (!grantTarget({ id: '', owner: owner.username, path, to: to.username, perms: body.perms, createdAt: '' })) throw bad('grants.folder-only')
-    if (grantsOf(owner.username).length >= GRANTS_PER_USER && !grantsOf(owner.username).some(g => g.path === path && same(g.to, to.username))) {
+    if (!grantTarget({ id: '', owner: owner.username, path, to: toName, ...(group ? { toGroup: group.id } : {}), perms: body.perms, createdAt: '' })) throw bad('grants.folder-only')
+    const sameRecipient = (g: Grant) => (group ? g.toGroup === group.id : !g.toGroup && same(g.to, toName))
+    if (grantsOf(owner.username).length >= GRANTS_PER_USER && !grantsOf(owner.username).some(g => g.path === path && sameRecipient(g))) {
       throw bad('grants.too-many', { max: GRANTS_PER_USER })
     }
-    const { grant, created } = saveGrant(owner, to, path, body.perms)
-    audit({ user: owner.username, ip, action: created ? 'grant-create' : 'grant-update', target: path, detail: `${to.username}, ${grant.perms}` })
+    const { grant, created } = saveGrant(owner, recipient, path, body.perms)
+    audit({ user: owner.username, ip, action: created ? 'grant-create' : 'grant-update', target: path, detail: `${group ? `กลุ่ม ${group.name}` : toName}, ${grant.perms}` })
     if (created) onGrantCreated(grant)
     return { ok: true, created, grant: given(grant) }
-  }, { body: t.Object({ space: t.String(), path: t.String(), to: t.String(), perms: permsT }) })
+  }, { body: t.Object({ space: t.String(), path: t.String(), to: t.Optional(t.String()), toGroup: t.Optional(t.String()), perms: permsT }) })
 
   // ───────────── lists ─────────────
   .get('/grants/mine', ({ user, ip }) => {
@@ -126,13 +141,16 @@ export const grantRoutes = new Elysia({ prefix: '/api' })
   .get('/grants/to-me', ({ user, ip }) => {
     const u = requireUser({ user, ip })
     return {
-      items: activeGrantsTo(u).map(({ grant, owner, abs }) => ({
+      items: activeGrantsTo(u).map(({ grant, owner, abs, perms, viaGroup }) => ({
         id: grant.id,
         space: `grant:${grant.id}`,
         name: basename(abs),
         owner: owner.username,
         ownerName: owner.name,
-        perms: grant.perms,
+        // for a group grant what this member gets: edit only when both the grant and their place in the group allow it
+        perms,
+        // only for a folder that came through a group (the member can not leave it; only the owner ends it)
+        ...(viaGroup ? { viaGroup: { id: viaGroup.id, name: viaGroup.name } } : {}),
         createdAt: grant.createdAt,
       })),
     }
@@ -143,7 +161,7 @@ export const grantRoutes = new Elysia({ prefix: '/api' })
     const u = requireUser({ user, ip })
     const g = ownGrant(u, params.id)
     if (g.perms !== body.perms) setGrantPerms(g, body.perms)
-    audit({ user: u.username, ip, action: 'grant-update', target: g.path, detail: `${g.to}, ${g.perms}` })
+    audit({ user: u.username, ip, action: 'grant-update', target: g.path, detail: `${g.toGroup ? `กลุ่ม ${findGroup(g.toGroup)?.name ?? g.toGroup}` : g.to}, ${g.perms}` })
     return { ok: true, grant: given(g) }
   }, { body: t.Object({ perms: permsT }) })
 
@@ -152,8 +170,9 @@ export const grantRoutes = new Elysia({ prefix: '/api' })
     const u = requireUser({ user, ip })
     const g = findGrant(params.id)
     const isOwner = !!g && same(g.owner, u.username)
-    if (!g || (!isOwner && !same(g.to, u.username))) throw notFound()
+    // a member of a group does not leave a group grant alone: only the owner ends it
+    if (!g || (!isOwner && (g.toGroup || !same(g.to, u.username)))) throw notFound()
     removeGrant(g)
-    audit({ user: u.username, ip, action: 'grant-delete', target: g.path, detail: isOwner ? g.to : `${g.owner}, leave` })
+    audit({ user: u.username, ip, action: 'grant-delete', target: g.path, detail: isOwner ? (g.toGroup ? `กลุ่ม ${findGroup(g.toGroup)?.name ?? g.toGroup}` : g.to) : `${g.owner}, leave` })
     return { ok: true }
   })

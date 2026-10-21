@@ -22,6 +22,7 @@ import { DISK_CRITICAL_PERCENT, DISK_LOW_PERCENT, diskInfo, storageStats } from 
 import { removeUserState } from '../favorites'
 import { removeGrantsOf } from '../grants'
 import { removeAppPasswordsOf } from '../app-passwords'
+import { removeUserFromGroups } from '../groups'
 import { listTrash, purge, restore, tombstoneTrashOf, trashSummary } from '../trash'
 import { isBeta } from '../release'
 import { availableVersion } from '../update-source'
@@ -191,6 +192,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     forgetNotifications(target.username)
     removeGrantsOf(target.username)
     removeAppPasswordsOf(target.username)
+    removeUserFromGroups(target.username)
     audit({ user: admin.username, ip, action: 'user-delete', target: target.username })
     return { ok: true }
   })

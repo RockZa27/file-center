@@ -1232,8 +1232,8 @@
     "patches": [
       {
         "file": "src/grants.ts",
-        "find": "if (!user || !g || !same(g.to, user.username)) return null",
-        "replace": "if (!user || !g) return null"
+        "find": "const perms = user && g ? grantPermsFor(g, user) : null",
+        "replace": "const perms = user && g ? (grantPermsFor(g, user) ?? g.perms) : null"
       }
     ]
   },
@@ -1439,6 +1439,71 @@
         "file": "src/routes/session.ts",
         "find": "removeAppPasswordsOf(u.username)",
         "replace": "void u.username"
+      }
+    ]
+  },
+  {
+    "id": "group-non-member-opens",
+    "difficulty": "easy",
+    "category": "authz",
+    "severity": "critical",
+    "tests": "tests/groups.test.ts",
+    "description": "a user who is not in a group can open its folder",
+    "patches": [
+      {
+        "file": "src/groups.ts",
+        "find": "if (!m && user.role !== 'admin') return null",
+        "replace": "if (!m && user.role === 'nobody') return null"
+      },
+      {
+        "file": "src/groups.ts",
+        "find": "PERMS[m!.perms]",
+        "replace": "PERMS[m?.perms ?? 'edit']"
+      }
+    ]
+  },
+  {
+    "id": "group-view-can-write",
+    "difficulty": "easy",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/groups.test.ts",
+    "description": "a group member who may only view can change files in the group folder",
+    "patches": [
+      {
+        "file": "src/groups.ts",
+        "find": "  view: ['read', 'download', 'batchdownload', 'zip'],",
+        "replace": "  view: ['read', 'download', 'batchdownload', 'zip', 'upload', 'write'],"
+      }
+    ]
+  },
+  {
+    "id": "group-upload-not-counted",
+    "difficulty": "medium",
+    "category": "quota",
+    "severity": "medium",
+    "tests": "tests/groups.test.ts",
+    "description": "what is written into a group folder is not counted against the group quota",
+    "patches": [
+      {
+        "file": "src/groups.ts",
+        "find": "perms: new Set(perms), quotaOwner: groupOwner(g) }",
+        "replace": "perms: new Set(perms) }"
+      }
+    ]
+  },
+  {
+    "id": "group-deleted-user-stays",
+    "difficulty": "medium",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/groups.test.ts",
+    "description": "a deleted account stays in its groups, and a new account by the same name gets its place",
+    "patches": [
+      {
+        "file": "src/routes/admin.ts",
+        "find": "    removeUserFromGroups(target.username)\n",
+        "replace": ""
       }
     ]
   }

@@ -185,6 +185,8 @@ export const paths = {
   grants: join(config.dataDir, 'grants.json'),
   /** app passwords for WebDAV (app-passwords.ts): only an argon2 hash of each, never the password */
   appPasswords: join(config.dataDir, 'app-passwords.json'),
+  /** groups, their members and limits (groups.ts) */
+  groups: join(config.dataDir, 'groups.json'),
   tmp: join(config.dataDir, 'tmp'),
   branding: join(config.dataDir, 'branding'),
   /** installed web updates: state.json, releases/, staging/ (see release.ts) */

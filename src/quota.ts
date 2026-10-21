@@ -9,6 +9,7 @@
  */
 import { accessFor, allUsers, type Access, type User } from './auth'
 import { bad, HttpError, treeStats, within } from './fsx'
+import { groupOwners } from './groups'
 import { sizeText } from './messages'
 import { versionBytesUnder } from './versions'
 
@@ -75,6 +76,11 @@ function usedNow(user: User): number {
 export async function ready(user: User | null | undefined): Promise<void> {
   // a count that was already running when something changed is marked stale when it ends: count once more
   for (let i = 0; i < 3 && user && limitOf(user) && !fresh(user); i++) await recount(user)
+}
+
+/** wait for a fresh count even when there is no limit (the list of groups shows what each folder holds) */
+export async function counted(user: User): Promise<void> {
+  for (let i = 0; i < 3 && !fresh(user); i++) await recount(user)
 }
 
 /** for the usage page: never waits, `counting` is true while there is no usable number yet */
@@ -150,7 +156,8 @@ export function forget(username: string): void {
  * Checked against every limited user's home, so it also finds a home that was moved by an admin.
  */
 export function ownerOfPath(abs: string): User | null {
-  for (const u of allUsers()) {
+  // a group folder is a limited home too (groups.ts); no account's home lies inside it
+  for (const u of [...groupOwners(), ...allUsers()]) {
     if (!limitOf(u)) continue
     if (within(accessFor(u, 'home')!.root, abs)) return u
   }
@@ -180,7 +187,7 @@ export function holdNow(user: User | null | undefined, bytes: number): Hold {
 
 /**
  * Whose quota what is written into this space counts against: the caller's in their home, the owner's in a folder
- * shared with the caller (a grant), nobody's elsewhere.
+ * shared with the caller (a grant), the group's in a group folder, nobody's elsewhere.
  */
 export function quotaUserOf(a: Access, user: User | null): User | null {
   if (a.space === 'home') return user
