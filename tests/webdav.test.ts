@@ -359,10 +359,13 @@ describe('webdav: PROPFIND', () => {
     expect(await u.dav.hrefs('/dav/')).toEqual(['/dav/', '/dav/home/'])
     const p = await davUser('dv-list2', 'readwrite', { publicPermissions: ['read', 'download'] })
     expect(await p.dav.hrefs('/dav/')).toEqual(['/dav/', '/dav/home/', '/dav/public/'])
-    expect(await new Dav('admin', (await (async () => {
+    // the admin may also have folders shared with them or groups, made by other test files
+    const adminRoot = await new Dav('admin', (await (async () => {
       const made = await admin.json('POST', '/api/me/app-passwords', { name: 'adm', scope: 'readwrite', password: process.env.ADMIN_PASSWORD })
       return made.data.secret as string
-    })())).hrefs('/dav/')).toEqual(['/dav/', '/dav/home/', '/dav/public/'])
+    })())).hrefs('/dav/')
+    expect(adminRoot.slice(0, 3)).toEqual(['/dav/', '/dav/home/', '/dav/public/'])
+    for (const h of adminRoot.slice(3)) expect(['/dav/shared/', '/dav/groups/']).toContain(h)
 
     mkdirSync(home('dv-list1', 'โฟลเดอร์ ทดสอบ'), { recursive: true })
     writeFileSync(home('dv-list1', 'รายงาน 2569 #1 (final).txt'), 'สวัสดี')
