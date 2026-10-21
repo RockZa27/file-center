@@ -1223,10 +1223,12 @@ describe('webdav: security fixes (1.11)', () => {
     expect(r.res.headers.get('x-error-code')).toBe('files.dav-too-many-props')
   })
 
-  test('a folder with 10,000 entries or more is refused whole with 507 and a DAV error body; one under the limit answers', async () => {
+  test('a folder with WEBDAV_MAX_ITEMS entries or more is refused whole with 507 and a DAV error body; one under the limit answers', async () => {
     const u = await davUser('dv-big')
     mkdirSync(home('dv-big', 'big'), { recursive: true })
-    const limit = dav.PROPFIND_MAX_ITEMS
+    expect(config.davMaxItems).toBe(100_000)
+    const saved = config.davMaxItems
+    const limit = (config.davMaxItems = 300)
     for (let i = 0; i < limit; i++) writeFileSync(home('dv-big', 'big', `f${i}`), '')
     const big = await u.dav.propfind('/dav/home/big/', '1')
     expect(big.status).toBe(507)
@@ -1239,6 +1241,7 @@ describe('webdav: security fixes (1.11)', () => {
     expect(ok.text.match(/<D:response>/g)!.length).toBe(limit)
     // Depth 0 on the same folder is still fine
     expect((await u.dav.propfind('/dav/home/big/', '0')).status).toBe(207)
+    config.davMaxItems = saved
     rmSync(home('dv-big'), { recursive: true, force: true })
   })
 

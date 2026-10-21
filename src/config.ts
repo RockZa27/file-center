@@ -90,6 +90,8 @@ export const config = {
   adminPassword: env('ADMIN_PASSWORD', ''),
   /** "off" turns WebDAV (/dav, webdav.ts) off: it then answers 404 */
   webdav: !['off', 'false', '0'].includes(env('WEBDAV', 'on').trim().toLowerCase()),
+  /** a WebDAV folder listing (PROPFIND Depth 1) answers folders with fewer entries than this; bigger ones get 507 */
+  davMaxItems: num('WEBDAV_MAX_ITEMS', 100_000),
   /** "false" turns the update-from-the-web feature off completely */
   webUpdate: env('WEB_UPDATE', 'true') !== 'false',
   /** biggest update package an admin may upload */

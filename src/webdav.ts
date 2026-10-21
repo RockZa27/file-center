@@ -314,9 +314,11 @@ const PROPS: Record<string, (it: Item, env: Env) => string | null> = {
 // what a request for "all properties" gets: the quota ones only when asked for by name (RFC 4331)
 const ALL = ['displayname', 'resourcetype', 'getlastmodified', 'creationdate', 'getcontentlength', 'getcontenttype', 'getetag', 'supportedlock', 'lockdiscovery']
 
-/** a PROPFIND may name this many properties, and answers for fewer than this many items (the answer is items x properties) */
+/**
+ * a PROPFIND may name this many properties, and answers folders with fewer than config.davMaxItems entries (the answer
+ * is items x properties: 100,000 items x 50 properties stays in the tens of MB, a photo folder of 20,000 still lists)
+ */
 export const PROPFIND_MAX_PROPS = 50
-export const PROPFIND_MAX_ITEMS = 10_000
 const tooMany = () => xmlResponse(507, '<D:error xmlns:D="DAV:"><D:number-of-matches-within-limits/></D:error>')
 
 type Wanted = { ns: string; name: string }
@@ -387,7 +389,7 @@ async function propfind(ctx: Ctx, segs: string[], place: Place | null): Promise<
     items.push(itemOf(segs, name, st, place))
     if (st.isDirectory() && depth === '1') {
       // more than the limit is refused whole (507), not cut off: a client that is shown half a folder believes it is all there
-      if (readdirSync(place.abs).length >= PROPFIND_MAX_ITEMS) return tooMany()
+      if (readdirSync(place.abs).length >= config.davMaxItems) return tooMany()
       for (const [n, cst] of await listStats(place.abs)) items.push(itemOf([...segs, n], n, cst, place))
     }
   }
