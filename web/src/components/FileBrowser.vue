@@ -325,7 +325,8 @@ const gridItems = computed(() => sorted.value.slice(0, gridLimit.value))
 // ───── small pictures of images, PDFs and videos (the grid and the gallery never load the files themselves) ─────
 const isVideo = it => mediaKindOf(it.name) === 'video'
 // the version (mtime) is in the address: the browser keeps a picture for a day, so a changed file must ask for a new one
-const thumbOf = (it, size) => (it.type === 'file' && can('read') && wantsThumb(it.name) ? api.thumbUrl(props.space, it.path, size, it.mtime) : '')
+// the 1024 px picture is close to the file itself, so the server gives it only to those who may download (read-only: 256)
+const thumbOf = (it, size) => (it.type === 'file' && can('read') && wantsThumb(it.name) ? api.thumbUrl(props.space, it.path, can('download') ? size : 256, it.mtime) : '')
 const tileSize = sharpScreen() ? 1024 : 256
 onMounted(() => loadThumbStatus(!!app.user))
 
