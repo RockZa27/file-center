@@ -378,6 +378,7 @@ OFFICE_SERVER_INTERNAL_URL=http://onlyoffice
 | `DATA_DIR` | `./data` (Docker: `/data/system`) | ผู้ใช้, ตั้งค่า, session, log, ถังขยะ, ไฟล์อัปโหลดที่ยังไม่เสร็จ |
 | `FC_RUN_AS_ROOT` | `false` | (Docker) `true` = รันแอปเป็น root แบบเดิม ไม่เปลี่ยนเจ้าของ `./data` (ปกติรันเป็นผู้ใช้ `bun` uid 1000) |
 | `ADMIN_PASSWORD` | สุ่ม | รหัสผ่านของ admin ตอนสร้างบัญชีครั้งแรก |
+| `WEBDAV` | `on` | `off` = ปิด WebDAV (`/dav` ตอบ 404) และรหัสผ่านแอปใช้ไม่ได้ ดู [WebDAV](#webdav-เปิดไฟล์เป็นไดรฟ์ในเครื่อง-windows-macos-มือถือ-rclone) |
 | `UPLOAD_MAX_SIZE` | 10 GB | ขนาดสูงสุดต่อไฟล์ (ไบต์) |
 | `UPLOAD_CHUNK_SIZE` | 8 MB | ขนาดชิ้นส่วนที่หน้าเว็บส่งทีละชิ้น |
 | `UPLOAD_SIMULTANEOUS` | 6 | จำนวนชิ้นที่ส่งพร้อมกัน |
@@ -714,6 +715,80 @@ admin กำหนดโควตาให้ผู้ใช้แต่ละ�
 
 ประวัติการใช้งานมี `grant-create`, `grant-update`, `grant-delete` ในโค้ด `onGrantCreated(grant)` ใน `src/grants.ts` เรียกทุกครั้งที่สร้างสิทธิ์ใหม่ (ไม่รวมการแก้) โมดูลอื่น (เช่นการแจ้งเตือน) เพิ่มฟังก์ชันใน `grantCreatedListeners` เพื่อรับรู้
 
+## WebDAV: เปิดไฟล์เป็นไดรฟ์ในเครื่อง (Windows, macOS, มือถือ, rclone)
+
+File Center เปิด WebDAV ที่ `/dav/` ให้โปรแกรมในเครื่องใช้ไฟล์เหมือนไดรฟ์ธรรมดา (เปิด แก้ บันทึก ลาก วาง) โดยผ่านกติกาเดียวกับหน้าเว็บทุกอย่าง: สิทธิ์ของผู้ใช้ โควตา ถังขยะ (ลบผ่าน WebDAV ไปอยู่ในถังขยะของเจ้าของ) และเวอร์ชันของไฟล์ (บันทึกทับแล้วเก็บของเดิมไว้ ตามค่า `VERSIONS_KEEP`) ปิดทั้งหมดได้ด้วย `WEBDAV=off` (ทุกพาธใต้ `/dav` ตอบ 404 ส่วนหน้าเว็บและ API ไม่เปลี่ยน)
+
+### รหัสผ่านแอป (app password)
+
+WebDAV **ไม่รับรหัสผ่านบัญชีและไม่อ่าน cookie ของหน้าเว็บ** รับเฉพาะ Basic auth แบบ `ชื่อผู้ใช้:รหัสผ่านแอป` รหัสผ่านแอปทำเองได้ที่ API ด้านล่าง (ต้องใส่รหัสผ่านบัญชีอีกครั้ง) ทีละเครื่อง ทีละแอป และเพิกถอนทีละอันได้โดยไม่กระทบรหัสผ่านบัญชีหรือเครื่องอื่น
+
+- รูปแบบ `fc-` ตามด้วยตัวอักษรและตัวเลขสุ่ม 32 ตัว **แสดงครั้งเดียวตอนสร้าง** ระบบเก็บเฉพาะแฮช (argon2id) ใน `DATA_DIR/app-passwords.json` แม้แต่ผู้ดูแลระบบก็ดูรหัสไม่ได้
+- ขอบเขต (`scope`): `read` = ดูและดาวน์โหลดเท่านั้น · `readwrite` = ตามสิทธิ์ของบัญชี ขอบเขตเป็นได้แค่ตัดสิทธิ์ ไม่เพิ่มสิทธิ์เกินที่บัญชีมี
+- สร้างได้คนละ 20 อัน รหัสที่ใช้เข้าได้ไม่ผ่านการยืนยันสองขั้นตอน (2FA) เพราะเป็นรหัสสุ่มแยกต่างหากที่ใช้ได้กับ WebDAV อย่างเดียว เข้า API หรือหน้าเว็บด้วยรหัสนี้ไม่ได้
+- **ลบหมดทุกอัน** เมื่อบัญชีถูกลบ เมื่อผู้ใช้เปลี่ยนรหัสผ่าน และเมื่อผู้ดูแลตั้งรหัสผ่านใหม่ให้ (ลบรหัสแล้วใช้ไม่ได้ทันที)
+- รหัสผิดซ้ำถูกล็อกเหมือนหน้าเข้าสู่ระบบ (ต่อ IP + ชื่อผู้ใช้ ตาม `LOGIN_MAX_ATTEMPTS` / `LOGIN_LOCKOUT_SECONDS` และต่อ IP ตาม `LOGIN_ADDRESS_MAX_ATTEMPTS`) ตอบ 401 พร้อม `WWW-Authenticate: Basic realm="File Center", charset="UTF-8"` เมื่อโดนล็อกตอบ 429 พร้อม `Retry-After`
+- บัญชีที่ยังต้องเปลี่ยนรหัสผ่านเริ่มต้น (`must-change-password`) ใช้ WebDAV ไม่ได้จนกว่าจะเปลี่ยน
+- บันทึกการใช้ล่าสุด (`lastUsedAt`, `lastIp`) ไม่เกินนาทีละครั้ง การสร้าง ลบ อัปโหลด แก้ไข สร้างโฟลเดอร์ ลบ ย้าย และคัดลอกลงประวัติการใช้งาน (`detail` ขึ้นต้นด้วย `WebDAV`; อัปโหลดทับไฟล์เดิมซ้ำ ๆ ลงบรรทัดเดียวต่อนาทีต่อไฟล์)
+
+| | |
+|---|---|
+| `GET /api/me/app-passwords` | `{ items: [{ id, name, scope, hint, createdAt, lastUsedAt, lastIp }], max: 20, enabled }` (`hint` คือ `fc-` กับอักขระ 8 ตัวแรกของรหัส ไว้แยกว่าอันไหน ไม่ใช่ตัวรหัส; `enabled: false` = `WEBDAV=off`) |
+| `POST /api/me/app-passwords` `{ name, scope, password }` | `name` 1–60 ตัวอักษร · `scope` = `read` / `readwrite` · `password` = รหัสผ่านบัญชีของคุณตอนนี้ ตอบ `{ id, name, scope, hint, createdAt, lastUsedAt, lastIp, secret }` **`secret` มีเฉพาะคำตอบนี้ครั้งเดียว** · 403 `auth.wrong-password` / 429 `auth.confirm-locked` (นับรวมกับการยืนยันรหัสผ่านอื่น) · 400 `auth.app-password-bad-name` / `auth.app-password-bad-scope` / `auth.app-password-limit` |
+| `DELETE /api/me/app-passwords/:id` | ลบอันของตัวเอง (ของคนอื่น = 404 `auth.app-password-not-found`) |
+
+`GET /api/session` มี `config.webdav` (true/false) สำหรับผู้ที่เข้าสู่ระบบแล้ว ให้หน้าเว็บรู้ว่าจะแสดงส่วนนี้หรือไม่
+
+### โครงสร้างโฟลเดอร์ใน `/dav/`
+
+| พาธ | คืออะไร |
+|---|---|
+| `/dav/home/` | โฟลเดอร์ของตัวเอง (admin = ที่เก็บไฟล์ทั้งหมด) |
+| `/dav/public/` | โฟลเดอร์สาธารณะ (มีเมื่อบัญชีนี้มีสิทธิ์ใช้) |
+| `/dav/shared/<ชื่อโฟลเดอร์>/` | โฟลเดอร์ที่ผู้ใช้อื่นแชร์ให้ (grants) ชื่อซ้ำกันต่อท้าย ` (2)`, ` (3)` ตามลำดับที่แชร์ ถ้าไม่มีใครแชร์ให้ โฟลเดอร์นี้ไม่ปรากฏ |
+
+ทุกพาธถูกแปลงเป็น (space, พาธใน space) แล้วผ่าน `accessFor` และ `resolveIn` เหมือน API เสมอ: สิทธิ์ `read` `download` `write` `upload` ตามจริงของ space นั้น (แชร์แบบ `view` = อ่านอย่างเดียว) และโควตา/ถังขยะนับตามเจ้าของ space เหมือนในหน้าเว็บ การเขียนทับ ย้าย คัดลอก และลบ ทำได้เฉพาะในโฟลเดอร์จริง ไม่ใช่โฟลเดอร์จัดกลุ่ม (`/dav/`, `/dav/shared/`) พาธที่มี `..`, `\`, `%2f` หรือ NUL ถูกปฏิเสธ
+
+**ผู้พัฒนา:** โมดูลอื่นเพิ่มโฟลเดอร์ใน `/dav/` ได้ด้วย `registerDavSpace(ชื่อ, user => space | null)` (หนึ่งโฟลเดอร์ = หนึ่ง space) หรือ `registerDavFolder(ชื่อ, user => [{ name, space }])` (โฟลเดอร์ที่รวมหลาย space เช่น กลุ่มผู้ใช้: `registerDavFolder('groups', user => groupsOf(user).map(g => ({ name: g.name, space: \`group:${g.id}\` })))`) ใน `src/webdav.ts` ชื่อถูกทำให้ปลอดภัยและไม่ซ้ำให้ ถ้าไม่มี entry โฟลเดอร์นั้นไม่ปรากฏ สิทธิ์ทุกอย่างมาจาก `accessFor(user, space)`
+
+### เชื่อมต่อจากเครื่องต่าง ๆ
+
+ใช้ที่อยู่ `https://files.example.com/dav/home/` (แทนด้วยโดเมนของคุณ) ชื่อผู้ใช้คือชื่อบัญชี รหัสผ่านคือรหัสผ่านแอป **ควรใช้ผ่าน HTTPS เสมอ** (Basic auth ส่งรหัสไปตรง ๆ) ดู [Cloudflare Tunnel](#ใช้งานผ่านโดเมนด้วย-cloudflare-tunnel)
+
+- **Windows** (เปิดใน File Explorer > This PC > Map network drive): ใส่ `https://files.example.com/dav/home` เลือก "Connect using different credentials" แล้วกรอกชื่อผู้ใช้กับรหัสผ่านแอป หรือใช้คำสั่ง `net use Z: https://files.example.com/dav/home /user:alice fc-xxxxxxxx...`
+  - บริการ **WebClient** ต้องทำงาน (Services > WebClient > Start, Startup type = Automatic) ถ้าไม่มีบริการนี้ (Windows Server) ต้องติดตั้งฟีเจอร์ "WebDAV Redirector" ก่อน
+  - Windows ใช้ HTTP แบบไม่เข้ารหัสไม่ได้ตามค่าเริ่มต้น (Basic auth ต้องผ่าน HTTPS) จึงต้องมี HTTPS
+  - **ไฟล์ใหญ่กว่า 50 MB ดาวน์โหลดไม่ได้** เพราะ Windows ตั้งค่า `FileSizeLimitInBytes` ไว้ 50,000,000 ไบต์ เปลี่ยนที่ Registry `HKLM\SYSTEM\CurrentControlSet\Services\WebClient\Parameters` ค่า `FileSizeLimitInBytes` (DWORD) เป็น `4294967295` (สูงสุด 4 GB) แล้วรีสตาร์ตบริการ WebClient (`net stop webclient && net start webclient`) หรือรีสตาร์ตเครื่อง ไฟล์ที่ใหญ่กว่า 4 GB ผ่านไดรฟ์ที่แมปไม่ได้ ใช้ rclone หรือหน้าเว็บแทน
+  - การเปิดไฟล์ Office จากไดรฟ์ที่แมปใช้งานได้ (ระบบแจกและจำ lock ให้เพื่อให้ Word/Excel เขียนได้ ดูข้อจำกัดด้านล่าง)
+- **macOS Finder:** Go > Connect to Server (⌘K) ใส่ `https://files.example.com/dav/home/` กด Connect แล้วใส่ชื่อผู้ใช้กับรหัสผ่านแอป ถ้าใช้รหัส `read` เซิร์ฟเวอร์ประกาศ `DAV: 1` (ไม่มี LOCK) ซึ่ง Finder มักเมานต์เป็นแบบอ่านอย่างเดียว
+- **iOS (Files):** ปุ่ม ⋯ > Connect to Server ใส่ `https://files.example.com/dav/home/` เลือก Registered User · **Android:** แอปที่รองรับ WebDAV เช่น Solid Explorer, Material Files, FolderSync เลือกชนิด WebDAV ใส่ที่อยู่และรหัสเดียวกัน
+- **rclone** (ซิงก์/สำรอง/คัดลอกไฟล์ใหญ่ได้ดีที่สุด ทดสอบกับ rclone 1.75: ls, copy, sync, check, delete, ย้าย, คัดลอกฝั่งเซิร์ฟเวอร์ ผ่านทั้ง `vendor=other` และ `vendor=owncloud`):
+
+```ini
+# ~/.config/rclone/rclone.conf   (ทำรหัสที่ปิดบังด้วย  rclone obscure fc-xxxxxxxx...)
+[filecenter]
+type = webdav
+url = https://files.example.com/dav/home
+vendor = other
+user = alice
+pass = <ผลจาก rclone obscure>
+```
+
+```bash
+rclone lsd filecenter:
+rclone copy ./photos filecenter:photos -P
+rclone sync ./backup filecenter:backup --transfers 4
+```
+
+### ข้อจำกัดที่ควรรู้
+
+- **Cloudflare (แพ็กเกจ Free และ Pro) ตัดคำขอที่ใหญ่เกิน 100 MB** WebDAV ส่งไฟล์ทั้งไฟล์ในคำขอเดียว (หน้าเว็บแบ่งเป็นชิ้นตาม `UPLOAD_CHUNK_SIZE` จึงไม่โดน) อัปโหลดไฟล์เกิน 100 MB ผ่านโดเมนที่ผ่าน Cloudflare จึงล้มเหลว ให้อัปโหลดจากในวง LAN ด้วยที่อยู่ตรงของเครื่อง (`http://<ip>:3000/dav/...`) ผ่านโดเมนที่ไม่ผ่านพร็อกซีของ Cloudflare หรืออัปโหลดผ่านหน้าเว็บ การดาวน์โหลดไม่ติดขีดจำกัดนี้
+- ขนาดไฟล์สูงสุดต่อไฟล์คือ `UPLOAD_MAX_SIZE` · ไฟล์ถูกเขียนลงโฟลเดอร์ชั่วคราวแล้วย้ายเข้าที่ในครั้งเดียว ไฟล์ที่ส่งไม่ครบ/ขาดกลางทางไม่ทิ้งไฟล์ค้าง (ใช้ได้ทั้งแบบมีและไม่มี `Content-Length`) และใช้หน่วยความจำคงที่ไม่ว่าไฟล์ใหญ่แค่ไหน
+- ขนาดคำขอ: Bun รับเนื้อหาคำขอได้สูงสุดเท่า `UPLOAD_MAX_SIZE` เพื่อให้ `PUT` ของ WebDAV ไหลลงดิสก์ได้ทั้งไฟล์ ส่วนเส้นทางอื่นทั้งหมด (`/api/...`) ยังรับได้เท่าเดิมคือ 2 ชิ้นอัปโหลด + 1 MB (`UPLOAD_CHUNK_SIZE`×2 + 1 MB) และ JSON ไม่เกิน 1 MB: เกินแล้วตอบ 413 `request.too-big` ทันที ทั้งแบบมี `Content-Length` และแบบส่งเป็นท่อน (chunked) ที่ระบบนับไบต์ระหว่างรับ
+- `PROPFIND` รองรับ `Depth: 0` และ `1` เท่านั้น (`infinity` ตอบ 403) · `PROPPATCH` ตั้งเวลาแก้ไขล่าสุดได้ (`getlastmodified`, `lastmodified` ของ rclone/ownCloud, `Win32LastModifiedTime`) รับแต่ไม่เก็บค่า `Win32*` อื่น ๆ และปฏิเสธ property อื่นทั้งหมด (ไม่มี dead properties) · `PUT` รองรับ `If-Match` / `If-None-Match` และ `X-OC-Mtime`
+- **lock ไม่บังคับ:** `LOCK`/`UNLOCK` แจก token ให้ (ไม่เกิน 1 ชั่วโมง) และเก็บไว้ในหน่วยความจำเท่านั้น เพื่อให้ Windows Explorer, Finder และ Office ยอมเขียนไฟล์ แต่ไม่ได้กันไม่ให้คนอื่นเขียนทับไฟล์ที่ล็อกอยู่ และรีสตาร์ตแล้ว lock หายหมด (ผ่าน litmus ชุด `basic` 16/16 และ `copymove` 13/13 ส่วนชุด `locks` และ `props` ที่ตรวจการบังคับ lock และ dead properties ไม่ผ่านตามที่ออกแบบไว้)
+- `GET` ที่โฟลเดอร์ตอบ 405 (ใช้ `PROPFIND`)
+
 ## ค้นหาไฟล์
 
 `GET /api/search?space=home&q=report` หาจากชื่อไฟล์/โฟลเดอร์ (ตัวพิมพ์เล็กใหญ่ไม่ต่างกัน) ใต้ `path` ที่ระบุ เฉพาะภายในพื้นที่ของผู้เรียกที่มีสิทธิ์ `read`
@@ -797,6 +872,7 @@ src/
   logger.ts         log ของระบบ (logs/system.log), หมุนไฟล์ log, ตัดความลับออกก่อนเขียน
   stats.ts          นับจำนวนและขนาดไฟล์ให้หน้าภาพรวม (เบื้องหลัง เก็บผลไว้ใน stats-cache.json)
   shares.ts, routes/shares.ts               ลิงก์แชร์ให้คนที่ไม่มีบัญชีดาวน์โหลด และลิงก์รับไฟล์
+  webdav.ts, webdav-xml.ts, app-passwords.ts, routes/app-passwords.ts   WebDAV ที่ /dav (PROPFIND, PUT แบบสตรีม, MOVE/COPY, LOCK ที่ไม่บังคับ) รหัสผ่านแอปที่ใช้เข้า และตัวอ่าน XML เล็ก ๆ
   quota.ts          โควตาพื้นที่ต่อผู้ใช้: นับ เก็บผล 60 วินาที จองพื้นที่ของงานที่กำลังเขียน
   office.ts, routes/office.ts               แก้ไขเอกสาร office ผ่าน ONLYOFFICE Docs: config ที่เซ็นแล้ว, โทเคนของลิงก์, JWT, รับไฟล์ที่บันทึก
   trash.ts, audit.ts, settings.ts, store.ts, common-passwords.ts
@@ -806,6 +882,7 @@ scripts/release.ts  เผยแพร่แพ็กเกจลง branch upda
 web/                Vue 3 + Naive UI (build ไปที่ web/dist)
 tests/api.test.ts   ทดสอบ API
 tests/shares.test.ts  ลิงก์แชร์: สิทธิ์ รหัสผ่าน หมดอายุ จำนวนครั้ง และไม่ออกนอกโฟลเดอร์ที่แชร์
+tests/webdav.test.ts  WebDAV และรหัสผ่านแอป: การเข้าสู่ระบบ ล็อก PROPFIND PUT แบบสตรีม โควตา ถังขยะ MOVE/COPY ขอบเขต read พาธอันตราย โฟลเดอร์ที่แชร์ และขีดจำกัดขนาดคำขอของ API
 tests/quota.test.ts  โควตา: ทุกทางที่ไบต์ลงโฟลเดอร์ การจองและคืนที่จอง อัปโหลดพร้อมกัน และ /api/me/usage
 tests/upload-links.test.ts  ลิงก์รับไฟล์: เงื่อนไขการสร้าง ไม่เห็นของในโฟลเดอร์ ไม่เขียนทับ ข้อจำกัด ผูกกับผู้เยี่ยมชม รหัสผ่าน หมดอายุ
 tests/logs.test.ts  ทดสอบ log ของระบบ การหมุนไฟล์ การส่งออก และว่าไม่มีความลับหลุดลง log

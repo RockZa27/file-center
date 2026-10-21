@@ -1376,5 +1376,70 @@
         "replace": "return"
       }
     ]
+  },
+  {
+    "id": "webdav-read-scope-writes",
+    "difficulty": "easy",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/webdav.test.ts",
+    "description": "an app password with scope read can write, delete, create and move through WebDAV",
+    "patches": [
+      {
+        "file": "src/webdav.ts",
+        "find": "if (ctx.scope === 'read') { perms.delete('write'); perms.delete('upload') }",
+        "replace": "if (ctx.scope === 'read') { void perms }"
+      }
+    ]
+  },
+  {
+    "id": "webdav-dotdot-escape",
+    "difficulty": "medium",
+    "category": "path-traversal",
+    "severity": "critical",
+    "tests": "tests/webdav.test.ts",
+    "description": "WebDAV path escapes root with %2e%2e: an encoded slash or dot segment in a path reaches other users' folders",
+    "patches": [
+      {
+        "file": "src/webdav.ts",
+        "find": "if (seg === '.' || seg === '..' || /[\\\\/\\u0000]/.test(seg)) throw bad('fs.bad-path')",
+        "replace": "if (/\\u0000/.test(seg)) throw bad('fs.bad-path')"
+      },
+      {
+        "file": "src/webdav.ts",
+        "find": "abs: resolveIn(access.root, rel) }",
+        "replace": "abs: join(access.root, rel) }"
+      }
+    ]
+  },
+  {
+    "id": "webdav-put-quota",
+    "difficulty": "medium",
+    "category": "quota",
+    "severity": "medium",
+    "tests": "tests/webdav.test.ts",
+    "description": "WebDAV PUT bypasses quota: a user over their limit can keep writing files through /dav",
+    "patches": [
+      {
+        "file": "src/webdav.ts",
+        "find": "const q = quotaUserOf(s, user)",
+        "replace": "const q = null as User | null"
+      }
+    ]
+  },
+  {
+    "id": "app-passwords-survive-password-change",
+    "difficulty": "easy",
+    "category": "auth",
+    "severity": "medium",
+    "tests": "tests/webdav.test.ts",
+    "description": "changing the account password leaves the app passwords (and so every connected WebDAV client) working",
+    "patches": [
+      {
+        "file": "src/routes/session.ts",
+        "find": "removeAppPasswordsOf(u.username)",
+        "replace": "void u.username"
+      }
+    ]
   }
 ]

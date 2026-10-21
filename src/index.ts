@@ -12,6 +12,7 @@ import { HttpError, notFound, within } from './fsx'
 import { onStop, shutdown } from './lifecycle'
 import { accessLine, log } from './logger'
 import { adminRoutes } from './routes/admin'
+import { appPasswordRoutes } from './routes/app-passwords'
 import { backupRoutes } from './routes/backup'
 import { fileRoutes } from './routes/files'
 import { meRoutes } from './routes/me'
@@ -38,6 +39,7 @@ import { cleanStaleUploads } from './uploads'
 import { officeConfig, officeOrigin } from './office'
 import { cleanStaging, signingKey } from './updater'
 import { sourceConfig } from './update-source'
+import { handleDav, isDavPath } from './webdav'
 
 // a folder shared with someone rings their bell (and mail / LINE as they chose)
 grantCreatedListeners.push(g => {
@@ -177,29 +179,49 @@ const fromThisMachine = (request: Request, socketIp: string | undefined) =>
 // when each request came in, for the access log (ACCESS_LOG=true)
 const requestStart = new WeakMap<Request, number>()
 
-// Bun's own limit has to fit a chunk upload, so it is far too generous for JSON: a list of names or a form is small.
-// Only the text editor (PUT /api/content, up to 2 MB of text, more once escaped) needs more.
+// What every route but /dav may be sent: a chunk upload (two chunks and a megabyte of room). Bun's own limit
+// (maxRequestBodySize) is raised to UPLOAD_MAX_SIZE for WebDAV, whose PUT carries a whole file, so it no longer guards
+// the other routes: refuseBigBody does, from the length header or, for a body of unknown length, by counting.
+export const BODY_LIMIT = config.uploadChunkSize * 2 + 1024 * 1024
+const serverBodyLimit = config.webdav ? Math.max(BODY_LIMIT, config.uploadMaxSize) : BODY_LIMIT
+
+// A form or a list of names is small. Only the text editor (PUT /api/content, up to 2 MB of text, more once escaped) needs more.
 const JSON_MAX_BYTES = 1024 * 1024
 const BIG_JSON = /^\/api\/content$/
 
 /**
- * A JSON body over JSON_MAX_BYTES is refused before anything parses it (a parse and a schema check of millions of
- * list entries is a stall of its own). The length header says it when there is one; without it (chunked) the body is
- * read from a copy of the request. Routes that read their own body (chunks, logo, update package) are not JSON.
+ * A body over BODY_LIMIT is refused before any route reads it. The length header says it when there is one; a body
+ * without it (chunked) is counted from a copy of the stream, stopping at the limit, so at most BODY_LIMIT bytes are
+ * ever held. A JSON body over JSON_MAX_BYTES is refused before anything parses it (a parse and a schema check of
+ * millions of list entries is a stall of its own). Routes that read their own body (chunks, logo, update package) are not JSON.
  */
-async function refuseBigJson(request: Request) {
+async function refuseBigBody(request: Request) {
   if (request.method === 'GET' || request.method === 'HEAD' || !request.body) return
+  const length = Number(request.headers.get('content-length'))
+  if (length > BODY_LIMIT) throw new HttpError(413, 'request.too-big')
+  let counted = 0
+  if (!request.headers.has('content-length')) {
+    const reader = request.clone().body!.getReader()
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      counted += value.byteLength
+      // not awaited: the cancel of one side of a copied stream finishes only when the other side is cancelled too
+      if (counted > BODY_LIMIT) { void reader.cancel().catch(() => {}); throw new HttpError(413, 'request.too-big') }
+    }
+  }
   if (!(request.headers.get('content-type') ?? '').toLowerCase().includes('json')) return
   if (BIG_JSON.test(new URL(request.url).pathname)) return
-  const length = Number(request.headers.get('content-length'))
-  if (length > JSON_MAX_BYTES || (!length && (await request.clone().text()).length > JSON_MAX_BYTES)) throw new HttpError(413, 'request.too-big')
+  if (length > JSON_MAX_BYTES || (!length && counted > JSON_MAX_BYTES)) throw new HttpError(413, 'request.too-big')
 }
 
-export const app = new Elysia({ serve: { idleTimeout: 255, maxRequestBodySize: config.uploadChunkSize * 2 + 1024 * 1024 } })
+export const app = new Elysia({ serve: { idleTimeout: 255, maxRequestBodySize: serverBodyLimit } })
   // set before routing, so error responses (401, 404...) carry them too
-  .onRequest(async ({ request, set }) => {
+  .onRequest(async ({ request, set, server }) => {
     if (config.accessLog) requestStart.set(request, performance.now())
-    await refuseBigJson(request)
+    // WebDAV is answered here, before routing: no cookie, no session, no CSRF check (see webdav.ts), and its own body limits
+    if (isDavPath(new URL(request.url).pathname)) return handleDav(request, server?.requestIP(request)?.address ?? 'unknown')
+    await refuseBigBody(request)
     set.headers['x-content-type-options'] = 'nosniff'
     set.headers['x-frame-options'] = 'SAMEORIGIN'
     set.headers['referrer-policy'] = 'same-origin'
@@ -235,6 +257,7 @@ export const app = new Elysia({ serve: { idleTimeout: 255, maxRequestBodySize: c
   .use(logRoutes)
   .use(fileRoutes)
   .use(meRoutes)
+  .use(appPasswordRoutes)
   .use(notifyRoutes)
   .use(trashRoutes)
   .use(grantRoutes)

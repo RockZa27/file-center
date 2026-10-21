@@ -777,6 +777,8 @@ describe('full system: CSRF', () => {
       ['POST', '/api/grants', { ...files, path: '/matrix.txt', to: 'somchai', perms: 'view' }],
       ['PATCH', '/api/grants/:id', { perms: 'edit' }],
       ['DELETE', '/api/grants/:id'],
+      ['POST', '/api/me/app-passwords/', { name: 'csrf', scope: 'readwrite', password: 'test-admin-pass' }],
+      ['DELETE', '/api/me/app-passwords/:id'],
     ]
     // the exceptions, on purpose: a share link's password form needs no session (tests/shares.test.ts), and the
     // ONLYOFFICE callback comes from the document server, which has no session: it proves itself with a signed token

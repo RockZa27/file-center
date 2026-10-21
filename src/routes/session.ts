@@ -1,6 +1,7 @@
 import { Elysia, t } from 'elysia'
 import { alert } from '../alerts'
 import { audit } from '../audit'
+import { removeAppPasswordsOf } from '../app-passwords'
 import {
   accessFor, checkPasswordStrength, checkSecondFactor, clearFailures, confirmPassword, createLoginTicket, createSession,
   destroySession, destroySessionById, destroyUserSessions, finishTwoFactorSetup, findUser, hasPendingSetup, hashPassword,
@@ -28,6 +29,8 @@ function appConfig(user: User | null, lang: Lang) {
     ...(user ? { shareDays: allowedShareDays() } : {}),
     // whether the page shows "open in the office editor", and for which file types; visitors can not use it
     ...(user ? { office: officeClientConfig() } : {}),
+    // whether /dav answers (WEBDAV=off turns it off); the page shows the app passwords only then
+    ...(user ? { webdav: config.webdav } : {}),
     appName: s.appName,
     primaryColor: s.primaryColor,
     // left empty by the admin: the standard text in the visitor's language
@@ -252,6 +255,8 @@ export const sessionRoutes = new Elysia({ prefix: '/api' })
     u.mustChangePassword = false
     saveUsers()
     destroyUserSessions(u.username, sid)
+    // a device that signed in with an app password learned nothing from the old password, but it must not outlive the change
+    removeAppPasswordsOf(u.username)
     audit({ user: u.username, ip, action: 'password-change' })
     return { ok: true }
   }, { body: t.Object({ current: t.String({ maxLength: 1000 }), next: t.String({ maxLength: 1000 }) }) })

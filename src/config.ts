@@ -84,6 +84,8 @@ export const config = {
   trustProxy: env('TRUST_PROXY', 'false') as 'false' | 'true' | 'cloudflare',
   /** first-run admin password; random one is printed to the console when empty */
   adminPassword: env('ADMIN_PASSWORD', ''),
+  /** "off" turns WebDAV (/dav, webdav.ts) off: it then answers 404 */
+  webdav: !['off', 'false', '0'].includes(env('WEBDAV', 'on').trim().toLowerCase()),
   /** "false" turns the update-from-the-web feature off completely */
   webUpdate: env('WEB_UPDATE', 'true') !== 'false',
   /** biggest update package an admin may upload */
@@ -181,6 +183,8 @@ export const paths = {
   /** favorites and recent files per user (favorites.ts) */
   userState: join(config.dataDir, 'user-state.json'),
   grants: join(config.dataDir, 'grants.json'),
+  /** app passwords for WebDAV (app-passwords.ts): only an argon2 hash of each, never the password */
+  appPasswords: join(config.dataDir, 'app-passwords.json'),
   tmp: join(config.dataDir, 'tmp'),
   branding: join(config.dataDir, 'branding'),
   /** installed web updates: state.json, releases/, staging/ (see release.ts) */

@@ -63,7 +63,7 @@ export function contentDisposition(kind: 'inline' | 'attachment', name: string) 
 }
 
 /** a strong validator of one version of a file: its size and modification time (to the millisecond) */
-const fileTag = (st: { size: number; mtimeMs: number }) => `"${st.size.toString(36)}-${Math.floor(st.mtimeMs).toString(36)}"`
+export const fileTag = (st: { size: number; mtimeMs: number }) => `"${st.size.toString(36)}-${Math.floor(st.mtimeMs).toString(36)}"`
 
 /** `ranges: false` always sends the whole file (a share link with a download limit counts whole downloads only) */
 export function fileResponse(abs: string, name: string, request: Request, wantInline: boolean, ranges = true) {

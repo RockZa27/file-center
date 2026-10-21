@@ -9,7 +9,7 @@ import type { Perm } from './settings'
 export const SESSION_COOKIE = 'fc_sid'
 const PASSWORD_CHANGE_ROUTES = new Set(['/api/session', '/api/password', '/api/logout', '/api/health', '/api/branding/logo'])
 
-function clientIp(request: Request, socketIp: string): string {
+export function clientIp(request: Request, socketIp: string): string {
   if (config.trustProxy === 'cloudflare') return request.headers.get('cf-connecting-ip')?.trim() || socketIp
   if (config.trustProxy === 'true') return request.headers.get('x-forwarded-for')?.split(',').at(-1)?.trim() || socketIp
   return socketIp

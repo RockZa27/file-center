@@ -21,6 +21,7 @@ import { revokeSharesOf } from '../shares'
 import { DISK_CRITICAL_PERCENT, DISK_LOW_PERCENT, diskInfo, storageStats } from '../stats'
 import { removeUserState } from '../favorites'
 import { removeGrantsOf } from '../grants'
+import { removeAppPasswordsOf } from '../app-passwords'
 import { listTrash, purge, restore, tombstoneTrashOf, trashSummary } from '../trash'
 import { isBeta } from '../release'
 import { availableVersion } from '../update-source'
@@ -161,6 +162,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
       target.passwordHash = passwordHash
       target.mustChangePassword = reset
       destroyUserSessions(target.username)
+      removeAppPasswordsOf(target.username)
     }
     saveUsers()
     audit({ user: admin.username, ip, action: reset ? 'user-password-reset' : 'user-update', target: target.username })
@@ -188,6 +190,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     removeUserState(target.username)
     forgetNotifications(target.username)
     removeGrantsOf(target.username)
+    removeAppPasswordsOf(target.username)
     audit({ user: admin.username, ip, action: 'user-delete', target: target.username })
     return { ok: true }
   })

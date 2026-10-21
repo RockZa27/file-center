@@ -53,6 +53,13 @@ export const MESSAGES = {
   'auth.two-factor-not-enabled': { th: 'ยังไม่ได้เปิดการยืนยันสองขั้นตอน', en: 'Two-factor sign-in is not on.' },
   'auth.two-factor-no-setup': { th: 'ยังไม่ได้เริ่มตั้งค่า หรือหมดเวลาแล้ว กรุณาเริ่มตั้งค่าใหม่', en: 'Setup was not started or has expired. Please start again.' },
 
+  // app passwords (WebDAV)
+  'auth.app-password-limit': { th: 'สร้างรหัสผ่านแอปได้ไม่เกิน {max} รายการ กรุณาลบอันที่ไม่ใช้ก่อน', en: 'You can have at most {max} app passwords. Delete one you no longer use first.' },
+  'auth.app-password-bad-name': { th: 'ชื่อรหัสผ่านแอปต้องมี 1-60 ตัวอักษร', en: 'The app password name must be 1 to 60 characters long.' },
+  'auth.app-password-bad-scope': { th: 'สิทธิ์ของรหัสผ่านแอปต้องเป็น read หรือ readwrite', en: 'The scope of an app password must be "read" or "readwrite".' },
+  'auth.app-password-not-found': { th: 'ไม่พบรหัสผ่านแอปที่ระบุ', en: 'The app password was not found.' },
+  'auth.dav-read-only': { th: 'รหัสผ่านแอปนี้อ่านได้อย่างเดียว แก้ไขไฟล์ไม่ได้', en: 'This app password is read-only; it cannot change files.' },
+
   // ───────────── fs: what a file-system error means for the visitor ─────────────
   'fs.bad-name': { th: 'ชื่อไม่ถูกต้อง', en: 'The name is not valid.' },
   'fs.name-too-long': { th: 'ชื่อยาวเกินไป (ภาษาไทยได้ประมาณ 85 ตัวอักษร ภาษาอังกฤษ 255 ตัวอักษร)', en: 'The name is too long (about 85 Thai or 255 English characters).' },
@@ -94,6 +101,17 @@ export const MESSAGES = {
   'files.dest-name-taken': { th: 'มีชื่อเดียวกันอยู่ในปลายทางแล้ว', en: 'An item with the same name is already in the destination.' },
   'files.delete-failed': { th: 'ลบไม่สำเร็จ', en: 'Could not delete.' },
   'files.transfer-failed': { th: 'ทำรายการไม่สำเร็จ', en: 'Could not complete the action.' },
+
+  // WebDAV (/dav)
+  'files.dav-bad-xml': { th: 'อ่าน XML ที่ส่งมาไม่ได้ หรือเป็นแบบที่ไม่อนุญาต', en: 'The XML sent could not be read or is not allowed.' },
+  'files.dav-bad-destination': { th: 'ปลายทาง (Destination) ไม่ถูกต้อง', en: 'The Destination is not valid.' },
+  'files.dav-other-server': { th: 'ปลายทางต้องอยู่ใต้ /dav ของเซิร์ฟเวอร์นี้', en: 'The Destination must be under /dav on this server.' },
+  'files.dav-precondition': { th: 'เงื่อนไขของคำขอไม่เป็นจริง (If-Match, If-None-Match หรือ Overwrite)', en: 'A condition of the request is not met (If-Match, If-None-Match or Overwrite).' },
+  'files.dav-virtual': { th: 'ที่นี่เป็นโฟลเดอร์จัดกลุ่มของระบบ สร้าง แก้ไข หรือลบอะไรในนี้ไม่ได้', en: 'This is a folder that only groups other folders; nothing can be created, changed or deleted here.' },
+  'files.dav-unsupported-body': { th: 'คำขอนี้ต้องไม่มีเนื้อหา', en: 'This request must not have a body.' },
+  'files.dav-is-folder': { th: 'นี่คือโฟลเดอร์ ใช้ PROPFIND เพื่อดูรายการ', en: 'This is a folder. Use PROPFIND to list it.' },
+  'files.dav-bad-method': { th: 'ไม่รองรับคำสั่งนี้', en: 'This method is not supported.' },
+  'files.dav-lock-not-found': { th: 'ไม่พบ lock ที่ระบุ', en: 'The lock was not found.' },
 
   // ───────────── versions and favorites ─────────────
   'versions.not-found': { th: 'ไม่พบฉบับเก่านี้ของไฟล์', en: 'This earlier version of the file was not found.' },
