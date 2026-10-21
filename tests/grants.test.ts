@@ -322,7 +322,7 @@ describe('grants: when they stop working', () => {
 
   test("the owner's home moves elsewhere: the grant no longer reaches into it", async () => {
     const a = await pair('home', 'view')
-    expect((await admin.json('PUT', `/api/admin/users/${a.ou}`, { homedir: '/elsewhere/gr-home-o' })).status).toBe(200)
+    expect((await admin.json('PUT', `/api/admin/users/${a.ou}`, { homedir: '/gr-elsewhere/gr-home-o' })).status).toBe(200)
     expect((await list(a.rec, a.space)).status).toBe(403)
     // back to the old home it works again; the folder is still where it was
     expect((await admin.json('PUT', `/api/admin/users/${a.ou}`, { homedir: '/users/gr-home-o' })).status).toBe(200)

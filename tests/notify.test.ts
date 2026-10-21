@@ -410,6 +410,8 @@ describe('notifications: events', () => {
   test('a home above 90% of its quota is told once, again after it fell below', async () => {
     const owner = await userWith('nt-quota', PERMS, 1000)
     const count = async () => (await bell(owner)).items.filter((n: any) => n.kind === 'quota-low').length
+    // other files leave homes near their limit behind: their notices go out first, so the counts below are this user's
+    await checks.checkQuotaLow()
     writeFileSync(home('nt-quota', 'big.bin'), new Uint8Array(500))
     quota.forget('nt-quota')
     expect(await checks.checkQuotaLow()).toBe(0)

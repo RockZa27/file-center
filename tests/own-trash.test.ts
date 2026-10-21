@@ -172,7 +172,7 @@ describe('own trash: restore (undo)', () => {
     const c = await userWith('ot-moved')
     writeFileSync(home('ot-moved', 'm.txt'), 'm')
     const id = (await del(c, '/m.txt')).data.trashed[0].id
-    expect((await admin.json('PUT', '/api/admin/users/ot-moved', { homedir: '/elsewhere/ot-moved' })).status).toBe(200)
+    expect((await admin.json('PUT', '/api/admin/users/ot-moved', { homedir: '/ot-elsewhere/ot-moved' })).status).toBe(200)
     const item = (await list(c)).find(i => i.id === id)
     expect(item).toMatchObject({ owner: 'ot-moved', space: null, path: null, restorable: false })
     const r = await c.json('POST', `/api/me/trash/${id}/restore`)
