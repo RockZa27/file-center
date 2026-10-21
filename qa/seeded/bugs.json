@@ -1232,8 +1232,8 @@
     "patches": [
       {
         "file": "src/grants.ts",
-        "find": "if (!user || !g || !same(g.to, user.username)) return null",
-        "replace": "if (!user || !g) return null"
+        "find": "const perms = user && g ? grantPermsFor(g, user) : null",
+        "replace": "const perms = user && g ? (grantPermsFor(g, user) ?? g.perms) : null"
       }
     ]
   },
