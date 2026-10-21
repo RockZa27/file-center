@@ -113,6 +113,9 @@ export async function unzipTo(zipAbs: string, destDir: string, limits: { maxByte
     const files = entries.filter(e => !e.directory)
     if (files.length > limits.maxFiles) throw bad('zip.too-many-files', { max: limits.maxFiles.toLocaleString() })
     if (files.reduce((sum, e) => sum + e.uncompressedSize, 0) > limits.maxBytes) throw tooBig()
+    // a password-protected entry can not be taken out here: say so, before anything is written
+    const locked = files.filter(e => e.encrypted)
+    if (locked.length) throw bad('zip.encrypted', { n: locked.length, name: locked[0].filename })
 
     let total = 0
     let count = 0

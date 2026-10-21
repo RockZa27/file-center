@@ -4,7 +4,7 @@
  * every user here starts with "ar-".
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { mkdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { mkdirSync, readdirSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { BlobWriter, TextReader, Uint8ArrayReader, ZipWriter } from '@zip.js/zip.js'
 import { zipSync } from 'fflate'
@@ -436,5 +436,19 @@ describe('only a few archives are opened at a time', () => {
     expect(codes.every(c => c === 200 || c === 503)).toBe(true)
     expect((await import('../src/archive')).archiveBusy()).toBe(0)
     expect((await list(owner, '/main.zip')).status).toBe(200)
+  })
+})
+
+describe('extracting a zip with password-protected files', () => {
+  test('is refused before anything is written, naming how many files are locked', async () => {
+    const u = await userWith('ar-unzip', ['read', 'write', 'download', 'zip', 'upload'])
+    mkdirSync(home('ar-unzip'), { recursive: true })
+    writeFileSync(home('ar-unzip', 'locked.zip'), await zipJs([{ name: 'secret.txt', data: 'top secret', password: 'pw' }, { name: 'open.txt', data: 'open' }]))
+    const r = await u.json('POST', '/api/unzip', { space: 'home', path: '/locked.zip' })
+    expect(r.status).toBe(400)
+    expect(r.data.code).toBe('zip.encrypted')
+    expect(r.data.params).toEqual({ n: 1, name: 'secret.txt' })
+    expect(readdirSync(home('ar-unzip')).sort()).toEqual(['locked.zip'])
+    rmSync(home('ar-unzip'), { recursive: true, force: true })
   })
 })

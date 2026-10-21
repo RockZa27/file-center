@@ -132,6 +132,7 @@ export const MESSAGES = {
 
   // ───────────── zip ─────────────
   'zip.too-big': { th: 'ไฟล์ที่แตกออกมามีขนาดใหญ่เกินกำหนด หรือพื้นที่จัดเก็บไม่พอ', en: 'The extracted files are too big, or there is not enough storage space.' },
+  'zip.encrypted': { th: 'แตกไฟล์ไม่ได้ เพราะมี {n} ไฟล์ใน zip ที่ตั้งรหัสผ่านไว้ (เช่น {name}) ให้แตกด้วยโปรแกรมในเครื่องที่ใส่รหัสผ่านได้', en: 'This zip can not be extracted here: {n} file(s) in it are password protected (e.g. {name}). Extract it with a program on your computer that asks for the password.' },
   'zip.unsafe-path': { th: 'ไฟล์ zip มีพาธที่ไม่ปลอดภัย', en: 'The zip file contains an unsafe path.' },
   'zip.too-many-files': { th: 'ไฟล์ zip มีไฟล์มากกว่า {max} ไฟล์', en: 'The zip file contains more than {max} files.' },
   'zip.not-zip': { th: 'ต้องเป็นไฟล์ .zip', en: 'This must be a .zip file.' },

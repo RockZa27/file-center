@@ -927,8 +927,6 @@ function moveCursor(step, extend) {
 }
 function onKey(e) {
   if (e.defaultPrevented || e.isComposing || e.altKey) return
-  // a manual dropdown does not close itself on Escape
-  if (ctx.show && e.key === 'Escape') { ctx.show = false; e.preventDefault(); return }
   if (typing(e.target) || overlayOpen()) return
   // only while the focus is in the page's content (not the side menu or the top bar)
   if (e.target !== document.body && !root.value?.contains(e.target)) return
@@ -974,8 +972,10 @@ function onKey(e) {
     keysOpen.value = true
   }
 }
-onMounted(() => window.addEventListener('keydown', onKey))
-onBeforeUnmount(() => { window.removeEventListener('keydown', onKey); ghost?.remove() })
+// a manual dropdown does not close itself on Escape, and its menu keeps the key from reaching window: listen first
+const closeCtx = e => { if (ctx.show && e.key === 'Escape') { ctx.show = false; e.preventDefault(); e.stopPropagation() } }
+onMounted(() => { window.addEventListener('keydown', closeCtx, true); window.addEventListener('keydown', onKey) })
+onBeforeUnmount(() => { window.removeEventListener('keydown', closeCtx, true); window.removeEventListener('keydown', onKey); ghost?.remove() })
 
 function onSearchSelect(it) {
   if (it.type === 'dir') return go(it.path)
