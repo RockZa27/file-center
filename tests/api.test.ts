@@ -690,6 +690,12 @@ describe('full system: permission matrix', () => {
       ['GET', '/api/admin/users/:username/sessions'],
       ['POST', '/api/admin/users/:username/sessions/revoke'],
       ['POST', '/api/admin/users/:username/2fa/reset', { password: 'x' }],
+      ['GET', '/api/admin/groups'],
+      ['POST', '/api/admin/groups', { name: 'sneaky group' }],
+      ['PATCH', '/api/admin/groups/:id', { name: 'sneaky' }],
+      ['DELETE', '/api/admin/groups/:id', { password: 'x' }],
+      ['PUT', '/api/admin/groups/:id/members', { username: 'not-admin', perms: 'edit' }],
+      ['DELETE', '/api/admin/groups/:id/members/:username'],
     ]
     const routes = app.routes.filter((r: any) => r.path.startsWith('/api/admin')).map((r: any) => `${r.method} ${r.path}`)
     expect(routes.filter((r: string) => !adminCalls.some(([m, p]) => `${m} ${p}` === r))).toEqual([])
@@ -777,6 +783,11 @@ describe('full system: CSRF', () => {
       ['POST', '/api/grants', { ...files, path: '/matrix.txt', to: 'somchai', perms: 'view' }],
       ['PATCH', '/api/grants/:id', { perms: 'edit' }],
       ['DELETE', '/api/grants/:id'],
+      ['POST', '/api/admin/groups', { name: 'csrf group' }],
+      ['PATCH', '/api/admin/groups/:id', { name: 'pwned' }],
+      ['DELETE', '/api/admin/groups/:id', { password: 'test-admin-pass' }],
+      ['PUT', '/api/admin/groups/:id/members', { username: 'somchai', perms: 'edit' }],
+      ['DELETE', '/api/admin/groups/:id/members/:username'],
     ]
     // the exceptions, on purpose: a share link's password form needs no session (tests/shares.test.ts), and the
     // ONLYOFFICE callback comes from the document server, which has no session: it proves itself with a signed token

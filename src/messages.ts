@@ -127,6 +127,7 @@ export const MESSAGES = {
   'admin.home-required': { th: 'ผู้ใช้ทั่วไปต้องมีโฟลเดอร์ของตัวเอง', en: 'A regular user needs a folder of their own.' },
   'admin.bad-quota': { th: 'โควตาต้องเป็นจำนวนไบต์เต็ม 0 (ไม่จำกัด) ถึง 2^50', en: 'The quota must be a whole number of bytes from 0 (no limit) to 2^50.' },
   'admin.home-in-public': { th: 'โฟลเดอร์ของผู้ใช้ต้องไม่อยู่ในโฟลเดอร์สาธารณะ', en: 'A user\'s folder must not be inside the public folder.' },
+  'admin.home-in-groups': { th: 'โฟลเดอร์ของผู้ใช้ต้องไม่อยู่ในโฟลเดอร์ /groups ซึ่งเป็นของกลุ่ม', en: 'A user\'s folder must not be inside /groups, which holds the group folders.' },
   'admin.user-not-found': { th: 'ไม่พบผู้ใช้', en: 'The user was not found.' },
   'admin.not-manageable': { th: 'คุณไม่มีสิทธิ์จัดการผู้ใช้นี้', en: 'You are not allowed to manage this user.' },
   'admin.role-not-allowed': { th: 'คุณกำหนดบทบาทนี้ไม่ได้ (ผู้ดูแลสร้างและแก้ไขได้เฉพาะผู้ใช้ทั่วไป)', en: 'You cannot assign this role (a manager can only create and edit regular users).' },
@@ -196,6 +197,14 @@ export const MESSAGES = {
   'grants.query-short': { th: 'พิมพ์อย่างน้อย {min} ตัวอักษรเพื่อค้นหาผู้ใช้', en: 'Type at least {min} characters to search for a user.' },
   'grants.create-rate': { th: 'แชร์โฟลเดอร์ถี่เกินไป กรุณารอ {seconds} วินาทีแล้วลองใหม่', en: 'Too many shares in a short time. Wait {seconds} seconds and try again.' },
   'grants.lookup-rate': { th: 'ค้นหาผู้ใช้ถี่เกินไป กรุณารอ {seconds} วินาทีแล้วลองใหม่', en: 'Too many user searches. Wait {seconds} seconds and try again.' },
+  'grants.to-one': { th: 'ระบุผู้รับเพียงอย่างเดียว: ผู้ใช้ (to) หรือกลุ่ม (toGroup)', en: 'Name exactly one recipient: a user (to) or a group (toGroup).' },
+
+  // ───────────── groups ─────────────
+  'groups.not-found': { th: 'ไม่พบกลุ่มที่ระบุ', en: 'The group was not found.' },
+  'groups.bad-name': { th: 'ชื่อกลุ่มต้องยาว 1–{max} ตัวอักษร และไม่มีเครื่องหมาย / \\ หรืออักขระควบคุม', en: 'The group name must be 1–{max} characters long, without / \\ or control characters.' },
+  'groups.name-taken': { th: 'มีกลุ่มชื่อนี้อยู่แล้ว', en: 'A group with this name already exists.' },
+  'groups.member-not-found': { th: 'ผู้ใช้นี้ไม่ได้เป็นสมาชิกของกลุ่ม', en: 'This user is not a member of the group.' },
+  'groups.not-manageable': { th: 'คุณเพิ่มหรือนำผู้ใช้นี้ออกจากกลุ่มไม่ได้ (ผู้ดูแลจัดการได้เฉพาะผู้ใช้ทั่วไปที่ตัวเองดูแล)', en: 'You cannot add this user to a group or remove them (a manager handles only the plain users they manage).' },
 
   // ───────────── share links ─────────────
   // one answer for every link that does not work (unknown, expired, revoked, used up, item or owner gone): a guesser learns nothing
@@ -370,6 +379,7 @@ export const MESSAGES = {
     en: 'You have used {percent}% of your storage quota ({usedText} of {quotaText}).',
   },
   'notify.folder-shared': { th: '{from} แชร์โฟลเดอร์ "{name}" ให้คุณ', en: '{from} shared the folder "{name}" with you.' },
+  'notify.group-added': { th: 'คุณถูกเพิ่มเข้ากลุ่ม "{name}"', en: 'You were added to the group "{name}".' },
   // answers of the routes
   'notify.not-found': { th: 'ไม่พบการแจ้งเตือนนี้', en: 'This notification was not found.' },
   'notify.bad-kind': { th: 'ชนิดการแจ้งเตือนไม่ถูกต้อง', en: 'The notification type is not valid.' },

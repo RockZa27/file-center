@@ -22,7 +22,7 @@ import { type Lang, MESSAGES, type MessageCode, type Params, sizeText, text } fr
 import { settings } from './settings'
 import { JsonStore } from './store'
 
-export const KINDS = ['upload-received', 'link-expiring', 'link-limit-reached', 'quota-low', 'folder-shared', 'system-alert'] as const
+export const KINDS = ['upload-received', 'link-expiring', 'link-limit-reached', 'quota-low', 'folder-shared', 'group-added', 'system-alert'] as const
 export type NotifyKind = (typeof KINDS)[number]
 export type Channel = 'web' | 'email' | 'line'
 const CHANNELS: Channel[] = ['web', 'email', 'line']
@@ -35,6 +35,7 @@ const KIND_TEXT: Record<Exclude<NotifyKind, 'system-alert'>, MessageCode> = {
   'link-limit-reached': 'notify.link-limit-reached',
   'quota-low': 'notify.quota-low',
   'folder-shared': 'notify.folder-shared',
+  'group-added': 'notify.group-added',
 }
 
 export const NOTIFY_MAX = 100

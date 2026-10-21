@@ -6,6 +6,7 @@ import { config } from '../config'
 import { context, requireUser } from '../context'
 import { forbidden, normRel, notFound, resolveIn, within } from '../fsx'
 import { activeGrantsTo } from '../grants'
+import { groupOfOwner, groupsOf, memberOf } from '../groups'
 import { listTrash, purge, readTrash, restore, trashOwner, type TrashMeta } from '../trash'
 
 /**
@@ -16,12 +17,14 @@ import { listTrash, purge, readTrash, restore, trashOwner, type TrashMeta } from
 
 const same = (a: string | null | undefined, b: string) => !!a && a.toLowerCase() === b.toLowerCase()
 
-/** the spaces the caller can write to now: home, the folders shared with them for editing, the public folder */
+/** the spaces the caller can write to now: home, the folders shared with them for editing, the groups they may edit, the public folder */
 function writableSpaces(user: User): Access[] {
   const out: Access[] = []
   const add = (a: Access | null) => { if (a?.perms.has('write')) out.push(a) }
   add(accessFor(user, 'home'))
   for (const g of activeGrantsTo(user)) add(accessFor(user, `grant:${g.grant.id}`))
+  // as a member only: an admin who is not one sees group items in the admin trash
+  for (const g of groupsOf(user.username)) add(accessFor(user, `group:${g.id}`))
   add(accessFor(user, 'public'))
   return out
 }
@@ -37,8 +40,15 @@ function locate(spaces: Access[], abs: string): { access: Access; path: string }
   return null
 }
 
+/** an entry of a group folder belongs to the group: every member who may edit there sees it */
+function ofMyGroup(user: User, meta: TrashMeta): boolean {
+  const g = groupOfOwner(trashOwner(meta))
+  return !!g && memberOf(g, user.username)?.perms === 'edit'
+}
+
 /** the owner sees it; so does whoever deleted it, as long as the place it came from is one they can still write to */
 function visible(user: User, meta: TrashMeta, spaces: Access[]): boolean {
+  if (ofMyGroup(user, meta)) return true
   if (same(trashOwner(meta), user.username)) return true
   if (!same(meta.deletedBy, user.username)) return false
   return !!locate(spaces, join(config.storageDir, normRel(meta.originalPath)))
@@ -50,6 +60,8 @@ function visible(user: User, meta: TrashMeta, spaces: Access[]): boolean {
  */
 function purgeable(user: User, meta: TrashMeta, spaces: Access[]): boolean {
   const owner = trashOwner(meta)
+  // a group's entry: any editor restores it, but only the one who deleted it (still an editor) destroys it; the admin does so from the admin trash
+  if (groupOfOwner(owner)) return same(meta.deletedBy, user.username) && ofMyGroup(user, meta)
   if (owner) return same(owner, user.username)
   return visible(user, meta, spaces)
 }
@@ -72,6 +84,8 @@ export const trashRoutes = new Elysia({ prefix: '/api/me' })
       return {
         id: m.id, name: m.name, type: m.type, size: m.size, deletedAt: m.deletedAt, deletedBy: m.deletedBy,
         owner: trashOwner(m),
+        // set when the item came from a group folder (owner is then `group:<id>`)
+        group: (g => (g ? { id: g.id, name: g.name } : null))(groupOfOwner(trashOwner(m))),
         // where it goes back to, in the caller's own terms; null when it can not go back (the home moved, no write right)
         space: at?.access.space ?? null,
         path: at?.path ?? null,

@@ -21,6 +21,7 @@ import { logRoutes } from './routes/logs'
 import { officeRoutes } from './routes/office'
 import { sessionRoutes } from './routes/session'
 import { grantRoutes } from './routes/grants'
+import { groupRoutes } from './routes/groups'
 import { shareRoutes } from './routes/shares'
 import { trashRoutes } from './routes/trash'
 import { updateRoutes } from './routes/update'
@@ -30,6 +31,7 @@ import { LINE_API, lineBase } from './line'
 import { smtpConfig } from './mail'
 import { checkNotifications } from './notify-checks'
 import { grantCreatedListeners } from './grants'
+import { findGroup } from './groups'
 import { notify } from './notify'
 import { purgeExpiredShares } from './shares'
 import { purgeExpired } from './trash'
@@ -39,9 +41,11 @@ import { officeConfig, officeOrigin } from './office'
 import { cleanStaging, signingKey } from './updater'
 import { sourceConfig } from './update-source'
 
-// a folder shared with someone rings their bell (and mail / LINE as they chose)
+// a folder shared with someone rings their bell (and mail / LINE as they chose); shared with a group, every member's
 grantCreatedListeners.push(g => {
-  notify(g.to, 'folder-shared', { from: findUser(g.owner)?.name || g.owner, name: g.path.split('/').filter(Boolean).at(-1) ?? '/' }, `/with-me/${g.id}`)
+  const params = { from: findUser(g.owner)?.name || g.owner, name: g.path.split('/').filter(Boolean).at(-1) ?? '/' }
+  const to = g.toGroup ? (findGroup(g.toGroup)?.members.map(m => m.username) ?? []).filter(n => n.toLowerCase() !== g.owner.toLowerCase()) : [g.to]
+  for (const name of to) notify(name, 'folder-shared', params, `/with-me/${g.id}`)
 })
 import { compressedCopy, compressible, etagMatches, etagOf, pickEncoding } from './static'
 
@@ -238,6 +242,7 @@ export const app = new Elysia({ serve: { idleTimeout: 255, maxRequestBodySize: c
   .use(notifyRoutes)
   .use(trashRoutes)
   .use(grantRoutes)
+  .use(groupRoutes)
   .use(versionRoutes)
   .use(uploadRoutes)
   .use(shareRoutes)
