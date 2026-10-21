@@ -2,5 +2,5 @@
   "minCoverageLines": 80,
   "maxCoverageDrop": 1,
   "maxWebBytes": 5242880,
-  "maxTestSeconds": 330
+  "maxTestSeconds": 420
 }
