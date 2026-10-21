@@ -7,6 +7,8 @@
 #   4. an UNSIGNED update package is refused; a package (99.0.0) signed with a throw-away key (its public key is the
 #      container's UPDATE_PUBLIC_KEY) is installed through /api/admin/update/upload|stage|apply,
 #      wait for the restart: the version is 99.0.0
+#      thumbnails: the tools in the image (libvips, poppler, ffmpeg) make a picture of a jpg, a pdf and an mp4 that the
+#      tools themselves made inside the container, as uid 1000 on the read-only root (skipped with FC_CI_NO_APT=1)
 #   5. a second container with FC_RUN_AS_ROOT=true runs as uid 0
 #   6. a volume of an older install (owned by root, closed folder) is handed to uid 1000 with only the four capabilities
 #
@@ -129,7 +131,7 @@ command -v bun >/dev/null || fail 'bun is not installed (used to read JSON and t
 log "build the image ($IMAGE)"
 build=(docker build -q -t "$IMAGE")
 # a machine that can not reach a Debian mirror builds without the security updates (CI always installs them)
-[ "${FC_CI_NO_APT:-}" = "1" ] && build+=(--build-arg APT_UPGRADE=false)
+[ "${FC_CI_NO_APT:-}" = "1" ] && build+=(--build-arg APT_UPGRADE=false --build-arg THUMB_TOOLS=false)
 if [ -n "${FC_CI_CA_BUNDLE:-}" ]; then
   # a machine whose HTTPS goes through an inspecting proxy: the build trusts this CA bundle too (nothing else changes)
   mkdir "$WORK/ca" && cp "$FC_CI_CA_BUNDLE" "$WORK/ca/ca.crt"
@@ -193,6 +195,55 @@ api POST "/api/upload/$id/complete" '{}' >/dev/null
 curl -fsS -b "$COOKIES" -o "$WORK/back.bin" "$BASE_URL/api/download?space=home&path=/blob.bin" || fail 'download failed'
 cmp "$WORK/blob.bin" "$WORK/back.bin" || fail 'the downloaded file differs from the uploaded one'
 pass "uploaded in $total chunks, downloaded byte for byte the same"
+
+# ───────────── 3b. thumbnails
+if [ "${FC_CI_NO_APT:-}" = "1" ]; then
+  # no tools in the image (no Debian mirror): the app must say so and answer 404 thumb.unavailable, not fail
+  log 'thumbnails (the image was built without the tools, FC_CI_NO_APT=1): they must be off, not broken'
+  [ "$(api GET /api/thumbs/status | json 'JSON.stringify(d)')" = '{"image":false,"pdf":false,"video":false}' ] \
+    || fail "/api/thumbs/status without the tools: $(api GET /api/thumbs/status)"
+  status=$(curl -sS -o "$WORK/thumb.out" -w '%{http_code}' -b "$COOKIES" "$BASE_URL/api/thumb?space=home&path=/blob.bin") || fail 'curl thumb'
+  [ "$status" = 404 ] || fail "a thumbnail without the tools answered $status, expected 404"
+  pass 'without the tools thumbnails are off (status all false, 404 for a file), the rest works'
+else
+  log 'thumbnails of a jpg, a pdf and an mp4 made by the tools in the image'
+  # the test files are made by the image's own tools, as the app's user (uid 1000)
+  docker exec -u 1000 "$PREFIX-main" sh -c \
+    'ffmpeg -v error -f lavfi -i testsrc=size=800x600:rate=1 -frames:v 1 -y /data/storage/t.jpg &&
+     ffmpeg -v error -f lavfi -i testsrc=duration=2:size=320x240:rate=10 -pix_fmt yuv420p -c:v mpeg4 -y /data/storage/t.mp4' \
+    || fail 'ffmpeg in the image could not make the test files'
+  docker exec -i -u 1000 "$PREFIX-main" sh -c 'cat > /data/storage/t.pdf' <<'PDF'
+%PDF-1.4
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj
+4 0 obj << /Length 52 >>
+stream
+BT /F1 48 Tf 72 700 Td (Hello File Center) Tj ET
+endstream
+endobj
+5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj
+trailer << /Root 1 0 R /Size 6 >>
+%%EOF
+PDF
+  [ "$(api GET /api/thumbs/status | json 'JSON.stringify(d)')" = '{"image":true,"pdf":true,"video":true}' ] \
+    || fail "/api/thumbs/status does not report image, pdf and video as available: $(api GET /api/thumbs/status)"
+  # thumb_check FILE MAGIC-HEX (the first bytes of the answer): webp starts with RIFF (52494646), jpeg with ffd8
+  thumb_check() {
+    local name=$1 magic=$2 status first
+    status=$(curl -sS -o "$WORK/thumb.out" -w '%{http_code}' -b "$COOKIES" "$BASE_URL/api/thumb?space=home&path=/$name") || fail "curl thumb $name"
+    [ "$status" = 200 ] || fail "thumbnail of $name answered $status: $(head -c 300 "$WORK/thumb.out")"
+    first=$(od -An -tx1 -N"$((${#magic} / 2))" "$WORK/thumb.out" | tr -d ' \n')
+    [ "$first" = "$magic" ] || fail "thumbnail of $name starts with $first, expected $magic"
+    [ "$(stat -c %s "$WORK/thumb.out")" -gt 100 ] || fail "thumbnail of $name is empty"
+  }
+  thumb_check t.jpg 52494646
+  thumb_check t.mp4 52494646
+  thumb_check t.pdf ffd8
+  [ "$(docker exec "$PREFIX-main" sh -c 'ls /data/system/thumbs | wc -l')" -ge 3 ] || fail 'the thumbnail cache in /data/system/thumbs is empty'
+  [ -z "$(docker exec "$PREFIX-main" sh -c 'ls /data/system/thumbs/tmp')" ] || fail '/data/system/thumbs/tmp still holds work files'
+  pass 'jpg, pdf and mp4 thumbnails are made inside the container (uid 1000, read-only root), cached in /data/system/thumbs'
+fi
 
 # ───────────── 4. update from the web
 log 'build and install an update package (99.0.0)'

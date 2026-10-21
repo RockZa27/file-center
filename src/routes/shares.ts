@@ -41,8 +41,24 @@ function insideShare(root: string, input: unknown): { rel: string; abs: string }
   return { rel, abs }
 }
 
+/**
+ * The file a path names inside a download link, found the way /api/s/:token/download finds it (same checks: the link
+ * is live, its password given, no link on the way). Used by the routes that look at a file without downloading it.
+ */
+export function shareFile(token: unknown, path: unknown, request: Request): { share: Share; abs: string } {
+  const { share, abs } = openShare(token, 'download')
+  needUnlocked(share, request)
+  let target = abs
+  if (share.type === 'dir') target = insideShare(abs, path).abs
+  else if (normRel(path) !== '/') throw notFound()
+  let st
+  try { st = lstatSync(target) } catch { throw notFound() }
+  if (!st.isFile()) throw notFound()
+  return { share, abs: target }
+}
+
 /** the link is there but has a password this browser has not given yet */
-function needUnlocked(share: Share, request: Request) {
+export function needUnlocked(share: Share, request: Request) {
   if (!isUnlocked(share, request)) throw new HttpError(401, 'share.password-required')
 }
 
@@ -50,7 +66,7 @@ function needUnlocked(share: Share, request: Request) {
  * Count a download once its last byte has been handed over; a cancelled download (or an error half way) only gives
  * its place back. Answers other than a whole file (206 parts, 416) never count.
  */
-function counted(res: Response, slot: { finish(): void; release(): void }): Response {
+export function counted(res: Response, slot: { finish(): void; release(): void }): Response {
   if (res.status !== 200 || !res.body) {
     slot.release()
     return res
@@ -81,7 +97,7 @@ function counted(res: Response, slot: { finish(): void; release(): void }): Resp
  * A link without a download limit has nothing to protect by waiting for the last byte, so the answer goes out as it is
  * (Bun sends a file straight from disk) and the download is counted now: once for a whole file, never for 206 and 416.
  */
-function settled(res: Response, slot: { finish(): void; release(): void }): Response {
+export function settled(res: Response, slot: { finish(): void; release(): void }): Response {
   if (res.status === 200 && res.body) slot.finish()
   else slot.release()
   return res

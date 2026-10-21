@@ -9,7 +9,11 @@ x-logging: &logging
 
 services:
   file-center:
-    build: .
+    build:
+      context: .
+      args:
+        # ffmpeg (ภาพตัวอย่างของวิดีโอ) ใหญ่ราว 350 MB ตั้ง THUMB_VIDEO=false ใน .env ถ้าไม่ต้องการ (ดู README หัวข้อภาพตัวอย่าง)
+        THUMB_VIDEO: ${THUMB_VIDEO:-true}
     container_name: file-center
     restart: unless-stopped
     logging: *logging

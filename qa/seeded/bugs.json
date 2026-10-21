@@ -1506,5 +1506,50 @@
         "replace": ""
       }
     ]
+  },
+  {
+    "id": "thumb-ignores-permissions",
+    "difficulty": "easy",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/thumbs.test.ts",
+    "description": "GET /api/thumb does not require the read permission: a user who may not read a space still gets pictures of its files",
+    "patches": [
+      {
+        "file": "src/routes/thumbs.ts",
+        "find": "const a = need({ user, ip }, query.space, 'read')",
+        "replace": "const a = need({ user, ip }, query.space)"
+      }
+    ]
+  },
+  {
+    "id": "archive-entry-dotdot",
+    "difficulty": "easy",
+    "category": "path-traversal",
+    "severity": "high",
+    "tests": "tests/archive.test.ts",
+    "description": "an entry name with .. is accepted by /api/archive/file, so a zip that has an entry such as ../evil.txt hands it out",
+    "patches": [
+      {
+        "file": "src/archive.ts",
+        "find": "if (input.split('/').some(s => s === '..')) throw bad('archive.bad-entry')",
+        "replace": "if (false) throw bad('archive.bad-entry')"
+      }
+    ]
+  },
+  {
+    "id": "zip-bomb-not-refused",
+    "difficulty": "medium",
+    "category": "dos",
+    "severity": "high",
+    "tests": "tests/archive.test.ts",
+    "description": "an entry over 100 MB packed tighter than 100:1 is unpacked and streamed instead of refused with 413",
+    "patches": [
+      {
+        "file": "src/archive.ts",
+        "find": "(declared > BOMB_MIN_BYTES && ratio > BOMB_RATIO)",
+        "replace": "false"
+      }
+    ]
   }
 ]

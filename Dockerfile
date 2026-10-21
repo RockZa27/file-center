@@ -14,6 +14,19 @@ ARG APT_UPGRADE=true
 RUN if [ "$APT_UPGRADE" = "true" ]; then \
       apt-get update && apt-get upgrade -y --no-install-recommends && apt-get clean && rm -rf /var/lib/apt/lists/*; \
     fi
+# Thumbnails (src/thumbs.ts): libvips-tools for pictures, poppler-utils for the first page of a PDF, a font for PDF text that
+# is not embedded, and ffmpeg for a frame of a video. They are system tools, not part of the app bundle, so a web update does
+# not bring them: after updating from the web run "docker compose up -d --build" once to get them. Without them the file
+# list just shows icons. ffmpeg is the heavy one (about 350 MB installed): THUMB_VIDEO=false leaves it out (no video
+# thumbnails). THUMB_TOOLS=false leaves out everything, only for machines with no Debian mirror (same reason as APT_UPGRADE).
+ARG THUMB_TOOLS=true
+ARG THUMB_VIDEO=true
+RUN pkgs=""; \
+    if [ "$THUMB_TOOLS" = "true" ]; then pkgs="libvips-tools poppler-utils fonts-dejavu-core"; \
+      if [ "$THUMB_VIDEO" = "true" ]; then pkgs="$pkgs ffmpeg"; fi; fi; \
+    if [ -n "$pkgs" ]; then \
+      apt-get update && apt-get install -y --no-install-recommends $pkgs && apt-get clean && rm -rf /var/lib/apt/lists/*; \
+    fi
 WORKDIR /app
 ENV NODE_ENV=production \
     STORAGE_DIR=/data/storage \
