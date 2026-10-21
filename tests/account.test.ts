@@ -269,6 +269,19 @@ describe('devices', () => {
     expect((await admin.json('POST', '/api/admin/users/nobody-here/sessions/revoke')).status).toBe(404)
     expect((await admin.json('GET', '/api/session')).data.user?.username).toBe('admin')
   })
+  test('ending the sessions of a user also removes their app passwords, and says so', async () => {
+    await userWith('ac-dev7')
+    const u = await new Client().loginOk('ac-dev7', PW)
+    for (const name of ['a', 'b']) expect((await u.json('POST', '/api/me/app-passwords', { name, scope: 'read', password: PW })).status).toBe(200)
+    expect((await u.json('GET', '/api/me/app-passwords')).data.items.length).toBe(2)
+    const r = await admin.json('POST', '/api/admin/users/ac-dev7/sessions/revoke')
+    expect(r.status).toBe(200)
+    expect(r.data).toMatchObject({ ok: true, revoked: 1, appPasswords: 2 })
+    const again = await new Client().loginOk('ac-dev7', PW)
+    expect((await again.json('GET', '/api/me/app-passwords')).data.items).toEqual([])
+    const line = auditLines().filter(l => l.action === 'sessions-revoke' && l.target === 'ac-dev7').at(-1)
+    expect(line.detail).toContain('2 app password')
+  })
   test('sessions saved before the list existed keep working and get an id', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'fc-old-sessions-'))
     try {
@@ -602,6 +615,25 @@ describe('command line', () => {
     }
   })
 
+  test('sessions-revoke removes the app passwords too, and says so', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'fc-cli-'))
+    try {
+      const data = join(dir, 'data')
+      mkdirSync(data)
+      writeFileSync(join(data, 'users.json'), JSON.stringify({ users: [userRecord('cli-a'), userRecord('cli-b')] }))
+      const item = (id: string, username: string) => ({ id, username, name: id, hash: 'x', hint: 'abcdefgh', scope: 'read', createdAt: new Date().toISOString(), lastUsedAt: null, lastIp: null })
+      writeFileSync(join(data, 'app-passwords.json'), JSON.stringify({ items: [item('1', 'cli-a'), item('2', 'cli-b'), item('3', 'cli-b')] }))
+      const revoke = cli(data, join(dir, 'storage'), 'sessions-revoke', 'cli-b')
+      expect(revoke.code).toBe(0)
+      expect(revoke.out).toContain('2 app password')
+      expect(JSON.parse(readFileSync(join(data, 'app-passwords.json'), 'utf8')).items.map((i: any) => i.id)).toEqual(['1'])
+      const audit = readFileSync(join(data, 'logs', 'audit.log'), 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l))
+      expect(audit.at(-1).detail).toContain('2 app password')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   test('while the app runs: the next request sees the change', async () => {
     const { codes } = await twoFactorUser('ac-cli')
     const c = await new Client().loginOk('admin', 'test-admin-pass')
@@ -619,5 +651,17 @@ describe('command line', () => {
     await JsonStore.flushAll()
     expect(cli(process.env.DATA_DIR!, process.env.STORAGE_DIR!, 'sessions-revoke', 'ac-cli').code).toBe(0)
     expect((await victim.json('GET', '/api/session')).data.user).toBeNull()
+  })
+
+  test('while the app runs: app passwords removed from the command line are gone from the app too', async () => {
+    const c = await new Client().loginOk('ac-cli', PW)
+    expect((await c.json('POST', '/api/me/app-passwords', { name: 'cli', scope: 'read', password: PW })).status).toBe(200)
+    expect((await c.json('GET', '/api/me/app-passwords')).data.items.length).toBe(1)
+    await JsonStore.flushAll()
+    const r = cli(process.env.DATA_DIR!, process.env.STORAGE_DIR!, 'sessions-revoke', 'ac-cli')
+    expect(r.code).toBe(0)
+    expect(r.out).toContain('1 app password')
+    const again = await new Client().loginOk('ac-cli', PW)
+    expect((await again.json('GET', '/api/me/app-passwords')).data.items).toEqual([])
   })
 })

@@ -207,8 +207,10 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     const admin = requireStaff({ user, ip })
     const target = manageable(admin, params.username)
     const revoked = destroyUserSessions(target.username)
-    audit({ user: admin.username, ip, action: 'sessions-revoke', target: target.username, detail: String(revoked) })
-    return { ok: true, revoked }
+    // a stolen cookie and a stolen app password are the same emergency: the WebDAV passwords go too
+    const appPasswords = removeAppPasswordsOf(target.username)
+    audit({ user: admin.username, ip, action: 'sessions-revoke', target: target.username, detail: `${revoked} session, ${appPasswords} app password` })
+    return { ok: true, revoked, appPasswords }
   })
 
   // for a user who lost the phone and the backup codes; the admin proves it is them with their own password

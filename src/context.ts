@@ -82,6 +82,7 @@ export const context = new Elysia({ name: 'context' })
     const answer = (status: number, c: MessageCode, params: Params = {}) => {
       if (isDownloadNavigation(request)) return errorPage(status, langOf(request), c, params)
       set.status = status
+      if (status === 503) set.headers['retry-after'] ??= '3'
       return { error: text(langOf(request), c, params), code: c, params }
     }
     // file-system errors (disk full, name too long...) get a clear message instead of a 500 with server paths

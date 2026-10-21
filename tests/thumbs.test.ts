@@ -147,7 +147,7 @@ beforeAll(async () => {
 
 // other test files count the files in the homes of the users: leave none behind
 afterAll(() => {
-  for (const u of ['th-owner', 'th-other', 'th-blind']) rmSync(home(u), { recursive: true, force: true })
+  for (const u of ['th-owner', 'th-other', 'th-blind', 'th-viewer']) rmSync(home(u), { recursive: true, force: true })
 })
 
 afterEach(() => {
@@ -486,5 +486,58 @@ describe('the cache', () => {
     expect(Object.keys(zip).filter(n => n.includes('thumbs') || n.includes('in-backup'))).toEqual([])
     // not left for the tests that count backups
     expect((await admin.json('DELETE', `/api/admin/backups/${made.data.name}`)).status).toBe(200)
+  })
+})
+
+describe('who may ask for 1024 px (security 1.11)', () => {
+  test('read alone gets 256 px only; 1024 needs read and download, in every way of writing the number', async () => {
+    thumbs.setTools({ vipsthumbnail: '/bin/true', vipsheader: '/bin/true' })
+    const viewer = await userWith('th-viewer', ['read'])
+    mkdirSync(home('th-viewer'), { recursive: true })
+    writeFileSync(home('th-viewer', 'a.png'), png(64, 64))
+    for (const size of ['1024', '1024.0', ' 1024', '0x400', '1e3']) {
+      const r = await thumb(viewer, '/a.png', { size })
+      expect([size, r.status === 403 || r.status === 400]).toEqual([size, true])
+    }
+    expect((await thumb(viewer, '/a.png', { size: '1024' })).status).toBe(403)
+    // 256 passes the permission check (the fake tool makes no picture, so the answer is "unavailable", not 403)
+    expect((await thumb(viewer, '/a.png', { size: '256' })).status).toBe(404)
+    expect((await thumb(viewer, '/a.png')).status).toBe(404)
+    // with download as well, 1024 is allowed (the same answer as 256 here)
+    expect((await thumb(other, '/pics/a.png', { size: '1024' })).status).not.toBe(403)
+    expect((await thumb(owner, '/pics/a.png', { size: '1024' })).status).not.toBe(403)
+  })
+
+  test('a picture from someone else\'s home leaves a line in the trail, once a minute per file', async () => {
+    thumbs.setTools({ vipsthumbnail: '/bin/true', vipsheader: '/bin/true' })
+    const audit = await import('../src/audit')
+    const url = `/api/thumb?${q({ space: 'user:th-owner', path: '/pics/inner/b.png' })}`
+    await admin.raw('GET', url)
+    await admin.raw('GET', url)
+    const lines = [...audit.auditEntries()].filter(e => e.user === 'admin' && e.action === 'browse' && e.target === '/users/th-owner/pics/inner/b.png')
+    expect(lines.length).toBe(1)
+    // one's own folder leaves nothing
+    await owner.raw('GET', `/api/thumb?${q({ space: 'home', path: '/pics/inner/b.png' })}`)
+    expect([...audit.auditEntries()].some(e => e.user === 'th-owner' && e.action === 'browse')).toBe(false)
+  })
+})
+
+describe('share links and the download limit (security 1.11)', () => {
+  test('a link whose downloads are used up gives no thumbnail; neither does an expired or revoked one', async () => {
+    thumbs.setTools({ vipsthumbnail: '/bin/true', vipsheader: '/bin/true' })
+    const r = await owner.json('POST', '/api/shares', { space: 'home', path: '/pics', days: 7, maxDownloads: 1 })
+    const { token } = r.data
+    const get = (size?: string) => anon.raw('GET', `/api/s/${token}/thumb?${q({ path: '/a.png', ...(size ? { size } : {}) })}`)
+    // not used up: past the link's checks (the fake tool makes no picture: "unavailable")
+    expect((await get()).status).toBe(404)
+    expect((await get('1024')).status).toBe(404)
+    expect((await (await get('1024')).json() as any).code).toBe('thumb.unavailable')
+    const dl = await anon.raw('GET', `/api/s/${token}/download?${q({ path: '/a.png' })}`)
+    expect(dl.status).toBe(200)
+    await dl.arrayBuffer()
+    for (const size of [undefined, '256', '1024']) {
+      const res = await get(size)
+      expect([size, res.status, ((await res.json()) as any).code]).toEqual([size, 404, 'share.not-found'])
+    }
   })
 })

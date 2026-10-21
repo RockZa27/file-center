@@ -28,7 +28,9 @@ function decode(s: string): string {
       const n = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10)
       return Number.isInteger(n) && n > 0 && n <= 0x10ffff && !(n >= 0xd800 && n <= 0xdfff) ? String.fromCodePoint(n) : ''
     }
-    return ENTITIES[e.toLowerCase()] ?? m
+    const k = e.toLowerCase()
+    // own keys only: &constructor; or &__proto__; must not find something on Object.prototype
+    return Object.hasOwn(ENTITIES, k) ? ENTITIES[k] : m
   })
 }
 

@@ -23,11 +23,11 @@ const permsT = t.Union([t.Literal('view'), t.Literal('edit')])
 /** a slash would break the name as a folder name (WebDAV shows each group as one); control characters would break lines in the log */
 const GROUP_NAME_CHARS = /[\x00-\x1f\x7f/\\]/
 
-/** 1 to 64 characters, unique without regard to case, no slash (the name is a folder name for WebDAV) and no control character */
+/** 1 to 64 characters, unique without regard to case, no slash (the name is a folder name for WebDAV), no control character and not only dots (".", ".." are dot segments in a path) */
 function cleanName(input: unknown, except?: Group): string {
   const name = typeof input === 'string' ? input.trim() : ''
   const length = [...name].length
-  if (length < 1 || length > GROUP_NAME_MAX || GROUP_NAME_CHARS.test(name)) throw bad('groups.bad-name', { max: GROUP_NAME_MAX })
+  if (length < 1 || length > GROUP_NAME_MAX || GROUP_NAME_CHARS.test(name) || /^\.+$/.test(name)) throw bad('groups.bad-name', { max: GROUP_NAME_MAX })
   const taken = findGroupByName(name)
   if (taken && taken !== except) throw conflict('groups.name-taken')
   return name

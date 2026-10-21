@@ -380,7 +380,7 @@ describe('grants: picking a person', () => {
     expect((await look(noShare, 'grl')).status).toBe(403)
     // an admin may
     expect((await look(admin, 'grl-p0')).status).toBe(200)
-  })
+  }, 30_000) // 14 accounts are made here, each with a full-strength argon2 hash: more than 5 s on a slow or busy machine
 
   test('a light limit on searches per minute', async () => {
     const c = await userWith('grl-rate')
