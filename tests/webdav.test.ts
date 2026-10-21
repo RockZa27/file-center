@@ -3,7 +3,7 @@
  * on the same app as api.test.ts (see in-process-env.ts); the ones about streaming and about the size limits start a real
  * server, because Bun's own limit and the way a body arrives exist only there. Every user here starts with "dv".
  */
-import { beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -119,6 +119,8 @@ async function davUser(username: string, scope: 'read' | 'readwrite' = 'readwrit
   return { web, dav: new Dav(username, made.data.secret as string), id: made.data.id as string, username }
 }
 
+let savedAddressMax = 0
+
 beforeAll(async () => {
   ;({ app } = await import('../src/index'))
   ;({ config, paths } = await import('../src/config'))
@@ -131,8 +133,12 @@ beforeAll(async () => {
   grantsMod = await import('../src/grants')
   await admin.login('admin', process.env.ADMIN_PASSWORD!)
   // every wrong password in these tests comes from one address ('unknown' in process): the wide net must not trip
+  savedAddressMax = config.loginAddressMaxAttempts
   config.loginAddressMaxAttempts = 1000
 })
+
+// the files after this one see the limit they expect
+afterAll(() => { config.loginAddressMaxAttempts = savedAddressMax })
 
 // ───────────────────────────── app passwords ─────────────────────────────
 
