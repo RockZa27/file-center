@@ -1297,8 +1297,8 @@
     "patches": [
       {
         "file": "src/backup.ts",
-        "find": "const victim = listBackups().slice(1).reverse().find(b => b.name !== protect)",
-        "replace": "const victim = listBackups().reverse().find(b => b.name !== protect)"
+        "find": "const victim = (await listBackups()).slice(1).reverse().find(b => b.name !== protect)",
+        "replace": "const victim = (await listBackups()).reverse().find(b => b.name !== protect)"
       }
     ]
   },
@@ -1739,21 +1739,6 @@
         "file": "src/backup.ts",
         "find": "Date.parse(y.createdAt) - Date.parse(x.createdAt) || (x.name < y.name ? 1 : -1)",
         "replace": "(x.name < y.name ? 1 : -1)"
-      }
-    ]
-  },
-  {
-    "id": "backup-room-deletes-last",
-    "difficulty": "medium",
-    "category": "integrity",
-    "severity": "high",
-    "tests": "tests/durability.test.ts",
-    "description": "making room for a new backup may delete the only complete backup before the new one exists",
-    "patches": [
-      {
-        "file": "src/backup.ts",
-        "find": "const victim = (await listBackups()).slice(1).reverse().find(",
-        "replace": "const victim = (await listBackups()).reverse().find("
       }
     ]
   },
