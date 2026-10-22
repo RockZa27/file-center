@@ -132,6 +132,7 @@ export const MESSAGES = {
   'upload.bad-chunk-size': { th: 'ขนาดชิ้นส่วนไม่ถูกต้อง (ต้องเป็น {bytes} ไบต์)', en: 'The chunk size is wrong (it must be {bytes} bytes).' },
   'upload.missing-chunk': { th: 'ยังขาดชิ้นส่วนที่ {n}', en: 'Chunk {n} is still missing.' },
   'upload.size-mismatch': { th: 'ขนาดไฟล์หลังรวมไม่ตรงกับที่แจ้งไว้', en: 'The assembled file does not have the announced size.' },
+  'upload.dest-gone': { th: 'โฟลเดอร์ปลายทางของการอัปโหลดนี้ถูกลบ ย้าย หรือเปลี่ยนชื่อไปแล้ว จึงยกเลิกการอัปโหลด กรุณาอัปโหลดใหม่ในโฟลเดอร์ที่ต้องการ', en: 'The folder this file was being uploaded to was deleted, moved or renamed, so the upload was cancelled. Please upload it again into the folder you want.' },
   'upload.too-deep': { th: 'โฟลเดอร์ซ้อนลึกเกินไป', en: 'The folders are nested too deeply.' },
 
   // ───────────── zip ─────────────

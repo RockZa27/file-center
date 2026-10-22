@@ -78,6 +78,8 @@ export const config = {
   thumbCacheMax: Math.max(1, num('THUMB_CACHE_MAX_MB', 1024)) * 1024 ** 2,
   unzipMaxBytes: num('UNZIP_MAX_BYTES', 20 * 1024 ** 3),
   unzipMaxFiles: num('UNZIP_MAX_FILES', 50_000),
+  /** code page of the names in a zip that are not UTF-8 (zip.js would read them as CP437): cp874 = Thai Windows; cp437 = leave it to zip.js */
+  zipLegacyEncoding: env('ZIP_LEGACY_ENCODING', 'cp874'),
   /** set to "true" behind HTTPS so the session cookie is marked Secure */
   secureCookie: env('SECURE_COOKIE', 'false') === 'true',
   /**

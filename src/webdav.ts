@@ -38,7 +38,7 @@ import {
 import { activeGrantsTo, GRANT_SPACE } from './grants'
 import { log, safePath } from './logger'
 import { langOf, type MessageCode, type Params, text } from './messages'
-import { exceeded, holdNow, limitOf, markStale, markStaleFor, ownerOfPath, quotaUserOf, ready, roomLeft, usage, type Hold } from './quota'
+import { exceeded, holdNow, limitOf, markStale, markStaleBetween, markStaleFor, ownerOfPath, quotaUserOf, ready, roomLeft, usage, type Hold } from './quota'
 import { fileResponse, fileTag } from './routes/files'
 import { indexTouched } from './search-index'
 import type { Perm } from './settings'
@@ -575,6 +575,8 @@ async function place(tmp: string, dest: string, size: number) {
 }
 
 const SPACE_CHECK_EVERY = 8 * 1024 * 1024
+/** how much quota a PUT without Content-Length takes at a time while its bytes arrive */
+const RESERVE_STEP = 4 * 1024 * 1024
 
 async function putMethod(ctx: Ctx, segs: string[], place_: Place | null): Promise<Response> {
   const { request, user, ip } = ctx
@@ -599,16 +601,26 @@ async function putMethod(ctx: Ctx, segs: string[], place_: Place | null): Promis
   await ready(q)
   const before = statOf(s.abs)?.size ?? 0
   ensureSpace(paths.tmp, known ?? 0)
-  // while the bytes arrive they hold their place in the quota: exactly the growth when the size is announced, else all
-  // the room that is left (a client that does not say how much it sends can not be held to a smaller number)
-  let cap = config.uploadMaxSize
+  // while the bytes arrive they hold their place in the quota: exactly the growth when the size is announced. A client
+  // that does not say how much it sends holds a place a piece at a time as the bytes come in (taking all that is left
+  // would make a second upload of the same user fail with 507 while there is room for both)
   let hold: Hold | null = null
+  let meter: ((written: number) => void) | null = null
   if (q && limitOf(q)) {
     if (known !== null) hold = holdNow(q, Math.max(0, known - before))
     else {
-      const room = roomLeft(q)
-      hold = holdNow(q, room)
-      cap = Math.min(cap, before + room)
+      const parts: Hold[] = []
+      let held = 0
+      hold = { commit() {}, release() { for (const p of parts) p.release(); parts.length = 0; held = 0 } }
+      meter = written => {
+        const need = Math.max(0, written - before)
+        if (need <= held) return
+        // a piece of RESERVE_STEP, or less when that is all the room there is; never less than what is needed now
+        const take = Math.min(Math.max(need - held, RESERVE_STEP), roomLeft(q))
+        if (take < need - held) throw exceeded(q)
+        parts.push(holdNow(q, take))
+        held += take
+      }
     }
   }
 
@@ -623,8 +635,9 @@ async function putMethod(ctx: Ctx, segs: string[], place_: Place | null): Promis
         written += chunk.byteLength
         if (known !== null) {
           if (written > known) throw bad('upload.size-mismatch')
-        } else if (written > cap) {
-          throw written > config.uploadMaxSize || !q ? new HttpError(413, 'upload.too-big') : exceeded(q)
+        } else {
+          if (written > config.uploadMaxSize) throw new HttpError(413, 'upload.too-big')
+          meter?.(written)
         }
         if (written - checked >= SPACE_CHECK_EVERY) { ensureSpace(paths.tmp, 0); checked = written }
         let off = 0
@@ -773,6 +786,7 @@ async function copyMoveMethod(ctx: Ctx, kind: 'copy' | 'move', place_: Place | n
     moveVersions(from, to)
     moveState(from, to)
     indexTouched(from); indexTouched(to)
+    markStaleBetween(from, to)
   } else {
     // a copy, or a move into another space: copied beside the destination first, then put in place, so a failure
     // loses nothing; the source goes to the trash only when the copy is complete
@@ -799,7 +813,7 @@ async function copyMoveMethod(ctx: Ctx, kind: 'copy' | 'move', place_: Place | n
         await moveToTrash(from, user.username)
       } catch (err) {
         rmSync(to, { recursive: true, force: true })
-        markStale(q?.username)
+        if (q) markStale(q.username)
         throw err
       }
       markStaleFor(src, user)

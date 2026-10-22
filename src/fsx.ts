@@ -1,6 +1,7 @@
-import { existsSync, lstatSync, mkdirSync, readdirSync, realpathSync, statfsSync, statSync } from 'node:fs'
+import { closeSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, realpathSync, renameSync, rmSync, statfsSync, statSync, writeSync } from 'node:fs'
 import { constants as FS, type Stats } from 'node:fs'
-import { copyFile, lstat, mkdir, readdir, readlink, rename, rm, rmdir, symlink, unlink } from 'node:fs/promises'
+import { copyFile, link, lstat, mkdir, readdir, readlink, rename, rm, rmdir, symlink, unlink } from 'node:fs/promises'
+import { randomBytes } from 'node:crypto'
 import { basename, dirname, extname, join, relative, sep } from 'node:path'
 import { config } from './config'
 import { log } from './logger'
@@ -230,14 +231,42 @@ export function uniquePath(abs: string): string {
 }
 
 /**
- * move a file, folder or link to `to`. One rename when both sit on the same disk. Across disks (EXDEV) the tree is
- * copied with copyTree, without holding up other requests, and the source goes only once the copy is complete:
- * a failed copy removes what it wrote and leaves the source as it was. Links move as links, never followed.
- * `renameStep` is there for the tests: one disk can not produce EXDEV.
+ * Rename that never replaces what is at `to`. rename() silently replaces a file, so a check with existsSync() before
+ * it leaves a window in which a file created meanwhile is lost. A file or a link is hard-linked to `to` first (link()
+ * fails with EEXIST when `to` exists, in one step) and only then is the old name removed; a folder is renamed, which
+ * the kernel already refuses onto a file or a folder that holds anything.
  */
-export async function moveTree(from: string, to: string, renameStep: (from: string, to: string) => Promise<void> = rename) {
+export async function renameNoReplace(from: string, to: string) {
+  const st = await lstat(from)
+  if (st.isDirectory()) return await rename(from, to)
   try {
-    return await renameStep(from, to)
+    await link(from, to)
+  } catch (err: any) {
+    // a disk that can not make hard links (FAT, some network shares): the old check-then-rename is all there is
+    if (err?.code === 'EPERM' || err?.code === 'ENOTSUP' || err?.code === 'EOPNOTSUPP' || err?.code === 'ENOSYS') {
+      if (await lstat(to).then(() => true, () => false)) throw Object.assign(new Error('EEXIST'), { code: 'EEXIST' })
+      return await rename(from, to)
+    }
+    throw err
+  }
+  try {
+    await unlink(from)
+  } catch (err) {
+    await unlink(to).catch(() => {}) // two names for one file would be a copy nobody asked for
+    throw err
+  }
+}
+
+/**
+ * move a file, folder or link to `to`. One rename when both sit on the same disk, and it never replaces something
+ * that is already there (EEXIST; `overwrite: true` is for "a.txt" -> "A.txt" on a disk that ignores case). Across disks
+ * (EXDEV) the tree is copied with copyTree, without holding up other requests, and the source goes only once the copy
+ * is complete: a failed copy removes what it wrote and leaves the source as it was. Links move as links, never
+ * followed. `renameStep` is there for the tests: one disk can not produce EXDEV.
+ */
+export async function moveTree(from: string, to: string, renameStep: ((from: string, to: string) => Promise<void>) | null = null, { overwrite = false } = {}) {
+  try {
+    return await (renameStep ?? (overwrite ? rename : renameNoReplace))(from, to)
   } catch (err: any) {
     if (err?.code !== 'EXDEV') throw err
   }
@@ -329,6 +358,29 @@ export async function copyTree(from: string, to: string, { links = false } = {})
     await rm(to, { recursive: true, force: true }).catch(() => {})
     throw err
   }
+}
+
+/**
+ * Replace the content of an existing file in one step: written to a temp file in the same folder, flushed to disk, then
+ * renamed over it, so a crash or a full disk half way leaves the old content, never a cut-off file. The mode is kept; a
+ * link is written through (the file it points to is replaced), like writeFileSync did.
+ */
+export function writeFileAtomic(abs: string, content: string | Uint8Array) {
+  const target = lstatSync(abs).isSymbolicLink() ? realpathSync(abs) : abs
+  const mode = statSync(target).mode & 0o7777
+  const tmp = join(dirname(target), `.fc-save-${randomBytes(6).toString('hex')}`)
+  const fd = openSync(tmp, 'wx', mode)
+  try {
+    const bytes = typeof content === 'string' ? Buffer.from(content) : content
+    for (let at = 0; at < bytes.length;) at += writeSync(fd, bytes, at)
+    fsyncSync(fd)
+  } catch (err) {
+    closeSync(fd)
+    rmSync(tmp, { force: true })
+    throw err
+  }
+  closeSync(fd)
+  try { renameSync(tmp, target) } catch (err) { rmSync(tmp, { force: true }); throw err }
 }
 
 export function ensureDir(abs: string) {

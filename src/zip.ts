@@ -1,9 +1,74 @@
 import { closeSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, writeSync } from 'node:fs'
 import { dirname, extname, join } from 'node:path'
 import { BlobReader, configure, ZipReader, ZipWriter } from '@zip.js/zip.js'
-import { bad, cleanName, uniquePath, within } from './fsx'
+import { config } from './config'
+import { bad, cleanName, HttpError, uniquePath, within } from './fsx'
 
 configure({ useWebWorkers: false })
+
+/** zip.js reads the whole central directory into memory before it yields one entry: a bigger one is refused unread */
+export const DIRECTORY_MAX_BYTES = 64 * 1024 ** 2
+export const DIRECTORY_MAX_ENTRIES = 100_000
+/**
+ * What the end of the file says about the central directory (EOCD, and the ZIP64 record when the 32-bit fields are
+ * full), read before zip.js is let near the file. Refuses with 413 `archive.directory-too-big`. A file with no EOCD is
+ * left to zip.js, which refuses it as not-zip. `maxEntries` is a lower limit still (the extractor's file cap); passing
+ * it refuses with `tooMany()` instead.
+ */
+export async function checkDirectory(abs: string, { maxEntries = DIRECTORY_MAX_ENTRIES, tooMany }: { maxEntries?: number; tooMany?: () => HttpError } = {}): Promise<void> {
+  const file = Bun.file(abs)
+  const size = file.size
+  const tailLen = Math.min(size, 22 + 0xffff)
+  const tail = new Uint8Array(await file.slice(size - tailLen, size).arrayBuffer())
+  const dv = new DataView(tail.buffer, tail.byteOffset, tail.byteLength)
+  let at = -1
+  for (let i = tail.length - 22; i >= 0; i--) {
+    if (dv.getUint32(i, true) === 0x06054b50) { at = i; break }
+  }
+  if (at < 0) return
+  let entries = BigInt(dv.getUint16(at + 10, true))
+  let bytes = BigInt(dv.getUint32(at + 12, true))
+  if (entries === 0xffffn || bytes === 0xffffffffn || dv.getUint32(at + 16, true) === 0xffffffff) {
+    // the ZIP64 locator is the 20 bytes before the EOCD and points at the ZIP64 record
+    const locAt = size - tailLen + at - 20
+    if (locAt >= 0) {
+      const loc = new DataView(await file.slice(locAt, locAt + 20).arrayBuffer())
+      if (loc.getUint32(0, true) === 0x07064b50) {
+        const recAt = Number(loc.getBigUint64(8, true))
+        if (recAt >= 0 && recAt + 56 <= size) {
+          const rec = new DataView(await file.slice(recAt, recAt + 56).arrayBuffer())
+          if (rec.getUint32(0, true) === 0x06064b50) {
+            entries = rec.getBigUint64(32, true)
+            bytes = rec.getBigUint64(40, true)
+          }
+        }
+      }
+    }
+  }
+  if (bytes > BigInt(DIRECTORY_MAX_BYTES)) throw new HttpError(413, 'archive.directory-too-big')
+  if (entries > BigInt(Math.min(maxEntries, DIRECTORY_MAX_ENTRIES))) throw tooMany ? tooMany() : new HttpError(413, 'archive.directory-too-big')
+}
+
+
+// Names without the UTF-8 flag: zip.js takes valid UTF-8 as it is (macOS and many tools never set the flag) and decodes
+// the rest as CP437, which turns a Thai or CJK name from Windows into mojibake. That "the rest" is decoded with the
+// code page the zips of this site come from (ZIP_LEGACY_ENCODING, default cp874 = Thai Windows) instead.
+const LEGACY_ALIASES: Record<string, string> = { cp874: 'windows-874', ibm874: 'windows-874', cp932: 'shift_jis', cp936: 'gbk', cp949: 'euc-kr', cp950: 'big5' }
+function legacyDecoder(name: string): TextDecoder | null {
+  const key = name.trim().toLowerCase()
+  if (key === 'cp437' || key === '') return null // zip.js's own default
+  const label = LEGACY_ALIASES[key] ?? key.replace(/^cp(125\d)$/, 'windows-$1')
+  try { return new TextDecoder(label as ConstructorParameters<typeof TextDecoder>[0]) } catch { return legacyDecoder('cp874') }
+}
+
+/** pass to ZipReader / getEntries: the file names and comments that are not UTF-8 are read as the legacy code page */
+export const legacyNames = {
+  decodeText(value: Uint8Array, encoding: string): string | undefined {
+    // zip.js asks for cp437 only when the flag is off and the bytes are not valid UTF-8
+    if (encoding.trim().toLowerCase() !== 'cp437') return undefined
+    return legacyDecoder(config.zipLegacyEncoding)?.decode(value)
+  },
+}
 
 export type ZipItem = {
   name: string; abs: string; dir: boolean; mtime: number; size: number
@@ -107,7 +172,10 @@ export function zipStream(items: ZipItem[], options: ZipOptions = {}): ReadableS
 export async function unzipTo(zipAbs: string, destDir: string, limits: { maxBytes: number; maxFiles: number }): Promise<number> {
   const tooBig = () => bad('zip.too-big')
   const unsafe = () => bad('zip.unsafe-path')
-  const reader = new ZipReader(new BlobReader(Bun.file(zipAbs)))
+  // the end of the file says how many entries there are: a zip that claims more than we would extract is refused before
+  // zip.js reads (and keeps in memory) the whole directory
+  await checkDirectory(zipAbs, { maxEntries: limits.maxFiles, tooMany: () => bad('zip.too-many-files', { max: limits.maxFiles.toLocaleString() }) })
+  const reader = new ZipReader(new BlobReader(Bun.file(zipAbs)), legacyNames)
   try {
     const entries = await reader.getEntries()
     const files = entries.filter(e => !e.directory)

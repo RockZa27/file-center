@@ -717,8 +717,13 @@
     "patches": [
       {
         "file": "src/uploads.ts",
-        "find": "const finalPath = uniquePath(join(meta.destDir, meta.name))",
-        "replace": "const finalPath = join(meta.destDir, meta.name)"
+        "find": "let finalPath = uniquePath(join(meta.destDir, meta.name))",
+        "replace": "let finalPath = join(meta.destDir, meta.name)"
+      },
+      {
+        "file": "src/uploads.ts",
+        "find": "      finalPath = uniquePath(join(meta.destDir, meta.name))\n",
+        "replace": "      finalPath = join(meta.destDir, meta.name)\n"
       }
     ]
   },
@@ -1561,9 +1566,9 @@
     "description": "a zip whose end record declares a huge central directory (or over 100,000 entries) is handed to zip.js, which reads it all into memory, instead of being refused with 413",
     "patches": [
       {
-        "file": "src/archive.ts",
-        "find": "if (bytes > BigInt(DIRECTORY_MAX_BYTES) || entries > BigInt(DIRECTORY_MAX_ENTRIES)) throw",
-        "replace": "if (false) throw"
+        "file": "src/zip.ts",
+        "find": "  if (bytes > BigInt(DIRECTORY_MAX_BYTES)) throw new HttpError(413, 'archive.directory-too-big')\n  if (entries > BigInt(Math.min(maxEntries, DIRECTORY_MAX_ENTRIES))) throw tooMany ? tooMany() : new HttpError(413, 'archive.directory-too-big')",
+        "replace": "  if (false) throw new HttpError(413, 'archive.directory-too-big')"
       }
     ]
   },
@@ -1629,6 +1634,51 @@
         "file": "src/routes/guide.ts",
         "find": "toursDone: t.Optional(t.Any())",
         "replace": "toursDone: t.Optional(t.Any()), username: t.Optional(t.String())"
+      }
+    ]
+  },
+  {
+    "id": "unzip-reads-all-entries",
+    "difficulty": "medium",
+    "category": "dos",
+    "severity": "medium",
+    "tests": "tests/files-fixes.test.ts",
+    "description": "POST /api/unzip lets zip.js read the whole central directory of any zip into memory before the file-count cap is looked at",
+    "patches": [
+      {
+        "file": "src/zip.ts",
+        "find": "await checkDirectory(zipAbs, { maxEntries: limits.maxFiles, tooMany: () => bad('zip.too-many-files', { max: limits.maxFiles.toLocaleString() }) })",
+        "replace": "await Promise.resolve()"
+      }
+    ]
+  },
+  {
+    "id": "upload-recreates-folder",
+    "difficulty": "medium",
+    "category": "integrity",
+    "severity": "medium",
+    "tests": "tests/files-fixes.test.ts",
+    "description": "an upload that completes after its folder was renamed, moved or trashed makes the old folder again and puts the file there",
+    "patches": [
+      {
+        "file": "src/uploads.ts",
+        "find": "  if (isDir(meta.destDir)) return\n",
+        "replace": "  ensureDir(meta.destDir)\n  if (isDir(meta.destDir)) return\n"
+      }
+    ]
+  },
+  {
+    "id": "move-overwrites-file",
+    "difficulty": "medium",
+    "category": "integrity",
+    "severity": "high",
+    "tests": "tests/files-fixes.test.ts",
+    "description": "rename and move replace a file created at the destination after the existence check (rename() overwrites silently)",
+    "patches": [
+      {
+        "file": "src/fsx.ts",
+        "find": "    await link(from, to)\n",
+        "replace": "    return await rename(from, to)\n"
       }
     ]
   }

@@ -51,7 +51,8 @@ export const uploadRoutes = new Elysia({ prefix: '/api/upload' })
   .post('/:id/complete', async ({ user, ip, params }) => {
     const owner = user?.username ?? 'guest'
     const done = await completeUpload(params.id, owner, user)
-    audit({ user: owner, ip, action: 'upload', target: storagePath(done.path), detail: String(done.size) })
+    // a repeat (the client did not get the first answer) is not a second upload
+    if (!done.again) audit({ user: owner, ip, action: 'upload', target: storagePath(done.path), detail: String(done.size) })
     return { ok: true, size: done.size }
   })
 

@@ -7,7 +7,7 @@ import { extname } from 'node:path'
 import { BlobReader, type Entry, ZipReader } from '@zip.js/zip.js'
 import { config } from './config'
 import { bad, HttpError, notFound } from './fsx'
-import './zip' // zip.js is configured there (no web workers)
+import { checkDirectory, DIRECTORY_MAX_ENTRIES, legacyNames } from './zip' // zip.js is configured there (no web workers)
 
 /** more entries than this are not listed */
 export const ARCHIVE_MAX_ENTRIES = 10_000
@@ -19,61 +19,35 @@ export const BOMB_RATIO = 100
  * zip.js refuses a whole archive when one entry is called "../x"; here the names are only shown and compared, never used
  * as a path, so such an archive can still be looked into (entryName() refuses to take out an entry of that kind)
  */
-const NAMES = { filenameValidation: 'tolerant' } as const
+const NAMES = { filenameValidation: 'tolerant', ...legacyNames } as const
 
-/** zip.js reads the whole central directory into memory before it yields one entry: a bigger one is refused unread */
-export const DIRECTORY_MAX_BYTES = 64 * 1024 ** 2
-export const DIRECTORY_MAX_ENTRIES = 100_000
 /** how many archives are looked into at the same time; the next one waits outside (503 + Retry-After) */
 export const ARCHIVE_MAX_CONCURRENT = 4
-let active = 0
+/** extracting (POST /api/unzip) is heavier and longer than looking: its own, smaller count, so it can not take the viewer's places */
+export const UNZIP_MAX_CONCURRENT = 2
 
-/** a place for one archive operation; the function it returns gives the place back (and may be called twice) */
-function takeSlot(): () => void {
-  if (active >= ARCHIVE_MAX_CONCURRENT) throw new HttpError(503, 'archive.busy')
-  active++
-  let released = false
-  return () => { if (!released) { released = true; active-- } }
+/** places for archive operations; the function `take` returns gives its place back (and may be called twice) */
+function slots(max: number) {
+  let active = 0
+  return {
+    take(): () => void {
+      if (active >= max) throw new HttpError(503, 'archive.busy')
+      active++
+      let released = false
+      return () => { if (!released) { released = true; active-- } }
+    },
+    busy: () => active,
+  }
 }
-export const archiveBusy = () => active
+const viewer = slots(ARCHIVE_MAX_CONCURRENT)
+const unzipper = slots(UNZIP_MAX_CONCURRENT)
+const takeSlot = viewer.take
+/** a place for one extraction (503 `archive.busy` when they are all taken) */
+export const takeUnzipSlot = unzipper.take
+export const unzipBusy = unzipper.busy
+export const archiveBusy = viewer.busy
 
-/**
- * What the end of the file says about the central directory (EOCD, and the ZIP64 record when the 32-bit fields are
- * full), read before zip.js is let near the file. Refuses with 413 `archive.directory-too-big`. A file with no EOCD is
- * left to zip.js, which refuses it as not-zip.
- */
-export async function checkDirectory(abs: string): Promise<void> {
-  const file = Bun.file(abs)
-  const size = file.size
-  const tailLen = Math.min(size, 22 + 0xffff)
-  const tail = new Uint8Array(await file.slice(size - tailLen, size).arrayBuffer())
-  const dv = new DataView(tail.buffer, tail.byteOffset, tail.byteLength)
-  let at = -1
-  for (let i = tail.length - 22; i >= 0; i--) {
-    if (dv.getUint32(i, true) === 0x06054b50) { at = i; break }
-  }
-  if (at < 0) return
-  let entries = BigInt(dv.getUint16(at + 10, true))
-  let bytes = BigInt(dv.getUint32(at + 12, true))
-  if (entries === 0xffffn || bytes === 0xffffffffn || dv.getUint32(at + 16, true) === 0xffffffff) {
-    // the ZIP64 locator is the 20 bytes before the EOCD and points at the ZIP64 record
-    const locAt = size - tailLen + at - 20
-    if (locAt >= 0) {
-      const loc = new DataView(await file.slice(locAt, locAt + 20).arrayBuffer())
-      if (loc.getUint32(0, true) === 0x07064b50) {
-        const recAt = Number(loc.getBigUint64(8, true))
-        if (recAt >= 0 && recAt + 56 <= size) {
-          const rec = new DataView(await file.slice(recAt, recAt + 56).arrayBuffer())
-          if (rec.getUint32(0, true) === 0x06064b50) {
-            entries = rec.getBigUint64(32, true)
-            bytes = rec.getBigUint64(40, true)
-          }
-        }
-      }
-    }
-  }
-  if (bytes > BigInt(DIRECTORY_MAX_BYTES) || entries > BigInt(DIRECTORY_MAX_ENTRIES)) throw new HttpError(413, 'archive.directory-too-big')
-}
+export { checkDirectory, DIRECTORY_MAX_BYTES, DIRECTORY_MAX_ENTRIES } from './zip'
 
 export type ArchiveEntry = { name: string; dir: boolean; size: number; compressed: number; modified: number; encrypted: boolean }
 

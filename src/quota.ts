@@ -144,6 +144,26 @@ export function markStale(username?: string): void {
   }
 }
 
+/** the users (admins left out: they have no quota) whose home holds `abs` */
+function homesHolding(abs: string): Set<string> {
+  const out = new Set<string>()
+  for (const u of [...groupOwners(), ...allUsers()]) {
+    if (u.role === 'admin') continue
+    if (within(accessFor(u, 'home')!.root, abs)) out.add(u.username)
+  }
+  return out
+}
+
+/**
+ * Something moved from `from` to `to` inside one space. An admin works in all homes, so this can take a file out of
+ * one home and into another: both counts are out of date. Nothing happens when both lie in the same home (or in none).
+ */
+export function markStaleBetween(from: string, to: string): void {
+  const a = homesHolding(from)
+  const b = homesHolding(to)
+  for (const name of new Set([...a, ...b])) if (a.has(name) !== b.has(name)) markStale(name)
+}
+
 /** a changed limit or home folder: forget the count */
 export function forget(username: string): void {
   const k = keyOf(username)

@@ -6,15 +6,16 @@ import { Elysia, t } from 'elysia'
 import { audit, auditOnce } from '../audit'
 import { isForeignSpace } from '../auth'
 import { config, paths } from '../config'
+import { takeUnzipSlot } from '../archive'
 import { context, need, requireUser } from '../context'
 import {
-  bad, conflict, copyTree, ensureSpace, forbidden, freeSpace, fromFsError, HttpError, isDir, joinRel, listDirAsync, moveTree,
+  bad, conflict, copyTree, ensureSpace, forbidden, freeSpace, fromFsError, HttpError, isDir, joinRel, listDirAsync, moveTree, writeFileAtomic,
   normRel, notFound, resolveIn, sameFile, storagePath, treeStats, uniquePath, validName, within,
 } from '../fsx'
 import { log } from '../logger'
 import { type Lang, langOf, type MessageCode, text } from '../messages'
 import { recordRecent, moveState } from '../favorites'
-import { exceeded, holdNow, markStale, markStaleFor, ownerOfPath, quotaUserOf, ready, roomLeft, usage } from '../quota'
+import { exceeded, holdNow, markStale, markStaleBetween, markStaleFor, ownerOfPath, quotaUserOf, ready, roomLeft, usage } from '../quota'
 import { indexTouched, parseFilters, searchEntries } from '../search-index'
 import { moveToTrash } from '../trash'
 import { moveVersions, reserveVersion } from '../versions'
@@ -223,7 +224,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     try { hold = holdNow(q, grow) } catch (err) { ticket?.release(); throw err }
     try {
       ticket?.keep('edit', user?.username ?? 'guest')
-      writeFileSync(abs, body.content)
+      writeFileAtomic(abs, body.content)
     } catch (err) {
       hold.release()
       ticket?.release()
@@ -251,7 +252,8 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     if (to === from) return { ok: true }
     // "a.txt" -> "A.txt" is the same file on a case-insensitive disk, but a different one on Linux
     if (existsSync(to) && !sameFile(from, to)) throw conflict('files.name-taken')
-    await moveTree(from, to)
+    // never replaces a file that appeared since the check above (only the same file under a differently-cased name passes it)
+    await moveTree(from, to, null, { overwrite: existsSync(to) })
     moveVersions(from, to)
     moveState(from, to)
     indexTouched(from); indexTouched(to)
@@ -336,7 +338,10 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     // what the quota leaves is the budget when it is the smaller one; the budget is held while the files come out
     const room = q ? roomLeft(q) : Infinity
     const maxBytes = Math.min(otherMax, room)
-    const hold = holdNow(q, maxBytes)
+    // a few extractions at a time: each one reads a whole central directory into memory and keeps a core busy
+    const release = takeUnzipSlot()
+    let hold
+    try { hold = holdNow(q, maxBytes) } catch (err) { release(); throw err }
     mkdirSync(dest)
     try {
       const count = await unzipTo(abs, dest, { maxBytes, maxFiles: config.unzipMaxFiles })
@@ -351,6 +356,8 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
       // too much for the quota is a full home, not a zip that is too big
       if (q && room < otherMax && err instanceof HttpError && err.code === 'zip.too-big') throw exceeded(q)
       throw err instanceof HttpError ? err : bad('zip.extract-failed')
+    } finally {
+      release()
     }
   }, { body: t.Object({ space: t.String(), path: t.String() }) })
 
@@ -447,6 +454,8 @@ async function transfer(
         moveVersions(from, to)
         moveState(from, to)
         indexTouched(from); indexTouched(to)
+        // an admin can move between two homes of the same space
+        markStaleBetween(from, to)
       } else {
         // the spaces overlap for an admin (the home is the whole storage): a folder still can not go into itself
         if (cross && isDir(from) && within(from, destAbs)) {
@@ -473,7 +482,7 @@ async function transfer(
             await moveToTrash(from, user?.username ?? 'guest')
           } catch (err) {
             rmSync(target, { recursive: true, force: true })
-            markStale(q?.username)
+            if (q) markStale(q.username)
             throw err
           }
           markStaleFor(a, user)

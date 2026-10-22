@@ -619,6 +619,47 @@ describe('webdav: PUT', () => {
     expect((await u.dav.put('/dav/home/d.bin', new Uint8Array(900), { 'content-length': '900' })).status).toBe(201)
   })
 
+  test('parallel PUTs without Content-Length each take only what they have received, so both fit when there is room', async () => {
+    const u = await davUser('dv-putpar', 'readwrite', { quotaBytes: 10 * MB })
+    const piece = new Uint8Array(MB)
+    // a body of 2 MB without a length that, after the second piece, waits until `gate` opens; `reached` says it got that far
+    const stream = (gate: Promise<void>) => {
+      let sent = 0
+      let reach!: () => void
+      const reached = new Promise<void>(r => { reach = r })
+      const body = new ReadableStream<Uint8Array>({
+        async pull(c) {
+          if (sent < 2) { sent++; c.enqueue(piece); return }
+          reach()
+          await gate
+          c.close()
+        },
+      }, { highWaterMark: 0 })
+      return { body, reached }
+    }
+    const put = (name: string, body: ReadableStream) =>
+      app.handle(new Request(`http://localhost/dav/home/${name}`, { method: 'PUT', body, duplex: 'half', headers: { authorization: basic(u.username, u.dav.secret) } } as any)) as Promise<Response>
+    let open!: () => void
+    const gate = new Promise<void>(r => { open = r })
+    const a = stream(gate)
+    const b = stream(gate)
+    const first = put('a.bin', a.body)
+    await a.reached
+    // the first is half way: before the fix it held all 10 MB that were left, and this one was refused (507)
+    const second = put('b.bin', b.body)
+    await Promise.race([b.reached, second])
+    open()
+    expect([(await first).status, (await second).status]).toEqual([201, 201])
+    expect([statSync(home('dv-putpar', 'a.bin')).size, statSync(home('dv-putpar', 'b.bin')).size]).toEqual([2 * MB, 2 * MB])
+    // what is still over the quota is refused while it comes, and everything held is free again
+    const big = new ReadableStream<Uint8Array>({ pull(c) { c.enqueue(piece) } })
+    const over = await put('over.bin', big)
+    expect(`${over.status} ${over.headers.get('x-error-code')}`).toBe('507 quota.exceeded')
+    expect(existsSyncSafe(home('dv-putpar', 'over.bin'))).toBe(false)
+    expect(readdirSync(paths.tmp).filter(n => n.startsWith('dav-'))).toEqual([])
+    expect((await u.dav.put('/dav/home/c.bin', new Uint8Array(6 * MB), { 'content-length': String(6 * MB) })).status).toBe(201)
+  })
+
   test('UPLOAD_MAX_SIZE, a length that does not match, and a folder that is a file', async () => {
     const u = await davUser('dv-put4')
     const was = config.uploadMaxSize

@@ -853,8 +853,8 @@ describe('full system: uploads', () => {
     expect((await putChunk(admin, id, 1, data.subarray(MB))).status).toBe(200)
     expect((await admin.json('GET', `/api/upload/${id}`)).data.received).toEqual([0, 1])
     expect((await complete(admin, id)).status).toBe(200)
-    // a finished upload is gone
-    expect((await complete(admin, id)).status).toBe(404)
+    // a finished upload is gone: more chunks are refused, and a repeated "complete" (a lost answer) gets the same success, see tests/files-fixes.test.ts
+    expect((await complete(admin, id)).status).toBe(200)
     expect((await putChunk(admin, id, 0, data.subarray(0, MB))).status).toBe(404)
     const res = await admin.raw('GET', '/api/download?space=home&path=/twice.bin')
     expect(sha256(new Uint8Array(await res.arrayBuffer()))).toBe(sha256(data))

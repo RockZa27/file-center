@@ -1,10 +1,10 @@
 import { randomBytes } from 'node:crypto'
-import { existsSync, readdirSync, readFileSync, renameSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
-import { open } from 'node:fs/promises'
+import { existsSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
+import { open, rm } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { accessFor, type User } from './auth'
 import { config, paths } from './config'
-import { bad, ensureDir, ensureSpace, forbidden, HttpError, normRel, notFound, resolveIn, uniquePath, validName, within } from './fsx'
+import { bad, conflict, copyTree, ensureDir, ensureSpace, forbidden, HttpError, isDir, normRel, notFound, renameNoReplace, resolveIn, uniquePath, validName, within } from './fsx'
 import { indexTouched } from './search-index'
 import { commitBytes, limitOf, releaseBytes, reserveBytes, restoreReservation } from './quota'
 import { JsonStore } from './store'
@@ -70,9 +70,23 @@ function stillAllowed(id: string, meta: Meta, user: User | null | undefined) {
   }
 }
 
+/**
+ * The folder the file was announced for can be renamed, moved, deleted or replaced by a file while the chunks are on
+ * their way. Putting the file there anyway would quietly make the old folder again (outside the trash, without its
+ * owner's rights, in a place nobody looks): the upload is thrown away and its quota hold given back instead.
+ */
+function stillThere(id: string, meta: Meta) {
+  if (isDir(meta.destDir)) return
+  restoreReservations()
+  dropUpload(id, meta)
+  throw conflict('upload.dest-gone')
+}
+
 /** throws unless `owner` has this upload and may still add to it; lets a route refuse before it reads the request body */
 export function checkUpload(id: string, owner: string, user?: User | null) {
-  stillAllowed(id, loadMeta(id, owner), user)
+  const meta = loadMeta(id, owner)
+  stillAllowed(id, meta, user)
+  stillThere(id, meta)
 }
 
 // ───────────── visitors' daily allowance ─────────────
@@ -228,6 +242,7 @@ export function receivedChunks(id: string, owner: string): { received: number[];
 export async function saveChunk(id: string, owner: string, index: number, data: ArrayBuffer, user?: User | null) {
   const meta = loadMeta(id, owner)
   stillAllowed(id, meta, user)
+  stillThere(id, meta)
   if (!Number.isInteger(index) || index < 0 || index >= meta.total) throw bad('upload.bad-chunk-index')
   const expected = index === meta.total - 1 ? meta.size - meta.chunkSize * (meta.total - 1) : meta.chunkSize
   if (data.byteLength !== expected) throw bad('upload.bad-chunk-size', { bytes: expected })
@@ -243,31 +258,85 @@ export async function saveChunk(id: string, owner: string, index: number, data: 
   touch(id)
 }
 
-export async function completeUpload(id: string, owner: string, user?: User | null) {
+// A client that lost the answer to "complete" asks again. The file has landed and the upload folder is gone by then, so
+// the answer is kept for a few minutes (in memory, per user and upload): the retry gets the same success, and no second
+// copy called "name (1)". A retry that comes while the first is still copying (a slow cross-disk copy) waits for it.
+const COMPLETED_MS = 5 * 60_000
+const COMPLETED_MAX = 1000
+const completed = new Map<string, { path: string; size: number; at: number }>()
+const completing = new Map<string, Promise<{ path: string; size: number }>>()
+
+export type Completed = { path: string; size: number; /** true when this answer repeats an earlier one (nothing new happened) */ again: boolean }
+
+export async function completeUpload(id: string, owner: string, user?: User | null): Promise<Completed> {
+  const key = `${owner}\0${id}`
+  const now = Date.now()
+  // oldest first (Map keeps insertion order): drop what is too old, and the oldest when there are too many
+  for (const [k, v] of completed) { if (now - v.at > COMPLETED_MS || completed.size > COMPLETED_MAX) completed.delete(k); else break }
+  const earlier = completed.get(key)
+  if (earlier) return { path: earlier.path, size: earlier.size, again: true }
+  const running = completing.get(key)
+  if (running) return { ...(await running), again: true }
+  const p = finishUpload(id, owner, user)
+  completing.set(key, p)
+  try {
+    const done = await p
+    completed.set(key, { ...done, at: Date.now() })
+    return { ...done, again: false }
+  } finally {
+    completing.delete(key)
+  }
+}
+
+async function finishUpload(id: string, owner: string, user?: User | null) {
   restoreReservations()
   const meta = loadMeta(id, owner)
   stillAllowed(id, meta, user)
+  stillThere(id, meta)
   for (let i = 0; i < meta.total; i++) {
     if (!existsSync(join(dirOf(id), String(i)))) throw bad('upload.missing-chunk', { n: i + 1 })
   }
   const data = dataOf(id)
   if (statSync(data).size !== meta.size) throw bad('upload.size-mismatch')
 
-  ensureDir(meta.destDir)
-  const finalPath = uniquePath(join(meta.destDir, meta.name))
-  try {
-    renameSync(data, finalPath)
-  } catch (err: any) {
-    // storage and data folders on different disks: copy instead (slow for big files)
-    if (err?.code !== 'EXDEV') throw err
-    ensureSpace(meta.destDir, meta.size)
-    await Bun.write(finalPath, Bun.file(data))
+  // uniquePath only looks: a file of that name can appear before the move, and a plain rename would replace it
+  let finalPath = uniquePath(join(meta.destDir, meta.name))
+  for (let tries = 0; ; tries++) {
+    try {
+      await putInPlace(data, finalPath, meta)
+      break
+    } catch (err: any) {
+      if (err?.code !== 'EEXIST' || tries >= 5) throw err
+      finalPath = uniquePath(join(meta.destDir, meta.name))
+    }
   }
   indexTouched(finalPath)
   rmSync(dirOf(id), { recursive: true, force: true })
   // the file is in the home now: the reservation turns into counted bytes
   if (meta.quotaUser) commitBytes(meta.quotaUser, meta.size)
   return { path: finalPath, size: meta.size }
+}
+
+/**
+ * One move when tmp and the storage are on the same disk (the default layout: DATA_DIR and STORAGE_DIR sit side by
+ * side, and in Docker both are in the one /data volume). On different disks the file is copied (slow for big files)
+ * beside its place and moved in, so nobody sees half a file under its real name. Never replaces a file.
+ */
+async function putInPlace(data: string, finalPath: string, meta: Meta) {
+  try {
+    await renameNoReplace(data, finalPath)
+  } catch (err: any) {
+    if (err?.code !== 'EXDEV') throw err
+    ensureSpace(meta.destDir, meta.size)
+    const part = join(meta.destDir, `.fc-up-${randomBytes(8).toString('hex')}`)
+    try {
+      await copyTree(data, part)
+      await renameNoReplace(part, finalPath)
+    } catch (e) {
+      await rm(part, { force: true })
+      throw e
+    }
+  }
 }
 
 export function cancelUpload(id: string, owner: string) {
