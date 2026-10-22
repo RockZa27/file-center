@@ -1,9 +1,10 @@
 <template>
   <div class="page">
-    <div class="page-header">
-      <div><h1>{{ t('nav.dashboard') }}</h1><p>{{ s?.reduced ? t('dash.reducedSubtitle') : t('dash.subtitle') }}</p></div>
+    <page-header :title="t('nav.dashboard')" :description="s?.reduced ? t('dash.reducedSubtitle') : t('dash.subtitle')">
+      <template #actions>
       <n-button :loading="loading" @click="load"><template #icon><n-icon :component="RefreshOutline" /></template>{{ t('common.refresh') }}</n-button>
-    </div>
+      </template>
+    </page-header>
 
     <n-alert v-if="error" type="error" class="gap">{{ error }}</n-alert>
     <div v-if="s?.warnings?.length" class="warnings">
@@ -85,6 +86,7 @@
 </template>
 
 <script setup>
+import PageHeader from '../components/PageHeader.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NAlert, NButton, NIcon, NProgress, NSpin, NTag } from 'naive-ui'

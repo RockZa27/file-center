@@ -1,6 +1,6 @@
 <template>
   <div class="page narrow">
-    <div class="page-header"><div><h1>{{ t('nav.settings') }}</h1><p>{{ t('settings.subtitle') }}</p></div></div>
+    <page-header :title="t('nav.settings')" :description="t('settings.subtitle')" />
     <n-spin :show="loading">
       <div class="surface block">
         <h2>{{ t('settings.brand') }}</h2>
@@ -61,6 +61,7 @@
 </template>
 
 <script setup>
+import PageHeader from '../components/PageHeader.vue'
 import { onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NAlert, NButton, NCheckbox, NCheckboxGroup, NColorPicker, NForm, NFormItem, NIcon, NInput, NSpin, NSwitch, NUpload } from 'naive-ui'

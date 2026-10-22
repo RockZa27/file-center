@@ -3,7 +3,7 @@
     <n-alert v-if="app.user?.mustChangePassword" type="warning" class="gap">{{ t('profile.mustChange') }}</n-alert>
     <div class="who muted">{{ app.user?.name }} · {{ t('users.role') }}: {{ roleLabel(app.user?.role) }}</div>
     <n-tabs v-model:value="tab" type="line" animated :class="{ 'no-tabs': app.user?.mustChangePassword }">
-      <n-tab-pane name="password" :tab="t('profile.passwordTab')" display-directive="show">
+      <n-tab-pane name="password" :tab="tabLabel('profile-password', t('profile.passwordTab'))" display-directive="show">
     <n-form label-placement="top" @submit.prevent="save">
       <!-- tells password managers which account the new password belongs to -->
       <input type="text" name="username" autocomplete="username" :value="app.user?.username || ''" readonly hidden>
@@ -21,15 +21,19 @@
       </n-form-item>
     </n-form>
       </n-tab-pane>
-      <n-tab-pane v-if="!app.user?.mustChangePassword" name="security" :tab="t('profile.securityTab')">
+      <n-tab-pane v-if="!app.user?.mustChangePassword" name="security" :tab="tabLabel('profile-security', t('profile.securityTab'))">
         <!-- made when the tab opens (not before), so the lists are fresh each time -->
         <security-panel v-if="show" @lock="v => (locked = v)" @signedout="signedOut" />
       </n-tab-pane>
-      <n-tab-pane v-if="!app.user?.mustChangePassword" name="notify" :tab="t('profile.notifyTab')">
+      <n-tab-pane v-if="!app.user?.mustChangePassword" name="notify" :tab="tabLabel('profile-notify', t('profile.notifyTab'))">
         <notify-panel v-if="show && tab === 'notify'" />
       </n-tab-pane>
-      <n-tab-pane v-if="!app.user?.mustChangePassword && app.config.webdav" name="dav" :tab="t('dav.tab')">
+      <n-tab-pane v-if="!app.user?.mustChangePassword && app.config.webdav" name="dav" :tab="tabLabel('profile-dav', t('dav.tab'))">
         <app-passwords-panel v-if="show && tab === 'dav'" @lock="v => (locked = v)" />
+      </n-tab-pane>
+      <n-tab-pane v-if="!app.user?.mustChangePassword" name="display" :tab="tabLabel('profile-display', t('profile.tabDisplay'))">
+        <p class="muted hint">{{ t('profile.displayHint') }}</p>
+        <div class="pref-row"><span>{{ t('nav.theme') }} / {{ t('nav.language') }}</span><preference-controls /></div>
       </n-tab-pane>
     </n-tabs>
     <template v-if="tab === 'password'" #footer>
@@ -42,13 +46,14 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, h, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NAlert, NButton, NForm, NFormItem, NInput, NModal, NTabPane, NTabs } from 'naive-ui'
 import { useRouter } from 'vue-router'
 import { api } from '../api'
 import { useFeedback, useRoleLabel } from '../composables'
 import { useAppStore } from '../store'
+import PreferenceControls from './PreferenceControls.vue'
 import PasswordRules from './PasswordRules.vue'
 import AppPasswordsPanel from './AppPasswordsPanel.vue'
 import NotifyPanel from './NotifyPanel.vue'
@@ -73,6 +78,8 @@ function signedOut() {
   router.push({ name: app.publicAvailable ? 'public' : 'login' })
 }
 
+// the tab titles carry a stable data-tour name for the guided tour
+const tabLabel = (tour, text) => () => h('span', { 'data-tour': tour }, text)
 const mismatch = computed(() => form.again && form.again !== form.next)
 // the length and username hints are shown live, but the server judges the password (its common-password list too)
 const valid = computed(() => form.current && form.next && form.next === form.again)
@@ -100,5 +107,7 @@ async function save() {
 .who { font-size: 13px; margin-bottom: 8px; overflow-wrap: anywhere; }
 .field { width: 100%; min-width: 0; }
 .no-tabs :deep(.n-tabs-nav) { display: none; }
+.hint { margin: 0 0 12px; font-size: 13px; }
+.pref-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 .foot { display: flex; justify-content: flex-end; gap: 8px; }
 </style>

@@ -22,7 +22,11 @@ const th = {
     language: 'ภาษา', theme: 'ธีม', themeLight: 'โหมดสว่าง', themeDark: 'โหมดมืด', themeAuto: 'ตามระบบ',
     publicPage: 'หน้าสาธารณะ', publicFolder: 'โฟลเดอร์สาธารณะ', admin: 'ผู้ดูแลระบบ', shareLinks: 'ลิงก์ที่แชร์', favorites: 'รายการโปรด',
     withMe: 'แชร์กับฉัน', groupFolders: 'โฟลเดอร์กลุ่ม', groupsAdmin: 'กลุ่ม', myTrash: 'ถังขยะของฉัน', trashAll: 'ถังขยะทั้งระบบ',
+    menu: 'เมนู', system: 'ระบบ', help: 'คู่มือการใช้งาน', helpTip: 'คู่มือการใช้งาน',
+    section: { files: 'ไฟล์', sharing: 'การแชร์', manage: 'จัดการ', system: 'ระบบ' },
   },
+  help: { comingSoon: 'เร็วๆ นี้ — คู่มือการใช้งานกำลังจัดทำ' },
+  system: { updateAvailable: 'มีเวอร์ชันใหม่' },
   login: {
     codeHelp: 'เปิดแอปยืนยันตัวตนบนมือถือ แล้วกรอกรหัส 6 หลัก', backupHelp: 'กรอกรหัสสำรองหนึ่งรหัส (ใช้ได้ครั้งเดียว)', code: 'รหัส 6 หลัก', backupCode: 'รหัสสำรอง',
     verify: 'ยืนยัน', useBackup: 'ใช้รหัสสำรอง', useAppCode: 'ใช้รหัสจากแอป', back: 'ย้อนกลับ',
@@ -34,6 +38,7 @@ const th = {
   },
   profile: {
     passwordTab: 'รหัสผ่าน', securityTab: 'ความปลอดภัย', notifyTab: 'แจ้งเตือน',
+    tabDisplay: 'การแสดงผล', displayHint: 'เลือกธีมและภาษาที่ใช้แสดงผลบนอุปกรณ์เครื่องนี้',
     current: 'รหัสผ่านปัจจุบัน', new: 'รหัสผ่านใหม่', confirm: 'ยืนยันรหัสผ่านใหม่',
     mismatch: 'รหัสผ่านไม่ตรงกัน', done: 'เปลี่ยนรหัสผ่านแล้ว',
     mustChange: 'บัญชีนี้ยังใช้รหัสผ่านเริ่มต้นที่ระบบสร้างให้ กรุณาตั้งรหัสผ่านใหม่ก่อนใช้งานต่อ',
@@ -507,7 +512,11 @@ const en = {
     language: 'Language', theme: 'Theme', themeLight: 'Light', themeDark: 'Dark', themeAuto: 'System',
     publicPage: 'Public page', publicFolder: 'Public folder', admin: 'Administrator', shareLinks: 'Shared links', favorites: 'Favorites',
     withMe: 'Shared with me', groupFolders: 'Group folders', groupsAdmin: 'Groups', myTrash: 'My trash', trashAll: 'All trash',
+    menu: 'Menu', system: 'System', help: 'Help', helpTip: 'Help and user guide',
+    section: { files: 'Files', sharing: 'Sharing', manage: 'Manage', system: 'System' },
   },
+  help: { comingSoon: 'Coming soon — the user guide is being written.' },
+  system: { updateAvailable: 'A new version is available' },
   login: {
     codeHelp: 'Open the authenticator app on your phone and enter the 6-digit code', backupHelp: 'Enter one of your backup codes (each works once)', code: '6-digit code', backupCode: 'Backup code',
     verify: 'Verify', useBackup: 'Use a backup code', useAppCode: 'Use the app code', back: 'Back',
@@ -519,6 +528,7 @@ const en = {
   },
   profile: {
     passwordTab: 'Password', securityTab: 'Security', notifyTab: 'Alerts',
+    tabDisplay: 'Display', displayHint: 'Choose the theme and language used on this device.',
     current: 'Current password', new: 'New password', confirm: 'Confirm new password',
     mismatch: 'Passwords do not match', done: 'Password changed',
     mustChange: 'This account still uses the generated first-run password. Please choose a new one to continue.',

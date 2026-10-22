@@ -1,9 +1,10 @@
 <template>
   <div class="page narrow">
-    <div class="page-header">
-      <div><h1>{{ t('nav.update') }}</h1><p>{{ t('update.subtitle') }}</p></div>
+    <page-header :title="t('nav.update')" :description="t('update.subtitle')">
+      <template #actions>
       <n-button :loading="loading" :disabled="busy" @click="load"><template #icon><n-icon :component="RefreshOutline" /></template>{{ t('common.refresh') }}</n-button>
-    </div>
+      </template>
+    </page-header>
 
     <n-spin :show="loading && !st">
       <template v-if="st">
@@ -216,6 +217,7 @@
 </template>
 
 <script setup>
+import PageHeader from '../components/PageHeader.vue'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'

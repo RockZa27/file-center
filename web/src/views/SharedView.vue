@@ -1,19 +1,16 @@
 <template>
   <div class="page">
-    <div class="page-header">
-      <div>
-        <h1>{{ t('nav.publicFolder') }}</h1>
-        <p>{{ t('files.publicHint') }}</p>
-        <div class="perms">
-          <n-tag v-for="p in perms" :key="p" size="small" round :bordered="false" type="info">{{ t(`perm.${p}`) }}</n-tag>
-        </div>
+    <page-header :title="t('nav.publicFolder')" :description="t('files.publicHint')">
+      <div class="perms">
+        <n-tag v-for="p in perms" :key="p" size="small" round :bordered="false" type="info">{{ t(`perm.${p}`) }}</n-tag>
       </div>
-    </div>
+    </page-header>
     <file-browser space="public" />
   </div>
 </template>
 
 <script setup>
+import PageHeader from '../components/PageHeader.vue'
 import { computed } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NTag } from 'naive-ui'

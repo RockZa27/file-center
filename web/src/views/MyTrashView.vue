@@ -1,9 +1,10 @@
 <template>
   <div class="page">
-    <div class="page-header">
-      <div><h1>{{ title }}</h1><p>{{ t('myTrash.subtitle', { days: retention }) }}</p></div>
+    <page-header :title="title" :description="t('myTrash.subtitle', { days: retention })">
+      <template #actions>
       <n-button type="error" secondary :disabled="!items.length" @click="emptyAll"><template #icon><n-icon :component="TrashBinOutline" /></template>{{ t('trash.empty') }}</n-button>
-    </div>
+      </template>
+    </page-header>
     <div class="surface">
       <n-data-table :columns="columns" :data="items" :loading="loading" :bordered="false" :single-line="false"
         :scroll-x="narrow ? undefined : 760" table-layout="fixed" :row-key="r => r.id" :pagination="{ pageSize: 25 }"
@@ -15,6 +16,7 @@
 </template>
 
 <script setup>
+import PageHeader from '../components/PageHeader.vue'
 import { computed, h, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NButton, NDataTable, NEmpty, NIcon, NTag } from 'naive-ui'

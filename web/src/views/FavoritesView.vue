@@ -1,11 +1,6 @@
 <template>
   <div class="page">
-    <div class="page-header">
-      <div>
-        <h1>{{ t('favorites.title') }}</h1>
-        <p>{{ t('favorites.hint') }}</p>
-      </div>
-    </div>
+    <page-header :title="t('favorites.title')" :description="t('favorites.hint')" />
     <n-tabs v-model:value="tab" type="line">
       <n-tab name="favorites">{{ t('favorites.tabFavorites') }}</n-tab>
       <n-tab name="recent">{{ t('favorites.tabRecent') }}</n-tab>
@@ -40,6 +35,7 @@
 </template>
 
 <script setup>
+import PageHeader from '../components/PageHeader.vue'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'

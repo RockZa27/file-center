@@ -1,11 +1,12 @@
 <template>
   <div class="page">
-    <div class="page-header">
-      <div><h1>{{ t('nav.logs') }}</h1><p>{{ t('logs.subtitle') }}</p></div>
+    <page-header :title="t('nav.logs')" :description="t('logs.subtitle')">
+      <template #actions>
       <n-button tag="a" :href="api.logsDownloadUrl()" secondary :loading="saving !== null" @click="e => follow(e, api.logsDownloadUrl(), { admin: true })">
         <template #icon><n-icon :component="DownloadOutline" /></template>{{ t('logs.download') }}
       </n-button>
-    </div>
+      </template>
+    </page-header>
     <div class="filters">
       <n-input v-model:value="f.q" clearable :placeholder="t('logs.search')" class="f-q" @keyup.enter="apply" @clear="apply"><template #prefix><n-icon :component="SearchOutline" /></template></n-input>
       <n-select v-model:value="f.level" clearable :options="levelOptions" :placeholder="t('logs.allLevels')" class="f-l" @update:value="apply" />
@@ -24,6 +25,7 @@
 </template>
 
 <script setup>
+import PageHeader from '../components/PageHeader.vue'
 import { computed, h, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'

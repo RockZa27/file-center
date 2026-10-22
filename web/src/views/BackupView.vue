@@ -1,12 +1,13 @@
 <template>
   <div class="page narrow">
-    <div class="page-header">
-      <div><h1>{{ t('nav.backup') }}</h1><p>{{ t('backup.subtitle') }}</p></div>
+    <page-header :title="t('nav.backup')" :description="t('backup.subtitle')">
+      <template #actions>
       <div class="head-actions">
         <n-button :loading="loading" :disabled="restoring" @click="load"><template #icon><n-icon :component="RefreshOutline" /></template>{{ t('common.refresh') }}</n-button>
         <n-button type="primary" :loading="creating" :disabled="restoring || working" @click="backupNow"><template #icon><n-icon :component="ArchiveOutline" /></template>{{ t('backup.now') }}</n-button>
       </div>
-    </div>
+      </template>
+    </page-header>
 
     <!-- restarting after a restore -->
     <div v-if="restoring" class="surface block center">
@@ -196,6 +197,7 @@
 </template>
 
 <script setup>
+import PageHeader from '../components/PageHeader.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NAlert, NButton, NEmpty, NForm, NFormItem, NIcon, NInput, NInputNumber, NModal, NRadio, NRadioButton, NRadioGroup, NSpin, NSwitch, NTag, NTimePicker } from 'naive-ui'

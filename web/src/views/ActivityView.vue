@@ -1,6 +1,6 @@
 <template>
   <div class="page">
-    <div class="page-header"><div><h1>{{ t('nav.activity') }}</h1><p>{{ t('activity.subtitle') }}</p></div></div>
+    <page-header :title="t('nav.activity')" :description="t('activity.subtitle')" />
     <div class="filters">
       <n-input v-model:value="f.q" clearable :placeholder="t('activity.search')" class="f-q" @keyup.enter="apply" @clear="apply"><template #prefix><n-icon :component="SearchOutline" /></template></n-input>
       <n-input v-model:value="f.user" clearable :placeholder="t('activity.user')" class="f-u" @keyup.enter="apply" @clear="apply" />
@@ -24,6 +24,7 @@
 </template>
 
 <script setup>
+import PageHeader from '../components/PageHeader.vue'
 import { computed, h, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NButton, NDataTable, NEmpty, NIcon, NInput, NSelect, NTag } from 'naive-ui'
