@@ -67,12 +67,13 @@ import ProfileModal from '../components/ProfileModal.vue'
 import SpotlightTour from '../components/SpotlightTour.vue'
 import WhatsNewModal from '../components/WhatsNewModal.vue'
 import { releasesFor } from '../guide/releases'
-import { drawerHook, guide, loadGuide, openWhatsNew, saveSeen, startFullTour, tour } from '../guide/tour'
+import { drawerHook, guide, loadGuide, openWhatsNew, resetGuide, saveSeen, startFullTour, tour } from '../guide/tour'
 import { compareVersions } from '../guide/util'
 import { useAppStore } from '../store'
-import { useRoleLabel } from '../composables'
+import { useFeedback, useRoleLabel } from '../composables'
 
 const { t } = useI18n()
+const fb = useFeedback()
 const roleLabel = useRoleLabel()
 const app = useAppStore()
 const route = useRoute()
@@ -168,7 +169,8 @@ async function onSelect(key) {
   if (key.startsWith('theme:')) app.setTheme(key.slice(6))
   if (key.startsWith('lang:')) app.setLang(key.slice(5))
   if (key === 'logout') {
-    await app.logout()
+    try { await app.logout() } catch (e) { return fb.fail(e) }
+    resetGuide()
     router.push({ name: app.publicAvailable ? 'public' : 'login' })
   }
 }
@@ -186,6 +188,8 @@ async function checkSession() {
 }
 // whatever call noticed that the session is gone, leave the protected area at once
 watch(() => app.user, u => { if (!u) router.replace({ name: 'login' }) })
+// another user (or none) on the page: the tour state and the "what is new" decision were the last one's
+watch(() => app.user?.username, () => { resetGuide(); guideChecked = false; if (app.user) bootGuide() })
 // the server refuses everything until a handed-out password is changed: reload the page once it is
 const viewKey = ref(0)
 watch(() => app.user?.mustChangePassword, (now, before) => {
@@ -209,7 +213,7 @@ function showGuide() {
 function bootGuide() {
   if (!app.user || app.user.mustChangePassword) return
   guide.loaded = false
-  loadGuide().then(showGuide)
+  loadGuide().then(showGuide).catch(() => { /* a nicety */ })
 }
 watch(() => app.user?.mustChangePassword, (now, before) => { if (before && !now) bootGuide() })
 watch(profileOpen, showGuide)

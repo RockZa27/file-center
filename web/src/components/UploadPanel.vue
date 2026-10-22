@@ -93,7 +93,7 @@ function add(list, path) {
     }
     const item = reactive({
       key: ++seq, file, displayName, relativeDir, path, space: props.space, size: file.size,
-      loaded: 0, status: 'queued', error: '', id: null, paused: false, canceled: false, aborts: new Set(), started: 0, final: false,
+      loaded: 0, status: 'queued', error: '', id: null, chunkSize: 0, total: 0, paused: false, canceled: false, aborts: new Set(), started: 0, final: false,
     })
     // a name the file system can not hold is told here, per file, before anything is sent (trying again changes nothing)
     const bad = nameProblem(file.name, relativeDir)
@@ -133,11 +133,19 @@ async function upload(it) {
   it.loaded = 0
   it.error = ''
   try {
-    const init = await api.uploadInit(it.space, it.path, it.file.name, it.size, it.relativeDir)
-    it.id = init.id
+    // a retry resumes the upload the server still holds (its temp data and quota hold) instead of starting a second one
+    let init = it.id ? await resume(it) : null
+    if (!init) {
+      init = await api.uploadInit(it.space, it.path, it.file.name, it.size, it.relativeDir)
+      it.id = init.id
+      it.chunkSize = init.chunkSize
+      it.total = init.total
+    }
     const { chunkSize, total } = init
-    const sent = new Array(total).fill(0)
-    const pending = [...Array(total).keys()]
+    const have = new Set(init.received || [])
+    const sent = Array.from({ length: total }, (_, i) => (have.has(i) ? Math.min(chunkSize, it.size - i * chunkSize) : 0))
+    const pending = [...Array(total).keys()].filter(i => !have.has(i))
+    it.loaded = sent.reduce((a, b) => a + b, 0)
     let failure = null
     const sync = () => { it.loaded = sent.reduce((a, b) => a + b, 0) }
 
@@ -188,9 +196,26 @@ async function upload(it) {
     if (it.canceled) return
     it.status = 'error'
     it.error = e.message
+    // the folder is gone and the server dropped the upload: trying again would fail the same way
+    if (e.code === 'upload.dest-gone') { it.final = true; it.id = null }
     // the storage is full: the message holds used/quota; say which file it was, the others in the queue may still fit
     if (e.code === 'quota.exceeded') fb.warn(t('upload.quotaFailed', { name: it.displayName, message: e.message }))
   }
+}
+
+/** the server's view of this item's upload: { chunkSize, total, received }, or null when it is gone (the old one is cancelled) */
+async function resume(it) {
+  try {
+    const st = await api.uploadStatus(it.id)
+    if (st.total === it.total && Array.isArray(st.received)) return { chunkSize: it.chunkSize, total: st.total, received: st.received }
+  } catch (e) {
+    // offline or a server error: say so and keep the id, the next retry looks again
+    if (e.status !== 404 && e.status !== 403) throw e
+  }
+  const old = it.id
+  it.id = null
+  await api.uploadCancel(old).catch(() => {})
+  return null
 }
 
 function scheduleRefresh() {
@@ -200,7 +225,7 @@ function scheduleRefresh() {
 
 function cancel(it) {
   // a file that was never sent just leaves the list
-  if (it.final) { queue.value = queue.value.filter(i => i !== it); return }
+  if (it.final) { if (it.id) api.uploadCancel(it.id).catch(() => {}); queue.value = queue.value.filter(i => i !== it); return }
   it.canceled = true
   it.status = 'canceled'
   it.aborts.forEach(a => a())
@@ -215,6 +240,8 @@ function retry(it) {
 }
 
 function clearFinished() {
+  // a failed item that is dropped from the list must not keep its upload (and the quota it holds) on the server
+  for (const i of queue.value) if (i.status === 'error' && i.id) { api.uploadCancel(i.id).catch(() => {}); i.id = null }
   queue.value = queue.value.filter(i => ['queued', 'uploading', 'paused'].includes(i.status))
 }
 

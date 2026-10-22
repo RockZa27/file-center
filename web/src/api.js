@@ -140,6 +140,7 @@ export const api = {
   shareArchiveFileUrl: (token, path, entry) => `/api/s/${encodeURIComponent(token)}/archive/file?${qs({ path: path && path !== '/' ? path : undefined, entry })}`,
 
   uploadInit: (space, path, name, size, relativeDir) => post('/api/upload', { space, path, name, size, relativeDir }),
+  uploadStatus: id => get(`/api/upload/${id}`),
   uploadComplete: id => post(`/api/upload/${id}/complete`),
   uploadCancel: id => call('DELETE', `/api/upload/${id}`),
 

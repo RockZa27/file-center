@@ -68,7 +68,8 @@ export const useAppStore = defineStore('app', {
     },
     async init() {
       hooks.onUnauthorized = () => {
-        if (this.user) this.refresh()
+        // offline: the next call or the next visit finds out again, nobody needs an error for this
+        if (this.user) this.refresh().catch(() => { /* kept as it was */ })
       }
       i18n.global.locale.value = this.lang
       try {

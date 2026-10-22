@@ -387,27 +387,33 @@ async function loadUsage() {
   try { usage.value = await api.usage() } catch { /* the line is a nicety */ }
 }
 
+// only the newest read may touch the page: a slower answer for a folder the user already left is dropped
+let loadSeq = 0
 async function load(quiet = false) {
+  const mine = ++loadSeq
+  const where = location.value
   if (!quiet) loading.value = true
   error.value = ''
   loadUsage()
   app.loadFavorites()
   try {
-    const res = await api.list(props.space, location.value)
+    const res = await api.list(props.space, where)
+    if (mine !== loadSeq) return
     items.value = res.entries
     if (viewing.value) viewPerms.value = res.permissions || []
     checked.value = checked.value.filter(p => res.entries.some(e => e.path === p))
     applySelect()
   } catch (e) {
+    if (mine !== loadSeq) return
     // an old bookmark or a typed address: say why the page shows the top folder instead
-    if (e.status === 404 && location.value !== '/') {
-      fb.warn(t('files.folderNotFound', { path: location.value }))
+    if (e.status === 404 && where !== '/') {
+      fb.warn(t('files.folderNotFound', { path: where }))
       return go('/', true)
     }
     items.value = []
     error.value = e.message
   } finally {
-    loading.value = false
+    if (mine === loadSeq) loading.value = false
   }
 }
 

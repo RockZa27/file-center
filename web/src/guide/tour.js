@@ -5,7 +5,7 @@ import { useAppStore } from '../store'
 import { fullTour, resolve, tourIdsFor, tourSteps } from './tours'
 
 /** the signed-in user's onboarding state, as the server keeps it */
-export const guide = reactive({ loaded: false, seenVersion: null, toursDone: [] })
+export const guide = reactive({ loaded: false, owner: null, seenVersion: null, toursDone: [] })
 
 /** the what's-new / welcome window: mode 'welcome', 'news' (items newer than seenVersion) or 'all' (everything, for the help page) */
 export const whatsNew = reactive({ show: false, mode: 'news', releases: [] })
@@ -21,11 +21,30 @@ let token = 0
 /** where the user was when the tour began: a tour that walked through other pages brings them back */
 let origin = ''
 
+const currentUser = () => useAppStore().user?.username ?? null
+
+/** forget whatever was loaded: a different user (or nobody) is on the page now */
+export function resetGuide() {
+  guide.loaded = false
+  guide.owner = null
+  guide.seenVersion = null
+  guide.toursDone = []
+  tour.active = false
+  tour.targets = []
+  whatsNew.show = false
+}
+
 export async function loadGuide() {
+  const who = currentUser()
+  if (!who) return false
+  // the previous user's list must not outlive a failed read for this one
+  if (guide.owner !== who) resetGuide()
   try {
     const g = await api.guide()
+    if (currentUser() !== who) return false // signed out or in as someone else while it was on its way
     guide.seenVersion = g.seenVersion ?? null
     guide.toursDone = Array.isArray(g.toursDone) ? g.toursDone : []
+    guide.owner = who
     guide.loaded = true
     return true
   } catch {
@@ -33,14 +52,17 @@ export async function loadGuide() {
   }
 }
 
+/** what the guide holds was read for the user who is signed in now (only then is it written back) */
+const ownGuide = () => guide.loaded && guide.owner !== null && guide.owner === currentUser()
+
 export function saveSeen(version) {
-  if (!version) return
+  if (!version || !ownGuide()) return
   guide.seenVersion = version
   api.saveGuide({ seenVersion: version }).catch(() => { /* shown again next time */ })
 }
 
 function markDone(ids) {
-  if (!ids.length) return
+  if (!ids.length || !ownGuide()) return
   const merged = [...new Set([...guide.toursDone, ...ids])]
   if (merged.length === guide.toursDone.length) return
   guide.toursDone = merged
