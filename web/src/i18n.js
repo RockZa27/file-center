@@ -25,7 +25,16 @@ const th = {
     menu: 'เมนู', system: 'ระบบ', help: 'คู่มือการใช้งาน', helpTip: 'คู่มือการใช้งาน',
     section: { files: 'ไฟล์', sharing: 'การแชร์', manage: 'จัดการ', system: 'ระบบ' },
   },
-  help: { comingSoon: 'เร็วๆ นี้ — คู่มือการใช้งานกำลังจัดทำ' },
+  guide: {
+    menu: 'แนะนำการใช้งาน', close: 'ปิด', skip: 'ข้าม', back: 'ย้อนกลับ', next: 'ถัดไป', done: 'เสร็จสิ้น', gotIt: 'เข้าใจแล้ว', stepOf: '{n} / {total}',
+    showMe: 'พาไปดู', version: 'เวอร์ชัน {v}', newTitle: 'มีอะไรใหม่ในเวอร์ชัน {v}', allTitle: 'มีอะไรใหม่',
+    welcomeTitle: 'ยินดีต้อนรับสู่ {name}', welcomeLead: 'ที่นี่คุณเก็บ จัดการ และแชร์ไฟล์ได้อย่างปลอดภัย ให้เราพาชมสั้นๆ ว่าอะไรอยู่ตรงไหน ใช้เวลาไม่ถึงสองนาที',
+    welcomeHelp: 'ข้ามไปก่อนก็ได้ กดปุ่ม ? ที่มุมบนเมื่อไหร่ก็ได้เพื่อเปิดคู่มือหรือดูทัวร์อีกครั้ง', startTour: 'เริ่มทัวร์', skipTour: 'ข้าม',
+  },
+  help: {
+    subtitle: 'วิธีใช้งานแต่ละส่วน ค้นหาหัวข้อ หรือให้เราพาไปดูของจริง', restartTour: 'เริ่มทัวร์ใหม่ทั้งหมด', whatsNew: 'มีอะไรใหม่', search: 'ค้นหาหัวข้อ เช่น แชร์ ถังขยะ WebDAV',
+    none: 'ไม่พบหัวข้อที่ตรงกับ "{q}"', open: 'ไปที่หน้านี้', forAdmin: 'ผู้ดูแลระบบ', forStaff: 'ผู้ดูแล',
+  },
   system: { updateAvailable: 'มีเวอร์ชันใหม่' },
   login: {
     codeHelp: 'เปิดแอปยืนยันตัวตนบนมือถือ แล้วกรอกรหัส 6 หลัก', backupHelp: 'กรอกรหัสสำรองหนึ่งรหัส (ใช้ได้ครั้งเดียว)', code: 'รหัส 6 หลัก', backupCode: 'รหัสสำรอง',
@@ -515,7 +524,16 @@ const en = {
     menu: 'Menu', system: 'System', help: 'Help', helpTip: 'Help and user guide',
     section: { files: 'Files', sharing: 'Sharing', manage: 'Manage', system: 'System' },
   },
-  help: { comingSoon: 'Coming soon — the user guide is being written.' },
+  guide: {
+    menu: 'User guide', close: 'Close', skip: 'Skip', back: 'Back', next: 'Next', done: 'Done', gotIt: 'Got it', stepOf: '{n} / {total}',
+    showMe: 'Show me', version: 'Version {v}', newTitle: "What's new in {v}", allTitle: "What's new",
+    welcomeTitle: 'Welcome to {name}', welcomeLead: 'Store, manage and share your files safely here. Let us show you around in a short tour, it takes under two minutes.',
+    welcomeHelp: 'You can skip it for now. Press the ? button at the top any time to open the guide or see the tour again.', startTour: 'Start the tour', skipTour: 'Skip',
+  },
+  help: {
+    subtitle: 'How each part works. Search a topic, or let us show you the real thing.', restartTour: 'Restart the full tour', whatsNew: "What's new", search: 'Search topics, e.g. share, trash, WebDAV',
+    none: 'No topic matches "{q}"', open: 'Go to this page', forAdmin: 'Admin', forStaff: 'Manager',
+  },
   system: { updateAvailable: 'A new version is available' },
   login: {
     codeHelp: 'Open the authenticator app on your phone and enter the 6-digit code', backupHelp: 'Enter one of your backup codes (each works once)', code: '6-digit code', backupCode: 'Backup code',

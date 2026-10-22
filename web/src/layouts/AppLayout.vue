@@ -46,6 +46,8 @@
       <main><router-view :key="viewKey" /></main>
     </div>
     <profile-modal v-model:show="profileOpen" :open-tab="profileTab" />
+    <whats-new-modal />
+    <spotlight-tour />
   </div>
 </template>
 
@@ -55,13 +57,18 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { NAvatar, NBadge, NButton, NDropdown, NIcon } from 'naive-ui'
 import {
-  ContrastOutline, FolderOpenOutline, FolderOutline, GlobeOutline, HelpCircleOutline, KeyOutline, LanguageOutline, LinkOutline, LogOutOutline, MenuOutline, MoonOutline, PeopleCircleOutline, PersonOutline,
+  ContrastOutline, FolderOpenOutline, FolderOutline, GlobeOutline, BookOutline, HelpCircleOutline, KeyOutline, LanguageOutline, LinkOutline, LogOutOutline, MenuOutline, MoonOutline, PeopleCircleOutline, PersonOutline,
   ServerOutline, ShareSocialOutline, SpeedometerOutline, StarOutline, SunnyOutline, TimeOutline, TrashOutline,
 } from '@vicons/ionicons5'
 import { api } from '../api'
 import AppLogo from '../components/AppLogo.vue'
 import NotificationBell from '../components/NotificationBell.vue'
 import ProfileModal from '../components/ProfileModal.vue'
+import SpotlightTour from '../components/SpotlightTour.vue'
+import WhatsNewModal from '../components/WhatsNewModal.vue'
+import { releasesFor } from '../guide/releases'
+import { drawerHook, guide, loadGuide, openWhatsNew, saveSeen, startFullTour, tour } from '../guide/tour'
+import { compareVersions } from '../guide/util'
 import { useAppStore } from '../store'
 import { useRoleLabel } from '../composables'
 
@@ -75,6 +82,10 @@ const drawer = ref(false)
 const profileOpen = ref(false)
 const profileTab = ref('password')
 function openProfile(tab = 'password') { profileTab.value = tab; profileOpen.value = true }
+// the tour opens and closes the side menu drawer (a phone shows the menu as a drawer)
+drawerHook.open = () => { drawer.value = true }
+drawerHook.close = () => { drawer.value = false }
+drawerHook.isOpen = () => drawer.value
 const warnings = ref([])
 let timer = null
 
@@ -145,6 +156,7 @@ const userOptions = computed(() => [
       { key: 'lang:en', label: mark(app.lang === 'en', 'English') },
     ],
   },
+  { key: 'guide', label: t('guide.menu'), icon: () => h(NIcon, { component: BookOutline }) },
   { type: 'divider', key: 'd2' },
   { key: 'logout', label: t('nav.logout'), icon: () => h(NIcon, { component: LogOutOutline }) },
 ])
@@ -152,6 +164,7 @@ const mark = (on, text) => (on ? '✓ ' : '') + text
 
 async function onSelect(key) {
   if (key === 'profile') openProfile()
+  if (key === 'guide') startFullTour()
   if (key.startsWith('theme:')) app.setTheme(key.slice(6))
   if (key.startsWith('lang:')) app.setLang(key.slice(5))
   if (key === 'logout') {
@@ -178,17 +191,43 @@ const viewKey = ref(0)
 watch(() => app.user?.mustChangePassword, (now, before) => {
   if (before && !now) { viewKey.value++; loadWarnings() }
 })
+
+// a new user gets the welcome (and the tour), a user who updated gets what is new; nothing while the forced password dialog is up
+let guideChecked = false
+function showGuide() {
+  if (guideChecked || !guide.loaded || !app.user || app.user.mustChangePassword || profileOpen.value) return
+  const version = app.config.version
+  if (!version) return
+  guideChecked = true
+  if (guide.seenVersion == null) return openWhatsNew('welcome', [])
+  if (compareVersions(guide.seenVersion, version) >= 0) return
+  const news = releasesFor(app.user.role, guide.seenVersion, version, { webdav: !!app.config.webdav })
+  if (news.length) openWhatsNew('news', news)
+  else saveSeen(version)
+}
+// (the server answers nothing until a handed-out password is changed, so the guide is fetched after that)
+function bootGuide() {
+  if (!app.user || app.user.mustChangePassword) return
+  guide.loaded = false
+  loadGuide().then(showGuide)
+}
+watch(() => app.user?.mustChangePassword, (now, before) => { if (before && !now) bootGuide() })
+watch(profileOpen, showGuide)
 const onVisible = () => document.visibilityState === 'visible' && checkSession()
 
 onMounted(() => {
   if (app.user?.mustChangePassword) profileOpen.value = true
   loadWarnings()
   app.loadGroups()
+  bootGuide()
   timer = setInterval(() => { checkSession(); loadWarnings() }, 2 * 60 * 1000)
   document.addEventListener('visibilitychange', onVisible)
 })
 onBeforeUnmount(() => {
   clearInterval(timer)
+  tour.active = false
+  drawerHook.open = drawerHook.close = null
+  drawerHook.isOpen = () => false
   document.removeEventListener('visibilitychange', onVisible)
 })
 </script>

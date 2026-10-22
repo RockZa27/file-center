@@ -236,6 +236,10 @@ export const api = {
   notificationsRead: ids => post('/api/me/notifications/read', ids ? { ids } : {}),
   notificationDelete: id => call('DELETE', `/api/me/notifications/${encodeURIComponent(id)}`),
   notifyPrefs: () => get('/api/me/notify-prefs'),
+  /** the signed-in user's onboarding state: { seenVersion, toursDone } */
+  guide: () => get('/api/me/guide'),
+  /** per-field replace: send `seenVersion` and/or the full `toursDone` list */
+  saveGuide: body => call('PUT', '/api/me/guide', body),
   saveNotifyPrefs: body => call('PUT', '/api/me/notify-prefs', body),
   setEmail: address => call('PUT', '/api/me/email', { address }),
   removeEmail: () => call('DELETE', '/api/me/email'),
