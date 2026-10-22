@@ -152,6 +152,7 @@ afterAll(() => {
 
 afterEach(() => {
   thumbs.resetTools()
+  thumbs.resetFailures()
   Object.assign(thumbs.limits, { running: 2, queue: 16, timeoutMs: 10_000, maxPixels: 100_000_000, maxImageBytes: 500 * 1024 ** 2, failMs: 5 * 60_000 })
 })
 
@@ -339,10 +340,32 @@ describe('limits (fake tools, run everywhere)', () => {
     expect(Date.now() - t0).toBeLessThan(5000)
     // the work files are gone
     expect(readdirSync(join(paths.thumbs, 'tmp'))).toEqual([])
-    // and it is not started again for the next request
+    // a timeout says nothing about the file: the next request tries again (it is not remembered as a failure)
     const before = thumbs.stats.spawned
     expect((await thumb(owner, '/slow.mp4')).status).toBe(404)
+    expect(thumbs.stats.spawned).toBeGreaterThan(before)
+  })
+
+  test('a timeout is not remembered: once the tool is fast enough the thumbnail is made', async () => {
+    thumbs.setTools({ ffmpeg: fakeTool('fake-slow-then-fast', 'exec sleep 30') })
+    thumbs.limits.timeoutMs = 300
+    writeFileSync(home('th-owner', 'later.mp4'), 'later')
+    expect((await thumb(owner, '/later.mp4')).status).toBe(404)
+    thumbs.setTools({ ffmpeg: fakeTool('fake-fast', `for a; do last=$a; done\nprintf 'RIFF....WEBPVP8 ' > "$last"`) })
+    thumbs.limits.timeoutMs = 10_000
+    expect((await thumb(owner, '/later.mp4')).status).toBe(200)
+  })
+
+  test('a tool that ran and said "no" is remembered, until resetFailures()', async () => {
+    thumbs.setTools({ ffmpeg: fakeTool('fake-no', 'exit 1') })
+    writeFileSync(home('th-owner', 'never.mp4'), 'never')
+    expect((await thumb(owner, '/never.mp4')).status).toBe(404)
+    const before = thumbs.stats.spawned
+    expect((await thumb(owner, '/never.mp4')).status).toBe(404)
     expect(thumbs.stats.spawned).toBe(before)
+    thumbs.resetFailures()
+    expect((await thumb(owner, '/never.mp4')).status).toBe(404)
+    expect(thumbs.stats.spawned).toBeGreaterThan(before)
   })
 
   test('no more than two run at once; the others wait, and when the queue is full the answer is 503 with Retry-After', async () => {

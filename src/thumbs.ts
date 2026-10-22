@@ -119,7 +119,8 @@ function toolEnv(): Record<string, string> {
   }
 }
 
-type Ran = { ok: boolean; out: string; timedOut: boolean }
+/** `transient`: the tool did not get to give an answer (timeout, could not start), so a failure says nothing about the file */
+type Ran = { ok: boolean; out: string; timedOut: boolean; transient?: boolean }
 
 /** one tool, killed (only it) when it runs past `timeoutMs`; its output is read only when `capture` says so */
 async function run(argv: string[], timeoutMs: number, capture = false): Promise<Ran> {
@@ -128,7 +129,7 @@ async function run(argv: string[], timeoutMs: number, capture = false): Promise<
   try {
     proc = Bun.spawn(argv, { stdin: 'ignore', stdout: capture ? 'pipe' : 'ignore', stderr: 'ignore', env: toolEnv(), cwd: join(paths.thumbs, 'tmp') })
   } catch {
-    return { ok: false, out: '', timedOut: false }
+    return { ok: false, out: '', timedOut: false, transient: true }
   }
   let timedOut = false
   const timer = setTimeout(() => { timedOut = true; proc.kill('SIGKILL') }, Math.max(1, timeoutMs))
@@ -137,7 +138,7 @@ async function run(argv: string[], timeoutMs: number, capture = false): Promise<
     const read = capture ? readCapped(proc.stdout as ReadableStream<Uint8Array>) : Promise.resolve('')
     const code = await proc.exited
     const out = await Promise.race([read, new Promise<string>(r => setTimeout(() => r(''), 300))])
-    return { ok: code === 0 && !timedOut, out, timedOut }
+    return { ok: code === 0 && !timedOut, out, timedOut, transient: timedOut }
   } finally {
     clearTimeout(timer)
   }
@@ -161,8 +162,17 @@ async function readCapped(stream: ReadableStream<Uint8Array>, max = 16 * 1024): 
 
 export type Plan = { abs: string; key: string; kind: Kind; size: ThumbSize; ext: 'webp' | 'jpg'; mime: string }
 
-/** files that failed: until when they are not tried again, and the answer they get meanwhile */
+/**
+ * Files this tool says it can not thumbnail: until when they are not tried again, and the answer they get meanwhile.
+ * Only that verdict is kept. A timeout, a tool that could not start or a busy queue says nothing about the file, so the
+ * next request tries again (one slow minute must not hide a file's thumbnail for five).
+ */
 const failed = new Map<string, { until: number; code: 'thumb.unavailable' | 'thumb.too-big' }>()
+
+/** forget every remembered failure (tests: one slow run must not decide the next test) */
+export function resetFailures() {
+  failed.clear()
+}
 
 /** the key of one version of a file at one size */
 export const cacheKey = (stored: string, size: number, st: { size: number; mtimeMs: number }) =>
@@ -252,6 +262,12 @@ async function generate(p: Plan): Promise<string> {
   const out = join(work, `out-${id}.${p.ext}`)
   const deadline = Date.now() + limits.timeoutMs
   const left = () => deadline - Date.now()
+  let transient = false
+  const ran = async (argv: string[], capture = false) => {
+    const r = await run(argv, left(), capture)
+    if (r.transient) transient = true
+    return r
+  }
   try {
     let real: string
     try { real = realpathSync(p.abs) } catch { throw notFound() }
@@ -260,17 +276,17 @@ async function generate(p: Plan): Promise<string> {
 
     if (p.kind === 'image') {
       // the size in pixels first: a small file can unpack to billions
-      const head = await run([toolPath.vipsheader!, link], left(), true)
+      const head = await ran([toolPath.vipsheader!, link], true)
       const dims = /:\s*(\d+)x(\d+)\b/.exec(head.out)
       if (!head.ok || !dims) throw unavailable()
       if (Number(dims[1]) * Number(dims[2]) > limits.maxPixels) throw tooBig()
       const q = p.size === 256 ? 75 : 80
       // ">" = only ever make it smaller
-      const r = await run([toolPath.vipsthumbnail!, link, '--size', `${N}x${N}>`, '-o', `${out}[Q=${q},strip]`], left())
+      const r = await ran([toolPath.vipsthumbnail!, link, '--size', `${N}x${N}>`, '-o', `${out}[Q=${q},strip]`])
       if (!r.ok) throw unavailable()
     } else if (p.kind === 'pdf') {
       // the first page only; -singlefile writes <prefix>.jpg
-      const r = await run([toolPath.pdftoppm!, '-q', '-f', '1', '-l', '1', '-scale-to', N, '-jpeg', '-jpegopt', 'quality=80', '-singlefile', link, out.slice(0, -4)], left())
+      const r = await ran([toolPath.pdftoppm!, '-q', '-f', '1', '-l', '1', '-scale-to', N, '-jpeg', '-jpegopt', 'quality=80', '-singlefile', link, out.slice(0, -4)])
       if (!r.ok) throw unavailable()
     } else {
       const demux = VIDEO_DEMUX[ext] ?? VIDEO_DEMUX['.mp4']
@@ -278,8 +294,8 @@ async function generate(p: Plan): Promise<string> {
       const base = [toolPath.ffmpeg!, '-nostdin', '-hide_banner', '-v', 'error', '-threads', '1', '-protocol_whitelist', 'file', '-f', demux]
       const tail = ['-i', link, '-an', '-sn', '-frames:v', '1', '-vf', scale, '-c:v', 'libwebp', '-quality', '75', '-y', out]
       // a frame at one second; a clip shorter than that gives nothing, so it is asked again for its first frame
-      let r = await run([...base, '-ss', '1', ...tail], left())
-      if (r.ok && sizeOf(out) <= EMPTY) r = await run([...base, ...tail], left())
+      let r = await ran([...base, '-ss', '1', ...tail])
+      if (r.ok && sizeOf(out) <= EMPTY) r = await ran([...base, ...tail])
       if (!r.ok) throw unavailable()
     }
 
@@ -289,7 +305,8 @@ async function generate(p: Plan): Promise<string> {
     renameSync(out, file)
     return file
   } catch (err) {
-    if (!(err instanceof HttpError && err.code === 'thumb.busy')) {
+    const verdict = err instanceof HttpError && (err.code === 'thumb.unavailable' || err.code === 'thumb.too-big')
+    if (verdict && !(transient && err.code === 'thumb.unavailable')) {
       failed.set(p.key, { until: Date.now() + limits.failMs, code: err instanceof HttpError && err.code === 'thumb.too-big' ? 'thumb.too-big' : 'thumb.unavailable' })
     }
     if (failed.size > 5000) failed.clear()
