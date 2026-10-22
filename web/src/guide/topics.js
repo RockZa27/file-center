@@ -183,8 +183,8 @@ export const topics = [
     title: { th: 'อัปเดตระบบ', en: 'Updating' },
     keywords: { th: 'อัปเดต เวอร์ชัน แพ็กเกจ', en: 'update version package upgrade' },
     text: {
-      th: ['ที่แท็บ "อัปเดตระบบ" อัปโหลดแพ็กเกจเวอร์ชันใหม่ ระบบจะสำรองข้อมูลก่อน แล้วติดตั้งและเริ่มใหม่ จุดสีฟ้าบนเมนู "ระบบ" แปลว่ามีเวอร์ชันใหม่'],
-      en: ['In the "Update" tab upload a new version package. The system backs up first, then installs and restarts. A blue dot on the "System" menu means a new version is available.'],
+      th: ['ที่แท็บ "อัปเดตระบบ" กด "ตรวจและอัปเดต" หรืออัปโหลดแพ็กเกจเวอร์ชันใหม่ ระบบตรวจลายเซ็น ติดตั้ง แล้วเริ่มใหม่เอง เวอร์ชันเดิมยังเก็บไว้ ถ้ามีปัญหาย้อนกลับได้จากประวัติเวอร์ชัน จุดสีฟ้าบนเมนู "ระบบ" แปลว่ามีเวอร์ชันใหม่'],
+      en: ['In the "Update" tab press "Check and update" or upload a new version package. The system checks its signature, installs it and restarts by itself. The previous version is kept, so you can roll back from the version history if something is wrong. A blue dot on the "System" menu means a new version is available.'],
     },
   },
 ]
