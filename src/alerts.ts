@@ -8,6 +8,7 @@
  * ALERT_LANG and passes through `scrub` like the log, so no password, token or cookie leaves; IPs appear as in the
  * activity log. startAlerts (index.ts) runs the checks that have no request of their own to hang on.
  */
+import { basename } from 'node:path'
 import { config } from './config'
 import { conflict, HttpError } from './fsx'
 import { clean, errorsSince, log, scrub } from './logger'
@@ -15,9 +16,10 @@ import { MESSAGES, text, type MessageCode, type Params } from './messages'
 import { mirrorAlert, resetNotifyLimits } from './notify'
 import { settings } from './settings'
 import { DISK_CRITICAL_PERCENT, diskInfo } from './stats'
+import { JsonStore } from './store'
 import { lookForNewVersion } from './update-source'
 
-export type AlertKind = 'test' | 'backup-failed' | 'errors' | 'lockout' | 'disk-critical' | 'update-available'
+export type AlertKind = 'test' | 'backup-failed' | 'errors' | 'lockout' | 'disk-critical' | 'update-available' | 'store-write-failed'
 const WEBHOOK_KINDS = ['discord', 'slack', 'telegram', 'json'] as const
 type WebhookKind = (typeof WEBHOOK_KINDS)[number]
 
@@ -147,6 +149,11 @@ export async function sendTestAlert(): Promise<void> {
   lastSent.test = new Date().toISOString()
   const r = render('admin.alert-test', {})
   await post(t.url, payload(t.kind, 'test', 'admin.alert-test', r.message, r.params))
+}
+
+// a data file that could not be written (disk full, no permission) after several tries: the change is only in memory
+JsonStore.onWriteFailed = (file, error) => {
+  alert('store-write-failed', 'admin.alert-store-write', { file: basename(file), reason: (error as Error)?.message ?? String(error) })
 }
 
 /** wait for the alerts on their way (tests) */

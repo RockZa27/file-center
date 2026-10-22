@@ -1,0 +1,180 @@
+/**
+ * Durability fixes of 1.12.1: the stores are flushed before the server is waited for, a failed write is retried and
+ * reported, a corrupt data file stops the start, a crash while trashing leaves nothing invisible, backups keep their
+ * old copies until the new one is complete, a slow release is not deleted, a restore on another host says that 2FA
+ * secrets can not be opened. Runs in-process on the same app as api.test.ts (see in-process-env.ts); the parts that
+ * end the process or fail at import time run in a child process of their own.
+ */
+import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { join, resolve } from 'node:path'
+import { base } from './in-process-env'
+
+const ROOT = resolve(import.meta.dir, '..')
+const scratch = mkdtempSync(join(base, 'durability-'))
+let n = 0
+const fresh = (name: string) => { const d = join(scratch, `${name}-${++n}`); mkdirSync(d, { recursive: true }); return d }
+
+/** run a script in a child bun with its own data folders; returns exit code and what it printed */
+async function child(script: string, env: Record<string, string> = {}) {
+  const dir = fresh('child')
+  const file = join(dir, 'run.ts')
+  writeFileSync(file, script)
+  const proc = Bun.spawn([process.execPath, file], {
+    cwd: dir, stdout: 'pipe', stderr: 'pipe',
+    env: { PATH: process.env.PATH!, HOME: dir, DATA_DIR: join(dir, 'data'), STORAGE_DIR: join(dir, 'storage'), ADMIN_PASSWORD: 'x-test-pass-1', UPDATE_SOURCE: 'off', ...env },
+  })
+  const [out, err, code] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited])
+  return { code, out, err, dir }
+}
+const src = (name: string) => JSON.stringify(join(ROOT, 'src', name))
+
+describe('shutdown writes the stores before it waits for the server', () => {
+  test('a server that never stops (a long transfer) does not cost the queued changes', async () => {
+    const file = join(fresh('shutdown'), 'a.json')
+    const r = await child(`
+      import { JsonStore } from ${src('store')}
+      import { onStop, shutdown } from ${src('lifecycle')}
+      const s = new JsonStore<{ n: number }>(${JSON.stringify(file)}, () => ({ n: 0 }))
+      s.updateSoon(d => { d.n = 5 }, 60_000)
+      onStop(() => new Promise(() => {}))
+      await shutdown(0, 2000, 200)
+    `)
+    expect(r.code).toBe(0)
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({ n: 5 })
+  })
+
+  test('a change made while the server drains is written too', async () => {
+    const file = join(fresh('shutdown'), 'a.json')
+    const r = await child(`
+      import { JsonStore } from ${src('store')}
+      import { onStop, shutdown } from ${src('lifecycle')}
+      const s = new JsonStore<{ n: number }>(${JSON.stringify(file)}, () => ({ n: 0 }))
+      onStop(async () => { s.updateSoon(d => { d.n = 9 }, 60_000); await new Promise(() => {}) })
+      await shutdown(0, 3000, 200)
+    `)
+    expect(r.code).toBe(0)
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({ n: 9 })
+  })
+
+  test('when the time runs out first, what is only in memory is written before the exit', async () => {
+    const file = join(fresh('shutdown'), 'a.json')
+    const r = await child(`
+      import { JsonStore } from ${src('store')}
+      import { onStop, shutdown } from ${src('lifecycle')}
+      const s = new JsonStore<{ n: number }>(${JSON.stringify(file)}, () => ({ n: 0 }))
+      onStop(async () => { s.updateSoon(d => { d.n = 7 }, 60_000); await new Promise(() => {}) })
+      await shutdown(3, 500, 60_000)
+    `)
+    expect(r.code).toBe(3)
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({ n: 7 })
+  })
+})
+
+describe('JsonStore: a write that fails', () => {
+  let JsonStore: typeof import('../src/store').JsonStore
+  let keep: typeof JsonStore.retry
+  let keepHook: typeof JsonStore.onWriteFailed
+  beforeAll(async () => {
+    ;({ JsonStore } = await import('../src/store'))
+    await import('../src/alerts') // registers the hook the last test looks at
+    keep = { ...JsonStore.retry, delaysMs: [...JsonStore.retry.delaysMs] }
+    keepHook = JsonStore.onWriteFailed
+  })
+  afterEach(() => {
+    JsonStore.retry = { ...keep, delaysMs: [...keep.delaysMs] }
+    JsonStore.onWriteFailed = keepHook
+  })
+
+  /** a store whose folder is gone, so every write fails */
+  function broken() {
+    const dir = fresh('store')
+    const file = join(dir, 'disk-full-demo.json')
+    const s = new JsonStore<{ n: number }>(file, () => ({ n: 0 }))
+    rmSync(dir, { recursive: true, force: true })
+    return { dir, file, s }
+  }
+
+  test('is retried, reported once when the tries run out, and written once the disk works again', async () => {
+    JsonStore.retry = { delaysMs: [1, 1], laterMs: 60_000 }
+    const reports: string[] = []
+    JsonStore.onWriteFailed = file => { reports.push(file) }
+    const { dir, file, s } = broken()
+    s.update(d => { d.n = 1 })
+    await s.idle()
+    expect(reports).toEqual([file])
+    mkdirSync(dir, { recursive: true })
+    s.update(d => { d.n = 2 })
+    await s.idle()
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({ n: 2 })
+    expect(reports.length).toBe(1)
+  })
+
+  test('a store whose tries ran out tries again by itself', async () => {
+    JsonStore.retry = { delaysMs: [], laterMs: 20 }
+    JsonStore.onWriteFailed = () => {}
+    const { dir, file, s } = broken()
+    s.update(d => { d.n = 4 })
+    await s.idle()
+    expect(existsSync(file)).toBe(false)
+    mkdirSync(dir, { recursive: true })
+    const until = Date.now() + 10_000
+    while (!existsSync(file) && Date.now() < until) await Bun.sleep(10)
+    await s.idle()
+    expect(JSON.parse(readFileSync(file, 'utf8'))).toEqual({ n: 4 })
+  })
+
+  test('the admin is alerted (alerts.ts registers itself on the store)', async () => {
+    const alerts = await import('../src/alerts')
+    const { config } = await import('../src/config')
+    const got: any[] = []
+    const hook = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: async req => { got.push(await req.json()); return new Response('ok') } })
+    const saved = { url: config.alertWebhookUrl, kind: config.alertWebhookKind }
+    try {
+      Object.assign(config, { alertWebhookUrl: `http://127.0.0.1:${hook.port}/h`, alertWebhookKind: 'json' })
+      alerts.resetAlerts()
+      JsonStore.retry = { delaysMs: [], laterMs: 60_000 }
+      const { s } = broken()
+      s.update(d => { d.n = 1 })
+      await s.idle()
+      await alerts.alertsIdle()
+      expect(got.map(g => g.event)).toEqual(['store-write-failed'])
+      expect(got[0].code).toBe('admin.alert-store-write')
+      expect(got[0].message).toContain('disk-full-demo.json')
+    } finally {
+      Object.assign(config, { alertWebhookUrl: saved.url, alertWebhookKind: saved.kind })
+      alerts.resetAlerts()
+      hook.stop(true)
+    }
+  })
+})
+
+describe('a corrupt data file stops the start', () => {
+  for (const [module, file] of [['groups', 'groups.json'], ['grants', 'grants.json'], ['shares', 'shares.json'], ['app-passwords', 'app-passwords.json']] as const) {
+    test(`${file} is not reset to empty`, async () => {
+      const dir = fresh('corrupt')
+      const data = join(dir, 'data')
+      mkdirSync(data, { recursive: true })
+      writeFileSync(join(data, file), '{ "broken": ')
+      const r = await child(`await import(${src(module)}); console.log('started')`, { DATA_DIR: data, STORAGE_DIR: join(dir, 'storage') })
+      expect(r.code).not.toBe(0)
+      expect(r.out).not.toContain('started')
+      // the file is still the broken one, one copy is kept, and the message says what to do
+      expect(readFileSync(join(data, file), 'utf8')).toBe('{ "broken": ')
+      expect(readdirSync(data).filter(f => f.startsWith(`${file}.broken-`)).length).toBe(1)
+      expect(r.err).toContain(file)
+      expect(r.err).toContain('To recover')
+      expect(r.err).toContain('วิธีแก้')
+    })
+  }
+
+  test('favorites and recents still start fresh', async () => {
+    const { JsonStore } = await import('../src/store')
+    const file = join(fresh('corrupt'), 'user-state.json')
+    writeFileSync(file, 'nope')
+    expect(new JsonStore<Record<string, number>>(file, () => ({ fresh: 1 })).value).toEqual({ fresh: 1 })
+    expect(readdirSync(join(file, '..')).some(f => f.startsWith('user-state.json.broken-'))).toBe(true)
+  })
+})
+
+afterAll(() => { rmSync(scratch, { recursive: true, force: true }) })

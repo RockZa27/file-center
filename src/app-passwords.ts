@@ -43,7 +43,7 @@ const BASE62 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789'
 // here: every sign-in that is not in the cache pays it, and a flood of wrong ones must not cost the server much.
 const HASH_OPTIONS = { algorithm: 'argon2id', memoryCost: 8192, timeCost: 2 } as const
 
-const store = new JsonStore<{ items: AppPassword[] }>(paths.appPasswords, () => ({ items: [] }))
+const store = new JsonStore<{ items: AppPassword[] }>(paths.appPasswords, () => ({ items: [] }), { onCorrupt: 'fail' })
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
 
 /** what the list shows: never the hash */

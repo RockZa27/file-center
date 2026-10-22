@@ -298,7 +298,7 @@ if (import.meta.main) {
     log.error('uncaught-exception', err)
     process.exit(1)
   })
-  onStop(async () => { stopSearchIndex(); await app.stop() })
+  onStop(async force => { stopSearchIndex(); await app.stop(force) })
   startAlerts()
   startSearchIndex() // built in the background: searches walk the disk until it is ready
   // docker stop, Ctrl+C and updates: finish writing users, sessions and settings before leaving

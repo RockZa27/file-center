@@ -44,7 +44,7 @@ const PERMS: Record<GrantPerms, Perm[]> = {
   edit: ['read', 'download', 'batchdownload', 'zip', 'upload', 'write'],
 }
 
-const store = new JsonStore<{ grants: Grant[] }>(paths.grants, () => ({ grants: [] }))
+const store = new JsonStore<{ grants: Grant[] }>(paths.grants, () => ({ grants: [] }), { onCorrupt: 'fail' })
 
 export const allGrants = () => store.value.grants
 export const findGrant = (id: unknown) => (typeof id === 'string' ? allGrants().find(g => g.id === id) : undefined)

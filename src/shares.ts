@@ -75,7 +75,7 @@ export const SHARE_LOCKOUT: Lockout = { max: 5, lockMs: 15 * 60_000 }
 export const UNLOCK_MS = 60 * 60_000
 export const SHARE_COOKIE = 'fc_share'
 
-const store = new JsonStore<{ shares: Share[] }>(paths.shares, () => ({ shares: [] }))
+const store = new JsonStore<{ shares: Share[] }>(paths.shares, () => ({ shares: [] }), { onCorrupt: 'fail' })
 
 /** 32 random bytes, base64url: 43 characters */
 const TOKEN_RE = /^[A-Za-z0-9_-]{43}$/

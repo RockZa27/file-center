@@ -38,7 +38,7 @@ const PERMS: Record<GroupPerms, Perm[]> = {
   edit: ['read', 'download', 'batchdownload', 'zip', 'upload', 'write'],
 }
 
-const store = new JsonStore<{ groups: Group[] }>(paths.groups, () => ({ groups: [] }))
+const store = new JsonStore<{ groups: Group[] }>(paths.groups, () => ({ groups: [] }), { onCorrupt: 'fail' })
 
 const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
 export const allGroups = () => store.value.groups

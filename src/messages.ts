@@ -185,6 +185,10 @@ export const MESSAGES = {
   // alerts sent to ALERT_WEBHOOK_URL (alerts.ts), in ALERT_LANG
   'admin.alert-test': { th: 'ทดสอบการแจ้งเตือน: ระบบส่งข้อความถึงช่องทางนี้ได้', en: 'Test alert: messages reach this channel.' },
   'admin.alert-errors': { th: 'มี error {count} รายการในชั่วโมงที่ผ่านมา (เกิน {max} รายการ) ดูได้ที่หน้า log ของระบบ', en: '{count} errors in the last hour (more than {max}). See the system log page.' },
+  'admin.alert-store-write': {
+    th: 'บันทึกไฟล์ข้อมูล {file} ไม่สำเร็จ ({reason}) การเปลี่ยนแปลงล่าสุดยังอยู่ในหน่วยความจำเท่านั้นและจะหายถ้าระบบรีสตาร์ต ตรวจพื้นที่ดิสก์และสิทธิ์ของ DATA_DIR ระบบจะลองบันทึกซ้ำเอง',
+    en: 'Could not save the data file {file} ({reason}). The latest changes are only in memory and are lost if the app restarts. Check the disk space and the permissions of DATA_DIR; the app will try again by itself.',
+  },
   'admin.alert-login-locked': {
     th: 'ล็อกการเข้าสู่ระบบของ {user} จาก IP {ip} ชั่วคราว เพราะใส่รหัสผ่านผิดหลายครั้ง',
     en: 'Sign-in for {user} from IP {ip} is locked for a while after too many wrong passwords.',
