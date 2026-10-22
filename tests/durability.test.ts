@@ -134,13 +134,17 @@ describe('JsonStore: a write that fails', () => {
       Object.assign(config, { alertWebhookUrl: `http://127.0.0.1:${hook.port}/h`, alertWebhookKind: 'json' })
       alerts.resetAlerts()
       JsonStore.retry = { delaysMs: [], laterMs: 60_000 }
-      const { s } = broken()
+      const { dir, s } = broken()
       s.update(d => { d.n = 1 })
       await s.idle()
       await alerts.alertsIdle()
       expect(got.map(g => g.event)).toEqual(['store-write-failed'])
       expect(got[0].code).toBe('admin.alert-store-write')
       expect(got[0].message).toContain('disk-full-demo.json')
+      // the "disk" works again: nothing is left that would try (and fail, and alert) minutes into another test file
+      mkdirSync(dir, { recursive: true })
+      s.save()
+      await s.idle()
     } finally {
       Object.assign(config, { alertWebhookUrl: saved.url, alertWebhookKind: saved.kind })
       alerts.resetAlerts()
