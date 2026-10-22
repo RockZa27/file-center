@@ -177,4 +177,98 @@ describe('a corrupt data file stops the start', () => {
   })
 })
 
+describe('trash: a crash between the move and the record', () => {
+  let trash: typeof import('../src/trash')
+  let paths: typeof import('../src/config').paths
+  let config: typeof import('../src/config').config
+  beforeAll(async () => {
+    trash = await import('../src/trash')
+    ;({ paths, config } = await import('../src/config'))
+  })
+  const ids: string[] = []
+  const newId = () => { const id = `${String(9_000_000_000_000 + ++n)}_${(0xabc00000 + n).toString(16)}`; ids.push(id); return id }
+  afterEach(() => { for (const id of ids.splice(0)) rmSync(join(paths.trash, id), { recursive: true, force: true }) })
+
+  test('the record is on disk before the item moves, and a crash in the move loses nothing', async () => {
+    // the process "dies" right after the item moved: a child runs the real code against a data folder of its own
+    const dir = fresh('trash-crash')
+    const data = join(dir, 'data')
+    const storage = join(dir, 'storage')
+    mkdirSync(storage, { recursive: true })
+    writeFileSync(join(storage, 'precious.txt'), 'keep me')
+    const r = await child(`
+      import { rename } from 'node:fs/promises'
+      import { ensureDirs } from ${src('config')}
+      ensureDirs()
+      const trash = await import(${src('trash')})
+      trash.trashDeps.move = async (from, to) => { await rename(from, to); process.exit(9) }
+      await trash.moveToTrash(${JSON.stringify(join(storage, 'precious.txt'))}, 'tester')
+    `, { DATA_DIR: data, STORAGE_DIR: storage })
+    expect(r.code).toBe(9)
+    const [id] = readdirSync(join(data, 'trash'))
+    expect(existsSync(join(data, 'trash', id, 'item'))).toBe(true)
+    expect(JSON.parse(readFileSync(join(data, 'trash', id, 'meta.json'), 'utf8'))).toMatchObject({ id, name: 'precious.txt', originalPath: '/precious.txt' })
+  })
+
+  test('an item without a record (an older version crashed there) is adopted, owner nobody', async () => {
+    const id = newId()
+    mkdirSync(join(paths.trash, id, 'item'), { recursive: true })
+    writeFileSync(join(paths.trash, id, 'item', 'a.txt'), 'abcd')
+    expect(trash.listTrash().some(m => m.id === id)).toBe(false)
+    expect(trash.repairTrash().adopted).toBe(1)
+    const meta = trash.listTrash().find(m => m.id === id)!
+    expect(meta).toMatchObject({ type: 'dir', size: 4, owner: null, space: 'other', deletedBy: 'system' })
+    expect(Date.now() - Date.parse(meta.deletedAt)).toBeLessThan(60_000)
+    // an adopted entry is whole now
+    expect(trash.repairTrash()).toEqual({ adopted: 0, purged: 0 })
+    const back = await trash.restore(id)
+    try {
+      expect(back.restoredTo).toBe(`/recovered-from-trash/${id}`)
+      expect(readFileSync(join(config.storageDir, 'recovered-from-trash', id, 'a.txt'), 'utf8')).toBe('abcd')
+    } finally {
+      rmSync(join(config.storageDir, 'recovered-from-trash'), { recursive: true, force: true })
+    }
+  })
+
+  test('a record without an item is removed; a complete entry is left alone', () => {
+    const record = (id: string, name: string) => JSON.stringify({ id, name, type: 'file', size: 1, originalPath: name, deletedAt: new Date().toISOString(), deletedBy: 'u' })
+    const lonely = newId()
+    mkdirSync(join(paths.trash, lonely), { recursive: true })
+    writeFileSync(join(paths.trash, lonely, 'meta.json'), record(lonely, 'x'))
+    const whole = newId()
+    mkdirSync(join(paths.trash, whole), { recursive: true })
+    writeFileSync(join(paths.trash, whole, 'item'), 'x')
+    writeFileSync(join(paths.trash, whole, 'meta.json'), record(whole, 'y'))
+    expect(trash.repairTrash().purged).toBe(1)
+    expect(existsSync(join(paths.trash, lonely))).toBe(false)
+    expect(existsSync(join(paths.trash, whole, 'item'))).toBe(true)
+    expect(trash.listTrash().some(m => m.id === whole)).toBe(true)
+  })
+
+  test('an entry being made right now is not touched', async () => {
+    const file = join(config.storageDir, `durability-slow-${++n}.txt`)
+    mkdirSync(config.storageDir, { recursive: true })
+    writeFileSync(file, 'slow')
+    let seen: { adopted: number; purged: number } | null = null
+    let listed = true
+    const real = trash.trashDeps.move
+    trash.trashDeps.move = async (from, to) => {
+      // the record is there, the item is not yet: neither repair nor the list may act on it
+      seen = trash.repairTrash()
+      listed = trash.listTrash().some(m => to.includes(m.id))
+      await real(from, to)
+    }
+    try {
+      const meta = await trash.moveToTrash(file, 'tester')
+      ids.push(meta.id)
+      expect(seen).toEqual({ adopted: 0, purged: 0 })
+      expect(listed).toBe(false)
+      expect(existsSync(join(paths.trash, meta.id, 'item'))).toBe(true)
+      expect(trash.listTrash().some(m => m.id === meta.id)).toBe(true)
+    } finally {
+      trash.trashDeps.move = real
+    }
+  })
+})
+
 afterAll(() => { rmSync(scratch, { recursive: true, force: true }) })

@@ -40,7 +40,7 @@ import { findGroup, groupSpacesOf } from './groups'
 import { notify } from './notify'
 import { purgeExpiredShares } from './shares'
 import { pruneThumbs } from './thumbs'
-import { purgeExpired } from './trash'
+import { purgeExpired, repairTrash } from './trash'
 import { purgeExpiredVersions } from './versions'
 import { cleanStaleUploads } from './uploads'
 import { officeConfig, officeOrigin } from './office'
@@ -81,6 +81,8 @@ if (config.lineChannelToken && !config.lineChannelSecret) log.warn('line-no-secr
 
 function housekeeping() {
   try {
+    const repaired = repairTrash()
+    if (repaired.adopted || repaired.purged) log.info('trash-repaired', repaired)
     const trash = purgeExpired()
     const versions = purgeExpiredVersions()
     const uploads = cleanStaleUploads()

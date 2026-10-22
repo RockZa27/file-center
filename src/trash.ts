@@ -1,5 +1,5 @@
 import { randomBytes } from 'node:crypto'
-import { existsSync, lstatSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs'
 import { basename, dirname, join } from 'node:path'
 import { allUsers, type User } from './auth'
 import { config, paths } from './config'
@@ -82,6 +82,18 @@ export function tombstoneTrashOf(username: string): number {
 
 const itemDir = (id: string) => join(paths.trash, id)
 
+/** the move itself; tests replace it to stop the process half way */
+export const trashDeps = { move: moveTree }
+/** entries being made or restored right now: repairTrash leaves them alone (they look unfinished on purpose) */
+const busyIds = new Set<string>()
+
+/** meta.json is written whole or not at all: a crash must not leave half of it */
+function writeMeta(id: string, meta: TrashMeta) {
+  const file = join(itemDir(id), 'meta.json')
+  writeFileSync(`${file}.tmp`, JSON.stringify(meta))
+  renameSync(`${file}.tmp`, file)
+}
+
 function safeId(id: unknown): string {
   if (typeof id !== 'string' || !/^[0-9]{13}_[a-f0-9]{8}$/.test(id)) throw notFound()
   return id
@@ -105,24 +117,33 @@ export async function moveToTrash(abs: string, deletedBy: string): Promise<Trash
     space: spaceOf(abs, owner),
   }
   ensureDir(itemDir(id))
+  busyIds.add(id)
   try {
-    await moveTree(abs, join(itemDir(id), 'item'))
-  } catch (err) {
-    // e.g. another request moved or deleted it while we counted: leave no empty trash entry behind
-    rmSync(itemDir(id), { recursive: true, force: true })
-    throw err
+    // the entry is described before the item moves in: a crash in between leaves a record without an item (repairTrash
+    // removes it), never an item nobody can see
+    writeMeta(id, meta)
+    try {
+      await trashDeps.move(abs, join(itemDir(id), 'item'))
+    } catch (err) {
+      // e.g. another request moved or deleted it while we counted: leave no empty trash entry behind
+      rmSync(itemDir(id), { recursive: true, force: true })
+      throw err
+    }
+    // the earlier versions of the file(s) go along, so a restore brings them back
+    try { stashVersions(abs, join(itemDir(id), 'versions')) } catch (err) { log.warn('versions-stash-failed', { id, error: err }) }
+    indexTouched(abs)
+    return meta
+  } finally {
+    busyIds.delete(id)
   }
-  // the earlier versions of the file(s) go along, so a restore brings them back
-  try { stashVersions(abs, join(itemDir(id), 'versions')) } catch (err) { log.warn('versions-stash-failed', { id, error: err }) }
-  indexTouched(abs)
-  writeFileSync(join(itemDir(id), 'meta.json'), JSON.stringify(meta))
-  return meta
 }
 
 export function listTrash(): TrashMeta[] {
   if (!existsSync(paths.trash)) return []
   const out: TrashMeta[] = []
   for (const id of readdirSync(paths.trash)) {
+    // its record exists before the item is in place: it is not in the trash yet
+    if (busyIds.has(id)) continue
     try {
       out.push(JSON.parse(readFileSync(join(paths.trash, id, 'meta.json'), 'utf8')))
     } catch { /* half-written entry, ignore */ }
@@ -166,16 +187,22 @@ export async function restore(
   if (existsSync(finalPath)) throw conflict('admin.trash-name-taken')
   const vdir = join(dir, 'versions')
   const hold = holdNow(owner, meta.size + stashedBytes(vdir))
+  // between the move and the removal of the entry it has a record and no item: not an orphan
+  busyIds.add(id)
   try {
-    await moveTree(join(dir, 'item'), finalPath)
-  } catch (err) {
-    hold.release()
-    throw err
+    try {
+      await moveTree(join(dir, 'item'), finalPath)
+    } catch (err) {
+      hold.release()
+      throw err
+    }
+    try { unstashVersions(vdir, meta.originalPath, finalPath) } catch (err) { log.warn('versions-restore-failed', { id, error: err }) }
+    hold.commit()
+    indexTouched(finalPath)
+    rmSync(dir, { recursive: true, force: true })
+  } finally {
+    busyIds.delete(id)
   }
-  try { unstashVersions(vdir, meta.originalPath, finalPath) } catch (err) { log.warn('versions-restore-failed', { id, error: err }) }
-  hold.commit()
-  indexTouched(finalPath)
-  rmSync(dir, { recursive: true, force: true })
   return { meta, restoredTo: storagePath(finalPath) }
 }
 
@@ -189,6 +216,64 @@ export function purge(idRaw?: unknown): number {
   if (!existsSync(itemDir(id))) throw notFound()
   rmSync(itemDir(id), { recursive: true, force: true })
   return 1
+}
+
+/**
+ * Entries that a crash left half made, found at start and in the hourly housekeeping:
+ *   an item without a record (made by a version before 1.12.1, which wrote meta.json last): adopted. Who deleted it, from
+ *   where and under which name died with the process, so it gets a record of its own: owner nobody (only the admin's
+ *   trash shows it), deleted now, to be restored into recovered-from-trash/ and sorted out by hand.
+ *   a record without an item (the process stopped before the move): removed, there is nothing to restore.
+ */
+export function repairTrash(): { adopted: number; purged: number } {
+  const out = { adopted: 0, purged: 0 }
+  if (!existsSync(paths.trash)) return out
+  for (const id of readdirSync(paths.trash)) {
+    if (!/^[0-9]{13}_[a-f0-9]{8}$/.test(id) || busyIds.has(id)) continue
+    const dir = itemDir(id)
+    try {
+      const item = join(dir, 'item')
+      const hasItem = !!lstatOrNull(item)
+      let meta: TrashMeta | null = null
+      try { meta = JSON.parse(readFileSync(join(dir, 'meta.json'), 'utf8')) } catch { /* none, or half written */ }
+      if (hasItem && !meta) {
+        const st = lstatSync(item)
+        const isDir = st.isDirectory() && !st.isSymbolicLink()
+        writeMeta(id, {
+          id, name: `recovered-${id}`, type: isDir ? 'dir' : 'file', size: isDir ? treeSizeSync(item) : st.size,
+          originalPath: `/recovered-from-trash/${id}`, deletedAt: new Date().toISOString(), deletedBy: 'system', owner: null, space: 'other',
+        })
+        out.adopted++
+        log.warn('trash-adopted', { id })
+      } else if (!hasItem && meta) {
+        rmSync(dir, { recursive: true, force: true })
+        out.purged++
+        log.warn('trash-record-without-item', { id, name: meta.name })
+      } else if (!hasItem && !meta && !existsSync(join(dir, 'versions'))) {
+        rmSync(dir, { recursive: true, force: true })
+      }
+    } catch (err) {
+      log.warn('trash-repair-failed', { id, error: err })
+    }
+  }
+  return out
+}
+
+const lstatOrNull = (p: string) => { try { return lstatSync(p) } catch { return null } }
+
+/** bytes of a tree, counted synchronously (an adopted entry is rare, and only its size is wanted) */
+function treeSizeSync(abs: string): number {
+  let total = 0
+  const stack = [abs]
+  while (stack.length) {
+    const p = stack.pop()!
+    for (const e of readdirSync(p, { withFileTypes: true })) {
+      const q = join(p, e.name)
+      if (e.isDirectory()) stack.push(q)
+      else if (e.isFile()) total += lstatSync(q).size
+    }
+  }
+  return total
 }
 
 export function purgeExpired(): number {
