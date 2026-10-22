@@ -20,6 +20,7 @@ import { bad, cleanName, conflict, ensureSpace, freeSpace, fromFsError, HttpErro
 import { restartSoon } from './lifecycle'
 import { log } from './logger'
 import { mirrorAlert } from './notify'
+import { open as openSealed } from './secret-box'
 import { type Lang, MESSAGES, type MessageCode, type Params, sizeText, text } from './messages'
 import { type BackupPrefs, settings } from './settings'
 import { recountStorage, storageStats } from './stats'
@@ -587,17 +588,44 @@ function checkData(dir: string) {
 }
 
 /**
+ * Usernames in the restored users.json whose 2FA secret this server can not open. secret.key is never in a backup, so a
+ * restore onto another host (or a rebuilt one) brings users.json back with secrets sealed by a key this server does not
+ * have: those users get past the password and then no code is ever right. Reads secret.key without making one.
+ */
+function lostTwoFactor(dir: string): string[] {
+  let users: any[]
+  try { users = JSON.parse(readFileSync(join(dir, 'users.json'), 'utf8')).users } catch { return [] }
+  if (!Array.isArray(users)) return []
+  const keyThere = existsSync(paths.secretKey)
+  const lost: string[] = []
+  for (const u of users) {
+    if (typeof u?.twoFactor?.secret !== 'string' || typeof u.username !== 'string') continue
+    try {
+      if (!keyThere) throw new Error('no secret.key')
+      openSealed(u.twoFactor.secret)
+    } catch {
+      lost.push(u.username)
+    }
+  }
+  return lost
+}
+
+/**
  * Put back the users, settings and logo of a backup. The current state is backed up first, so a wrong restore
  * can itself be undone. The caller restarts the app afterwards: the stores in memory still hold the old data.
  */
-export function restoreBackup(name: string): Promise<{ safety: BackupItem }> {
+/** `twoFactorLost`: users who can not use 2FA on this server after the restart (see lostTwoFactor) */
+export function restoreBackup(name: string): Promise<{ safety: BackupItem; twoFactorLost: string[] }> {
   return exclusive(async () => {
     const zipAbs = backupPath(name)
     const safety = await writeBackup(name)
     const work = mkdtempSync(join(paths.tmp, 'restore-'))
+    let twoFactorLost: string[] = []
     try {
       await extractData(zipAbs, work)
       checkData(work)
+      twoFactorLost = lostTwoFactor(work)
+      if (twoFactorLost.length) log.warn('backup-restore-2fa-unreadable', { name, users: twoFactorLost })
       // let queued writes land first, then nothing in memory may overwrite the restored files before the restart
       await JsonStore.flushAll()
       JsonStore.freeze()
@@ -620,6 +648,6 @@ export function restoreBackup(name: string): Promise<{ safety: BackupItem }> {
     } finally {
       rmSync(work, { recursive: true, force: true })
     }
-    return { safety }
+    return { safety, twoFactorLost }
   })
 }

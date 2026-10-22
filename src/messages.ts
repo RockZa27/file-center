@@ -291,6 +291,10 @@ export const MESSAGES = {
     th: 'ลบไฟล์สำรองเก่า {count} ไฟล์เพื่อเตรียมพื้นที่ แต่สำรองข้อมูลครั้งใหม่ไม่สำเร็จ จึงเหลือไฟล์สำรองน้อยลง ({names}) ตรวจพื้นที่ดิสก์แล้วสำรองข้อมูลใหม่',
     en: '{count} old backup(s) were deleted to make room, but the new backup failed, so fewer backups remain now ({names}). Check the disk space and run a backup again.',
   },
+  'backup.restore-2fa-lost': {
+    th: 'กู้คืนแล้ว แต่ {count} บัญชีที่เปิด 2FA ({users}) จะเข้าสู่ระบบด้วยรหัส 2FA ไม่ได้บนเครื่องนี้ เพราะ secret.key ของเครื่องนี้ไม่ตรงกับเครื่องที่สำรองข้อมูล (ไฟล์สำรองไม่มี secret.key) ก่อนออกจากระบบให้วาง secret.key เดิมไว้ใน DATA_DIR หรือรันที่เครื่อง server: bun src/cli.ts reset-2fa <ชื่อผู้ใช้> (Docker: docker compose exec file-center bun src/cli.ts reset-2fa <ชื่อผู้ใช้>) แล้วให้เจ้าของบัญชีเปิด 2FA ใหม่',
+    en: 'Restored, but {count} account(s) with 2FA ({users}) will not be able to sign in with a 2FA code on this server: its secret.key differs from the one that sealed the backup (a backup never contains secret.key). Put the original secret.key into DATA_DIR, or run on the server: bun src/cli.ts reset-2fa <username> (Docker: docker compose exec file-center bun src/cli.ts reset-2fa <username>), then the owner turns 2FA on again.',
+  },
   'backup.failed': { th: 'สำรองข้อมูลไม่สำเร็จ: {reason}', en: 'The backup failed: {reason}' },
   'backup.no-space': {
     th: 'พื้นที่ว่างสำหรับไฟล์สำรองไม่พอ: ต้องการ {needed} แต่เหลือ {free} (ลบไฟล์สำรองเก่าแล้วก็ยังไม่พอ) จึงไม่เริ่มสำรอง',

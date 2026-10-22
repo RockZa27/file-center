@@ -389,6 +389,13 @@ describe('backups: names, order and what is deleted when', () => {
     alerts.resetAlerts()
   })
 
+  test('the last complete backup is never deleted to make room for a new one', async () => {
+    await plant('file-center-backup-20000101-000000.zip', '2001-01-01T00:00:00Z', 1024)
+    backup.backupDeps.free = () => 1000 // never enough
+    await expect(backup.runBackup()).rejects.toMatchObject({ code: 'backup.no-space' })
+    expect(zips()).toEqual(['file-center-backup-20000101-000000.zip'])
+  })
+
   test('backups made by older versions (local time in the name) are listed and can be found by their name', async () => {
     await plant('file-center-backup-20240310-023000.zip', '2024-03-10T02:30:00Z')
     const [item] = await backup.listBackupsDetailed()
@@ -438,6 +445,61 @@ describe('launcher: a release that boots too slowly', () => {
       await Promise.race([launcher.exited, Bun.sleep(15_000)])
     }
   }, 90_000)
+})
+
+describe('restore onto another host: 2FA secrets that this secret.key can not open', () => {
+  /** restore a hand-made backup in a child with its own data folder; `withKey`: this host already has a secret.key */
+  async function restoreInChild(withKey: boolean) {
+    const dir = fresh('restore2fa')
+    const r = await child(`
+      import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+      import { join } from 'node:path'
+      import { zipSync } from ${JSON.stringify(join(ROOT, 'node_modules/fflate'))}
+      import { config, ensureDirs, paths } from ${src('config')}
+      ensureDirs()
+      const { seal } = await import(${src('secret-box')})
+      ${withKey ? '' : '/* no secret.key on this host */'}
+      const mine = ${withKey} ? seal('JBSWY3DPEHPK3PXP') : null
+      await import(${src('auth')})
+      const { restoreBackup } = await import(${src('backup')})
+      const enc = new TextEncoder()
+      const tf = (secret) => ({ secret, enabledAt: '2026-01-01T00:00:00Z', lastStep: 0, backup: [] })
+      const users = [
+        { username: 'boss', role: 'admin', passwordHash: 'x', twoFactor: tf('AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA') },
+        { username: 'plain', role: 'user', passwordHash: 'x' },
+        ...(mine ? [{ username: 'mine', role: 'user', passwordHash: 'x', twoFactor: tf(mine) }] : []),
+      ]
+      mkdirSync(config.backupDir, { recursive: true })
+      const name = 'file-center-backup-20000101-000000.zip'
+      writeFileSync(join(config.backupDir, name), zipSync({ 'users.json': enc.encode(JSON.stringify({ users })), 'backup.json': enc.encode('{}') }))
+      const r = await restoreBackup(name)
+      console.log(JSON.stringify({ lost: r.twoFactorLost, keyMade: existsSync(paths.secretKey) }))
+    `, { DATA_DIR: join(dir, 'data'), STORAGE_DIR: join(dir, 'storage') })
+    expect(r.err).not.toContain('error:')
+    expect(r.code).toBe(0)
+    return JSON.parse(r.out.trim().split('\n').at(-1)!) as { lost: string[]; keyMade: boolean }
+  }
+
+  test('a secret sealed with another key is reported; one this key opens is not', async () => {
+    const r = await restoreInChild(true)
+    expect(r.lost).toEqual(['boss'])
+  })
+
+  test('with no secret.key at all every user with 2FA is reported, and no key is made by looking', async () => {
+    const r = await restoreInChild(false)
+    expect(r.lost).toEqual(['boss'])
+    expect(r.keyMade).toBe(false)
+  })
+
+  test('the message tells both languages how to recover', async () => {
+    const { text } = await import('../src/messages')
+    for (const lang of ['th', 'en'] as const) {
+      const t = text(lang, 'backup.restore-2fa-lost', { count: 1, users: 'boss' })
+      expect(t).toContain('boss')
+      expect(t).toContain('secret.key')
+      expect(t).toContain('reset-2fa')
+    }
+  })
 })
 
 afterAll(() => { rmSync(scratch, { recursive: true, force: true }) })

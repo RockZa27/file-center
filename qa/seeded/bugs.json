@@ -1681,5 +1681,95 @@
         "replace": "    return await rename(from, to)\n"
       }
     ]
+  },
+  {
+    "id": "shutdown-force-no-flush",
+    "difficulty": "medium",
+    "category": "integrity",
+    "severity": "high",
+    "tests": "tests/durability.test.ts",
+    "description": "when the shutdown grace time runs out the process exits without writing the stores that are still only in memory",
+    "patches": [
+      {
+        "file": "src/lifecycle.ts",
+        "find": "  setTimeout(() => {\n    JsonStore.flushAllSync()\n    exitWith.exit(code)\n  }, graceMs).unref()",
+        "replace": "  setTimeout(() => {\n    exitWith.exit(code)\n  }, graceMs).unref()"
+      }
+    ]
+  },
+  {
+    "id": "store-write-failure-silent",
+    "difficulty": "medium",
+    "category": "integrity",
+    "severity": "high",
+    "tests": "tests/durability.test.ts",
+    "description": "a data file that cannot be written (disk full) is retried but never reported to the admin, so the change looks saved",
+    "patches": [
+      {
+        "file": "src/store.ts",
+        "find": "        try { JsonStore.onWriteFailed(this.file, err) } catch { /* reporting must not break the queue */ }\n",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "corrupt-groups-reset",
+    "difficulty": "medium",
+    "category": "integrity",
+    "severity": "high",
+    "tests": "tests/durability.test.ts",
+    "description": "a corrupt groups.json is silently replaced by an empty list at start instead of stopping the app",
+    "patches": [
+      {
+        "file": "src/groups.ts",
+        "find": "() => ({ groups: [] }), { onCorrupt: 'fail' })",
+        "replace": "() => ({ groups: [] }))"
+      }
+    ]
+  },
+  {
+    "id": "backup-order-by-name",
+    "difficulty": "subtle",
+    "category": "logic",
+    "severity": "medium",
+    "tests": "tests/durability.test.ts",
+    "description": "backups are sorted by the time in their name instead of the createdAt in backup.json, so retention can delete the newest backup",
+    "patches": [
+      {
+        "file": "src/backup.ts",
+        "find": "Date.parse(y.createdAt) - Date.parse(x.createdAt) || (x.name < y.name ? 1 : -1)",
+        "replace": "(x.name < y.name ? 1 : -1)"
+      }
+    ]
+  },
+  {
+    "id": "backup-room-deletes-last",
+    "difficulty": "medium",
+    "category": "integrity",
+    "severity": "high",
+    "tests": "tests/durability.test.ts",
+    "description": "making room for a new backup may delete the only complete backup before the new one exists",
+    "patches": [
+      {
+        "file": "src/backup.ts",
+        "find": "const victim = (await listBackups()).slice(1).reverse().find(",
+        "replace": "const victim = (await listBackups()).reverse().find("
+      }
+    ]
+  },
+  {
+    "id": "backup-prune-not-reported",
+    "difficulty": "subtle",
+    "category": "integrity",
+    "severity": "medium",
+    "tests": "tests/durability.test.ts",
+    "description": "old backups deleted for space are not counted, so the admin is not told when the new backup then fails",
+    "patches": [
+      {
+        "file": "src/backup.ts",
+        "find": "    removed.push(victim.name)\n",
+        "replace": ""
+      }
+    ]
   }
 ]

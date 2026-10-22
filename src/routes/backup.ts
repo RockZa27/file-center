@@ -10,7 +10,7 @@ import { context, requireAdmin } from '../context'
 import { fileResponse } from './files'
 import { bad, HttpError } from '../fsx'
 import { restartSoon, supervised } from '../lifecycle'
-import { langOf } from '../messages'
+import { langOf, text } from '../messages'
 
 export const backupRoutes = new Elysia({ prefix: '/api/admin' })
   .use(context)
@@ -70,15 +70,25 @@ export const backupRoutes = new Elysia({ prefix: '/api/admin' })
   })
 
   // puts back users, passwords, settings and the logo of a backup, then restarts so the app reads them
-  .post('/backups/restore', async ({ user, ip, body }) => {
+  .post('/backups/restore', async ({ user, ip, body, request }) => {
     const admin = requireAdmin({ user, ip })
     if (!supervised()) {
       throw new HttpError(409, 'not-supervised')
     }
     if (!BACKUP_NAME_RE.test(body.name)) throw bad('backup.bad-name')
     await confirmPassword(admin, ip, body.password, 'backup-restore-denied')
-    const { safety } = await restoreBackup(body.name)
-    audit({ user: admin.username, ip, action: 'backup-restore', target: body.name, detail: `สำรองข้อมูลก่อนกู้คืนไว้ที่ ${safety.name}` })
+    const { safety, twoFactorLost } = await restoreBackup(body.name)
+    audit({
+      user: admin.username, ip, action: 'backup-restore', target: body.name,
+      detail: `สำรองข้อมูลก่อนกู้คืนไว้ที่ ${safety.name}${twoFactorLost.length ? ` (2FA ใช้ไม่ได้บนเครื่องนี้: ${twoFactorLost.join(', ')})` : ''}`,
+    })
     restartSoon()
-    return { ok: true, restarting: true, safety: safety.name }
+    // secret.key is not in a backup: users with 2FA from another host can not sign in with a code until it is reset
+    const warning = twoFactorLost.length
+      ? (() => {
+          const params = { count: twoFactorLost.length, users: twoFactorLost.slice(0, 20).join(', ') }
+          return { code: 'backup.restore-2fa-lost' as const, params, message: text(langOf(request), 'backup.restore-2fa-lost', params) }
+        })()
+      : null
+    return { ok: true, restarting: true, safety: safety.name, twoFactorLost, warning }
   }, { body: t.Object({ name: t.String({ maxLength: 200 }), password: t.String({ maxLength: 1000 }) }) })
