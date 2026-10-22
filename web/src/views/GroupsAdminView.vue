@@ -1,9 +1,10 @@
 <template>
   <div class="page">
-    <div class="page-header">
-      <div><h1>{{ t('nav.groupsAdmin') }}</h1><p>{{ app.isAdmin ? t('groups.adminSubtitle') : t('groups.adminSubtitleManager') }}</p></div>
+    <page-header :title="t('nav.groupsAdmin')" :description="app.isAdmin ? t('groups.adminSubtitle') : t('groups.adminSubtitleManager')">
+      <template #actions>
       <n-button v-if="app.isAdmin" type="primary" @click="openForm(null)"><template #icon><n-icon :component="AddOutline" /></template>{{ t('groups.add') }}</n-button>
-    </div>
+      </template>
+    </page-header>
     <div class="surface">
       <n-data-table :columns="columns" :data="groups" :loading="loading" :bordered="false" :single-line="false"
         :scroll-x="narrow ? undefined : 760" table-layout="fixed" :row-key="r => r.id" :pagination="{ pageSize: 25 }"
@@ -47,6 +48,7 @@
 </template>
 
 <script setup>
+import PageHeader from '../components/PageHeader.vue'
 import { computed, h, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NAlert, NButton, NDataTable, NEmpty, NForm, NFormItem, NIcon, NInput, NInputNumber, NModal, NSelect, NSwitch } from 'naive-ui'

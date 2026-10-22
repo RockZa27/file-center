@@ -1,7 +1,7 @@
 <template>
   <div class="page">
-    <div class="page-header">
-      <div><h1>{{ t('nav.shareLinks') }}</h1><p>{{ tab === 'users' ? t('grants.usersSubtitle') : t('share.subtitle') }}</p></div>
+    <page-header :title="t('nav.shareLinks')" :description="tab === 'users' ? t('grants.usersSubtitle') : t('share.subtitle')">
+      <template #actions>
       <div v-if="tab === 'links'" class="head-actions">
         <label v-if="app.isStaff" class="all">
           <n-switch v-model:value="all" :disabled="loading" @update:value="load" />
@@ -9,7 +9,8 @@
         </label>
         <n-button :loading="loading" @click="load"><template #icon><n-icon :component="RefreshOutline" /></template>{{ t('common.refresh') }}</n-button>
       </div>
-    </div>
+      </template>
+    </page-header>
     <!-- links for people without an account, and folders shared with users: two lists, tabs only when the user may use both -->
     <n-tabs v-if="showLinks && app.canGrant" v-model:value="tab" type="line" class="tabs">
       <n-tab name="links">{{ t('grants.tabLinks') }}</n-tab>
@@ -27,6 +28,7 @@
 </template>
 
 <script setup>
+import PageHeader from '../components/PageHeader.vue'
 import { computed, h, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NButton, NDataTable, NEmpty, NIcon, NSwitch, NTab, NTabs, NTag } from 'naive-ui'

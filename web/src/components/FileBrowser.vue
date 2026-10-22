@@ -3,24 +3,24 @@
     <div class="toolbar">
       <div class="left">
         <n-dropdown v-if="can('upload')" trigger="click" :options="uploadOptions" @select="onUploadSelect">
-          <n-button type="primary">
+          <n-button type="primary" data-tour="upload">
             <template #icon><n-icon :component="CloudUploadOutline" /></template>{{ t('common.upload') }}
           </n-button>
         </n-dropdown>
         <n-dropdown v-if="can('write')" trigger="click" :options="createOptions" @select="onCreateSelect">
-          <n-button secondary>
+          <n-button secondary data-tour="new-folder">
             <template #icon><n-icon :component="AddOutline" /></template>{{ t('common.create') }}
           </n-button>
         </n-dropdown>
       </div>
       <div class="right">
-        <n-button quaternary circle :title="t('common.search')" @click="searchOpen = true"><template #icon><n-icon :component="SearchOutline" /></template></n-button>
+        <n-button quaternary circle data-tour="search" :title="t('common.search')" @click="searchOpen = true"><template #icon><n-icon :component="SearchOutline" /></template></n-button>
         <n-button quaternary circle :title="t('common.refresh')" :loading="loading" @click="load()"><template #icon><n-icon :component="RefreshOutline" /></template></n-button>
         <n-button class="keys-btn" quaternary circle :title="`${t('files.shortcuts')} (?)`" :aria-label="t('files.shortcuts')" @click="keysOpen = true"><template #icon><n-icon :component="KeypadOutline" /></template></n-button>
         <n-button quaternary circle :title="showHidden ? t('files.hideHidden') : t('files.showHidden')" @click="showHidden = !showHidden">
           <template #icon><n-icon :component="showHidden ? EyeOutline : EyeOffOutline" /></template>
         </n-button>
-        <n-button-group size="small">
+        <n-button-group size="small" data-tour="view-switch">
           <n-button :type="app.view === 'list' ? 'primary' : 'default'" :secondary="app.view === 'list'" :title="t('files.viewList')" @click="app.setView('list')"><template #icon><n-icon :component="ListOutline" /></template></n-button>
           <n-button :type="app.view === 'grid' ? 'primary' : 'default'" :secondary="app.view === 'grid'" :title="t('files.viewGrid')" @click="app.setView('grid')"><template #icon><n-icon :component="GridOutline" /></template></n-button>
           <n-button :type="app.view === 'gallery' ? 'primary' : 'default'" :secondary="app.view === 'gallery'" :title="t('files.viewGallery')" :aria-label="t('files.viewGallery')" @click="app.setView('gallery')"><template #icon><n-icon :component="ImagesOutline" /></template></n-button>
@@ -62,7 +62,7 @@
         <span class="sel-count">{{ t('files.selected', { n: selected.length }) }}</span>
         <div class="sel-actions">
           <n-button v-if="can('download') && can('batchdownload')" size="small" secondary @click="downloadMany(selected)"><template #icon><n-icon :component="DownloadOutline" /></template>{{ t('common.download') }}</n-button>
-          <n-button v-if="selected.length === 1 && canShareItem(selected[0])" size="small" secondary @click="openShare(selected[0])"><template #icon><n-icon :component="LinkOutline" /></template>{{ t('share.action') }}</n-button>
+          <n-button v-if="selected.length === 1 && canShareItem(selected[0])" size="small" secondary data-tour="share" @click="openShare(selected[0])"><template #icon><n-icon :component="LinkOutline" /></template>{{ t('share.action') }}</n-button>
           <n-button v-if="can('write') || copyOut" size="small" secondary @click="pick('copy', selected)"><template #icon><n-icon :component="CopyOutline" /></template>{{ t('files.copyTo') }}</n-button>
           <n-button v-if="can('write')" size="small" secondary @click="pick('move', selected)"><template #icon><n-icon :component="ReturnUpForwardOutline" /></template>{{ t('files.moveTo') }}</n-button>
           <n-button v-if="can('zip') && can('write')" size="small" secondary @click="askZip(selected)"><template #icon><n-icon :component="ArchiveOutline" /></template>{{ t('files.zip') }}</n-button>
@@ -72,7 +72,7 @@
       </div>
     </transition>
 
-    <div class="content surface">
+    <div class="content surface" data-tour="file-list">
       <n-spin :show="loading && !items.length">
         <div v-if="error" class="empty"><n-result status="warning" :title="error"><template #footer><n-button @click="load()">{{ t('common.retry') }}</n-button></template></n-result></div>
         <div v-else-if="!loading && !visible.length" class="empty">

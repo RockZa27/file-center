@@ -1,9 +1,10 @@
 <template>
   <div class="page">
-    <div class="page-header">
-      <div><h1>{{ t('nav.users') }}</h1><p>{{ t('users.subtitle') }}</p></div>
+    <page-header :title="t('nav.users')" :description="t('users.subtitle')">
+      <template #actions>
       <n-button type="primary" @click="edit(null)"><template #icon><n-icon :component="PersonAddOutline" /></template>{{ t('users.add') }}</n-button>
-    </div>
+      </template>
+    </page-header>
     <div class="surface">
       <n-data-table :columns="columns" :data="users" :loading="loading" :bordered="false" :single-line="false"
         :scroll-x="narrow ? undefined : 1050" :row-key="r => r.username"
@@ -27,6 +28,7 @@
 </template>
 
 <script setup>
+import PageHeader from '../components/PageHeader.vue'
 import { computed, h, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'

@@ -25,10 +25,11 @@
 
     <!-- the list -->
     <template v-else>
-      <div class="page-header">
-        <div><h1>{{ t('nav.withMe') }}</h1><p>{{ t('grants.withMeSubtitle') }}</p></div>
+      <page-header :title="t('nav.withMe')" :description="t('grants.withMeSubtitle')">
+        <template #actions>
         <n-button :loading="loading" @click="load"><template #icon><n-icon :component="RefreshOutline" /></template>{{ t('common.refresh') }}</n-button>
-      </div>
+        </template>
+      </page-header>
       <div class="surface list">
         <n-spin :show="loading && !items.length">
           <n-empty v-if="!loading && !items.length" :description="t('grants.withMeNone')" class="none" />
@@ -54,6 +55,7 @@
 </template>
 
 <script setup>
+import PageHeader from '../components/PageHeader.vue'
 import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
