@@ -397,4 +397,47 @@ describe('backups: names, order and what is deleted when', () => {
   })
 })
 
+describe('launcher: a release that boots too slowly', () => {
+  test('is rolled back but its directory is kept, and it is first in the history for a retry', async () => {
+    const dir = fresh('launcher')
+    const data = join(dir, 'data')
+    const release = join(data, 'app', 'releases', '9.9.7-slowboot')
+    mkdirSync(join(release, 'web'), { recursive: true })
+    // alive but never answering /api/health
+    writeFileSync(join(release, 'server.js'), 'setInterval(() => {}, 1000)')
+    writeFileSync(join(release, 'web', 'index.html'), '<html></html>')
+    writeFileSync(join(release, 'manifest.json'), JSON.stringify({ name: 'file-center', version: '9.9.7', builtAt: '', files: {} }))
+    const stateFile = join(data, 'app', 'state.json')
+    writeFileSync(stateFile, JSON.stringify({ schema: 1, current: '9.9.7-slowboot', history: [], pending: { dir: '9.9.7-slowboot', previous: null, at: new Date().toISOString() }, last: null }))
+    const probe = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: () => new Response('') })
+    const port = probe.port!
+    await probe.stop(true)
+    const launcher = Bun.spawn([process.execPath, join(ROOT, 'src', 'launcher.ts')], {
+      cwd: ROOT, stdout: 'ignore', stderr: 'ignore',
+      env: {
+        PATH: process.env.PATH!, HOME: dir, NODE_ENV: 'production', PORT: String(port), HOST: '127.0.0.1',
+        STORAGE_DIR: join(dir, 'storage'), DATA_DIR: data, ADMIN_PASSWORD: 'x-test-pass-1', MIN_FREE_SPACE: '0',
+        FC_HEALTH_TIMEOUT_MS: '1500', FC_STABLE_MS: '500', UPDATE_SOURCE: 'off',
+      },
+    })
+    try {
+      const until = Date.now() + 60_000
+      let state: any = null
+      while (Date.now() < until) {
+        try { state = JSON.parse(readFileSync(stateFile, 'utf8')) } catch { /* being written */ }
+        if (state?.last) break
+        await Bun.sleep(100)
+      }
+      expect(state.last).toMatchObject({ dir: '9.9.7-slowboot', version: '9.9.7', ok: false, code: 'update.health-timeout', params: { seconds: 2 } })
+      expect(state.current).toBeNull()
+      expect(state.pending).toBeNull()
+      expect(state.history).toEqual(['9.9.7-slowboot'])
+      expect(existsSync(release)).toBe(true)
+    } finally {
+      launcher.kill('SIGTERM')
+      await Promise.race([launcher.exited, Bun.sleep(15_000)])
+    }
+  }, 90_000)
+})
+
 afterAll(() => { rmSync(scratch, { recursive: true, force: true }) })

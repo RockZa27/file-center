@@ -376,6 +376,10 @@ export const MESSAGES = {
     th: 'โปรเซสหยุดทำงาน (code {exit}) ก่อนยืนยันการติดตั้ง',
     en: 'The process stopped (code {exit}) before the update was confirmed.',
   },
+  'update.health-timeout': {
+    th: 'เวอร์ชันใหม่ไม่ตอบสนองภายใน {seconds} วินาที จึงย้อนกลับ (เก็บไฟล์ของเวอร์ชันนั้นไว้ ลองสลับไปใช้ใหม่ได้โดยไม่ต้องอัปโหลดซ้ำ หรือเพิ่ม FC_HEALTH_TIMEOUT_MS ถ้าเครื่องเริ่มระบบช้า)',
+    en: 'The new version did not answer within {seconds} seconds, so the system went back. Its files were kept: switch to it again without uploading it a second time, or raise FC_HEALTH_TIMEOUT_MS if this server starts slowly.',
+  },
   // updates published on the web (UPDATE_SOURCE)
   'update.source-off': { th: 'ยังไม่ได้ตั้งแหล่งอัปเดต (UPDATE_SOURCE)', en: 'No update source is set (UPDATE_SOURCE).' },
   'update.source-unreachable': { th: 'ติดต่อแหล่งอัปเดตไม่ได้', en: 'The update source could not be reached.' },

@@ -16,6 +16,7 @@ import {
   type ReleaseState,
 } from './release'
 
+/** how long a new process has to answer /api/health (FC_HEALTH_TIMEOUT_MS; a big data folder or a slow disk may need more than the default 40 s) */
 const HEALTH_TIMEOUT_MS = Number(process.env.FC_HEALTH_TIMEOUT_MS) || 40_000
 /** an update must stay up this long after its first healthy answer to count as installed */
 const STABLE_MS = Number(process.env.FC_STABLE_MS) || 8_000
@@ -63,19 +64,25 @@ async function healthy(target: Target): Promise<boolean> {
   }
 }
 
-/** an update that failed: go back to what ran before and remember why */
-function rollBack(state: ReleaseState, name: string, why: ReturnType<typeof outcome>) {
+/**
+ * An update that failed: go back to what ran before and remember why. A release that crashed or exited is deleted.
+ * One that only booted too slowly (`keepRelease`) stays installed and is put first in the history: the admin can switch
+ * to it again from the update page (a bigger FC_HEALTH_TIMEOUT_MS first) without uploading the package again; the
+ * usual retention (the two newest of the history) removes it later.
+ */
+function rollBack(state: ReleaseState, name: string, why: ReturnType<typeof outcome>, keepRelease = false) {
   const previous = state.pending?.dir === name ? state.pending.previous : null
   const version = readManifest(releasePath(config.dataDir, name))?.version ?? name
+  const rest = state.history.filter(h => h !== name && h !== previous)
   writeState(config.dataDir, {
     ...state,
     current: previous && releaseUsable(config.dataDir, previous) ? previous : null,
-    history: state.history.filter(h => h !== name && h !== previous),
+    history: keepRelease ? [name, ...rest].slice(0, 2) : rest,
     pending: null,
     last: { dir: name, version, ok: false, ...why, at: new Date().toISOString() },
   })
-  rmSync(releasePath(config.dataDir, name), { recursive: true, force: true })
-  log('rollback', `อัปเดต ${version} ใช้งานไม่ได้ (${why.message}) ย้อนกลับแล้ว`, 'error')
+  if (!keepRelease) rmSync(releasePath(config.dataDir, name), { recursive: true, force: true })
+  log('rollback', `อัปเดต ${version} ใช้งานไม่ได้ (${why.message}) ย้อนกลับแล้ว${keepRelease ? ' (เก็บไฟล์เวอร์ชันนั้นไว้ให้ลองใหม่)' : ''}`, 'error')
 }
 
 let child: ReturnType<typeof Bun.spawn> | null = null
@@ -93,6 +100,7 @@ async function main() {
     })
 
     let exited = false
+    let timedOut = false
     const watch = (async () => {
       while (!exited && Date.now() - startedAt < HEALTH_TIMEOUT_MS) {
         if (await healthy(target)) {
@@ -109,7 +117,8 @@ async function main() {
         await sleep(500)
       }
       if (!exited) {
-        log('unresponsive', 'ระบบไม่ตอบสนองภายในเวลาที่กำหนด หยุดโปรเซส', 'error')
+        timedOut = true
+        log('unresponsive', `ระบบไม่ตอบสนองภายใน ${HEALTH_TIMEOUT_MS / 1000} วินาที (FC_HEALTH_TIMEOUT_MS) หยุดโปรเซส`, 'error')
         child?.kill()
       }
     })()
@@ -128,7 +137,9 @@ async function main() {
     }
     if (pendingNow) {
       // never answered, or fell over before it was confirmed
-      rollBack(state, target.name!, outcome('update.exited-unconfirmed', { exit: code }))
+      // too slow to answer is not the same as broken: that release stays installed, so a retry needs no new upload
+      if (timedOut) rollBack(state, target.name!, outcome('update.health-timeout', { seconds: Math.round(HEALTH_TIMEOUT_MS / 1000) }), true)
+      else rollBack(state, target.name!, outcome('update.exited-unconfirmed', { exit: code }))
       continue
     }
     // a running version that crashes later is restarted as it is: rolling back could hide a mistake in .env or the disk
