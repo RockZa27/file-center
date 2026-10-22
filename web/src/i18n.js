@@ -393,8 +393,8 @@ const th = {
       'disk-critical': 'ดิสก์ใกล้เต็ม', 'update-available': 'มีเวอร์ชันใหม่',
     },
     test: 'ส่งข้อความทดสอบ', testOk: 'ส่งข้อความทดสอบแล้ว ตรวจดูที่ช่องทางของคุณ', testFailed: 'ส่งข้อความทดสอบไม่สำเร็จ',
-    hint: 'ยังไม่ได้ตั้งการแจ้งเตือน ใส่ ALERT_WEBHOOK_URL (และ ALERT_WEBHOOK_KIND) ในไฟล์ .env แล้วรีสตาร์ต ระบบจะส่งข้อความถึง Discord, Slack, Telegram หรือ webhook เมื่อสำรองข้อมูลไม่สำเร็จ ดิสก์ใกล้เต็ม มีการเดารหัสผ่าน หรือมีเวอร์ชันใหม่ ดูวิธีตั้งในหัวข้อ "การแจ้งเตือน" ของ README',
-    invalid: 'ตั้ง ALERT_WEBHOOK_URL ไว้ ({host}) แต่ค่าใช้ไม่ได้ ระบบจึงปิดการแจ้งเตือนไว้ สาเหตุอยู่ในคำเตือน alerts-invalid ตอนเริ่มระบบ ดูหัวข้อ "การแจ้งเตือน" ของ README',
+    hint: 'ยังไม่ได้ตั้งการแจ้งเตือน ใส่ ALERT_WEBHOOK_URL (และ ALERT_WEBHOOK_KIND) ในไฟล์ .env แล้วรีสตาร์ต ระบบจะส่งข้อความถึง Discord, Slack, Telegram หรือ webhook เมื่อสำรองข้อมูลไม่สำเร็จ ดิสก์ใกล้เต็ม มีการเดารหัสผ่าน หรือมีเวอร์ชันใหม่ ดูวิธีตั้งใน docs/admin-guide.md หัวข้อ "การแจ้งเตือนระบบ (webhook)"',
+    invalid: 'ตั้ง ALERT_WEBHOOK_URL ไว้ ({host}) แต่ค่าใช้ไม่ได้ ระบบจึงปิดการแจ้งเตือนไว้ สาเหตุอยู่ในคำเตือน alerts-invalid ตอนเริ่มระบบ ดู docs/admin-guide.md หัวข้อ "การแจ้งเตือนระบบ (webhook)"',
     viewLog: 'ดูบันทึกระบบ',
   },
   notify: {
@@ -888,8 +888,8 @@ const en = {
       'disk-critical': 'Disk almost full', 'update-available': 'New version available',
     },
     test: 'Send a test', testOk: 'Test message sent. Check your channel.', testFailed: 'The test message was not delivered',
-    hint: 'Alerts are not set up. Put ALERT_WEBHOOK_URL (and ALERT_WEBHOOK_KIND) in the .env file and restart: the system then messages Discord, Slack, Telegram or a webhook when a backup fails, the disk is almost full, someone guesses passwords, or a new version is out. See the "การแจ้งเตือน" (Alerts) section of the README.',
-    invalid: 'ALERT_WEBHOOK_URL is set ({host}) but can not be used, so alerts are off. The reason is in the alerts-invalid warning logged at startup. See the "การแจ้งเตือน" (Alerts) section of the README.',
+    hint: 'Alerts are not set up. Put ALERT_WEBHOOK_URL (and ALERT_WEBHOOK_KIND) in the .env file and restart: the system then messages Discord, Slack, Telegram or a webhook when a backup fails, the disk is almost full, someone guesses passwords, or a new version is out. See docs/admin-guide.md, section "การแจ้งเตือนระบบ (webhook)" (System alerts, in Thai).',
+    invalid: 'ALERT_WEBHOOK_URL is set ({host}) but can not be used, so alerts are off. The reason is in the alerts-invalid warning logged at startup. See docs/admin-guide.md, section "การแจ้งเตือนระบบ (webhook)" (System alerts, in Thai).',
     viewLog: 'View system log',
   },
   notify: {

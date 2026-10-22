@@ -12,7 +12,7 @@ services:
     build:
       context: .
       args:
-        # ffmpeg (ภาพตัวอย่างของวิดีโอ) ใหญ่ราว 350 MB ตั้ง THUMB_VIDEO=false ใน .env ถ้าไม่ต้องการ (ดู README หัวข้อภาพตัวอย่าง)
+        # ffmpeg (ภาพตัวอย่างของวิดีโอ) ใหญ่ราว 350 MB ตั้ง THUMB_VIDEO=false ใน .env ถ้าไม่ต้องการ (ดู docs/install.md หัวข้อ "เครื่องมือภาพตัวอย่างในอิมเมจ")
         THUMB_VIDEO: ${THUMB_VIDEO:-true}
     container_name: file-center
     restart: unless-stopped
@@ -24,7 +24,7 @@ services:
     env_file:
       - path: .env
         required: false
-    # แอปทำงานเป็นผู้ใช้ bun (uid 1000) ไม่ใช่ root ถ้าจำเป็นต้องใช้ root ให้ตั้ง FC_RUN_AS_ROOT=true ใน .env (ดู README)
+    # แอปทำงานเป็นผู้ใช้ bun (uid 1000) ไม่ใช่ root ถ้าจำเป็นต้องใช้ root ให้ตั้ง FC_RUN_AS_ROOT=true ใน .env (ดู docs/install.md หัวข้อ "แอปในคอนเทนเนอร์ไม่ได้รันเป็น root")
     environment:
       # PORT ใน .env คือพอร์ตฝั่งเครื่อง host ส่วนในคอนเทนเนอร์ใช้ 3000 เสมอ
       PORT: "3000"
@@ -33,7 +33,7 @@ services:
     volumes:
       # ./data/storage = ไฟล์ที่อัปโหลด, ./data/system = ผู้ใช้ ตั้งค่า ประวัติ ถังขยะ session
       - ./data:/data
-    # เสริมความปลอดภัยของคอนเทนเนอร์ (ดูหัวข้อ "ตั้งค่าความปลอดภัยของคอนเทนเนอร์" ใน README ว่าถ้า host ใช้ไม่ได้ให้แก้อะไร)
+    # เสริมความปลอดภัยของคอนเทนเนอร์ (ดู docs/install.md หัวข้อ "ตั้งค่าความปลอดภัยของคอนเทนเนอร์" ว่าถ้า host ใช้ไม่ได้ให้แก้อะไร)
     # ระบบไฟล์ของอิมเมจอ่านอย่างเดียว เขียนได้เฉพาะ /data (ข้อมูล และเวอร์ชันที่อัปเดตจากเว็บใน /data/system/app) กับ /tmp
     read_only: true
     tmpfs:
@@ -51,7 +51,7 @@ services:
     pids_limit: ${FC_PIDS_LIMIT:-512}
 
   # Cloudflare Tunnel พาผู้ใช้จากโดเมนเข้ามาที่ file-center โดยไม่ต้องเปิดพอร์ตหรือมี IP จริง
-  # ทำงานเมื่อ .env มี COMPOSE_PROFILES=tunnel และ TUNNEL_TOKEN (ดูหัวข้อ Cloudflare Tunnel ใน README)
+  # ทำงานเมื่อ .env มี COMPOSE_PROFILES=tunnel และ TUNNEL_TOKEN (ดู docs/install.md หัวข้อ "ใช้งานผ่านโดเมนด้วย Cloudflare Tunnel")
   cloudflared:
     image: cloudflare/cloudflared:2026.10.0
     container_name: file-center-tunnel
@@ -66,7 +66,7 @@ services:
         condition: service_healthy
 
   # ONLYOFFICE Docs (Community) เปิด/แก้ไฟล์ docx xlsx pptx ในหน้าเว็บ ใช้ RAM ราว 2–4 GB
-  # ทำงานเมื่อ .env มี COMPOSE_PROFILES=office (หรือ tunnel,office) พร้อม OFFICE_URL, OFFICE_INTERNAL_URL และ OFFICE_JWT_SECRET (ดู README)
+  # ทำงานเมื่อ .env มี COMPOSE_PROFILES=office (หรือ tunnel,office) พร้อม OFFICE_URL, OFFICE_INTERNAL_URL และ OFFICE_JWT_SECRET (ดู docs/install.md หัวข้อ "แก้ไขเอกสาร office ด้วย ONLYOFFICE")
   onlyoffice:
     image: onlyoffice/documentserver:9.4.0
     container_name: file-center-office

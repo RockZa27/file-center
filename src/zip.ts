@@ -109,7 +109,7 @@ const STORE_ONLY = new Set(['.zip', '.jpg', '.jpeg', '.png', '.gif', '.webp', '.
 const ZIP64_FROM = 0xf000_0000
 const SAMPLE = 256 * 1024
 // zip.js has no native deflate for any level but 6, so it runs its own: level 1 is about 1.6x (text) to 2x faster than
-// 3, and its archives were 0.3% to 1.6% bigger when measured (README, "Speed")
+// 3, and its archives were 0.3% to 1.6% bigger when measured (docs/development.md, "วัดความเร็ว (benchmark)")
 export const DEFLATE_LEVEL = 1
 
 /**

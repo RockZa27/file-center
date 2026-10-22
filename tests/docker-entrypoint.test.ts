@@ -179,7 +179,7 @@ describe('docker entrypoint', () => {
   })
 })
 
-// the container hardening and the security job are plain text files: pin what the README promises
+// the container hardening and the security job are plain text files: pin what docs/install.md and docs/security.md promise
 describe('hardening and security job', () => {
   const root = resolve(import.meta.dir, '..')
   const read = (f: string) => readFileSync(join(root, f), 'utf8')

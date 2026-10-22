@@ -83,7 +83,7 @@ jobs:
           path: bench.json
           if-no-files-found: warn
 
-  # known vulnerabilities, leaked secrets and Dockerfile mistakes (README: "ตรวจช่องโหว่ใน CI"). Fails only for HIGH or
+  # known vulnerabilities, leaked secrets and Dockerfile mistakes (docs/security.md: "ตรวจช่องโหว่ใน CI"). Fails only for HIGH or
   # CRITICAL that has a fix available; every scan also leaves a SARIF file (all severities) in the artifact security-results.
   security:
     runs-on: ubuntu-latest
