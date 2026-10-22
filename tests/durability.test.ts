@@ -5,8 +5,8 @@
  * secrets can not be opened. Runs in-process on the same app as api.test.ts (see in-process-env.ts); the parts that
  * end the process or fail at import time run in a child process of their own.
  */
-import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, setSystemTime, test } from 'bun:test'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { base } from './in-process-env'
 
@@ -268,6 +268,132 @@ describe('trash: a crash between the move and the record', () => {
     } finally {
       trash.trashDeps.move = real
     }
+  })
+})
+
+describe('backups: names, order and what is deleted when', () => {
+  let backup: typeof import('../src/backup')
+  let config: typeof import('../src/config').config
+  let alerts: typeof import('../src/alerts')
+  let notify: typeof import('../src/notify')
+  const keep = { dir: '', free: null as any, limits: null as any, keepSetting: undefined as number | undefined }
+  const enc = new TextEncoder()
+
+  beforeAll(async () => {
+    await import('../src/index') // the admin account
+    backup = await import('../src/backup')
+    ;({ config } = await import('../src/config'))
+    alerts = await import('../src/alerts')
+    notify = await import('../src/notify')
+  })
+  beforeEach(() => {
+    keep.dir = config.backupDir
+    keep.free = backup.backupDeps.free
+    keep.limits = { ...backup.backupLimits }
+    config.backupDir = fresh('backups')
+  })
+  afterEach(() => {
+    config.backupDir = keep.dir
+    backup.backupDeps.free = keep.free
+    Object.assign(backup.backupLimits, keep.limits)
+    backup.saveBackupSettings({ keep: null })
+    setSystemTime()
+  })
+
+  /** a zip that looks like a backup of `createdAt`, whatever its name says; `pad` bytes of filler so it takes room */
+  async function plant(name: string, createdAt: string, pad = 0) {
+    const { zipSync } = await import('fflate')
+    const files: Record<string, Uint8Array> = { 'users.json': enc.encode('{}'), 'backup.json': enc.encode(JSON.stringify({ version: '1.9.1', createdAt })) }
+    if (pad) files['pad.bin'] = new Uint8Array(pad)
+    writeFileSync(join(config.backupDir, name), zipSync(files, { level: 0 }))
+  }
+  const zips = () => readdirSync(config.backupDir).filter(f => f.endsWith('.zip')).sort()
+
+  test('a new backup is named in UTC, whatever the zone of the server', async () => {
+    const dir = fresh('tz')
+    const r = await child(`
+      import { ensureDirs } from ${src('config')}
+      ensureDirs()
+      await import(${src('auth')})
+      const { runBackup } = await import(${src('backup')})
+      const b = await runBackup()
+      console.log(JSON.stringify(b))
+    `, { TZ: 'Asia/Bangkok', DATA_DIR: join(dir, 'data'), STORAGE_DIR: join(dir, 'storage') })
+    expect(r.code).toBe(0)
+    const b = JSON.parse(r.out.trim().split('\n').at(-1)!)
+    const utc = new Date(b.createdAt).toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15)
+    // the name is the second of createdAt (or a few later if the name was taken), in UTC
+    const stamp = b.name.slice('file-center-backup-'.length, -'.zip'.length)
+    expect(Date.parse(`${stamp.slice(0, 4)}-${stamp.slice(4, 6)}-${stamp.slice(6, 8)}T${stamp.slice(9, 11)}:${stamp.slice(11, 13)}:${stamp.slice(13, 15)}Z`) - Date.parse(b.createdAt)).toBeLessThan(5000)
+    expect(stamp.slice(0, 15)).toBe(utc)
+  })
+
+  test('two backups in the same second get two names at once (no waiting for the clock)', async () => {
+    setSystemTime(new Date('2031-05-06T07:08:09Z'))
+    const a = await backup.runBackup()
+    const b = await backup.runBackup()
+    expect(a.name).toBe('file-center-backup-20310506-070809.zip')
+    expect(b.name).toBe('file-center-backup-20310506-070810.zip')
+    expect(zips()).toEqual([a.name, b.name])
+  })
+
+  test('the list is ordered by the time in backup.json, not by the name', async () => {
+    await plant('file-center-backup-20990101-000000.zip', '2001-01-01T00:00:00Z')
+    await plant('file-center-backup-20000101-000000.zip', '2020-01-01T00:00:00Z')
+    writeFileSync(join(config.backupDir, 'file-center-backup-20100101-000000.zip'), 'not a zip: its name is all there is')
+    const names = (await backup.listBackupsDetailed()).map(b => b.name)
+    // 2020 (backup.json), then the unreadable one by its name (2010), then 2001
+    expect(names).toEqual(['file-center-backup-20000101-000000.zip', 'file-center-backup-20100101-000000.zip', 'file-center-backup-20990101-000000.zip'])
+    expect((await backup.listBackupsDetailed())[0].createdAt).toBe('2020-01-01T00:00:00.000Z')
+  })
+
+  test('only after the new backup is complete do the oldest beyond "keep" go, and by age, not by name', async () => {
+    await plant('file-center-backup-20990101-000000.zip', '2001-01-01T00:00:00Z')
+    await plant('file-center-backup-20000101-000000.zip', '2002-01-01T00:00:00Z')
+    backup.saveBackupSettings({ keep: 1 })
+    const made = await backup.runBackup()
+    expect(zips()).toEqual([made.name])
+  })
+
+  test('a backup that fails deletes nothing for "keep"', async () => {
+    await plant('file-center-backup-20000101-000000.zip', '2001-01-01T00:00:00Z')
+    await plant('file-center-backup-20000102-000000.zip', '2002-01-01T00:00:00Z')
+    backup.saveBackupSettings({ keep: 1 })
+    let calls = 0
+    backup.backupDeps.free = () => (++calls === 1 ? 1e12 : 10)
+    backup.backupLimits.checkEvery = 1
+    await expect(backup.runBackup()).rejects.toThrow()
+    expect(zips()).toEqual(['file-center-backup-20000101-000000.zip', 'file-center-backup-20000102-000000.zip'])
+  })
+
+  test('room is made from the oldest by age; if the new backup then fails the admin is told how many went', async () => {
+    const MB = 1024 * 1024
+    await plant('file-center-backup-20000103-000000.zip', '2003-01-01T00:00:00Z', 4 * MB)
+    await plant('file-center-backup-20000101-000000.zip', '2005-01-01T00:00:00Z', 4 * MB) // newest by age, though the name is the oldest
+    await plant('file-center-backup-20000102-000000.zip', '2001-01-01T00:00:00Z', 4 * MB) // oldest by age
+    backup.saveBackupSettings({ keep: 30 })
+    const { needed } = await backup.estimateBackup(false)
+    const used = () => readdirSync(config.backupDir).reduce((sum, f) => sum + statSync(join(config.backupDir, f)).size, 0)
+    let calls = 0
+    // two looks before the backup (one backup has to go), then the disk is full while writing
+    backup.backupDeps.free = () => (++calls <= 2 ? needed + 9 * MB - used() : 10)
+    backup.backupLimits.checkEvery = 1
+    alerts.resetAlerts()
+    await expect(backup.runBackup()).rejects.toThrow()
+    // the oldest by age is the one that went; the other two are still there
+    expect(zips()).toEqual(['file-center-backup-20000101-000000.zip', 'file-center-backup-20000103-000000.zip'])
+    const bell = notify.listNotifications('admin').items.filter(n => n.kind === 'system-alert' && n.params.code === 'backup.pruned-then-failed')
+    expect(bell.length).toBeGreaterThan(0)
+    expect(bell[0].params.count).toBe(1)
+    expect(String(bell[0].params.names)).toContain('file-center-backup-20000102-000000.zip')
+    alerts.resetAlerts()
+  })
+
+  test('backups made by older versions (local time in the name) are listed and can be found by their name', async () => {
+    await plant('file-center-backup-20240310-023000.zip', '2024-03-10T02:30:00Z')
+    const [item] = await backup.listBackupsDetailed()
+    expect(item.name).toBe('file-center-backup-20240310-023000.zip')
+    expect(backup.backupPath(item.name)).toBe(join(config.backupDir, item.name))
   })
 })
 

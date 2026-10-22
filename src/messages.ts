@@ -287,6 +287,10 @@ export const MESSAGES = {
   'backup.bad-settings': { th: 'ไฟล์ตั้งค่าในไฟล์สำรองเสียหาย จึงไม่กู้คืน', en: 'The settings in this backup are damaged, so it was not restored.' },
   // the outcome of the last backup (backup-status.json)
   'backup.done': { th: 'สำรองข้อมูลสำเร็จ', en: 'The backup was made.' },
+  'backup.pruned-then-failed': {
+    th: 'ลบไฟล์สำรองเก่า {count} ไฟล์เพื่อเตรียมพื้นที่ แต่สำรองข้อมูลครั้งใหม่ไม่สำเร็จ จึงเหลือไฟล์สำรองน้อยลง ({names}) ตรวจพื้นที่ดิสก์แล้วสำรองข้อมูลใหม่',
+    en: '{count} old backup(s) were deleted to make room, but the new backup failed, so fewer backups remain now ({names}). Check the disk space and run a backup again.',
+  },
   'backup.failed': { th: 'สำรองข้อมูลไม่สำเร็จ: {reason}', en: 'The backup failed: {reason}' },
   'backup.no-space': {
     th: 'พื้นที่ว่างสำหรับไฟล์สำรองไม่พอ: ต้องการ {needed} แต่เหลือ {free} (ลบไฟล์สำรองเก่าแล้วก็ยังไม่พอ) จึงไม่เริ่มสำรอง',

@@ -1,5 +1,4 @@
 import { closeSync, copyFileSync, existsSync, fsyncSync, openSync, readdirSync, readFileSync, renameSync, writeSync } from 'node:fs'
-import { open } from 'node:fs/promises'
 import { basename, dirname } from 'node:path'
 import { log } from './logger'
 
@@ -12,16 +11,6 @@ function writeDurableSync(file: string, text: string) {
     fsyncSync(fd)
   } finally {
     closeSync(fd)
-  }
-}
-
-async function writeDurable(file: string, text: string) {
-  const fh = await open(file, 'w')
-  try {
-    await fh.writeFile(text)
-    await fh.sync()
-  } finally {
-    await fh.close()
   }
 }
 
@@ -155,7 +144,9 @@ export class JsonStore<T> {
       if (JsonStore.frozen) return
       try {
         const tmp = `${this.file}.tmp`
-        await writeDurable(tmp, snapshot)
+        // synchronous on purpose: the file is on disk before the next request is looked at (as it was when the write was
+        // a plain Bun.write + rename), at the price of the loop standing still for the fsync of a few KB
+        writeDurableSync(tmp, snapshot)
         renameSync(tmp, this.file)
         if (this.unsaved) log.info('store-write-recovered', { file: this.file })
         this.unsaved = false

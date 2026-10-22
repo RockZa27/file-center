@@ -19,6 +19,7 @@ import { config, paths } from './config'
 import { bad, cleanName, conflict, ensureSpace, freeSpace, fromFsError, HttpError, notFound, within } from './fsx'
 import { restartSoon } from './lifecycle'
 import { log } from './logger'
+import { mirrorAlert } from './notify'
 import { type Lang, MESSAGES, type MessageCode, type Params, sizeText, text } from './messages'
 import { type BackupPrefs, settings } from './settings'
 import { recountStorage, storageStats } from './stats'
@@ -62,10 +63,14 @@ const LOGS_KEPT = new Set(['logs/', 'logs/audit.log', 'logs/system.log'])
 const RESTORE_MAX_BYTES = 64 * 1024 * 1024
 
 const pad = (n: number) => String(n).padStart(2, '0')
-/** local time, so the name matches the clock of the person reading it */
+/**
+ * UTC, so names sort and mean the same whatever the clock does (daylight saving makes one local hour twice a year).
+ * Backups made before 1.12.1 carry the server's local time in the name; their real time is in backup.json.
+ */
 const nameFor = (d: Date) =>
-  `file-center-backup-${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}.zip`
+  `file-center-backup-${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}-${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}.zip`
 
+/** the time in a name (read as local time, as older versions wrote it): only for a backup whose backup.json can not be read */
 function createdAtOf(name: string): string {
   const [, y, mo, d, h, mi, s] = /(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})/.exec(name)!.map(Number)
   return new Date(y, mo - 1, d, h, mi, s).toISOString()
@@ -81,53 +86,56 @@ export function backupPath(name: unknown): string {
 
 type BackupFile = Omit<BackupItem, 'parts'>
 
-/** newest first */
-export function listBackups(): BackupFile[] {
-  let names: string[]
-  try { names = readdirSync(config.backupDir) } catch { return [] }
-  const out: BackupFile[] = []
-  for (const name of names.filter(n => BACKUP_NAME_RE.test(n)).sort().reverse()) {
-    try { out.push({ name, size: statSync(join(config.backupDir, name)).size, createdAt: createdAtOf(name) }) } catch { /* just deleted */ }
-  }
-  return out
-}
+// what backup.json says (when it was made, the sizes of each part) is read once from the end of each zip, then remembered while the file is unchanged
+const metaCache = new Map<string, { size: number; mtimeMs: number; createdAt: string; parts: BackupParts | null }>()
 
-// the sizes of each backup are read once from its backup.json (the end of the zip), then remembered while the file is unchanged
-const partsCache = new Map<string, { size: number; mtimeMs: number; parts: BackupParts | null }>()
-
-async function readParts(abs: string): Promise<BackupParts | null> {
+async function readMeta(abs: string, name: string): Promise<{ createdAt: string; parts: BackupParts | null }> {
+  // not readable (a zip from outside, cut off, no backup.json): the date in its name, never the file's mtime, which a copy of the folder resets
+  let out: { createdAt: string; parts: BackupParts | null } = { createdAt: createdAtOf(name), parts: null }
   const reader = new ZipReader(new BlobReader(Bun.file(abs)))
   try {
     const entry = (await reader.getEntries()).find(e => e.filename === 'backup.json')
-    if (!entry || entry.directory || entry.uncompressedSize > 1024 * 1024) return null
+    if (!entry || entry.directory || entry.uncompressedSize > 1024 * 1024) return out
     const meta = JSON.parse(await entry.getData(new TextWriter()))
     const ok = (p: any): p is PartSizes => p && [p.files, p.size, p.compressed].every(n => typeof n === 'number')
-    return ok(meta?.parts?.data) && ok(meta.parts.logs) && ok(meta.parts.storage) ? meta.parts : null
+    if (typeof meta?.createdAt === 'string' && Number.isFinite(Date.parse(meta.createdAt))) out = { ...out, createdAt: new Date(meta.createdAt).toISOString() }
+    if (ok(meta?.parts?.data) && ok(meta.parts.logs) && ok(meta.parts.storage)) out = { ...out, parts: meta.parts }
+    return out
   } catch {
-    return null
+    return out
   } finally {
     await reader.close().catch(() => {})
   }
 }
 
-/** newest first, with the per-part sizes (null for a backup that has none: made by an older version, or unreadable) */
-export async function listBackupsDetailed(): Promise<BackupItem[]> {
+/** newest first by the time in backup.json (the name only breaks a tie): the order never depends on the clock's zone or on how a name was written */
+async function listAll(): Promise<BackupItem[]> {
+  let names: string[]
+  try { names = readdirSync(config.backupDir) } catch { return [] }
   const out: BackupItem[] = []
   const alive = new Set<string>()
-  for (const f of listBackups()) {
-    alive.add(f.name)
-    let mtimeMs = 0
-    try { mtimeMs = statSync(join(config.backupDir, f.name)).mtimeMs } catch { continue }
-    let cached = partsCache.get(f.name)
-    if (!cached || cached.size !== f.size || cached.mtimeMs !== mtimeMs) {
-      cached = { size: f.size, mtimeMs, parts: await readParts(join(config.backupDir, f.name)) }
-      partsCache.set(f.name, cached)
+  for (const name of names.filter(n => BACKUP_NAME_RE.test(n))) {
+    let st
+    try { st = statSync(join(config.backupDir, name)) } catch { continue } // just deleted
+    alive.add(name)
+    let cached = metaCache.get(name)
+    if (!cached || cached.size !== st.size || cached.mtimeMs !== st.mtimeMs) {
+      cached = { size: st.size, mtimeMs: st.mtimeMs, ...(await readMeta(join(config.backupDir, name), name)) }
+      metaCache.set(name, cached)
     }
-    out.push({ ...f, parts: cached.parts })
+    out.push({ name, size: st.size, createdAt: cached.createdAt, parts: cached.parts })
   }
-  for (const n of partsCache.keys()) if (!alive.has(n)) partsCache.delete(n)
-  return out
+  for (const n of metaCache.keys()) if (!alive.has(n)) metaCache.delete(n)
+  return out.sort((x, y) => Date.parse(y.createdAt) - Date.parse(x.createdAt) || (x.name < y.name ? 1 : -1))
 }
+
+/** newest first */
+export async function listBackups(): Promise<BackupFile[]> {
+  return (await listAll()).map(({ parts: _, ...f }) => f)
+}
+
+/** newest first, with the per-part sizes (null for a backup that has none: made by an older version, or unreadable) */
+export const listBackupsDetailed = listAll
 
 export function readStatus(): BackupStatus | null {
   try { return JSON.parse(readFileSync(paths.backupStatus, 'utf8')) } catch { return null }
@@ -421,18 +429,21 @@ export async function estimateBackup(includeFiles = effectiveBackup().includeFil
 }
 
 /**
- * Make room before a backup: delete the oldest backups one by one until it fits. The newest one always stays (at
- * least one complete backup must remain), and so does `protect`. Still too little: nothing is started.
+ * Make room before a backup: delete the oldest backups one by one, and only while the estimate says the new one does
+ * not fit. The newest one always stays (at least one complete backup must remain until the new one is finished), and
+ * so does `protect`. Still too little: nothing is started. Returns the names removed, so a failure that follows can be
+ * told to the admin (the old copies are gone and the new one is not there).
  */
-async function makeRoom(includeFiles: boolean, protect?: string) {
+async function makeRoom(includeFiles: boolean, protect: string | undefined, removed: string[]) {
   let est = await estimateBackup(includeFiles)
   while (!est.ok) {
     // newest first: the newest stays, the oldest of the rest goes
-    const victim = listBackups().slice(1).reverse().find(b => b.name !== protect)
+    const victim = (await listBackups()).slice(1).reverse().find(b => b.name !== protect)
     if (!victim) {
       throw new HttpError(507, 'backup.no-space', { needed: sizeText(est.needed), free: sizeText(est.free ?? 0), neededBytes: est.needed, freeBytes: est.free ?? 0 })
     }
     rmSync(join(config.backupDir, victim.name), { force: true })
+    removed.push(victim.name)
     audit({ user: 'system', ip: '-', action: 'backup-delete', target: victim.name, detail: 'ลบอัตโนมัติ: พื้นที่ว่างไม่พอสำหรับไฟล์สำรองใหม่' })
     log.warn('backup-pruned-for-space', { name: victim.name, needed: est.needed, free: est.free })
     est = await estimateBackup(includeFiles)
@@ -457,17 +468,20 @@ function spaceWatch() {
 /** prune keeps `protect` even when it is among the oldest (the backup a restore is about to read) */
 async function writeBackup(protect?: string): Promise<BackupItem> {
   const attempt = new Date().toISOString()
+  /** old backups deleted to make room for this one */
+  const removed: string[] = []
   try {
     mkdirSync(config.backupDir, { recursive: true })
     // left over from a backup that was cut off (crash, power loss)
     for (const n of readdirSync(config.backupDir)) if (n.endsWith('.partial')) rmSync(join(config.backupDir, n), { force: true })
+    // what the zip reads is the files on disk: changes still waiting in a store go in first
+    await JsonStore.flushAll()
     const prefs = effectiveBackup()
-    await makeRoom(prefs.includeFiles, protect)
-    let name = nameFor(new Date())
-    while (existsSync(join(config.backupDir, name))) {
-      await Bun.sleep(200) // names have one-second precision
-      name = nameFor(new Date())
-    }
+    await makeRoom(prefs.includeFiles, protect, removed)
+    // names have one-second precision: a taken name moves on to the next free second instead of waiting for it
+    let at = Date.now()
+    while (existsSync(join(config.backupDir, nameFor(new Date(at)))) || existsSync(join(config.backupDir, `${nameFor(new Date(at))}.partial`))) at += 1000
+    const name = nameFor(new Date(at))
     const items = collectItems(prefs.includeFiles)
     if (prefs.includeFiles) ensureSpace(config.backupDir, items.reduce((sum, i) => sum + i.size, 0))
     // backup.json goes last and is made when the zip gets there, so it can tell the sizes of everything before it
@@ -497,12 +511,13 @@ async function writeBackup(protect?: string): Promise<BackupItem> {
       throw err
     }
 
-    for (const old of listBackups().slice(prefs.keep)) {
+    // only now, with the new backup complete, do the oldest beyond `keep` go
+    for (const old of (await listBackups()).slice(prefs.keep)) {
       if (old.name !== protect) rmSync(join(config.backupDir, old.name), { force: true })
     }
     const size = statSync(target).size
     writeStatus({ status: 'ok', lastSuccess: attempt, lastAttempt: attempt, code: 'backup.done', params: {}, file: name, size })
-    return { name, size, createdAt: createdAtOf(name), parts: JSON.parse(JSON.stringify(parts)) }
+    return { name, size, createdAt: attempt, parts: JSON.parse(JSON.stringify(parts)) }
   } catch (err) {
     const known = fromFsError(err)
     const why = known?.message ?? (err as Error).message
@@ -514,6 +529,12 @@ async function writeBackup(protect?: string): Promise<BackupItem> {
     const code: MessageCode = noSpace ? noSpace.code : 'backup.failed'
     writeStatus({ status: 'failed', lastSuccess: readStatus()?.lastSuccess ?? null, lastAttempt: attempt, code, params, file: null, size: null })
     alert('backup-failed', code, params)
+    // the old copies went to make room and the new one is not there: the admin must know there are fewer than before
+    if (removed.length) {
+      log.error('backup-failed-after-pruning', { removed })
+      // the admins' bell (and LINE group), not a second webhook message: the failure alert above is already on its way
+      mirrorAlert('backup-pruned', 'backup.pruned-then-failed', { count: removed.length, names: removed.join(', ') })
+    }
     throw err
   }
 }
