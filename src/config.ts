@@ -188,6 +188,8 @@ export const paths = {
   versions: join(config.dataDir, 'versions'),
   /** favorites and recent files per user (favorites.ts) */
   userState: join(config.dataDir, 'user-state.json'),
+  /** onboarding per user (guide.ts): the version whose news they have seen, and the tours they finished */
+  guide: join(config.dataDir, 'guide.json'),
   grants: join(config.dataDir, 'grants.json'),
   /** app passwords for WebDAV (app-passwords.ts): only an argon2 hash of each, never the password */
   appPasswords: join(config.dataDir, 'app-passwords.json'),

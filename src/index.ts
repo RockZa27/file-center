@@ -18,6 +18,8 @@ import { backupRoutes } from './routes/backup'
 import { fileRoutes } from './routes/files'
 import { meRoutes } from './routes/me'
 import { notifyRoutes } from './routes/notify'
+import { guideRoutes } from './routes/guide'
+import { migrateGuide } from './guide'
 import { versionRoutes } from './routes/versions'
 import { logRoutes } from './routes/logs'
 import { officeRoutes } from './routes/office'
@@ -58,6 +60,7 @@ grantCreatedListeners.push(g => {
 })
 
 ensureDirs()
+migrateGuide()
 await bootstrapAdmin()
 
 // a bad key must not stop the app (the admin could not reach the update page to see why); packages are refused instead
@@ -271,6 +274,7 @@ export const app = new Elysia({ serve: { idleTimeout: 255, maxRequestBodySize: s
   .use(meRoutes)
   .use(appPasswordRoutes)
   .use(notifyRoutes)
+  .use(guideRoutes)
   .use(trashRoutes)
   .use(grantRoutes)
   .use(groupRoutes)

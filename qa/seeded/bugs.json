@@ -1611,5 +1611,25 @@
         "replace": "const appPasswords = 0"
       }
     ]
+  },
+  {
+    "id": "guide-writes-other-user",
+    "difficulty": "easy",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/guide.test.ts",
+    "description": "PUT /api/me/guide writes the record of the user named in the body instead of the signed-in user",
+    "patches": [
+      {
+        "file": "src/routes/guide.ts",
+        "find": "setGuide(u.username, body)",
+        "replace": "setGuide((body as any).username ?? u.username, body)"
+      },
+      {
+        "file": "src/routes/guide.ts",
+        "find": "toursDone: t.Optional(t.Any())",
+        "replace": "toursDone: t.Optional(t.Any()), username: t.Optional(t.String())"
+      }
+    ]
   }
 ]

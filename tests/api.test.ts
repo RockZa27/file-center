@@ -769,6 +769,7 @@ describe('full system: CSRF', () => {
       ['POST', '/api/me/favorites', { ...files, path: '/matrix.txt' }],
       ['DELETE', '/api/me/favorites', { ...files, path: '/matrix.txt' }],
       ['PUT', '/api/me/notify-prefs', { events: { 'quota-low': { web: false } } }],
+      ['PUT', '/api/me/guide', { seenVersion: '1.12.0' }],
       ['POST', '/api/me/notifications/read', {}],
       ['DELETE', '/api/me/notifications/:id'],
       ['PUT', '/api/me/email', { address: 'csrf@example.com' }],

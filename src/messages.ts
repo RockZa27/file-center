@@ -118,6 +118,10 @@ export const MESSAGES = {
   'versions.not-found': { th: 'ไม่พบฉบับเก่านี้ของไฟล์', en: 'This earlier version of the file was not found.' },
   'favorites.too-many': { th: 'รายการโปรดเต็มแล้ว (สูงสุด {max} รายการ) กรุณาเอาบางรายการออกก่อน', en: 'Your favorites are full (at most {max}). Remove some first.' },
 
+  // ───────────── guide ─────────────
+  'guide.bad-version': { th: 'หมายเลขเวอร์ชันไม่ถูกต้อง (ตัวอย่าง 1.12.0)', en: 'The version is not valid (for example 1.12.0).' },
+  'guide.bad-tours': { th: 'รายการทัวร์ไม่ถูกต้อง (ไม่เกิน {max} รายการ, ชื่อใช้ a-z 0-9 และ - ยาวไม่เกิน 40 ตัวอักษร)', en: 'The list of tours is not valid (at most {max}, each a-z, 0-9 and "-", up to 40 characters).' },
+
   // ───────────── upload ─────────────
   'upload.not-found': { th: 'ไม่พบการอัปโหลดนี้', en: 'This upload was not found.' },
   'upload.guest-disabled': { th: 'ผู้เยี่ยมชมอัปโหลดไฟล์ไม่ได้ กรุณาเข้าสู่ระบบก่อน', en: 'Visitors cannot upload files. Please sign in first.' },
