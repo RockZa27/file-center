@@ -115,7 +115,7 @@ async function dimsOf(bytes: Uint8Array): Promise<[number, number]> {
   writeFileSync(file, bytes)
   try {
     const p = Bun.spawnSync([Bun.which('vipsheader')!, file])
-    const m = /(\d+)x(\d+)/.exec(p.stdout.toString())!
+    const m = /: (\d+)x(\d+) /.exec(p.stdout.toString())! // after the name, which is random and may itself hold "4x7"
     return [Number(m[1]), Number(m[2])]
   } finally { rmSync(file, { force: true }) }
 }
