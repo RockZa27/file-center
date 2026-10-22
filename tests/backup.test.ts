@@ -346,13 +346,15 @@ describe('restore (end to end)', () => {
     launcher = Bun.spawn([process.execPath, join(root, 'src', 'launcher.ts')], {
       cwd: root,
       stdout: 'ignore',
-      stderr: 'inherit',
+      stderr: Bun.file(join(base, 'launcher-stderr.log')), // a pipe inherited by a stray launcher would keep the test runner waiting
       env: {
         PATH: process.env.PATH!, HOME: process.env.HOME ?? base, NODE_ENV: 'production',
         PORT: String(port), HOST: '127.0.0.1', STORAGE_DIR: e2e.storage, DATA_DIR: e2e.data, BACKUP_DIR: e2e.backups,
         BACKUP_HOUR: 'off', ADMIN_PASSWORD: E2E_PASSWORD, MIN_FREE_SPACE: '0', FC_STABLE_MS: '1500', FC_HEALTH_TIMEOUT_MS: '15000',
       },
     })
+    // if this process ends early (a broken restore can make the app in it exit), the launcher must not outlive it
+    process.once('exit', () => launcher?.kill('SIGTERM')) // it stops the app it started, then itself
     await until(async () => (await health())?.status === 'ok', 30_000, 'app start')
     live.csrf = (await api('GET', '/api/session')).data.csrf
     const r = await api('POST', '/api/login', { username: 'admin', password: E2E_PASSWORD })

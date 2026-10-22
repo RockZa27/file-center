@@ -11,7 +11,7 @@
  *   bun scripts/qa/seed.ts clean <dir>
  * Copies the working tree as it is (uncommitted changes included). The real tree is never modified.
  */
-import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import type { Decoy, Patch, SeededBug, SeedRecord } from './types'
 
@@ -23,8 +23,24 @@ const opt = (n: string) => { const i = rest.indexOf(`--${n}`); return i >= 0 ? r
 
 const run = async (cmd: string[], cwd = root, env: Record<string, string> = {}) => {
   const p = Bun.spawn(cmd, { cwd, stdout: 'pipe', stderr: 'pipe', env: { ...process.env, ...env } })
-  const [out, err, code] = await Promise.all([new Response(p.stdout).text(), new Response(p.stderr).text(), p.exited])
-  return { out, err, code }
+  const out = new Response(p.stdout).text()
+  const err = new Response(p.stderr).text()
+  const code = await p.exited
+  // a planted bug can end the test process early and leave a server it started holding the pipes open:
+  // read what is there, then stop waiting
+  const grace = <T>(t: Promise<T>) => Promise.race([t, Bun.sleep(5000).then(() => '')])
+  return { out: await grace(out), err: await grace(err), code }
+}
+
+/** stop what a test run left behind in its copy: only processes whose working folder is inside it */
+function stopLeftovers(dir: string) {
+  let pids: string[] = []
+  try { pids = readdirSync('/proc').filter(n => /^\d+$/.test(n)) } catch { return } // no /proc (macOS): nothing to look at
+  for (const pid of pids) {
+    let cwd = ''
+    try { cwd = readlinkSync(`/proc/${pid}/cwd`) } catch { continue }
+    if (cwd === dir || cwd.startsWith(dir + '/')) try { process.kill(Number(pid), 'SIGKILL') } catch { /* gone */ }
+  }
 }
 
 async function copyTree(dir: string, blind: boolean) {
@@ -106,6 +122,7 @@ if (cmd === 'prepare') {
       out.push({ id: bug.id, difficulty: bug.difficulty, severity: bug.severity, killed, failedTests: failed })
       console.log(`${killed ? 'caught  ' : 'MISSED  '} ${bug.id}${killed ? `  (${failed.length} failing)` : '  ← the tests do not notice this bug'}`)
     } finally {
+      stopLeftovers(dir)
       rmSync(dir, { recursive: true, force: true })
     }
   }
