@@ -20,6 +20,22 @@ export type BackupPrefs = {
   scheduleChangedAt?: string
 }
 
+/**
+ * Runtime settings the admin edits on the web (policy.ts reads them). A key that is missing falls back to the env value,
+ * then to the built-in default, so a settings.json from before these existed behaves exactly as it did.
+ */
+export type SharePrefs = { defaultDays?: number; maxDays?: number; allowNever?: boolean; requirePassword?: boolean }
+export type SecurityPrefs = { require2fa?: 'none' | 'admin' | 'staff' | 'all'; sessionTtlHours?: number; loginMaxAttempts?: number; loginLockoutSeconds?: number }
+export type FilesPrefs = {
+  /** 0 = no limit */
+  defaultQuotaBytes?: number; trashRetentionDays?: number; versionsKeep?: number; versionsDays?: number
+  uploadMaxSize?: number; webdav?: boolean; thumbnails?: boolean
+}
+/** `passSealed` is the SMTP password sealed with secret.key (secret-box.ts): never shown, never logged */
+export type MailPrefs = { host?: string; port?: number; secure?: 'starttls' | 'tls' | 'none'; user?: string; passSealed?: string; from?: string }
+/** `webhookSealed` is the alert URL sealed with secret.key: a bot token is part of it */
+export type AlertPrefs = { webhookSealed?: string; kind?: 'discord' | 'slack' | 'telegram' | 'json'; telegramChatId?: string; lang?: 'th' | 'en' }
+
 export type Settings = {
   appName: string
   primaryColor: string
@@ -33,6 +49,11 @@ export type Settings = {
   guestPermissions: Perm[]
   logo: string | null
   backup: BackupPrefs
+  share?: SharePrefs
+  security?: SecurityPrefs
+  files?: FilesPrefs
+  mail?: MailPrefs
+  alerts?: AlertPrefs
 }
 
 const defaults = (): Settings => ({

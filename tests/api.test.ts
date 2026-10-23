@@ -679,6 +679,8 @@ describe('full system: permission matrix', () => {
       ['POST', '/api/admin/update/fetch-and-apply', { password: 'x' }],
       ['GET', '/api/admin/alerts/'],
       ['POST', '/api/admin/alerts/test'],
+      ['GET', '/api/admin/config-warnings'],
+      ['POST', '/api/admin/mail/test', {}],
       ['GET', '/api/admin/backups'],
       ['GET', '/api/admin/backups/estimate'],
       ['PUT', '/api/admin/backups/settings', { keep: 3 }],
@@ -786,6 +788,7 @@ describe('full system: CSRF', () => {
       ['DELETE', '/api/grants/:id'],
       ['POST', '/api/me/app-passwords/', { name: 'csrf', scope: 'readwrite', password: 'test-admin-pass' }],
       ['DELETE', '/api/me/app-passwords/:id'],
+      ['POST', '/api/admin/mail/test', {}],
       ['POST', '/api/admin/groups', { name: 'csrf group' }],
       ['PATCH', '/api/admin/groups/:id', { name: 'pwned' }],
       ['DELETE', '/api/admin/groups/:id', { password: 'test-admin-pass' }],
@@ -1525,7 +1528,7 @@ describe('hardening: visitors\' daily upload allowance', () => {
     const { JsonStore } = await import('../src/store')
     const { utimesSync, readFileSync } = await import('node:fs')
     const keep = config.guestUploadDailyBytes
-    await admin.json('PUT', '/api/admin/settings', { guestPermissions: ['read', 'download', 'batchdownload', 'upload'] })
+    await admin.json('PUT', '/api/admin/settings', { guestPermissions: ['read', 'download', 'batchdownload', 'upload'], password: 'test-admin-pass' })
     const v1 = new Client()
     const v2 = new Client()
     await v1.start()

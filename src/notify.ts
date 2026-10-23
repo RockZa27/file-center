@@ -17,6 +17,7 @@ import { enqueue } from './deliver'
 import { bad, HttpError } from './fsx'
 import { lineEnabled, linePush } from './line'
 import { clean, log, scrub } from './logger'
+import { alertLang } from './policy'
 import { cleanAddress, oneLine, publicBase, sendMail, smtpConfig } from './mail'
 import { type Lang, MESSAGES, type MessageCode, type Params, sizeText, text } from './messages'
 import { settings } from './settings'
@@ -410,7 +411,7 @@ export function mirrorAlert(event: string, code: MessageCode, params: Params, no
     const p = { ...params, code }
     for (const admin of allUsers()) if (admin.role === 'admin') notify(admin.username, 'system-alert', p)
     if (config.lineGroupId && lineEnabled()) {
-      const message = `[${appName()}] ${describe(config.alertLang, 'system-alert', cleanParams(p))}`
+      const message = `[${appName()}] ${describe(alertLang(), 'system-alert', cleanParams(p))}`
       enqueue('line', () => linePush(config.lineGroupId, message))
     }
   } catch (err) {
@@ -458,4 +459,10 @@ export function resetNotifyLimits() {
   lineBudget.clear()
   uploadSent.clear()
   lastBell.clear()
+}
+
+/** the confirmed e-mail address of a user, or null (the admin test mail goes there) */
+export function verifiedEmailOf(username: string): string | null {
+  const e = own(state.value.users, username)?.email
+  return e?.verified ? e.address : null
 }

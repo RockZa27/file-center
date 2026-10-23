@@ -5,6 +5,7 @@ import { alert } from './alerts'
 import { audit } from './audit'
 import { COMMON_PASSWORDS, isRunOrRepeat } from './common-passwords'
 import { config, paths } from './config'
+import * as policy from './policy'
 import { bad, ensureDir, HttpError, normRel, resolveIn } from './fsx'
 import { GRANT_SPACE, grantSpace } from './grants'
 import { GROUP_SPACE, GROUPS_TOP, groupSpace } from './groups'
@@ -98,6 +99,8 @@ export const publicUser = (u: User) => ({
   permissions: u.permissions,
   publicPermissions: u.publicPermissions,
   mustChangePassword: !!u.mustChangePassword,
+  /** the admin requires 2FA for this role and the account has none: only the 2FA setup, password change and logout work (context.ts) */
+  mustSetup2fa: policy.mustSetup2fa(u),
   quotaBytes: u.quotaBytes ?? 0,
   createdAt: u.createdAt,
   lastLogin: u.lastLogin ?? null,
@@ -203,7 +206,7 @@ const anonymous = new Map<string, Session>()
 const ANON_TTL_MS = 6 * 3600_000
 const ANON_MAX = 5000
 const sidKey = (sid: string) => createHash('sha256').update(sid).digest('hex')
-const ttlOf = (s: Session) => (s.username ? config.sessionTtlMs : ANON_TTL_MS)
+const ttlOf = (s: Session) => (s.username ? policy.sessionTtlMs() : ANON_TTL_MS)
 
 export function createSession(username: string | null, meta: { ip?: string; ua?: string } = {}): { sid: string; session: Session } {
   const sid = randomBytes(32).toString('base64url')
@@ -300,7 +303,7 @@ export function reloadIfChangedByCli() {
 export function purgeExpiredSessions() {
   const now = Date.now()
   sessionStore.update(d => {
-    for (const [k, s] of Object.entries(d)) if (now - s.seen > config.sessionTtlMs) delete d[k]
+    for (const [k, s] of Object.entries(d)) if (now - s.seen > policy.sessionTtlMs()) delete d[k]
   })
   for (const [k, s] of anonymous) if (now - s.seen > ANON_TTL_MS) anonymous.delete(k)
 }
@@ -411,7 +414,7 @@ const ATTEMPTS_MAX = 10_000
 
 /** how many failures lock a key, and for how long; logins use LOGIN_MAX_ATTEMPTS / LOGIN_LOCKOUT_SECONDS */
 export type Lockout = { max: number; lockMs: number; /** failures older than this are forgotten (default: the lockout time) */ windowMs?: number }
-const loginLockout = (): Lockout => ({ max: config.loginMaxAttempts, lockMs: config.loginLockoutMs })
+const loginLockout = (): Lockout => ({ max: policy.loginMaxAttempts(), lockMs: policy.loginLockoutMs() })
 
 export function lockedFor(key: string): number {
   const a = attempts.get(key)

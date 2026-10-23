@@ -167,7 +167,7 @@ describe('share links: making and managing them', () => {
       const r = await share(owner, { path: '/report.txt', ...body })
       return `${r.status} ${r.data?.code ?? ''}`.trim()
     }
-    expect(await code({ days: 3 })).toBe('400 share.bad-days')
+    expect(await code({ days: 2 })).toBe('400 share.bad-days')
     expect(await code({ days: 31 })).toBe('400 share.bad-days')
     expect(await code({ days: 1 })).toBe('200')
     expect(await code({ days: 30 })).toBe('200')
@@ -185,14 +185,14 @@ describe('share links: making and managing them', () => {
     try {
       const r = await share(owner, { path: '/report.txt', days: 30 })
       expect(r.status).toBe(400)
-      expect(r.data.params).toEqual({ days: '1, 7' })
+      expect(r.data.params).toEqual({ days: '1, 3, 7' })
       expect(await code({ days: 7 })).toBe('200')
       // the share dialog learns the same choices from the session, so it never offers one the server refuses
-      expect((await owner.json('GET', '/api/session')).data.config.shareDays).toEqual([1, 7])
+      expect((await owner.json('GET', '/api/session')).data.config.shareDays).toEqual([1, 3, 7])
     } finally {
       config.shareMaxDays = before
     }
-    expect((await owner.json('GET', '/api/session')).data.config.shareDays).toEqual([1, 7, 30])
+    expect((await owner.json('GET', '/api/session')).data.config.shareDays).toEqual([1, 3, 7, 14, 30])
     // visitors cannot share, so they are not told
     expect((await new Client().json('GET', '/api/session')).data.config.shareDays).toBeUndefined()
   })

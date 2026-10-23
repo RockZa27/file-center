@@ -10,6 +10,7 @@
 import { createHash, randomBytes } from 'node:crypto'
 import { hostname } from 'node:os'
 import { config } from './config'
+import { mail as mailValues } from './policy'
 
 export class MailError extends Error {
   /** true = the server said no for good (5xx, a bad address): sending again changes nothing */
@@ -52,7 +53,8 @@ export function parseFrom(input: string): { name: string; address: string } | nu
 /** the SMTP_* settings, checked once per value; `error` says why e-mail is off (startup log, never the password) */
 let parsed: { key: string; settings: SmtpSettings | null; error: string | null } | undefined
 export function smtpConfig(): { enabled: boolean; error: string | null; settings: SmtpSettings | null } {
-  const c = config
+  const m = mailValues()
+  const c = { smtpHost: m.host, smtpPort: m.port, smtpSecure: m.secure, smtpUser: m.user, smtpPass: m.pass, smtpFrom: m.from, publicUrl: config.publicUrl }
   const key = [c.smtpHost, c.smtpPort, c.smtpSecure, c.smtpUser, c.smtpPass, c.smtpFrom, c.publicUrl].join('\n')
   if (parsed?.key !== key) {
     parsed = { key, settings: null, error: null }

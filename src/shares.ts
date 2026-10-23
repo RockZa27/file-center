@@ -11,6 +11,7 @@ import { lstatSync } from 'node:fs'
 import { basename } from 'node:path'
 import { accessFor, findUser, type Lockout, type Space } from './auth'
 import { config, paths } from './config'
+import * as policy from './policy'
 import { notFound, resolveIn, storagePath } from './fsx'
 import { nameOf, notify } from './notify'
 import { open, seal } from './secret-box'
@@ -54,9 +55,9 @@ export const kindOf = (s: Share): ShareKind => s.kind ?? 'download'
 
 export type ShareState = 'active' | 'expired' | 'revoked' | 'used-up' | 'unavailable'
 
-export const SHARE_DAYS = [1, 7, 30]
-/** the expiry choices this server takes: SHARE_DAYS up to SHARE_MAX_DAYS */
-export const allowedShareDays = () => SHARE_DAYS.filter(d => d <= config.shareMaxDays)
+export const SHARE_DAYS = policy.SHARE_DAY_CHOICES
+/** the expiry choices this server takes: SHARE_DAYS up to the longest allowed (settings page, else SHARE_MAX_DAYS) */
+export const allowedShareDays = policy.allowedShareDays
 export const SHARE_PASSWORD_MIN = 6
 export const SHARE_MAX_DOWNLOADS = 100_000
 export const SHARE_NOTE_MAX = 500
@@ -182,6 +183,8 @@ export const publicShare = (s: Share) => ({
   type: s.type,
   createdAt: s.createdAt,
   expiresAt: s.expiresAt,
+  /** made with "no expiry" (expiresAt is then a date far away) */
+  neverExpires: s.expiresAt === policy.NEVER_EXPIRES_AT,
   maxDownloads: s.maxDownloads,
   downloads: s.downloads,
   hasPassword: !!s.passwordHash,

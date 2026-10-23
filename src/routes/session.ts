@@ -9,6 +9,7 @@ import {
   recordWideLoginFailure, saveUsers, startTwoFactorSetup, useLoginTicket, verifyLogin, wideCodeWait, wideLoginWait, type Session, type User,
 } from '../auth'
 import { config } from '../config'
+import * as policy from '../policy'
 import { context, requireUser, SESSION_COOKIE } from '../context'
 import { HttpError, notFound } from '../fsx'
 import { type Lang, langOf } from '../messages'
@@ -18,7 +19,7 @@ import { allowedShareDays } from '../shares'
 import { otpauthUri } from '../totp'
 
 /** cookies take whole seconds: SESSION_TTL_HOURS=0.0001 must not break every response */
-const cookieMaxAge = () => Math.max(1, Math.floor(config.sessionTtlMs / 1000))
+const cookieMaxAge = () => Math.max(1, Math.floor(policy.sessionTtlMs() / 1000))
 
 function appConfig(user: User | null, lang: Lang) {
   const s = settings.get()
@@ -26,21 +27,24 @@ function appConfig(user: User | null, lang: Lang) {
     // visitors do not need to know which version (and so which known holes) is running
     ...(user ? { version: config.version } : {}),
     // the expiry choices of the share dialog (SHARE_MAX_DAYS may leave out the longer ones); visitors cannot share
-    ...(user ? { shareDays: allowedShareDays() } : {}),
+    ...(user ? {
+      shareDays: allowedShareDays(), shareDefaultDays: policy.shareDefaultDays(),
+      shareAllowNever: policy.shareAllowNever(), shareRequirePassword: policy.shareRequirePassword(),
+    } : {}),
     // whether the page shows "open in the office editor", and for which file types; visitors can not use it
     ...(user ? { office: officeClientConfig() } : {}),
     // whether /dav answers (WEBDAV=off turns it off); the page shows the app passwords only then
-    ...(user ? { webdav: config.webdav } : {}),
+    ...(user ? { webdav: policy.webdav() } : {}),
     appName: s.appName,
     primaryColor: s.primaryColor,
     // left empty by the admin: the standard text in the visitor's language
     ...pageTexts(lang),
     publicEnabled: s.publicEnabled,
     logo: s.logo,
-    uploadMaxSize: config.uploadMaxSize,
+    uploadMaxSize: policy.uploadMaxSize(),
     uploadChunkSize: config.uploadChunkSize,
     uploadSimultaneous: config.uploadSimultaneous,
-    trashRetentionDays: config.trashRetentionDays,
+    trashRetentionDays: policy.trashRetentionDays(),
     passwordMinLength: PASSWORD_MIN_LENGTH,
   }
 }
@@ -107,7 +111,7 @@ function snapshot(user: User | null, session: Session, lang: Lang) {
     const a = accessFor(user, space)
     if (a) spaces[space] = [...a.perms]
   }
-  return { csrf: session.csrf, user: user ? publicUser(user) : null, spaces, config: appConfig(user, lang) }
+  return { csrf: session.csrf, user: user ? publicUser(user) : null, mustSetup2fa: !!user && policy.mustSetup2fa(user), spaces, config: appConfig(user, lang) }
 }
 
 export const sessionRoutes = new Elysia({ prefix: '/api' })

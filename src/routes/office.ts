@@ -3,6 +3,7 @@ import { basename } from 'node:path'
 import { Elysia, t } from 'elysia'
 import { audit } from '../audit'
 import { config } from '../config'
+import * as policy from '../policy'
 import { context, need, requireUser } from '../context'
 import { forbidden, HttpError, normRel, notFound, resolveIn, storagePath } from '../fsx'
 import { log } from '../logger'
@@ -56,7 +57,7 @@ export const officeRoutes = new Elysia({ prefix: '/api/office' })
         const saved = await saveVersion(token, data)
         audit({
           user: saved.user.username, ip, action: 'office-save', target: storagePath(saved.abs),
-          detail: `${status === 6 ? 'บันทึกระหว่างแก้ไข, ' : ''}${saved.size} ไบต์ (${config.versionsKeep > 0 ? 'ฉบับเดิมเก็บเป็นเวอร์ชันก่อนหน้า' : 'ฉบับเดิมอยู่ในถังขยะ'})`,
+          detail: `${status === 6 ? 'บันทึกระหว่างแก้ไข, ' : ''}${saved.size} ไบต์ (${policy.versionsKeep() > 0 ? 'ฉบับเดิมเก็บเป็นเวอร์ชันก่อนหน้า' : 'ฉบับเดิมอยู่ในถังขยะ'})`,
         })
         return { error: 0 }
       } catch (err) {

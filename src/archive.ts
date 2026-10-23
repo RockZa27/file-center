@@ -6,6 +6,7 @@
 import { extname } from 'node:path'
 import { BlobReader, type Entry, ZipReader } from '@zip.js/zip.js'
 import { config } from './config'
+import * as policy from './policy'
 import { bad, HttpError, notFound } from './fsx'
 import { checkDirectory, DIRECTORY_MAX_ENTRIES, legacyNames } from './zip' // zip.js is configured there (no web workers)
 
@@ -128,7 +129,7 @@ export async function archiveEntryResponse(abs: string, input: unknown, wantInli
     if (entry.encrypted) throw new HttpError(422, 'archive.encrypted')
     const declared = entry.uncompressedSize
     const ratio = entry.compressedSize > 0 ? declared / entry.compressedSize : declared > 0 ? Infinity : 0
-    if (declared > config.uploadMaxSize || (declared > BOMB_MIN_BYTES && ratio > BOMB_RATIO)) throw new HttpError(413, 'archive.too-big')
+    if (declared > policy.uploadMaxSize() || (declared > BOMB_MIN_BYTES && ratio > BOMB_RATIO)) throw new HttpError(413, 'archive.too-big')
 
     // counted on the way out: the header may lie about the size
     let total = 0

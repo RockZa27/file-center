@@ -1,7 +1,9 @@
 import { existsSync, statSync } from 'node:fs'
 import { extname, join, normalize } from 'node:path'
 import { Elysia } from 'elysia'
-import { startAlerts } from './alerts'
+import { alert, startAlerts } from './alerts'
+import { envWarnings } from './config-warnings'
+import { UPLOAD_CEILING } from './policy'
 import { audit } from './audit'
 import { bootstrapAdmin, findUser, pruneLoginAttempts, purgeExpiredSessions } from './auth'
 import { backupDue, backupRunning, runBackup } from './backup'
@@ -200,7 +202,8 @@ const requestStart = new WeakMap<Request, number>()
 // (maxRequestBodySize) is raised to UPLOAD_MAX_SIZE for WebDAV, whose PUT carries a whole file, so it no longer guards
 // the other routes: refuseBigBody does, from the length header or, for a body of unknown length, by counting.
 export const BODY_LIMIT = config.uploadChunkSize * 2 + 1024 * 1024
-const serverBodyLimit = config.webdav ? Math.max(BODY_LIMIT, config.uploadMaxSize) : BODY_LIMIT
+// always room for a WebDAV PUT, so WebDAV can be switched on later from the settings page without a restart
+const serverBodyLimit = Math.max(BODY_LIMIT, UPLOAD_CEILING)
 
 // A form or a list of names is small. Only the text editor (PUT /api/content, up to 2 MB of text, more once escaped) needs more.
 const JSON_MAX_BYTES = 1024 * 1024
@@ -302,6 +305,9 @@ if (import.meta.main) {
   })
   onStop(async force => { stopSearchIndex(); await app.stop(force) })
   startAlerts()
+  // risky .env values that need no request to see: one alert, the details are on the settings page
+  const risky = envWarnings()
+  if (risky.length) alert('config-warnings', 'admin.config-startup-warnings', { count: risky.length, codes: risky.map(w => w.code).join(', ') })
   startSearchIndex() // built in the background: searches walk the disk until it is ready
   // docker stop, Ctrl+C and updates: finish writing users, sessions and settings before leaving
   process.on('SIGTERM', () => void shutdown(0))

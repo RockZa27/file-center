@@ -3,6 +3,7 @@ import { Elysia, t } from 'elysia'
 import { audit } from '../audit'
 import { accessFor, type Access, type User } from '../auth'
 import { config } from '../config'
+import * as policy from '../policy'
 import { context, requireUser } from '../context'
 import { forbidden, normRel, notFound, resolveIn, within } from '../fsx'
 import { activeGrantsTo } from '../grants'
@@ -92,7 +93,7 @@ export const trashRoutes = new Elysia({ prefix: '/api/me' })
         restorable: !!at,
       }
     })
-    return { items, retentionDays: config.trashRetentionDays }
+    return { items, retentionDays: policy.trashRetentionDays() }
   })
 
   .post('/trash/:id/restore', async ({ user, ip, params }) => {

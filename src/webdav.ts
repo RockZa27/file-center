@@ -29,6 +29,7 @@ import { touchAppPassword, verifyAppPassword, type AppPassword, type AppScope } 
 import { audit, auditOnce } from './audit'
 import { accessFor, clearFailures, lockedFor, recordFailure, USER_SPACE, type Access, type Lockout, type User } from './auth'
 import { config, paths } from './config'
+import * as policy from './policy'
 import { clientIp } from './context'
 import { moveState } from './favorites'
 import {
@@ -594,7 +595,7 @@ async function putMethod(ctx: Ctx, segs: string[], place_: Place | null): Promis
   const header = request.headers.get('content-length')
   const known = header === null || header === '' ? null : Number(header)
   if (known !== null && (!Number.isSafeInteger(known) || known < 0)) throw bad('request.invalid')
-  if (known !== null && known > config.uploadMaxSize) throw new HttpError(413, 'upload.too-big')
+  if (known !== null && known > policy.uploadMaxSize()) throw new HttpError(413, 'upload.too-big')
 
   // the count is awaited first: from the check of the quota to the reservation there is no await
   const q = quotaUserOf(s, user)
@@ -636,7 +637,7 @@ async function putMethod(ctx: Ctx, segs: string[], place_: Place | null): Promis
         if (known !== null) {
           if (written > known) throw bad('upload.size-mismatch')
         } else {
-          if (written > config.uploadMaxSize) throw new HttpError(413, 'upload.too-big')
+          if (written > policy.uploadMaxSize()) throw new HttpError(413, 'upload.too-big')
           meter?.(written)
         }
         if (written - checked >= SPACE_CHECK_EVERY) { ensureSpace(paths.tmp, 0); checked = written }
@@ -861,7 +862,7 @@ async function proppatchMethod(ctx: Ctx, segs: string[], place_: Place | null): 
 // ───────────── the entry point ─────────────
 
 export async function handleDav(request: Request, socketIp: string): Promise<Response> {
-  if (!config.webdav) return reply(request, 404, 'request.no-route')
+  if (!policy.webdav()) return reply(request, 404, 'request.no-route')
   try {
     const ip = clientIp(request, socketIp)
     const ctx = await authenticate(request, ip)

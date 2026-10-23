@@ -19,6 +19,7 @@ import { existsSync, mkdirSync, realpathSync, renameSync, rmSync, statSync, syml
 import { lstat, readdir, rm, stat } from 'node:fs/promises'
 import { extname, join } from 'node:path'
 import { config, paths } from './config'
+import * as policy from './policy'
 import { HttpError, notFound } from './fsx'
 import { log } from './logger'
 
@@ -80,7 +81,7 @@ export function setTools(tools: Partial<Record<ToolName, string | null>>) {
 
 /** which kinds can be made on this machine; the file list asks once, then shows icons for the rest */
 export function thumbStatus(): Record<Kind, boolean> {
-  if (!config.thumbnails) return { image: false, pdf: false, video: false }
+  if (!policy.thumbnails()) return { image: false, pdf: false, video: false }
   lookUp()
   return { image: !!(toolPath.vipsthumbnail && toolPath.vipsheader), pdf: !!toolPath.pdftoppm, video: !!toolPath.ffmpeg }
 }
