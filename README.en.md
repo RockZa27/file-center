@@ -39,6 +39,7 @@ designed to work and look much like the File Center built on FileGator, but it u
   an option to include the uploaded files, and a free-disk-space check first.
 - **One-click signed updates:** install from the web page; it rolls back by itself if the new version does not start.
 - **Account security:** two-step verification (2FA), signed-in devices, lockout after wrong passwords, a storage quota per user.
+- **Settings in the web page:** share-link policy, session length, lockout, upload size, trash, SMTP e-mail and the alert webhook are edited under System → Settings and apply at once (the web value wins over `.env`). 2FA can be required by role, and risky configuration is flagged.
 - **In-app tour and help:** a welcome screen, a spotlight tour, a Help page (`/help`) and a "What's new" popup after each update.
 - **Languages and theme:** the web app is in Thai and English, with a light/dark theme in the user menu.
 

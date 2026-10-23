@@ -612,8 +612,8 @@
     "patches": [
       {
         "file": "src/alerts.ts",
-        "find": "const message = scrub(`[${settings.get().appName}] ${text(config.alertLang, code, p)}`).slice(0, 1500)",
-        "replace": "const message = (`[${settings.get().appName}] ${text(config.alertLang, code, p)}`).slice(0, 1500)"
+        "find": "const message = scrub(`[${settings.get().appName}] ${text(policy.alertLang(), code, p)}`).slice(0, 1500)",
+        "replace": "const message = (`[${settings.get().appName}] ${text(policy.alertLang(), code, p)}`).slice(0, 1500)"
       }
     ]
   },
@@ -1753,6 +1753,96 @@
       {
         "file": "src/backup.ts",
         "find": "    removed.push(victim.name)\n",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "share-require-password-unenforced",
+    "difficulty": "easy",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/settings-policy.test.ts",
+    "description": "a share link without a password is created although the admin made passwords mandatory (only the web page asked for one)",
+    "patches": [
+      {
+        "file": "src/routes/shares.ts",
+        "find": "if (password === null && policy.shareRequirePassword()) throw bad('share.must-have-password')",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "guest-widen-no-step-up",
+    "difficulty": "medium",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/settings-policy.test.ts",
+    "description": "visitors can be given write, upload or zip rights without the admin's password",
+    "patches": [
+      {
+        "file": "src/routes/admin.ts",
+        "find": "if (widens || sensitive) await confirmPassword(",
+        "replace": "if (sensitive) await confirmPassword("
+      }
+    ]
+  },
+  {
+    "id": "settings-smtp-pass-in-get",
+    "difficulty": "subtle",
+    "category": "secrets",
+    "severity": "critical",
+    "tests": "tests/settings-policy.test.ts",
+    "description": "GET /api/admin/settings returns the SMTP password in clear",
+    "patches": [
+      {
+        "file": "src/policy.ts",
+        "find": "passSet: !!mv.pass,",
+        "replace": "passSet: !!mv.pass, pass: mv.pass,"
+      }
+    ]
+  },
+  {
+    "id": "must-setup-2fa-gate-open",
+    "difficulty": "medium",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/settings-policy.test.ts",
+    "description": "an account that must set up 2FA can still call every normal API",
+    "patches": [
+      {
+        "file": "src/context.ts",
+        "find": "if (!user || !mustSetup2fa(user)) return",
+        "replace": "if (!user || true || !mustSetup2fa(user)) return"
+      }
+    ]
+  },
+  {
+    "id": "session-ttl-setting-ignored",
+    "difficulty": "easy",
+    "category": "integrity",
+    "severity": "medium",
+    "tests": "tests/settings-policy.test.ts",
+    "description": "the session lifetime saved on the settings page is ignored, the env value is always used",
+    "patches": [
+      {
+        "file": "src/policy.ts",
+        "find": "return h !== undefined ? h * 3600_000 : config.sessionTtlMs",
+        "replace": "return config.sessionTtlMs"
+      }
+    ]
+  },
+  {
+    "id": "upload-max-above-ceiling",
+    "difficulty": "medium",
+    "category": "integrity",
+    "severity": "medium",
+    "tests": "tests/settings-policy.test.ts",
+    "description": "an upload size above the UPLOAD_MAX_SIZE the process started with is accepted and saved",
+    "patches": [
+      {
+        "file": "src/policy.ts",
+        "find": "if (v > UPLOAD_CEILING) throw bad('admin.upload-over-ceiling', { max: UPLOAD_CEILING })",
         "replace": ""
       }
     ]
