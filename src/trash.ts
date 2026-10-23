@@ -3,6 +3,7 @@ import { existsSync, lstatSync, readdirSync, readFileSync, renameSync, rmSync, w
 import { basename, dirname, join } from 'node:path'
 import { allUsers, type User } from './auth'
 import { config, paths } from './config'
+import * as policy from './policy'
 import { groupOwners } from './groups'
 import { holdNow, ownerOfPath, ready } from './quota'
 import { stashedBytes, stashVersions, unstashVersions } from './versions'
@@ -277,7 +278,7 @@ function treeSizeSync(abs: string): number {
 }
 
 export function purgeExpired(): number {
-  const cutoff = Date.now() - config.trashRetentionDays * 86_400_000
+  const cutoff = Date.now() - policy.trashRetentionDays() * 86_400_000
   let n = 0
   for (const m of listTrash()) {
     if (Date.parse(m.deletedAt) < cutoff) {

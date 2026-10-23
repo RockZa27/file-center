@@ -10,6 +10,7 @@
  */
 import { basename } from 'node:path'
 import { config } from './config'
+import * as policy from './policy'
 import { conflict, HttpError } from './fsx'
 import { clean, errorsSince, log, scrub } from './logger'
 import { MESSAGES, text, type MessageCode, type Params } from './messages'
@@ -19,7 +20,7 @@ import { DISK_CRITICAL_PERCENT, diskInfo } from './stats'
 import { JsonStore } from './store'
 import { lookForNewVersion } from './update-source'
 
-export type AlertKind = 'test' | 'backup-failed' | 'errors' | 'lockout' | 'disk-critical' | 'update-available' | 'store-write-failed'
+export type AlertKind = 'test' | 'settings-security' | 'config-warnings' | 'backup-failed' | 'errors' | 'lockout' | 'disk-critical' | 'update-available' | 'store-write-failed'
 const WEBHOOK_KINDS = ['discord', 'slack', 'telegram', 'json'] as const
 type WebhookKind = (typeof WEBHOOK_KINDS)[number]
 
@@ -42,20 +43,21 @@ let parsed: Target | undefined
 
 /** the webhook settings, checked once per value; `error` says why alerts are off (for the startup log, never the URL) */
 export function alertTarget(): Omit<Target, 'key'> {
-  const key = [config.alertWebhookUrl, config.alertWebhookKind, config.alertTelegramChatId].join('\n')
+  const eff = policy.alertValues()
+  const key = [eff.url, eff.kind, eff.chatId].join('\n')
   if (parsed?.key !== key) {
     parsed = { key, url: null, kind: null, host: null, error: null }
-    const value = config.alertWebhookUrl
+    const value = eff.url
     if (value) {
       let u: URL | null = null
       try { u = new URL(value) } catch { /* reported below */ }
-      const kind = (WEBHOOK_KINDS as readonly string[]).includes(config.alertWebhookKind) ? config.alertWebhookKind as WebhookKind : null
+      const kind = (WEBHOOK_KINDS as readonly string[]).includes(eff.kind) ? eff.kind as WebhookKind : null
       if (u) parsed.host = u.host
       if (!u) parsed.error = 'อ่าน ALERT_WEBHOOK_URL ไม่ได้'
       else if (!(u.protocol === 'https:' || (u.protocol === 'http:' && LOCAL_HOSTS.has(u.hostname)))) {
         parsed.error = 'ALERT_WEBHOOK_URL ต้องเป็น https:// (http:// ได้เฉพาะ 127.0.0.1 หรือ localhost)'
       } else if (!kind) parsed.error = 'ALERT_WEBHOOK_KIND ต้องเป็น discord, slack, telegram หรือ json'
-      else if (kind === 'telegram' && !config.alertTelegramChatId) parsed.error = 'ALERT_WEBHOOK_KIND=telegram ต้องตั้ง ALERT_TELEGRAM_CHAT_ID ด้วย'
+      else if (kind === 'telegram' && !eff.chatId) parsed.error = 'ALERT_WEBHOOK_KIND=telegram ต้องตั้ง ALERT_TELEGRAM_CHAT_ID ด้วย'
       else {
         parsed.url = u.href
         parsed.kind = kind
@@ -73,15 +75,15 @@ const inFlight = new Set<Promise<void>>()
 /** GET /api/admin/alerts: never the URL itself (a bot token or webhook secret is part of it), only its host */
 export function alertStatus() {
   const t = alertTarget()
-  return { enabled: t.url !== null, kind: t.kind ?? config.alertWebhookKind, host: t.host, lastSent: { ...lastSent } }
+  return { enabled: t.url !== null, kind: t.kind ?? policy.alertValues().kind, host: t.host, lastSent: { ...lastSent } }
 }
 
 /** the text in ALERT_LANG and the params, both cleaned the way the log is */
 function render(code: MessageCode, params: Params): { message: string; params: Params } {
   const p: Params = { ...params }
   // a reason that is itself a catalog message (backup failures) is told in ALERT_LANG too
-  if (typeof p.reasonCode === 'string' && Object.hasOwn(MESSAGES, p.reasonCode)) p.reason = text(config.alertLang, p.reasonCode as MessageCode)
-  const message = scrub(`[${settings.get().appName}] ${text(config.alertLang, code, p)}`).slice(0, 1500)
+  if (typeof p.reasonCode === 'string' && Object.hasOwn(MESSAGES, p.reasonCode)) p.reason = text(policy.alertLang(), p.reasonCode as MessageCode)
+  const message = scrub(`[${settings.get().appName}] ${text(policy.alertLang(), code, p)}`).slice(0, 1500)
   return { message, params: clean(p) as Params }
 }
 
@@ -90,8 +92,8 @@ function payload(kind: WebhookKind, event: AlertKind, code: MessageCode, message
   switch (kind) {
     case 'discord': return { content: message, allowed_mentions: { parse: [] } }
     case 'slack': return { text: message.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') }
-    case 'telegram': return { chat_id: config.alertTelegramChatId, text: message, disable_web_page_preview: true }
-    default: return { event, code, message, params, lang: config.alertLang, version: config.version, time: new Date().toISOString() }
+    case 'telegram': return { chat_id: policy.alertValues().chatId, text: message, disable_web_page_preview: true }
+    default: return { event, code, message, params, lang: policy.alertLang(), version: config.version, time: new Date().toISOString() }
   }
 }
 

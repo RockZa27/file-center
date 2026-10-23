@@ -1,6 +1,7 @@
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { Elysia, t } from 'elysia'
+import { alert } from '../alerts'
 import { audit, queryAudit } from '../audit'
 import type { Perm } from '../settings'
 import {
@@ -9,6 +10,7 @@ import {
 } from '../auth'
 import { staleAfterMs, statusIn } from '../backup'
 import { config, paths } from '../config'
+import * as policy from '../policy'
 import { context, manageable, requireAdmin, requireStaff } from '../context'
 import { bad, conflict, ensureDir, forbidden, HttpError, isDir, listDirAsync, normRel, notFound, resolveIn } from '../fsx'
 import { errorsSince } from '../logger'
@@ -16,6 +18,7 @@ import { langOf, type MessageCode, type Params, text } from '../messages'
 import type { User } from '../auth'
 import { cleanQuota, forget, usage } from '../quota'
 import { settings } from '../settings'
+import { policyView, savePolicy, STEP_UP_GROUPS } from '../policy'
 import { forgetNotifications } from '../notify'
 import { revokeSharesOf } from '../shares'
 import { DISK_CRITICAL_PERCENT, DISK_LOW_PERCENT, diskInfo, storageStats } from '../stats'
@@ -29,10 +32,17 @@ import { isBeta } from '../release'
 import { availableVersion } from '../update-source'
 import { uploadsInProgress } from '../uploads'
 import { alertRoutes } from './alerts'
+import { configRoutes } from './config-check'
 
 const startedAt = Date.now()
 const roleT = t.Union([t.Literal('admin'), t.Literal('manager'), t.Literal('user')])
 const permsT = t.Array(t.String(), { maxItems: 50 })
+
+/** the settings as the page gets them: no sealed secret, each runtime setting with the value in force and its source */
+function settingsView() {
+  const { share: _s, security: _e, files: _f, mail: _m, alerts: _a, ...plain } = settings.get()
+  return { ...plain, ...policyView() }
+}
 
 function adminCount() {
   return allUsers().filter(u => u.role === 'admin').length
@@ -52,6 +62,8 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
   .use(context)
   // /api/admin/alerts: mounted here so the app's route list in index.ts stays as it is
   .use(alertRoutes)
+  // /api/admin/config-warnings and /api/admin/mail/test
+  .use(configRoutes)
 
   // ───────────── public branding ─────────────
   .get('/branding/logo', () => {
@@ -101,7 +113,8 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     // a manager never takes over a folder that is there already (an admin's shared folder, a deleted user's leftovers)
     if (!isAdmin(admin) && homeIsTaken(username)) throw conflict('admin.home-exists')
     ensureDir(resolveIn(config.storageDir, homedir))
-    const quotaBytes = body.quotaBytes === undefined ? 0 : cleanQuota(body.quotaBytes)
+    // no quota given: the default of the settings page (an admin has no quota)
+    const quotaBytes = body.quotaBytes === undefined ? (body.role === 'admin' ? 0 : policy.defaultQuotaBytes()) : cleanQuota(body.quotaBytes)
     allUsers().push({
       username, name, role: body.role, homedir,
       ...(quotaBytes ? { quotaBytes } : {}),
@@ -320,7 +333,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
   // ───────────── trash ─────────────
   .get('/admin/trash', ({ user, ip }) => {
     requireAdmin({ user, ip })
-    return { items: listTrash(), retentionDays: config.trashRetentionDays }
+    return { items: listTrash(), retentionDays: policy.trashRetentionDays() }
   })
 
   .post('/admin/trash/restore', async ({ user, ip, body }) => {
@@ -340,10 +353,12 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
   // ───────────── settings ─────────────
   .get('/admin/settings', ({ user, ip }) => {
     requireAdmin({ user, ip })
-    return settings.get()
+    return settingsView()
   })
 
-  .put('/admin/settings', ({ user, ip, body }) => {
+  // A key left out stays; inside share/security/files/mail/alerts a key set to null goes back to the env value.
+  // Security and mail settings, and guest rights that let visitors change things, ask for the admin's password.
+  .put('/admin/settings', async ({ user, ip, body }) => {
     const admin = requireAdmin({ user, ip })
     const patch: Record<string, unknown> = {}
     const text = (key: keyof typeof body, max: number, min = 0) => {
@@ -363,15 +378,27 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     }
     if (body.publicEnabled !== undefined) patch.publicEnabled = body.publicEnabled
     if (body.guestPermissions) patch.guestPermissions = cleanPerms(body.guestPermissions)
+    // visitors gaining the right to change things (not read/download) is as sensitive as a security setting
+    const had = settings.get().guestPermissions
+    const widens = Array.isArray(patch.guestPermissions) && (patch.guestPermissions as Perm[]).some(p => ['write', 'upload', 'zip'].includes(p) && !had.includes(p))
+    const sensitive = STEP_UP_GROUPS.some(g => (body as Record<string, unknown>)[g] !== undefined)
+    if (widens || sensitive) await confirmPassword(admin, ip, body.password ?? '', 'settings-denied')
+    const changed = savePolicy(body as Record<string, unknown>)
     settings.update(patch)
-    audit({ user: admin.username, ip, action: 'settings-update', detail: Object.keys(patch).join(', ') })
-    return settings.get()
+    // the names of what changed, never a value (a password or a webhook URL is among them)
+    audit({ user: admin.username, ip, action: 'settings-update', detail: [...Object.keys(patch), ...changed].join(', ') })
+    const security = changed.filter(k => k.startsWith('security.'))
+    if (security.length) alert('settings-security', 'admin.alert-security-changed', { user: admin.username, keys: security.join(', ') })
+    return settingsView()
   }, {
     body: t.Object({
       appName: t.Optional(t.String()), primaryColor: t.Optional(t.String()),
       welcomeTitle: t.Optional(t.String()), welcomeText: t.Optional(t.String()),
       publicEmptyText: t.Optional(t.String()), publicEnabled: t.Optional(t.Boolean()),
       guestPermissions: t.Optional(permsT),
+      share: t.Optional(t.Any()), security: t.Optional(t.Any()), files: t.Optional(t.Any()),
+      mail: t.Optional(t.Any()), alerts: t.Optional(t.Any()),
+      password: t.Optional(t.String({ maxLength: 1000 })),
     }),
   })
 
@@ -387,7 +414,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     await Bun.write(join(paths.branding, `logo.${ext}`), data)
     settings.update({ logo: `${ext}:${Date.now()}` })
     audit({ user: admin.username, ip, action: 'logo-update' })
-    return settings.get()
+    return settingsView()
   }, { parse: 'none' })
 
   .delete('/admin/logo', ({ user, ip }) => {
@@ -396,7 +423,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     if (old) rmSync(join(paths.branding, `logo.${old.split(':')[0]}`), { force: true })
     settings.update({ logo: null })
     audit({ user: admin.username, ip, action: 'logo-remove' })
-    return settings.get()
+    return settingsView()
   })
 
 export { forbidden, HttpError }

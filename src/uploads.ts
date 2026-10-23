@@ -4,6 +4,7 @@ import { open, rm } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { accessFor, type User } from './auth'
 import { config, paths } from './config'
+import * as policy from './policy'
 import { bad, conflict, copyTree, ensureDir, ensureSpace, forbidden, HttpError, isDir, normRel, notFound, renameNoReplace, resolveIn, uniquePath, validName, within } from './fsx'
 import { indexTouched } from './search-index'
 import { commitBytes, limitOf, releaseBytes, reserveBytes, restoreReservation } from './quota'
@@ -196,7 +197,7 @@ export function initUpload(args: {
   const name = validName(args.name)
   const size = Number(args.size)
   if (!Number.isSafeInteger(size) || size < 0) throw bad('upload.bad-size')
-  if (size > config.uploadMaxSize) throw new HttpError(413, 'upload.too-big')
+  if (size > policy.uploadMaxSize()) throw new HttpError(413, 'upload.too-big')
   ensureSpace(paths.tmp, size)
 
   const segments = args.relativeDir.map(validName)

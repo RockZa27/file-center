@@ -1,6 +1,7 @@
 import { Elysia } from 'elysia'
 import { accessFor, canManage, getSession, isStaff, reloadIfChangedByCli, type Access, type Session, type User, findUser } from './auth'
 import { config } from './config'
+import { mustSetup2fa } from './policy'
 import { forbidden, fromFsError, HttpError } from './fsx'
 import { log, safePath } from './logger'
 import { type Lang, langOf, type MessageCode, type Params, text } from './messages'
@@ -8,6 +9,8 @@ import type { Perm } from './settings'
 
 export const SESSION_COOKIE = 'fc_sid'
 const PASSWORD_CHANGE_ROUTES = new Set(['/api/session', '/api/password', '/api/logout', '/api/health', '/api/branding/logo'])
+// an account that must set up 2FA (settings: security.require2fa) may do only that, change its password, read the session, leave, and read the guide
+const SETUP_2FA_ROUTES = new Set([...PASSWORD_CHANGE_ROUTES, '/api/2fa/setup', '/api/2fa/enable', '/api/me/guide'])
 
 export function clientIp(request: Request, socketIp: string): string {
   if (config.trustProxy === 'cloudflare') return request.headers.get('cf-connecting-ip')?.trim() || socketIp
@@ -125,6 +128,11 @@ export const context = new Elysia({ name: 'context' })
     if (pathname.startsWith('/api/') && !PASSWORD_CHANGE_ROUTES.has(pathname)) {
       throw new HttpError(403, 'must-change-password')
     }
+  })
+  .onBeforeHandle({ as: 'global' }, ({ request, user }) => {
+    if (!user || !mustSetup2fa(user)) return
+    const { pathname } = new URL(request.url)
+    if (pathname.startsWith('/api/') && !SETUP_2FA_ROUTES.has(pathname)) throw new HttpError(403, 'auth.2fa-required')
   })
 
 export type Caller = { user: User | null; ip: string }

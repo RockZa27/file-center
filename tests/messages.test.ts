@@ -92,14 +92,14 @@ describe('message catalog', () => {
 
   test('codes are dotted by area, apart from the ones the web page already relies on', () => {
     for (const code of Object.keys(MESSAGES)) {
-      const ok = LEGACY.includes(code) || new RegExp(`^(${AREAS.join('|')})\\.[a-z][a-z0-9-]*$`).test(code)
+      const ok = LEGACY.includes(code) || new RegExp(`^(${AREAS.join('|')})\\.[a-z0-9][a-z0-9-]*$`).test(code)
       expect(ok ? code : `${code} is not <area>.<name>`).toBe(code)
     }
     for (const code of LEGACY) expect(MESSAGES).toHaveProperty([code])
   })
 
   test('every code used in src/ is in the catalog, and every entry is used', () => {
-    const shaped = new RegExp(`'((?:${AREAS.join('|')})\\.[a-z][a-z0-9.-]*|${LEGACY.join('|')})'`, 'g')
+    const shaped = new RegExp(`'((?:${AREAS.join('|')})\\.[a-z0-9][a-z0-9.-]*|${LEGACY.join('|')})'`, 'g')
     const used = new Set<string>()
     for (const [file, src] of sources()) {
       for (const m of src.matchAll(shaped)) {

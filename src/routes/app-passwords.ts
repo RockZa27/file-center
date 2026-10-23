@@ -3,6 +3,7 @@ import { audit } from '../audit'
 import { APP_PASSWORDS_PER_USER, appPasswordsOf, createAppPassword, publicAppPassword, removeAppPassword } from '../app-passwords'
 import { confirmPassword } from '../auth'
 import { config } from '../config'
+import * as policy from '../policy'
 import { context, requireUser } from '../context'
 import { bad, notFound } from '../fsx'
 
@@ -15,7 +16,7 @@ export const appPasswordRoutes = new Elysia({ prefix: '/api/me/app-passwords' })
 
   .get('/', ({ user, ip }) => {
     const u = requireUser({ user, ip })
-    return { items: appPasswordsOf(u.username).map(publicAppPassword), max: APP_PASSWORDS_PER_USER, enabled: config.webdav }
+    return { items: appPasswordsOf(u.username).map(publicAppPassword), max: APP_PASSWORDS_PER_USER, enabled: policy.webdav() }
   })
 
   .post('/', async ({ user, ip, body }) => {

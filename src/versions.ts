@@ -12,6 +12,7 @@ import { copyFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { User } from './auth'
 import { config, paths } from './config'
+import * as policy from './policy'
 import { ensureDir, isDir, notFound, resolveIn, storagePath, within } from './fsx'
 import { commitBytes, holdNow, markStale, ownerOfPath, type Hold } from './quota'
 
@@ -121,7 +122,7 @@ export function versionBytesUnder(root: string): number {
 /** keep at most VERSIONS_KEEP of this file: the oldest go first */
 function prune(abs: string) {
   const list = listVersions(abs)
-  for (const m of list.slice(Math.max(0, config.versionsKeep))) dropVersion(m, join(bucketOf(m.storagePath), m.id))
+  for (const m of list.slice(Math.max(0, policy.versionsKeep()))) dropVersion(m, join(bucketOf(m.storagePath), m.id))
 }
 
 export type VersionTicket = {
@@ -138,7 +139,7 @@ export type VersionTicket = {
  * refuses the save and the current content stays untouched.
  */
 export function reserveVersion(owner: User | null, abs: string): VersionTicket | null {
-  if (!config.versionsKeep) return null
+  if (!policy.versionsKeep()) return null
   let st
   try { st = lstatSync(abs) } catch { return null }
   if (!st.isFile()) return null
@@ -236,8 +237,8 @@ export function unstashVersions(from: string, originalSp: string, toAbs: string)
 
 /** versions older than VERSIONS_DAYS (0 = no limit by age) leave; run by housekeeping */
 export function purgeExpiredVersions(): number {
-  if (!config.versionsDays || !existsSync(paths.versions)) return 0
-  const cutoff = Date.now() - config.versionsDays * 86_400_000
+  if (!policy.versionsDays() || !existsSync(paths.versions)) return 0
+  const cutoff = Date.now() - policy.versionsDays() * 86_400_000
   let n = 0
   for (const [dir, m] of scan(paths.versions)) {
     if (Date.parse(m.savedAt) < cutoff) { removeDir(dir); n++ }

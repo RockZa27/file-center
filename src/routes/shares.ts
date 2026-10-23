@@ -6,6 +6,7 @@ import { alert } from '../alerts'
 import { audit } from '../audit'
 import { accessFor, canManage, clearFailures, findUser, hashPassword, lockedFor, recordFailure } from '../auth'
 import { config } from '../config'
+import * as policy from '../policy'
 import { context, need, requireStaff, requireUser } from '../context'
 import { bad, forbidden, HttpError, listDirAsync, normRel, notFound, resolveIn, storagePath, treeStats } from '../fsx'
 import { sizeText } from '../messages'
@@ -131,7 +132,7 @@ function visitorUpload(token: unknown, request: Request) {
 function limitOf(input: number | null | undefined, max: number): number | null {
   if (input === undefined || input === null) return null
   if (!Number.isSafeInteger(input) || input < 1 || input > max) {
-    throw bad('share.bad-upload-limits', { file: config.uploadMaxSize, files: SHARE_MAX_FILES, total: SHARE_MAX_TOTAL })
+    throw bad('share.bad-upload-limits', { file: policy.uploadMaxSize(), files: SHARE_MAX_FILES, total: SHARE_MAX_TOTAL })
   }
   return input
 }
@@ -155,13 +156,16 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
     if (st.isSymbolicLink() || !(st.isFile() || st.isDirectory())) throw notFound()
     if (kind === 'upload' && !st.isDirectory()) throw bad('share.upload-folder-only')
 
+    // 0 days = no expiry, only when the admin allows it; otherwise a choice up to the longest the admin allows
     const days = allowedShareDays()
-    if (!days.includes(body.days)) throw bad('share.bad-days', { days: days.join(', ') })
+    const never = body.days === 0
+    if (never ? !policy.shareAllowNever() : !days.includes(body.days)) throw bad('share.bad-days', { days: days.join(', ') })
     const max = kind === 'upload' ? null : body.maxDownloads ?? null
     if (max !== null && (!Number.isInteger(max) || max < 1 || max > SHARE_MAX_DOWNLOADS)) {
       throw bad('share.bad-max-downloads', { max: SHARE_MAX_DOWNLOADS })
     }
     const password = body.password || null
+    if (password === null && policy.shareRequirePassword()) throw bad('share.must-have-password')
     if (password !== null && password.length < SHARE_PASSWORD_MIN) throw bad('share.password-too-short', { min: SHARE_PASSWORD_MIN })
     if (password !== null && password.length > 200) throw bad('auth.password-too-long')
     if (sharesOf(owner.username).length >= SHARES_PER_USER) throw bad('share.too-many', { max: SHARES_PER_USER })
@@ -170,7 +174,7 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
     if (Array.from(note).length > SHARE_NOTE_MAX) throw bad('share.note-too-long', { max: SHARE_NOTE_MAX })
     const upload = kind === 'upload' ? {
       kind: 'upload' as const,
-      maxFileBytes: limitOf(body.maxFileBytes, config.uploadMaxSize),
+      maxFileBytes: limitOf(body.maxFileBytes, policy.uploadMaxSize()),
       maxFiles: limitOf(body.maxFiles, SHARE_MAX_FILES),
       maxTotalBytes: limitOf(body.maxTotalBytes, SHARE_MAX_TOTAL),
       note,
@@ -181,7 +185,7 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
       space: a.space,
       path: rel,
       type: st.isDirectory() ? 'dir' : 'file',
-      expiresAt: new Date(Date.now() + body.days * 86_400_000).toISOString(),
+      expiresAt: never ? policy.NEVER_EXPIRES_AT : new Date(Date.now() + body.days * 86_400_000).toISOString(),
       maxDownloads: max,
       ...upload,
       ...(password ? { passwordHash: await hashPassword(password) } : {}),
@@ -189,7 +193,7 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
     // the path, never the token
     audit({
       user: owner.username, ip, action: 'share-create', target: storagePath(abs),
-      detail: `${kind === 'upload' ? 'ลิงก์รับไฟล์, ' : ''}${body.days} วัน${max ? `, ดาวน์โหลดได้ ${max} ครั้ง` : ''}${password ? ', มีรหัสผ่าน' : ''}`,
+      detail: `${kind === 'upload' ? 'ลิงก์รับไฟล์, ' : ''}${never ? 'ไม่มีวันหมดอายุ' : `${body.days} วัน`}${max ? `, ดาวน์โหลดได้ ${max} ครั้ง` : ''}${password ? ', มีรหัสผ่าน' : ''}`,
     })
     // the only time the token is told: it is not stored
     return { share: publicShare(share), token, url: `/s/${token}` }
