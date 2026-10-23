@@ -1528,7 +1528,7 @@ describe('hardening: visitors\' daily upload allowance', () => {
     const { JsonStore } = await import('../src/store')
     const { utimesSync, readFileSync } = await import('node:fs')
     const keep = config.guestUploadDailyBytes
-    await admin.json('PUT', '/api/admin/settings', { guestPermissions: ['read', 'download', 'batchdownload', 'upload'] })
+    await admin.json('PUT', '/api/admin/settings', { guestPermissions: ['read', 'download', 'batchdownload', 'upload'], password: 'test-admin-pass' })
     const v1 = new Client()
     const v2 = new Client()
     await v1.start()
