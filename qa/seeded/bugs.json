@@ -612,8 +612,8 @@
     "patches": [
       {
         "file": "src/alerts.ts",
-        "find": "const message = scrub(`[${settings.get().appName}] ${text(config.alertLang, code, p)}`).slice(0, 1500)",
-        "replace": "const message = (`[${settings.get().appName}] ${text(config.alertLang, code, p)}`).slice(0, 1500)"
+        "find": "const message = scrub(`[${settings.get().appName}] ${text(policy.alertLang(), code, p)}`).slice(0, 1500)",
+        "replace": "const message = (`[${settings.get().appName}] ${text(policy.alertLang(), code, p)}`).slice(0, 1500)"
       }
     ]
   },
