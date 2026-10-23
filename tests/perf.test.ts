@@ -284,6 +284,9 @@ describe('dashboard counting does not hold up other requests', () => {
   })
 
   test('status answers at once, /api/list stays under 100 ms while 50,000 files are counted', async () => {
+    // the very first list of a fresh server pays for its own warm-up (2-5x the others, and 101 ms once on CI):
+    // take it before the count starts, so every timed call below is one made while counting
+    expect((await api('GET', '/api/list?space=home&path=/big')).status).toBe(200)
     // no numbers yet: the first call starts the count and does not wait for it
     const pending = api('GET', '/api/admin/status')
     const latencies: number[] = []
