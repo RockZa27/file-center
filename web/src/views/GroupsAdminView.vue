@@ -6,7 +6,8 @@
       </template>
     </page-header>
     <div class="surface">
-      <n-data-table :columns="columns" :data="groups" :loading="loading" :bordered="false" :single-line="false"
+      <list-skeleton v-if="loading && !groups.length" />
+      <n-data-table v-else :columns="columns" :data="groups" :loading="loading" :bordered="false" :single-line="false"
         :scroll-x="narrow ? undefined : 760" table-layout="fixed" :row-key="r => r.id" :pagination="{ pageSize: 25 }"
       >
         <template #empty><n-empty :description="app.isAdmin ? t('groups.adminNone') : t('groups.adminNoneManager')" /></template>
@@ -48,6 +49,7 @@
 </template>
 
 <script setup>
+import ListSkeleton from '../components/ListSkeleton.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { computed, h, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -110,7 +112,7 @@ async function doDelete() {
 const openMembers = g => { members.id = g.id; members.show = true }
 
 const nameCell = g => h('div', { class: 'g-name-cell' }, [
-  h(NIcon, { component: PeopleCircleOutline, size: 22, color: '#f59e0b' }),
+  h(NIcon, { component: PeopleCircleOutline, size: 22, color: 'var(--folder)' }),
   h('div', { style: 'min-width:0' }, [h('div', { class: 'g-name' }, g.name), h('div', { class: 'muted small' }, t('groups.createdBy', { name: g.createdBy }))]),
 ])
 const countCell = g => t('groups.membersCount', { n: g.members.length })

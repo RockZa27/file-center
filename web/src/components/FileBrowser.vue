@@ -1,5 +1,5 @@
 <template>
-  <div ref="root" class="browser" @dragenter="onDragEnter" @dragover="onDragOver" @dragleave="onDragLeave" @drop.prevent="onDrop" @contextmenu="onBlankContext">
+  <div ref="root" class="browser" :class="{ 'has-bar': selected.length }" @click.capture="onClickCapture" @dragenter="onDragEnter" @dragover="onDragOver" @dragleave="onDragLeave" @drop.prevent="onDrop" @contextmenu="onBlankContext">
     <div class="toolbar">
       <div class="left">
         <n-dropdown v-if="can('upload')" trigger="click" :options="uploadOptions" @select="onUploadSelect">
@@ -14,47 +14,56 @@
         </n-dropdown>
       </div>
       <div class="right">
-        <n-button quaternary circle data-tour="search" :title="t('common.search')" @click="searchOpen = true"><template #icon><n-icon :component="SearchOutline" /></template></n-button>
-        <n-button quaternary circle :title="t('common.refresh')" :loading="loading" @click="load()"><template #icon><n-icon :component="RefreshOutline" /></template></n-button>
-        <n-button class="keys-btn" quaternary circle :title="`${t('files.shortcuts')} (?)`" :aria-label="t('files.shortcuts')" @click="keysOpen = true"><template #icon><n-icon :component="KeypadOutline" /></template></n-button>
-        <n-button quaternary circle :title="showHidden ? t('files.hideHidden') : t('files.showHidden')" @click="showHidden = !showHidden">
-          <template #icon><n-icon :component="showHidden ? EyeOutline : EyeOffOutline" /></template>
-        </n-button>
+        <tip-button data-tour="search" :label="t('common.search')" @click="searchOpen = true"><n-icon :component="SearchOutline" /></tip-button>
+        <tip-button :label="t('common.refresh')" :loading="loading" @click="load()"><n-icon :component="RefreshOutline" /></tip-button>
+        <n-dropdown trigger="click" placement="bottom-end" :options="sortOptions" @select="onSortSelect">
+          <tip-button :label="t('ux.sortBy')" data-testid="sort-menu"><n-icon :component="SwapVerticalOutline" /></tip-button>
+        </n-dropdown>
+        <tip-button class="keys-btn" :label="`${t('files.shortcuts')} (?)`" :aria-label="t('files.shortcuts')" @click="keysOpen = true"><n-icon :component="KeypadOutline" /></tip-button>
+        <tip-button :label="showHidden ? t('files.hideHidden') : t('files.showHidden')" @click="showHidden = !showHidden">
+          <n-icon :component="showHidden ? EyeOutline : EyeOffOutline" />
+        </tip-button>
         <n-button-group size="small" data-tour="view-switch">
-          <n-button :type="app.view === 'list' ? 'primary' : 'default'" :secondary="app.view === 'list'" :title="t('files.viewList')" @click="app.setView('list')"><template #icon><n-icon :component="ListOutline" /></template></n-button>
-          <n-button :type="app.view === 'grid' ? 'primary' : 'default'" :secondary="app.view === 'grid'" :title="t('files.viewGrid')" @click="app.setView('grid')"><template #icon><n-icon :component="GridOutline" /></template></n-button>
-          <n-button :type="app.view === 'gallery' ? 'primary' : 'default'" :secondary="app.view === 'gallery'" :title="t('files.viewGallery')" :aria-label="t('files.viewGallery')" @click="app.setView('gallery')"><template #icon><n-icon :component="ImagesOutline" /></template></n-button>
+          <tip-button bare :quaternary="false" :circle="false" :type="app.view === 'list' ? 'primary' : 'default'" :secondary="app.view === 'list'" :label="t('files.viewList')" @click="app.setView('list')"><n-icon :component="ListOutline" /></tip-button>
+          <tip-button bare :quaternary="false" :circle="false" :type="app.view === 'grid' ? 'primary' : 'default'" :secondary="app.view === 'grid'" :label="t('files.viewGrid')" @click="app.setView('grid')"><n-icon :component="GridOutline" /></tip-button>
+          <tip-button bare :quaternary="false" :circle="false" :type="app.view === 'gallery' ? 'primary' : 'default'" :secondary="app.view === 'gallery'" :label="t('files.viewGallery')" @click="app.setView('gallery')"><n-icon :component="ImagesOutline" /></tip-button>
         </n-button-group>
       </div>
     </div>
 
+    <!-- one bar: where you are (left); what is waiting to be pasted, the storage left and the count (right) -->
     <div class="crumbs">
-      <n-button v-if="location !== '/'" quaternary circle size="small" :title="t('common.back')" @click="go(parentPath(location))">
-        <template #icon><n-icon :component="ArrowBackOutline" /></template>
-      </n-button>
-      <n-breadcrumb>
-        <n-breadcrumb-item v-for="c in crumbs" :key="c.path" @click="go(c.path)">
-          <span
-            class="crumb" :class="{ 'drop-on': dropKey === c.path }"
-            @dragover="dropOver($event, c.path)" @dragleave="dropLeave($event, c.path)" @drop="dropDo($event, c.path)"
-          ><n-icon v-if="c.path === '/'" :component="HomeOutline" />{{ c.name }}</span>
-        </n-breadcrumb-item>
-      </n-breadcrumb>
-      <span class="count muted">{{ t('files.itemCount', { n: visible.length }) }}</span>
-    </div>
-
-    <!-- storage use: only in the personal folder of an account with a quota -->
-    <div v-if="usage && usage.quota > 0" class="usage">
-      <n-progress type="line" :percentage="usagePct" :status="usagePct >= 100 ? 'error' : usagePct >= 90 ? 'warning' : 'default'" :show-indicator="false" :height="6" />
-      <div class="muted small">{{ t('security.usedOf', { used: formatBytes(usage.used), quota: formatBytes(usage.quota) }) }} ({{ usagePct }}%)</div>
-    </div>
-
-    <!-- what Ctrl+C / Ctrl+X took: it waits for a paste in any folder of this space -->
-    <div v-if="clip && clip.paths.length" class="clip" role="status">
-      <n-icon :component="clip.mode === 'cut' ? CutOutline : CopyOutline" />
-      <span class="clip-text" :title="t('files.clipTip')">{{ t(clip.mode === 'cut' ? 'files.clipCut' : 'files.clipCopy', { n: clip.paths.length }) }}</span>
-      <n-button v-if="can('write')" size="tiny" secondary type="primary" @click="paste"><template #icon><n-icon :component="ClipboardOutline" /></template>{{ t('files.clipPaste') }}</n-button>
-      <n-button size="tiny" quaternary @click="clip = null">{{ t('files.clipClear') }}</n-button>
+      <div class="crumbs-main">
+        <tip-button v-if="location !== '/'" size="small" :label="t('common.back')" @click="go(parentPath(location))"><n-icon :component="ArrowBackOutline" /></tip-button>
+        <n-breadcrumb>
+          <n-breadcrumb-item v-for="c in crumbs" :key="c.path" @click="go(c.path)">
+            <span
+              class="crumb" :class="{ 'drop-on': dropKey === c.path }"
+              @dragover="dropOver($event, c.path)" @dragleave="dropLeave($event, c.path)" @drop="dropDo($event, c.path)"
+            ><n-icon v-if="c.path === '/'" :component="HomeOutline" />{{ c.name }}</span>
+          </n-breadcrumb-item>
+        </n-breadcrumb>
+      </div>
+      <div class="crumbs-meta">
+        <!-- what Ctrl+C / Ctrl+X took: it waits for a paste in any folder of this space -->
+        <div v-if="clip && clip.paths.length" class="clip" role="status">
+          <n-icon :component="clip.mode === 'cut' ? CutOutline : CopyOutline" />
+          <span class="clip-text" :title="t('files.clipTip')">{{ t(clip.mode === 'cut' ? 'files.clipCut' : 'files.clipCopy', { n: clip.paths.length }) }}</span>
+          <n-button v-if="can('write')" size="tiny" secondary type="primary" @click="paste"><template #icon><n-icon :component="ClipboardOutline" /></template>{{ t('files.clipPaste') }}</n-button>
+          <tip-button size="tiny" :label="t('files.clipClear')" @click="clip = null"><n-icon :component="CloseOutline" /></tip-button>
+        </div>
+        <!-- storage use: only in the personal folder of an account with a quota -->
+        <n-tooltip v-if="usage && usage.quota > 0">
+          <template #trigger>
+            <div class="usage" role="img" :aria-label="usageText">
+              <n-progress type="line" :percentage="usagePct" :status="usagePct >= 100 ? 'error' : usagePct >= 90 ? 'warning' : 'default'" :show-indicator="false" :height="6" class="usage-meter" />
+              <span class="muted usage-pct">{{ usagePct }}%</span>
+            </div>
+          </template>
+          {{ usageText }}
+        </n-tooltip>
+        <span class="count muted">{{ t('files.itemCount', { n: visible.length }) }}</span>
+      </div>
     </div>
 
     <transition name="fade">
@@ -72,10 +81,27 @@
       </div>
     </transition>
 
+    <!-- a phone: the same actions in a bar at the bottom of the screen, within reach of the thumb -->
+    <div v-if="selected.length" class="selbar" role="toolbar" :aria-label="t('files.selected', { n: selected.length })">
+      <div class="selbar-head">
+        <span class="selbar-count">{{ t('files.selected', { n: selected.length }) }}</span>
+        <button type="button" class="selbar-clear" @click="checked = []"><n-icon :component="CloseOutline" />{{ t('files.clearSelection') }}</button>
+      </div>
+      <div class="selbar-actions">
+        <button v-if="can('download') && can('batchdownload')" type="button" class="sb" @click="downloadMany(selected)"><n-icon :component="DownloadOutline" /><span>{{ t('common.download') }}</span></button>
+        <button v-if="selected.length === 1 && canShareItem(selected[0])" type="button" class="sb" data-tour="share" @click="openShare(selected[0])"><n-icon :component="LinkOutline" /><span>{{ t('share.action') }}</span></button>
+        <button v-if="can('write') || copyOut" type="button" class="sb" @click="pick('copy', selected)"><n-icon :component="CopyOutline" /><span>{{ t('ux.copy') }}</span></button>
+        <button v-if="can('write')" type="button" class="sb" @click="pick('move', selected)"><n-icon :component="ReturnUpForwardOutline" /><span>{{ t('ux.move') }}</span></button>
+        <button v-if="can('zip') && can('write')" type="button" class="sb" @click="askZip(selected)"><n-icon :component="ArchiveOutline" /><span>{{ t('ux.zip') }}</span></button>
+        <button v-if="can('write')" type="button" class="sb danger" @click="remove(selected)"><n-icon :component="TrashOutline" /><span>{{ t('common.delete') }}</span></button>
+      </div>
+    </div>
+
     <div class="content surface" data-tour="file-list">
-      <n-spin :show="loading && !items.length">
-        <div v-if="error" class="empty"><n-result status="warning" :title="error"><template #footer><n-button @click="load()">{{ t('common.retry') }}</n-button></template></n-result></div>
-        <div v-else-if="!loading && !visible.length" class="empty">
+      <div>
+        <list-skeleton v-if="loading && !items.length && !error" :rows="6" />
+        <div v-else-if="error" class="empty"><n-result status="warning" :title="error"><template #footer><n-button @click="load()">{{ t('common.retry') }}</n-button></template></n-result></div>
+        <div v-else-if="!visible.length" class="empty">
           <n-empty :description="can('write') ? t('files.emptyTitle') : (emptyText || t('files.emptyReadonly'))">
             <template v-if="can('upload')" #extra>
               <p class="muted small">{{ t('files.emptyText') }}</p>
@@ -87,7 +113,7 @@
           v-else-if="app.view === 'list'"
           :columns="columns" :data="sorted" :row-key="r => r.path" :checked-row-keys="checked"
           :row-props="rowProps" :row-class-name="rowClass" :pagination="pagination"
-          :bordered="false" :single-line="false" :scroll-x="620"
+          :bordered="false" :single-line="false" :scroll-x="narrow ? undefined : 620" table-layout="fixed"
           @update:checked-row-keys="k => (checked = k)" @update:sorter="onSorter"
         />
         <div v-else-if="app.view === 'gallery'" class="gallery">
@@ -96,12 +122,12 @@
               v-for="d in galleryDirs" :key="d.path" type="button" class="g-folder" role="listitem" :data-path="d.path" :class="{ cursor: cursor === d.path, 'drop-on': dropKey === d.path }"
               @click="go(d.path)" @contextmenu.prevent.stop="openContext($event, d)"
               @dragover="dropOver($event, d.path)" @dragleave="dropLeave($event, d.path)" @drop="dropDo($event, d.path)"
-            ><n-icon :component="Folder" color="#f59e0b" :size="18" /><span>{{ d.name }}</span></button>
+            ><n-icon :component="Folder" color="var(--folder)" :size="18" /><span>{{ d.name }}</span></button>
           </div>
-          <div v-if="!galleryMedia.length" class="muted g-empty">{{ t('gallery.empty') }}</div>
+          <n-empty v-if="!galleryMedia.length" class="g-empty" :description="t('gallery.empty')" />
           <div v-else class="g-grid">
             <div
-              v-for="it in galleryShown" :key="it.path" class="g-tile" :data-path="it.path" :draggable="can('write')"
+              v-for="it in galleryShown" :key="it.path" class="g-tile" :data-path="it.path" :draggable="can('write') && !coarse" v-bind="lp(it)"
               :class="{ on: checked.includes(it.path), cursor: cursor === it.path }"
               @contextmenu.prevent.stop="openContext($event, it)" @click="cursor = it.path" @dragstart="dragStart($event, it)" @dragend="dragEnd"
             >
@@ -117,7 +143,7 @@
               <div class="g-name">{{ it.name }}</div>
               <n-checkbox v-if="selectable" class="g-check" :checked="checked.includes(it.path)" @update:checked="v => toggle(it, v)" />
               <n-dropdown v-if="actionsFor(it).length" trigger="click" placement="bottom-end" :options="actionsFor(it)" @select="k => run(k, it)">
-                <n-button class="g-menu" quaternary circle size="small"><template #icon><n-icon :component="EllipsisHorizontal" /></template></n-button>
+                <tip-button class="g-menu" size="small" :label="t('ux.more')" :aria-label="`${t('ux.more')}: ${it.name}`"><n-icon :component="EllipsisHorizontal" /></tip-button>
               </n-dropdown>
             </div>
             <div v-if="galleryShown.length < galleryMedia.length" class="more"><n-button secondary @click="gridLimit += 120">{{ t('files.showMore', { n: galleryMedia.length - galleryShown.length }) }}</n-button></div>
@@ -125,7 +151,7 @@
         </div>
         <div v-else class="grid">
           <div
-            v-for="it in gridItems" :key="it.path" class="card" :data-path="it.path" :draggable="can('write')"
+            v-for="it in gridItems" :key="it.path" class="card" :data-path="it.path" :draggable="can('write') && !coarse" v-bind="lp(it)"
             :class="{ on: checked.includes(it.path), cursor: cursor === it.path, 'drop-on': dropKey === it.path }"
             @contextmenu.prevent.stop="openContext($event, it)" @click="cursor = it.path"
             @dragstart="dragStart($event, it)" @dragend="dragEnd"
@@ -143,16 +169,16 @@
               <div class="card-meta muted">{{ it.type === 'dir' ? t('common.folder') : formatBytes(it.size) }}</div>
             </button>
             <n-checkbox v-if="selectable" class="card-check" :checked="checked.includes(it.path)" @update:checked="v => toggle(it, v)" />
-            <n-button v-if="starrable" class="card-star" quaternary circle size="small" :title="isFav(it) ? t('files.removeFavorite') : t('files.addFavorite')" @click="toggleFav(it)">
-              <template #icon><n-icon :component="isFav(it) ? Star : StarOutline" :color="isFav(it) ? '#f59e0b' : undefined" /></template>
-            </n-button>
+            <tip-button v-if="starrable" class="card-star" size="small" :label="isFav(it) ? t('files.removeFavorite') : t('files.addFavorite')" @click="toggleFav(it)">
+              <n-icon :component="isFav(it) ? Star : StarOutline" :color="isFav(it) ? 'var(--star)' : undefined" />
+            </tip-button>
             <n-dropdown v-if="actionsFor(it).length" trigger="click" placement="bottom-end" :options="actionsFor(it)" @select="k => run(k, it)">
-              <n-button class="card-menu" quaternary circle size="small"><template #icon><n-icon :component="EllipsisHorizontal" /></template></n-button>
+              <tip-button class="card-menu" size="small" :label="t('ux.more')" :aria-label="`${t('ux.more')}: ${it.name}`"><n-icon :component="EllipsisHorizontal" /></tip-button>
             </n-dropdown>
           </div>
           <div v-if="gridItems.length < sorted.length" class="more"><n-button secondary @click="gridLimit += 120">{{ t('files.showMore', { n: sorted.length - gridItems.length }) }}</n-button></div>
         </div>
-      </n-spin>
+      </div>
       <div v-if="hiddenCount && !showHidden" class="hidden-note muted">
         {{ t('files.hiddenCount', { n: hiddenCount }) }}
         <n-button text type="primary" size="small" @click="showHidden = true">{{ t('files.show') }}</n-button>
@@ -207,20 +233,22 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import {
   NBreadcrumb, NBreadcrumbItem, NButton, NButtonGroup, NCheckbox, NDataTable, NDropdown, NEmpty, NIcon, NInput,
-  NModal, NProgress, NResult, NSpin,
+  NModal, NProgress, NResult, NTooltip,
 } from 'naive-ui'
 import {
   AddOutline, ArchiveOutline, Folder, ArrowBackOutline, ClipboardOutline, CloudUploadOutline, CopyOutline, CreateOutline, CutOutline, DocumentTextOutline,
   DownloadOutline, EllipsisHorizontal, EyeOffOutline, EyeOutline, FolderOpenOutline, GridOutline, HomeOutline, KeypadOutline, LinkOutline, ListOutline, PeopleOutline,
-  ImagesOutline, PlayOutline, OpenOutline, RefreshOutline, ReturnUpForwardOutline, SearchOutline, Star, StarOutline, TimeOutline, TrashOutline, FolderOutline, EyeOutline as ViewIcon, ExpandOutline,
+  CloseOutline, ImagesOutline, PlayOutline, SwapVerticalOutline, OpenOutline, RefreshOutline, ReturnUpForwardOutline, SearchOutline, Star, StarOutline, TimeOutline, TrashOutline, FolderOutline, EyeOutline as ViewIcon, ExpandOutline,
 } from '@vicons/ionicons5'
 import { api } from '../api'
-import { useFeedback } from '../composables'
+import { useFeedback, useNarrow } from '../composables'
 import { useAppStore } from '../store'
 import { collectDropped, fromInput } from '../upload-utils'
 import { loadThumbStatus, mediaKindOf, sharpScreen, wantsThumb } from '../media'
 import { baseName, extOf, formatBytes, formatDate, kindOf, officeModeFor, parentPath } from '../utils'
 import FileIcon from './FileIcon.vue'
+import ListSkeleton from './ListSkeleton.vue'
+import TipButton from './TipButton.vue'
 import FolderPicker from './FolderPicker.vue'
 import GrantModal from './GrantModal.vue'
 import Lightbox from './Lightbox.vue'
@@ -272,8 +300,24 @@ const checked = ref([])
 const showHidden = ref(false)
 const searchOpen = ref(false)
 const gridLimit = ref(120)
-const sortKey = ref('name')
-const sortOrder = ref('ascend')
+// the order is kept in this browser (like the view): the next folder and the next visit open in it
+const SORT_KEYS = ['name', 'size', 'mtime']
+function readSort() {
+  try {
+    const v = JSON.parse(localStorage.getItem('fc.sort') || 'null')
+    if (v && SORT_KEYS.includes(v.key) && ['ascend', 'descend'].includes(v.order)) return v
+  } catch { /* private mode, or something else wrote it */ }
+  return { key: 'name', order: 'ascend' }
+}
+const savedSort = readSort()
+const sortKey = ref(savedSort.key)
+const sortOrder = ref(savedSort.order)
+watch([sortKey, sortOrder], () => {
+  try { localStorage.setItem('fc.sort', JSON.stringify({ key: sortKey.value, order: sortOrder.value })) } catch { /* private mode */ }
+})
+const narrow = useNarrow()
+/** a touch screen: no hover, no drag and drop of rows (the menu has Move) */
+const coarse = window.matchMedia('(hover: none) and (pointer: coarse)').matches
 const dragging = ref(false)
 let dragDepth = 0
 const root = ref(null)
@@ -376,11 +420,20 @@ function extractFromViewer() {
   if (it) unzip(it)
 }
 
+const sortOptions = computed(() => [['name', 'common.name'], ['size', 'common.size'], ['mtime', 'common.modified']].map(([key, text]) => ({
+  key, label: `${sortKey.value === key ? (sortOrder.value === 'ascend' ? '↑ ' : '↓ ') : ''}${t(text)}`,
+})))
+// the same column again turns the order around
+function onSortSelect(key) {
+  if (sortKey.value === key) sortOrder.value = sortOrder.value === 'ascend' ? 'descend' : 'ascend'
+  else { sortKey.value = key; sortOrder.value = 'ascend' }
+}
 function onSorter(s) {
   if (!s || !s.order) { sortKey.value = 'name'; sortOrder.value = 'ascend' } else { sortKey.value = s.columnKey; sortOrder.value = s.order }
 }
 
 const usage = ref(null)
+const usageText = computed(() => (usage.value ? `${t('security.usedOf', { used: formatBytes(usage.value.used), quota: formatBytes(usage.value.quota) })} (${usagePct.value}%)` : ''))
 const usagePct = computed(() => (usage.value?.quota ? Math.min(100, Math.round((usage.value.used / usage.value.quota) * 100)) : 0))
 async function loadUsage() {
   if (props.space !== 'home' || !app.user) return
@@ -441,6 +494,34 @@ function applySelect() {
   if (selectable.value) checked.value = [it.path]
   if (it.type === 'file' && kindOf(it.name) !== 'other' && can('download')) { preview.item = it; preview.show = true }
 }
+
+// ───── touch: a long press (about half a second) on a row or tile selects it ─────
+const LONG_PRESS_MS = 500
+let lpTimer = null
+let lpAt = 0
+let lpX = 0
+let lpY = 0
+const lpStop = () => { clearTimeout(lpTimer); lpTimer = null }
+function lpStart(e, it) {
+  if (e.pointerType !== 'touch' || !selectable.value) return
+  lpStop()
+  lpX = e.clientX
+  lpY = e.clientY
+  lpTimer = setTimeout(() => {
+    lpTimer = null
+    lpAt = Date.now()
+    toggle(it, !checked.value.includes(it.path))
+    cursor.value = it.path
+    navigator.vibrate?.(15)
+  }, LONG_PRESS_MS)
+}
+// a finger that moves is scrolling, not pressing
+function lpMove(e) { if (lpTimer && Math.hypot(e.clientX - lpX, e.clientY - lpY) > 10) lpStop() }
+const lp = it => ({ onPointerdown: e => lpStart(e, it), onPointermove: lpMove, onPointerup: lpStop, onPointercancel: lpStop, onPointerleave: lpStop })
+/** the press just selected something: the click that follows it, and the browser's own menu for a long press, are not wanted */
+const justPressed = () => Date.now() - lpAt < 800
+function onClickCapture(e) { if (justPressed()) { e.stopPropagation(); e.preventDefault() } }
+onBeforeUnmount(lpStop)
 
 // ───── favorites ─────
 const starrable = computed(() => !!app.user && !viewing.value)
@@ -667,6 +748,7 @@ function openShare(it) {
 }
 
 function openContext(e, it) {
+  if (justPressed()) return
   const options = actionsFor(it)
   if (!options.length) return
   cursor.value = it.path
@@ -689,8 +771,9 @@ function blankActions() {
   return list
 }
 function onBlankContext(e) {
+  if (justPressed()) return e.preventDefault()
   // a row, a text box, a link, the pagination or the column titles keep their own menu or none
-  if (e.defaultPrevented || e.target.closest?.('input, textarea, a, button, .toolbar, .crumbs, .selection, .clip, .usage, .n-pagination, .n-data-table-thead, .card, .n-data-table-tr')) return
+  if (e.defaultPrevented || e.target.closest?.('input, textarea, a, button, .toolbar, .crumbs, .selection, .clip, .usage, .n-pagination, .n-data-table-thead, .card, .n-data-table-tr, .selbar')) return
   const options = blankActions()
   if (!options.length) return
   e.preventDefault()
@@ -715,20 +798,39 @@ const columns = computed(() => {
   if (starrable.value) {
     cols.push({
       title: '', key: 'star', width: 44, align: 'center',
-      render: row => h(NButton, { quaternary: true, circle: true, size: 'small', title: isFav(row) ? t('files.removeFavorite') : t('files.addFavorite'), onClick: () => toggleFav(row) }, {
-        icon: () => h(NIcon, { component: isFav(row) ? Star : StarOutline, color: isFav(row) ? '#f59e0b' : undefined }),
+      render: row => h(TipButton, { size: 'small', label: isFav(row) ? t('files.removeFavorite') : t('files.addFavorite'), onClick: () => toggleFav(row) }, {
+        default: () => h(NIcon, { component: isFav(row) ? Star : StarOutline, color: isFav(row) ? 'var(--star)' : undefined }),
       }),
     })
   }
-  cols.push(
-    {
-      title: t('common.name'), key: 'name', minWidth: 220, sorter: true,
-      sortOrder: sortKey.value === 'name' ? sortOrder.value : false,
-      render: row => h('button', { type: 'button', class: 'name-cell', onClick: () => open(row) }, [
-        h(FileIcon, { item: row, size: 22 }),
-        h('span', { class: 'truncate name-text', title: row.name }, row.name),
-      ]),
+  const nameCol = {
+    title: t('common.name'), key: 'name', minWidth: narrow.value ? undefined : 220, sorter: true,
+    sortOrder: sortKey.value === 'name' ? sortOrder.value : false,
+    // a phone has no room for the size and date columns: they sit under the name, and the whole name shows
+    render: row => h('button', { type: 'button', class: 'name-cell', onClick: () => open(row) }, [
+      h(FileIcon, { item: row, size: 22 }),
+      narrow.value
+        ? h('span', { class: 'name-stack' }, [
+            h('span', { class: 'name-text', title: row.name }, row.name),
+            h('span', { class: 'name-sub muted' }, [row.type === 'dir' ? '' : `${formatBytes(row.size)} · `, formatDate(row.mtime)].join('')),
+          ])
+        : h('span', { class: 'truncate name-text', title: row.name }, row.name),
+    ]),
+  }
+  const actionsCol = {
+    title: '', key: 'actions', width: 56, align: 'right',
+    render: row => {
+      const options = actionsFor(row)
+      return options.length
+        ? h(NDropdown, { trigger: 'click', placement: 'bottom-end', options, onSelect: k => run(k, row) }, {
+            default: () => h(TipButton, { size: 'small', label: t('ux.more'), ariaLabel: `${t('ux.more')}: ${row.name}` }, { default: () => h(NIcon, { component: EllipsisHorizontal }) }),
+          })
+        : null
     },
+  }
+  if (narrow.value) cols.push(nameCol, actionsCol)
+  else cols.push(
+    nameCol,
     {
       title: t('common.size'), key: 'size', width: 110, sorter: true,
       sortOrder: sortKey.value === 'size' ? sortOrder.value : false,
@@ -739,23 +841,14 @@ const columns = computed(() => {
       sortOrder: sortKey.value === 'mtime' ? sortOrder.value : false,
       render: row => formatDate(row.mtime),
     },
-    {
-      title: '', key: 'actions', width: 56, align: 'right',
-      render: row => {
-        const options = actionsFor(row)
-        return options.length
-          ? h(NDropdown, { trigger: 'click', placement: 'bottom-end', options, onSelect: k => run(k, row) }, {
-              default: () => h(NButton, { quaternary: true, circle: true, size: 'small' }, { icon: () => h(NIcon, { component: EllipsisHorizontal }) }),
-            })
-          : null
-      },
-    },
+    actionsCol,
   )
   return cols
 })
 const rowProps = row => ({
   'data-path': row.path,
-  draggable: can('write'),
+  draggable: can('write') && !coarse,
+  ...lp(row),
   onContextmenu: e => { e.preventDefault(); e.stopPropagation(); openContext(e, row) },
   onClick: () => { cursor.value = row.path; anchor = row.path },
   onDragstart: e => dragStart(e, row),
@@ -814,7 +907,7 @@ function dragStart(e, row) {
     // "n items" follows the pointer instead of one row's picture
     ghost = document.createElement('div')
     ghost.textContent = t('files.itemCount', { n: paths.length })
-    ghost.style.cssText = 'position:fixed;top:-100px;left:-100px;padding:6px 12px;border-radius:8px;background:#2563eb;color:#fff;font:600 13px sans-serif'
+    ghost.style.cssText = 'position:fixed;top:-100px;left:-100px;padding:6px 12px;border-radius:8px;background:var(--primary);color:#fff;font:600 13px sans-serif'
     document.body.appendChild(ghost)
     e.dataTransfer.setDragImage(ghost, 10, 10)
   }
@@ -997,9 +1090,12 @@ function onSearchSelect(it) {
 .browser { position: relative; min-height: calc(100vh - 240px); }
 .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .left, .right { display: flex; align-items: center; gap: 8px; }
-.usage { margin: -4px 0 12px; max-width: 360px; display: flex; flex-direction: column; gap: 4px; }
-.usage .small { font-size: 12.5px; }
-.crumbs { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; min-height: 28px; flex-wrap: wrap; }
+.usage { display: flex; align-items: center; gap: 8px; width: 120px; }
+.usage-meter { flex: 1; min-width: 0; }
+.usage-pct { font-size: 12.5px; min-width: 32px; text-align: right; }
+.crumbs { display: flex; align-items: center; justify-content: space-between; gap: 6px 14px; margin-bottom: 12px; min-height: 32px; flex-wrap: wrap; }
+.crumbs-main { display: flex; align-items: center; gap: 8px; flex: 1 1 280px; min-width: 0; }
+.crumbs-meta { display: flex; align-items: center; gap: 6px 14px; flex-wrap: wrap; margin-left: auto; }
 .crumbs .n-breadcrumb { min-width: 0; }
 /* long Thai folder names have no spaces: the trail wraps inside the screen instead of pushing the page sideways */
 .crumbs :deep(.n-breadcrumb ul) { display: flex; flex-wrap: wrap; row-gap: 2px; }
@@ -1013,8 +1109,8 @@ function onSearchSelect(it) {
 :deep(.n-data-table-tr.row-cursor > td) { background: color-mix(in srgb, var(--primary) 8%, transparent) !important; }
 :deep(.n-data-table-tr.row-cursor > td:first-child) { box-shadow: inset 3px 0 0 var(--primary); }
 .card.cursor { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-soft); }
-.clip { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 6px 12px; margin-bottom: 12px; border-radius: var(--radius); background: var(--surface-2); border: 1px dashed var(--border); font-size: 13.5px; }
-.clip-text { font-weight: 500; margin-right: auto; }
+.clip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 2px 4px 2px 10px; border-radius: 999px; background: var(--surface-2); border: 1px dashed var(--border); font-size: 13px; }
+.clip-text { font-weight: 500; overflow-wrap: anywhere; }
 .keys-hint { font-size: 13px; margin: 0 0 12px; }
 .keys { display: grid; grid-template-columns: minmax(110px, auto) 1fr; gap: 8px 16px; margin: 0 0 12px; align-items: center; }
 .keys dt { white-space: nowrap; }
@@ -1022,9 +1118,9 @@ function onSearchSelect(it) {
 .keys kbd { display: inline-block; min-width: 22px; padding: 2px 7px; text-align: center; border: 1px solid var(--border); border-bottom-width: 2px; border-radius: 6px; background: var(--surface-2); font: 600 12.5px ui-monospace, Menlo, Consolas, monospace; }
 .keys .plus { margin: 0 3px; color: var(--muted); }
 /* a phone has no keyboard to look the keys up for */
-@media (max-width: 640px) { .keys-btn { display: none; } }
+@media (max-width: 640px) { :deep(.keys-btn) { display: none; } }
 .crumb .n-icon { vertical-align: -2px; margin-right: 4px; }
-.count { margin-left: auto; font-size: 13px; }
+.count { font-size: 13px; white-space: nowrap; }
 .selection { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 8px 14px; margin-bottom: 12px; border-radius: var(--radius); background: var(--primary-soft); border: 1px solid color-mix(in srgb, var(--primary) 30%, transparent); }
 .sel-count { font-weight: 600; color: var(--primary); }
 .sel-actions { display: flex; gap: 6px; flex-wrap: wrap; }
@@ -1048,7 +1144,7 @@ function onSearchSelect(it) {
 .g-folder:hover, .g-folder.cursor { border-color: var(--primary); }
 .g-folder:focus-visible { outline: 2px solid var(--primary); }
 .g-folder.drop-on { outline: 2px solid var(--primary); background: var(--primary-soft); }
-.g-empty { padding: 36px 8px; text-align: center; }
+.g-empty { padding: 36px 8px; }
 .g-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 12px; }
 .g-tile { position: relative; min-width: 0; border-radius: 10px; transition: box-shadow 0.15s; }
 .g-tile.on, .g-tile.cursor { box-shadow: 0 0 0 2px var(--primary); }
@@ -1059,7 +1155,7 @@ function onSearchSelect(it) {
 .g-img > :deep(.n-icon) { position: absolute; inset: 0; margin: auto; }
 .g-name { margin-top: 4px; font-size: 12px; line-height: 1.35; color: var(--muted); overflow-wrap: anywhere; }
 .g-check { position: absolute; top: 8px; left: 8px; }
-.g-menu { position: absolute; top: 6px; right: 6px; background: var(--surface); }
+:deep(.g-menu) { position: absolute; top: 6px; right: 6px; border-radius: 50%; background: var(--surface); }
 @media (max-width: 640px) {
   .gallery { padding: 10px; }
   .g-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -1067,8 +1163,8 @@ function onSearchSelect(it) {
 .card-name { margin-top: 8px; font-size: 13.5px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .card-meta { font-size: 12px; }
 .card-check { position: absolute; top: 14px; left: 14px; }
-.card-star { position: absolute; top: 12px; right: 44px; background: var(--surface); }
-.card-menu { position: absolute; top: 12px; right: 12px; background: var(--surface); }
+:deep(.card-star) { position: absolute; top: 12px; right: 44px; border-radius: 50%; background: var(--surface); }
+:deep(.card-menu) { position: absolute; top: 12px; right: 12px; border-radius: 50%; background: var(--surface); }
 .more { grid-column: 1 / -1; text-align: center; }
 .drop { position: fixed; inset: 0; z-index: 100; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; background: color-mix(in srgb, var(--primary) 14%, transparent); border: 3px dashed var(--primary); color: var(--primary); font-size: 18px; font-weight: 600; pointer-events: none; }
 .foot { display: flex; justify-content: flex-end; gap: 8px; }
@@ -1080,5 +1176,29 @@ function onSearchSelect(it) {
 /* phones cannot hover for the title: long names wrap onto more lines instead of ending in "…" */
 @media (max-width: 640px) {
   :deep(.name-text), .card-name { white-space: normal; overflow-wrap: anywhere; }
+}
+:deep(.name-stack) { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+:deep(.name-sub) { font-size: 12px; }
+/* the bar for a selection at the bottom of a phone screen (the one under the toolbar is for wide screens) */
+.selbar { display: none; }
+.sb { all: unset; box-sizing: border-box; flex: 1 1 0; min-width: 48px; padding: 8px 2px; display: flex; flex-direction: column; align-items: center; gap: 2px; border-radius: 10px; cursor: pointer; font-size: 11.5px; line-height: 1.2; text-align: center; overflow-wrap: anywhere; color: var(--text); }
+.sb .n-icon { font-size: 20px; }
+.sb:hover, .sb:focus-visible { background: var(--surface-2); }
+.sb:focus-visible { outline: 2px solid var(--primary); }
+.sb.danger { color: var(--danger); }
+@media (max-width: 640px) {
+  .selection { display: none; }
+  .browser.has-bar { padding-bottom: 96px; }
+  .selbar { display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: 32; background: var(--surface); border-top: 1px solid var(--border); box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.12); padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); }
+  .selbar-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 6px 2px; }
+  .selbar-count { font-size: 12.5px; font-weight: 600; color: var(--primary); }
+  .selbar-clear { all: unset; display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 8px; cursor: pointer; font-size: 12.5px; color: var(--muted); }
+  .selbar-clear:hover, .selbar-clear:focus-visible { background: var(--surface-2); color: var(--text); }
+  .selbar-actions { display: flex; gap: 2px; }
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 10px; }
+}
+/* a finger, not a mouse: bigger targets, no text selection or callout on a long press */
+@media (hover: none) and (pointer: coarse) {
+  .content :deep(.n-data-table-tr), .card, .g-tile { -webkit-touch-callout: none; user-select: none; -webkit-user-select: none; }
 }
 </style>

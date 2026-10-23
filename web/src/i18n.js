@@ -2,6 +2,11 @@ import { watch } from 'vue'
 import { createI18n } from 'vue-i18n'
 
 const th = {
+  // screen furniture added with the 1.13 polish: top bar, lists, selection bar
+  ux: {
+    here: 'ตำแหน่งปัจจุบัน', helpTour: 'ทัวร์ของหน้านี้', helpNews: 'มีอะไรใหม่', loading: 'กำลังโหลด',
+    noUsers: 'ยังไม่มีผู้ใช้', more: 'เมนู', sortBy: 'เรียงลำดับ', copy: 'คัดลอก', move: 'ย้าย', zip: 'zip',
+  },
   common: {
     save: 'บันทึก', cancel: 'ยกเลิก', close: 'ปิด', confirm: 'ยืนยัน', delete: 'ลบ', create: 'สร้าง',
     rename: 'เปลี่ยนชื่อ', download: 'ดาวน์โหลด', upload: 'อัปโหลด', refresh: 'รีเฟรช', search: 'ค้นหา',
@@ -502,6 +507,11 @@ const th = {
 }
 
 const en = {
+  // screen furniture added with the 1.13 polish: top bar, lists, selection bar
+  ux: {
+    here: 'You are here', helpTour: 'Tour of this page', helpNews: "What's new", loading: 'Loading',
+    noUsers: 'No users yet', more: 'Actions', sortBy: 'Sort by', copy: 'Copy', move: 'Move', zip: 'Zip',
+  },
   common: {
     save: 'Save', cancel: 'Cancel', close: 'Close', confirm: 'Confirm', delete: 'Delete', create: 'Create',
     rename: 'Rename', download: 'Download', upload: 'Upload', refresh: 'Refresh', search: 'Search',

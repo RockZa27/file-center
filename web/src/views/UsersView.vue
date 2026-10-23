@@ -6,9 +6,12 @@
       </template>
     </page-header>
     <div class="surface">
-      <n-data-table :columns="columns" :data="users" :loading="loading" :bordered="false" :single-line="false"
-        :scroll-x="narrow ? undefined : 1050" :row-key="r => r.username"
-      />
+      <list-skeleton v-if="loading && !users.length" />
+      <n-data-table v-else :columns="columns" :data="users" :loading="loading" :bordered="false" :single-line="false"
+        :scroll-x="narrow ? undefined : 1050" :row-key="r => r.username" :pagination="{ pageSize: 25 }"
+      >
+        <template #empty><n-empty :description="t('ux.noUsers')" /></template>
+      </n-data-table>
     </div>
     <user-form-modal v-model:show="form.show" :user="form.user" @saved="load" />
     <user-devices-modal v-model:show="dev.show" :user="dev.user" @changed="load" />
@@ -28,11 +31,12 @@
 </template>
 
 <script setup>
+import ListSkeleton from '../components/ListSkeleton.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { computed, h, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { NButton, NDataTable, NDropdown, NFormItem, NIcon, NInput, NModal, NTag } from 'naive-ui'
+import { NButton, NDataTable, NDropdown, NEmpty, NFormItem, NIcon, NInput, NModal, NTag } from 'naive-ui'
 import { CreateOutline, EllipsisHorizontal, FolderOpenOutline, PersonAddOutline, TrashOutline } from '@vicons/ionicons5'
 import { api } from '../api'
 import UserDevicesModal from '../components/UserDevicesModal.vue'

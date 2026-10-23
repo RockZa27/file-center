@@ -14,7 +14,7 @@
     <n-spin :show="loading">
       <div class="list">
         <button v-for="f in folders" :key="f.path" type="button" class="folder" @click="open(f.path)">
-          <n-icon :component="Folder" color="#f59e0b" size="20" /><span class="truncate">{{ f.name }}</span>
+          <n-icon :component="Folder" color="var(--folder)" size="20" /><span class="truncate">{{ f.name }}</span>
         </button>
         <div v-if="!loading && !folders.length" class="muted none">{{ t('files.noSubfolders') }}</div>
       </div>

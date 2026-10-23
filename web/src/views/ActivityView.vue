@@ -13,7 +13,8 @@
       <n-button v-if="app.isAdmin" tag="a" :href="exportUrl" secondary :loading="saving !== null" :title="t('activity.exportHint')" @click="exportCsv"><template #icon><n-icon :component="DownloadOutline" /></template>{{ t('activity.export') }}</n-button>
     </div>
     <div class="surface">
-      <n-data-table :columns="columns" :data="rows" :loading="loading" :bordered="false" :single-line="false"
+      <list-skeleton v-if="loading && !rows.length" />
+      <n-data-table v-else :columns="columns" :data="rows" :loading="loading" :bordered="false" :single-line="false"
         :scroll-x="narrow ? undefined : 740" table-layout="fixed" :row-key="r => r.key"
       >
         <template #empty><n-empty :description="t('activity.none')" /></template>
@@ -24,6 +25,7 @@
 </template>
 
 <script setup>
+import ListSkeleton from '../components/ListSkeleton.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { computed, h, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'

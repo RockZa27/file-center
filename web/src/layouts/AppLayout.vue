@@ -16,11 +16,6 @@
           </router-link>
         </section>
       </nav>
-      <div class="side-foot">
-        <router-link :to="{ name: 'help' }" class="nav-item small" data-tour="nav-help" @click="drawer = false">
-          <n-icon :component="HelpCircleOutline" size="18" /><span class="nav-label">{{ t('nav.help') }}</span>
-        </router-link>
-      </div>
     </aside>
     <div v-if="drawer" class="scrim" @click="drawer = false" />
 
@@ -29,12 +24,19 @@
         <n-button class="menu-btn" quaternary circle data-tour="menu-toggle" :aria-label="t('nav.menu')" @click="drawer = true">
           <template #icon><n-icon :component="MenuOutline" /></template>
         </n-button>
-        <div class="title">{{ pageTitle }}</div>
+        <nav class="crumbs" :aria-label="t('ux.here')">
+          <template v-for="(c, i) in crumbs" :key="i">
+            <span v-if="i" class="sep" aria-hidden="true">›</span>
+            <span class="crumb" :class="{ last: i === crumbs.length - 1 }" :aria-current="i === crumbs.length - 1 ? 'page' : undefined">{{ c }}</span>
+          </template>
+        </nav>
         <div class="right">
           <span class="bell-wrap" data-tour="bell"><notification-bell @settings="openProfile('notify')" /></span>
-          <n-button class="help-btn" quaternary circle data-tour="help-button" :title="t('nav.helpTip')" :aria-label="t('nav.helpTip')" @click="router.push({ name: 'help' })">
-            <template #icon><n-icon :component="HelpCircleOutline" /></template>
-          </n-button>
+          <n-dropdown trigger="click" placement="bottom-end" :options="helpOptions" @select="onHelp">
+            <n-button class="help-btn" quaternary circle data-tour="help-button" :title="t('nav.helpTip')" :aria-label="t('nav.helpTip')">
+              <template #icon><n-icon :component="HelpCircleOutline" /></template>
+            </n-button>
+          </n-dropdown>
           <n-dropdown trigger="click" :options="userOptions" @select="onSelect">
             <button type="button" class="user-btn" data-tour="user-menu">
               <n-avatar round size="small" class="avatar">{{ initial }}</n-avatar>
@@ -57,7 +59,7 @@ import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
 import { NAvatar, NBadge, NButton, NDropdown, NIcon } from 'naive-ui'
 import {
-  ContrastOutline, FolderOpenOutline, FolderOutline, GlobeOutline, BookOutline, HelpCircleOutline, KeyOutline, LanguageOutline, LinkOutline, LogOutOutline, MenuOutline, MoonOutline, PeopleCircleOutline, PersonOutline,
+  ContrastOutline, FolderOpenOutline, FolderOutline, GlobeOutline, BookOutline, HelpCircleOutline, PlayCircleOutline, SparklesOutline, KeyOutline, LanguageOutline, LinkOutline, LogOutOutline, MenuOutline, MoonOutline, PeopleCircleOutline, PersonOutline,
   ServerOutline, ShareSocialOutline, SpeedometerOutline, StarOutline, SunnyOutline, TimeOutline, TrashOutline,
 } from '@vicons/ionicons5'
 import { api } from '../api'
@@ -67,7 +69,8 @@ import ProfileModal from '../components/ProfileModal.vue'
 import SpotlightTour from '../components/SpotlightTour.vue'
 import WhatsNewModal from '../components/WhatsNewModal.vue'
 import { releasesFor } from '../guide/releases'
-import { drawerHook, guide, loadGuide, openWhatsNew, resetGuide, saveSeen, startFullTour, tour } from '../guide/tour'
+import { drawerHook, guide, loadGuide, openWhatsNew, resetGuide, saveSeen, startFullTour, startTour, tour } from '../guide/tour'
+import { pageTourSteps } from '../guide/tours'
 import { compareVersions } from '../guide/util'
 import { useAppStore } from '../store'
 import { useFeedback, useRoleLabel } from '../composables'
@@ -127,9 +130,30 @@ const sections = computed(() => {
     { key: 'system', label: t('nav.section.system'), items: system },
   ].filter(sec => sec.items.length)
 })
-const navItems = computed(() => sections.value.flatMap(sec => sec.items))
 
-const pageTitle = computed(() => (route.meta.system ? t('nav.system') : route.name === 'help' ? t('nav.help') : route.name === 'user-files' ? t('nav.users') : route.name === 'shared' ? t('nav.publicFolder') : route.name === 'groups' ? t('nav.groupFolders') : navItems.value.find(i => i.name === route.name)?.label || ''))
+// the top bar only says where you are (section > page); the page's own title is the heading of the page
+const systemTabs = { settings: 'nav.settings', backup: 'nav.backup', update: 'nav.update', logs: 'nav.logs', trash: 'nav.trashAll' }
+const crumbs = computed(() => {
+  const name = route.name
+  if (route.meta.system) return [t('nav.section.system'), t(systemTabs[name] || 'nav.system')]
+  if (name === 'help') return [t('nav.help')]
+  const key = name === 'user-files' ? 'users' : name
+  const sec = sections.value.find(s => s.items.some(i => i.name === key))
+  const item = sec?.items.find(i => i.name === key)
+  return item ? [sec.label, item.label] : []
+})
+// "?": the tour of this page (when it has one), the guide, what is new
+const pageSteps = computed(() => pageTourSteps(route.name, app.user?.role))
+const helpOptions = computed(() => [
+  ...(pageSteps.value.length ? [{ key: 'tour', label: t('ux.helpTour'), icon: () => h(NIcon, { component: PlayCircleOutline }) }] : []),
+  { key: 'guide', label: t('nav.help'), icon: () => h(NIcon, { component: BookOutline }) },
+  { key: 'news', label: t('ux.helpNews'), icon: () => h(NIcon, { component: SparklesOutline }) },
+])
+function onHelp(key) {
+  if (key === 'tour') startTour(pageSteps.value)
+  if (key === 'guide') router.push({ name: 'help' })
+  if (key === 'news') openWhatsNew('all', releasesFor(app.user?.role, null, app.config.version, { webdav: !!app.config.webdav }))
+}
 const initial = computed(() => (app.user?.name || '?').trim().slice(0, 1).toUpperCase())
 
 const userOptions = computed(() => [
@@ -244,9 +268,7 @@ onBeforeUnmount(() => {
 .nav-item { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 8px; color: var(--text); text-decoration: none; font-size: 14.5px; }
 .nav-item:hover { background: var(--surface-2); }
 .nav-item.router-link-active { background: var(--primary-soft); color: var(--primary); font-weight: 600; }
-.nav-item.small { font-size: 13.5px; color: var(--muted); }
 .badge { margin-left: auto; }
-.side-foot { padding: 10px; border-top: 1px solid var(--border); }
 .nav-sec { display: flex; flex-direction: column; gap: 2px; }
 .nav-sec + .nav-sec { margin-top: 10px; }
 .nav-head { padding: 4px 12px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
@@ -254,7 +276,10 @@ onBeforeUnmount(() => {
 .main { margin-left: var(--sidebar-w); min-height: 100vh; display: flex; flex-direction: column; }
 .topbar { position: sticky; top: 0; z-index: 30; height: var(--header-h); display: flex; align-items: center; gap: 12px; padding: 0 20px; background: color-mix(in srgb, var(--bg) 85%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--border); }
 .menu-btn { display: none; }
-.title { font-weight: 600; font-size: 16px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crumbs { display: flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; color: var(--muted); white-space: nowrap; }
+.crumb { overflow: hidden; text-overflow: ellipsis; }
+.crumb.last { color: var(--text); font-weight: 500; }
+.sep { flex: none; }
 .bell-wrap { display: inline-flex; }
 .right { margin-left: auto; display: flex; align-items: center; gap: 4px; flex: none; }
 .user-btn { all: unset; display: flex; align-items: center; gap: 8px; padding: 4px 8px 4px 4px; border-radius: 999px; cursor: pointer; }
@@ -271,5 +296,6 @@ main { flex: 1; }
   .menu-btn { display: inline-flex; }
   .topbar { padding: 0 8px; gap: 6px; }
   .user-name { display: none; }
+  .crumb:not(.last), .sep { display: none; }
 }
 </style>

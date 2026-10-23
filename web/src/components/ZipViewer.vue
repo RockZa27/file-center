@@ -307,7 +307,7 @@ onBeforeUnmount(dropBlob)
 .main:focus-visible { outline: 2px solid var(--primary); outline-offset: -2px; }
 .text { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .nm { overflow-wrap: anywhere; font-weight: 500; line-height: 1.4; }
-.lock { margin-left: 6px; vertical-align: -2px; color: #f59e0b; }
+.lock { margin-left: 6px; vertical-align: -2px; color: var(--folder); }
 .acts { display: flex; flex: none; gap: 2px; }
 .pv-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
 .pv-name { flex: 1 1 160px; min-width: 0; overflow-wrap: anywhere; font-weight: 600; }

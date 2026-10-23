@@ -13,7 +13,8 @@
       <n-button @click="apply"><template #icon><n-icon :component="RefreshOutline" /></template>{{ t('common.refresh') }}</n-button>
     </div>
     <div class="surface">
-      <n-data-table
+      <list-skeleton v-if="loading && !rows.length" />
+      <n-data-table v-else
         v-model:expanded-row-keys="expanded" :columns="columns" :data="rows" :loading="loading" :bordered="false" :single-line="false"
         :scroll-x="narrow ? undefined : 760" table-layout="fixed" :row-key="r => r.key"
       >
@@ -25,6 +26,7 @@
 </template>
 
 <script setup>
+import ListSkeleton from '../components/ListSkeleton.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { computed, h, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'

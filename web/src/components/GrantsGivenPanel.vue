@@ -4,7 +4,8 @@
       <n-button :loading="loading" @click="load"><template #icon><n-icon :component="RefreshOutline" /></template>{{ t('common.refresh') }}</n-button>
     </div>
     <div class="surface">
-      <n-data-table :columns="columns" :data="rows" :loading="loading" :bordered="false" :single-line="false"
+      <list-skeleton v-if="loading && !rows.length" />
+      <n-data-table v-else :columns="columns" :data="rows" :loading="loading" :bordered="false" :single-line="false"
         :scroll-x="narrow ? undefined : 760" table-layout="fixed" :row-key="r => r.id" :pagination="{ pageSize: 25 }"      >
         <template #empty><n-empty :description="t('grants.usersNone')" /></template>
       </n-data-table>
@@ -13,6 +14,7 @@
 </template>
 
 <script setup>
+import ListSkeleton from './ListSkeleton.vue'
 import { computed, h, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NButton, NDataTable, NEmpty, NIcon, NRadioButton, NRadioGroup, NTag } from 'naive-ui'
@@ -46,7 +48,7 @@ async function remove(g) {
 const targetName = g => (g.toGroup ? g.toGroupName || t('groups.groupLabel') : g.toName || g.to)
 const dim = g => (g.active ? '' : ' dim')
 const folderCell = g => h('div', { class: `g-folder${dim(g)}` }, [
-  h(NIcon, { component: FolderOutline, size: 20, color: '#f59e0b' }),
+  h(NIcon, { component: FolderOutline, size: 20, color: 'var(--folder)' }),
   h('div', { class: 'g-text' }, [
     h('div', { class: 'g-name' }, g.name),
     h('div', { class: 'muted mono wrap' }, g.path || ''),

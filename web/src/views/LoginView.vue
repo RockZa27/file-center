@@ -1,8 +1,6 @@
 <template>
-  <div class="login">
-    <div class="corner"><preference-controls /></div>
+  <public-shell center :logo-to="app.publicAvailable ? '/' : { name: 'login' }">
     <div class="card surface">
-      <app-logo class="logo" />
       <h1>{{ t('login.title') }}</h1>
       <p class="muted sub">{{ ticket ? (useBackup ? t('login.backupHelp') : t('login.codeHelp')) : t('login.subtitle') }}</p>
       <n-alert v-if="failure" type="error" class="alert">{{ errorMessage }}</n-alert>
@@ -35,7 +33,7 @@
         <router-link :to="{ name: 'public' }">← {{ t('login.backToPublic') }}</router-link>
       </div>
     </div>
-  </div>
+  </public-shell>
 </template>
 
 <script setup>
@@ -43,8 +41,7 @@ import { computed, nextTick, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
 import { NAlert, NButton, NForm, NFormItem, NInput } from 'naive-ui'
-import AppLogo from '../components/AppLogo.vue'
-import PreferenceControls from '../components/PreferenceControls.vue'
+import PublicShell from '../components/PublicShell.vue'
 import { errorText } from '../composables'
 import { useAppStore } from '../store'
 
@@ -142,10 +139,7 @@ watch(code, v => { if (ticket.value && !useBackup.value && /^\d{6}$/.test(v)) su
 </script>
 
 <style scoped>
-.login { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; background: radial-gradient(900px 400px at 0% 0%, var(--primary-soft), transparent 70%), var(--bg); }
-.corner { position: fixed; top: 12px; right: 12px; }
 .card { width: min(400px, 100%); padding: 32px 28px 24px; }
-.logo { margin-bottom: 20px; }
 h1 { margin: 0; font-size: 22px; font-weight: 600; }
 .sub { margin: 6px 0 20px; font-size: 14px; }
 .alert { margin-bottom: 16px; }

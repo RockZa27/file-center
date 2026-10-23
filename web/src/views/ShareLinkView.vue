@@ -1,9 +1,5 @@
 <template>
-  <div class="share-page">
-    <header class="bar">
-      <app-logo :to="app.user ? { name: 'files' } : '/'" />
-      <preference-controls />
-    </header>
+  <public-shell :logo-to="app.user ? { name: 'files' } : '/'">
 
     <main class="wrap">
       <div v-if="loading && !info && !dead" class="center-box"><n-spin size="large" /></div>
@@ -150,7 +146,7 @@
             <template v-else>
               <div v-if="galleryDirs.length" class="g-folders" role="list" :aria-label="t('gallery.folders')">
                 <router-link v-for="d in galleryDirs" :key="d.path" :to="{ query: { path: d.path } }" class="g-folder" role="listitem">
-                  <n-icon :component="Folder" color="#f59e0b" :size="18" /><span>{{ d.name }}</span>
+                  <n-icon :component="Folder" color="var(--folder)" :size="18" /><span>{{ d.name }}</span>
                 </router-link>
               </div>
               <div v-if="!galleryMedia.length" class="muted g-empty">{{ t('gallery.empty') }}</div>
@@ -210,7 +206,7 @@
       :download-url="lightboxFile" :auto-original="false"
     />
     <zip-viewer v-model:show="zip.show" :name="zip.name" :source="zipSource" />
-  </div>
+  </public-shell>
 </template>
 
 <script setup>
@@ -220,10 +216,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { NAlert, NBreadcrumb, NBreadcrumbItem, NButton, NButtonGroup, NEmpty, NIcon, NInput, NProgress, NResult, NSpin } from 'naive-ui'
 import { ArchiveOutline, ArrowBackOutline, CheckmarkCircleOutline, CloudUploadOutline, DownloadOutline, Folder, FolderOpenOutline, ImagesOutline, ListOutline, LockClosedOutline, PlayOutline } from '@vicons/ionicons5'
 import { api, ApiError, putChunk } from '../api'
-import AppLogo from '../components/AppLogo.vue'
+import PublicShell from '../components/PublicShell.vue'
 import FileIcon from '../components/FileIcon.vue'
 import Lightbox from '../components/Lightbox.vue'
-import PreferenceControls from '../components/PreferenceControls.vue'
 import ThumbImg from '../components/ThumbImg.vue'
 import ZipViewer from '../components/ZipViewer.vue'
 import { errorText, useFeedback } from '../composables'
@@ -545,8 +540,6 @@ watch(locale, () => { if (failed.value) load() })
 </script>
 
 <style scoped>
-.share-page { min-height: 100vh; }
-.bar { height: var(--header-h); display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 24px; background: var(--surface); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 30; }
 .wrap { max-width: 880px; margin: 0 auto; padding: 32px 24px 48px; }
 .center-box { display: grid; place-items: center; padding: 80px 0; }
 .panel { padding: 32px 24px; }
@@ -606,7 +599,6 @@ h1 { margin: 0; font-weight: 600; }
 @media (max-width: 640px) {
   .gallery { padding: 10px; }
   .g-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-  .bar { padding: 0 12px; }
   .wrap { padding: 16px 12px 32px; }
   .panel { padding: 24px 16px; }
   .head { flex-direction: column; align-items: stretch; padding: 16px; }
@@ -636,7 +628,7 @@ h1 { margin: 0; font-weight: 600; }
 .mine-row { display: flex; align-items: flex-start; gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); }
 .mine-text { min-width: 0; }
 .mine-name { overflow-wrap: anywhere; font-weight: 500; }
-.ok { color: #18a058; margin-top: 3px; flex: none; }
+.ok { color: var(--ok); margin-top: 3px; flex: none; }
 
 @media (max-width: 640px) {
   .note, .rules, .mine { padding-left: 16px; padding-right: 16px; }

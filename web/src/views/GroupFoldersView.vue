@@ -2,8 +2,9 @@
   <div class="page">
     <!-- one group's folder -->
     <template v-if="id">
-      <n-spin :show="loading && !current">
-        <n-alert v-if="current" type="info" :show-icon="true" class="banner">
+      <div>
+        <n-skeleton v-if="loading && !current" class="banner" :height="64" :sharp="false" />
+        <n-alert v-else-if="current" type="info" :show-icon="true" class="banner">
           <div class="banner-row">
             <span class="banner-text">
               {{ t('groups.viewing', { name: current.name }) }}
@@ -19,7 +20,7 @@
             <template #extra><router-link :to="{ name: 'groups' }" class="back">← {{ t('groups.back') }}</router-link></template>
           </n-empty>
         </div>
-      </n-spin>
+      </div>
       <!-- the rights come with each listing: the group's folder is a space of its own -->
       <file-browser v-if="current" :key="current.id" :space="current.space" />
     </template>
@@ -31,24 +32,19 @@
         <n-button :loading="loading" @click="load"><template #icon><n-icon :component="RefreshOutline" /></template>{{ t('common.refresh') }}</n-button>
         </template>
       </page-header>
-      <div class="surface list">
-        <n-spin :show="loading && !items.length">
-          <n-empty v-if="!loading && !items.length" :description="t('groups.none')" class="none" />
-          <div v-for="g in items" :key="g.id" class="grp" data-testid="group-row">
-            <router-link :to="{ name: 'groups', params: { id: g.id } }" class="grp-main">
-              <n-icon :component="PeopleCircleOutline" size="28" color="#f59e0b" />
-              <span class="grp-text">
-                <span class="grp-name">{{ g.name }}</span>
-                <usage-bar :used="g.used" :quota="g.quotaBytes" />
-              </span>
-            </router-link>
+      <list-panel :loading="loading" :count="items.length" :empty="t('groups.none')">
+        <list-row v-for="g in items" :key="g.id" data-testid="group-row" :to="{ name: 'groups', params: { id: g.id } }">
+          <template #icon><n-icon :component="PeopleCircleOutline" size="28" color="var(--folder)" /></template>
+          <template #title>{{ g.name }}</template>
+          <template #sub><usage-bar :used="g.used" :quota="g.quotaBytes" /></template>
+          <template #actions>
             <n-tag size="small" round :bordered="false" :type="g.perms === 'edit' ? 'success' : 'default'">{{ permLabel(g.perms) }}</n-tag>
             <n-button size="small" type="primary" secondary @click="router.push({ name: 'groups', params: { id: g.id } })">
               <template #icon><n-icon :component="FolderOpenOutline" /></template>{{ t('groups.open') }}
             </n-button>
-          </div>
-        </n-spin>
-      </div>
+          </template>
+        </list-row>
+      </list-panel>
     </template>
   </div>
 </template>
@@ -58,10 +54,12 @@ import PageHeader from '../components/PageHeader.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { NAlert, NButton, NEmpty, NIcon, NSpin, NTag } from 'naive-ui'
+import { NAlert, NButton, NEmpty, NIcon, NSkeleton, NTag } from 'naive-ui'
 import { FolderOpenOutline, PeopleCircleOutline, RefreshOutline } from '@vicons/ionicons5'
 import { api } from '../api'
 import FileBrowser from '../components/FileBrowser.vue'
+import ListPanel from '../components/ListPanel.vue'
+import ListRow from '../components/ListRow.vue'
 import UsageBar from '../components/UsageBar.vue'
 import { useFeedback } from '../composables'
 import { useAppStore } from '../store'
@@ -102,12 +100,4 @@ watch(id, () => { if (id.value && !current.value) load() })
 .usage { margin-top: 8px; max-width: 420px; }
 .back { font-weight: 600; text-decoration: underline; text-underline-offset: 2px; color: inherit; white-space: nowrap; }
 .gone { padding: 48px 16px; }
-.list { padding: 4px 0; }
-.none { padding: 48px 16px; }
-.grp { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; padding: 12px 16px; border-bottom: 1px solid var(--border); }
-.grp:last-child { border-bottom: 0; }
-.grp-main { display: flex; align-items: center; gap: 12px; flex: 1 1 260px; min-width: 0; color: inherit; text-decoration: none; }
-.grp-text { display: flex; flex-direction: column; gap: 4px; min-width: 0; flex: 1; }
-.grp-name { font-weight: 600; overflow-wrap: anywhere; }
-.grp-main:hover .grp-name { color: var(--primary); text-decoration: underline; }
 </style>

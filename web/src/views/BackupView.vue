@@ -16,7 +16,8 @@
       <p class="muted">{{ t('backup.waiting') }}</p>
     </div>
 
-    <n-spin v-else :show="loading && !data">
+    <div v-else-if="loading && !data" class="surface"><list-skeleton :rows="4" /></div>
+    <div v-else>
       <template v-if="data">
         <n-alert v-if="settings.sameDisk" type="warning" :title="t('backup.sameDiskTitle')" class="gap">{{ t('backup.sameDisk') }}</n-alert>
 
@@ -149,7 +150,7 @@
           </div>
         </div>
       </template>
-    </n-spin>
+    </div>
 
     <!-- turning on "include files": the size first, then the password -->
     <n-modal v-model:show="filesOpen" preset="card" :title="t('backupSet.filesOnTitle')" style="width: calc(100vw - 32px); max-width: 480px" :mask-closable="!filesBusy" :closable="!filesBusy">
@@ -197,6 +198,7 @@
 </template>
 
 <script setup>
+import ListSkeleton from '../components/ListSkeleton.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'

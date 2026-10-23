@@ -149,6 +149,30 @@ export const resolve = list => (Array.isArray(list) ? list : list ? [list] : [])
 
 export const tourSteps = (id, role) => forRole(resolve(tours[id] || []), role)
 
+/**
+ * The tour of one page (the "?" menu in the top bar offers it): step ids by route name. A page not listed has no tour.
+ * Each step brings its own route, so the tour starts correctly from anywhere.
+ */
+const systemPageTour = ['sys-menu', 'sys-settings', 'sys-backup', 'sys-update']
+export const pageTours = {
+  files: ['file-list', 'upload', 'new-folder', 'search', 'view-switch', 'share'],
+  favorites: ['nav-favorites'],
+  'with-me': ['nav-with-me'],
+  groups: ['nav-groups'],
+  links: ['nav-links'],
+  'my-trash': ['nav-my-trash'],
+  dashboard: ['nav-dashboard'],
+  users: ['nav-users'],
+  'admin-groups': ['nav-admin-groups'],
+  activity: ['nav-activity'],
+  settings: systemPageTour,
+  backup: systemPageTour,
+  update: systemPageTour,
+}
+
+/** the steps of the page's tour for a role (empty when the page has none, or none of it fits the role) */
+export const pageTourSteps = (routeName, role) => forRole(resolve(pageTours[routeName] || []), role)
+
 /** the ids of the tours a role has */
 export const tourIdsFor = role => Object.keys(tours).filter(id => tourSteps(id, role).length)
 

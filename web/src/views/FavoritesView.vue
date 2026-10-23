@@ -5,32 +5,25 @@
       <n-tab name="favorites">{{ t('favorites.tabFavorites') }}</n-tab>
       <n-tab name="recent">{{ t('favorites.tabRecent') }}</n-tab>
     </n-tabs>
-    <div class="surface box">
-      <n-spin :show="loading && !rows.length">
-        <n-empty v-if="!loading && !rows.length" class="empty" :description="tab === 'favorites' ? t('favorites.emptyFavorites') : t('favorites.emptyRecent')" />
-        <ul v-else class="list">
-          <li v-for="r in rows" :key="`${r.space}:${r.path}`" class="row">
-            <button type="button" class="open" @click="openIt(r)">
-              <file-icon :item="r" :size="24" />
-              <span class="text">
-                <span class="nm">{{ r.name }}</span>
-                <span class="muted sub">
-                  <span class="dir">{{ parentPath(r.path) }}</span>
-                  <span>{{ spaceLabel(r.space) }}</span>
-                  <span v-if="tab === 'recent' && r.at" :title="formatDate(r.at)">{{ ago(r.at) }} · {{ formatDate(r.at) }}</span>
-                </span>
-              </span>
-            </button>
-            <n-button v-if="isFav(r)" quaternary circle :title="t('files.removeFavorite')" @click="unstar(r)">
-              <template #icon><n-icon :component="Star" color="#f59e0b" /></template>
-            </n-button>
-            <n-button v-else quaternary circle :title="t('files.addFavorite')" @click="star(r)">
-              <template #icon><n-icon :component="StarOutline" /></template>
-            </n-button>
-          </li>
-        </ul>
-      </n-spin>
-    </div>
+    <list-panel class="box" :loading="loading" :count="rows.length" :empty="tab === 'favorites' ? t('favorites.emptyFavorites') : t('favorites.emptyRecent')">
+      <list-row v-for="r in rows" :key="`${r.space}:${r.path}`" @open="openIt(r)">
+        <template #icon><file-icon :item="r" :size="24" /></template>
+        <template #title>{{ r.name }}</template>
+        <template #sub>
+          <span>{{ parentPath(r.path) }}</span>
+          <span>{{ spaceLabel(r.space) }}</span>
+          <span v-if="tab === 'recent' && r.at" :title="formatDate(r.at)">{{ ago(r.at) }} · {{ formatDate(r.at) }}</span>
+        </template>
+        <template #actions>
+          <n-button v-if="isFav(r)" quaternary circle :title="t('files.removeFavorite')" :aria-label="t('files.removeFavorite')" @click="unstar(r)">
+            <template #icon><n-icon :component="Star" color="var(--star)" /></template>
+          </n-button>
+          <n-button v-else quaternary circle :title="t('files.addFavorite')" :aria-label="t('files.addFavorite')" @click="star(r)">
+            <template #icon><n-icon :component="StarOutline" /></template>
+          </n-button>
+        </template>
+      </list-row>
+    </list-panel>
   </div>
 </template>
 
@@ -39,11 +32,13 @@ import PageHeader from '../components/PageHeader.vue'
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { NButton, NEmpty, NIcon, NSpin, NTab, NTabs } from 'naive-ui'
+import { NButton, NIcon, NTab, NTabs } from 'naive-ui'
 import { Star, StarOutline } from '@vicons/ionicons5'
 import { relativeTime } from '../account-utils'
 import { api } from '../api'
 import FileIcon from '../components/FileIcon.vue'
+import ListPanel from '../components/ListPanel.vue'
+import ListRow from '../components/ListRow.vue'
 import { useFeedback } from '../composables'
 import { useAppStore } from '../store'
 import { formatDate, parentPath } from '../utils'
@@ -94,15 +89,5 @@ async function star(r) {
 </script>
 
 <style scoped>
-.box { margin-top: 4px; min-height: 160px; }
-.empty { padding: 48px 16px; }
-.list { list-style: none; margin: 0; padding: 0; }
-.row { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border-top: 1px solid var(--border); }
-.row:first-child { border-top: 0; }
-.open { all: unset; box-sizing: border-box; flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px; padding: 6px; border-radius: 8px; cursor: pointer; }
-.open:hover, .open:focus-visible { background: var(--surface-2); }
-.text { min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-.nm { font-weight: 500; overflow-wrap: anywhere; }
-.sub { font-size: 12.5px; display: flex; flex-wrap: wrap; gap: 2px 12px; }
-.dir { overflow-wrap: anywhere; }
+.box { margin-top: 4px; }
 </style>

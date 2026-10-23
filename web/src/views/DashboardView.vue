@@ -20,7 +20,8 @@
       </n-alert>
     </div>
 
-    <n-spin :show="loading && !s">
+    <div v-if="loading && !s" class="surface"><list-skeleton :rows="4" /></div>
+    <div v-else>
       <!-- a manager: people and stored files only; the server leaves out everything else -->
       <div v-if="s?.reduced" class="cards">
         <div class="surface card">
@@ -81,15 +82,16 @@
           <div class="muted note">{{ s.runtime }} · {{ t('dash.uptime', { time: formatDuration(s.uptimeSeconds) }) }}</div>
         </div>
       </div>
-    </n-spin>
+    </div>
   </div>
 </template>
 
 <script setup>
+import ListSkeleton from '../components/ListSkeleton.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NAlert, NButton, NIcon, NProgress, NSpin, NTag } from 'naive-ui'
+import { NAlert, NButton, NIcon, NProgress, NTag } from 'naive-ui'
 import { useRouter } from 'vue-router'
 import { CloudDownloadOutline, RefreshOutline, SyncOutline } from '@vicons/ionicons5'
 import { api } from '../api'

@@ -6,7 +6,8 @@
       </template>
     </page-header>
     <div class="surface">
-      <n-data-table :columns="columns" :data="items" :loading="loading" :bordered="false" :single-line="false"
+      <list-skeleton v-if="loading && !items.length" />
+      <n-data-table v-else :columns="columns" :data="items" :loading="loading" :bordered="false" :single-line="false"
         :scroll-x="narrow ? undefined : 760" table-layout="fixed" :row-key="r => r.id" :pagination="{ pageSize: 25 }"
       >
         <template #empty><n-empty :description="t('trash.none')" /></template>
@@ -16,6 +17,7 @@
 </template>
 
 <script setup>
+import ListSkeleton from '../components/ListSkeleton.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { computed, h, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'

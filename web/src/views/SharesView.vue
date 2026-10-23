@@ -18,7 +18,8 @@
     </n-tabs>
     <grants-given-panel v-if="tab === 'users'" />
     <div v-show="tab === 'links'" class="surface">
-      <n-data-table :columns="columns" :data="rows" :loading="loading" :bordered="false" :single-line="false"
+      <list-skeleton v-if="loading && !rows.length" />
+      <n-data-table v-else :columns="columns" :data="rows" :loading="loading" :bordered="false" :single-line="false"
         :scroll-x="narrow ? undefined : (all ? 1080 : 980)" table-layout="fixed" :row-key="r => r.id" :pagination="{ pageSize: 25 }"
       >
         <template #empty><n-empty :description="t('share.none')" /></template>
@@ -28,6 +29,7 @@
 </template>
 
 <script setup>
+import ListSkeleton from '../components/ListSkeleton.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { computed, h, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
