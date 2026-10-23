@@ -161,12 +161,12 @@ export const topics = [
 
   // admin
   {
-    id: 'settings', icon: 'system', roles: ['admin'], to: { name: 'settings' }, tour: ['sys-menu', 'sys-settings'],
+    id: 'settings', icon: 'system', roles: ['admin'], to: { name: 'settings' }, tour: ['sys-menu', 'sys-settings', 'settings-cats'],
     title: { th: 'ตั้งค่าระบบ', en: 'System settings' },
-    keywords: { th: 'ตั้งค่า ชื่อระบบ โลโก้ สี อัปโหลด อีเมล', en: 'settings name logo colour upload email' },
+    keywords: { th: 'ตั้งค่า ชื่อระบบ โลโก้ สี อัปโหลด อีเมล smtp webhook 2fa บังคับ โควตา ลิงก์แชร์ รหัสผ่าน', en: 'settings name logo colour upload email smtp webhook 2fa require quota share link password' },
     text: {
-      th: ['หน้า "ระบบ" รวมทุกอย่างของผู้ดูแลไว้ในแท็บ ตั้งค่า สำรองข้อมูล อัปเดต บันทึกระบบ และถังขยะทั้งระบบ แท็บ "ตั้งค่า" ใช้ปรับชื่อ สี โลโก้ ขนาดอัปโหลด WebDAV และการแจ้งเตือน'],
-      en: ['The "System" page holds everything for admins in tabs: Settings, Backup, Update, Logs and the system-wide Trash. The "Settings" tab sets the name, colour, logo, upload limits, WebDAV and notifications.'],
+      th: ['หน้า "ระบบ" รวมทุกอย่างของผู้ดูแลไว้ในแท็บ ตั้งค่า สำรองข้อมูล อัปเดต บันทึกระบบ และถังขยะทั้งระบบ แท็บ "ตั้งค่า" แบ่งเป็นหมวด ทั่วไปและแบรนด์ หน้าสาธารณะ แชร์ ความปลอดภัย ไฟล์และพื้นที่ และอีเมลและแจ้งเตือน', 'ทุกช่องบอกที่มาของค่า (จาก .env ตั้งในเว็บ หรือค่าเริ่มต้น) และกด "คืนค่าเริ่มต้น" ได้ เมื่อแก้ค่า จะมีแถบบันทึกลอยด้านล่าง การเปลี่ยนค่าความปลอดภัยหรืออีเมลต้องยืนยันด้วยรหัสผ่าน', 'หมวด "ความปลอดภัย" บังคับให้ผู้ดูแลหรือทุกคนใช้ 2FA ได้ คนที่ยังไม่มี 2FA จะถูกพาไปตั้งค่าก่อนใช้งานต่อ ถ้าบังคับกลุ่มที่คุณอยู่ ให้เตรียมแอปยืนยันตัวตนไว้ก่อน หมวด "แชร์" ตั้งอายุลิงก์ ลิงก์ไม่หมดอายุ และบังคับรหัสผ่านของลิงก์ได้'],
+      en: ['The "System" page holds everything for admins in tabs: Settings, Backup, Update, Logs and the system-wide Trash. The "Settings" tab is split into categories: General and brand, Public page, Sharing, Security, Files and storage, and Email and alerts.', 'Every field shows where its value comes from (.env, set on the web, or default) and can be reset to the default. When you change something a save bar floats at the bottom. Changing security or email settings asks for your password.', 'The "Security" category can require 2FA for admins or everybody. People without 2FA are taken to set it up before they continue; if you require it for your own group, have an authenticator app ready. The "Sharing" category sets link lifetimes, links that never expire, and whether every link needs a password.'],
     },
   },
   {

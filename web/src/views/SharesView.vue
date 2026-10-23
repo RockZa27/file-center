@@ -153,8 +153,9 @@ const actions = s => {
     : [h('span', { class: 'muted small no-link' }, t('share.linkNotKept'))]
   return h('div', { class: 'row-actions' }, [...linkButtons, revokeButton(s)])
 }
+const expiry = s => (s.neverExpires ? t('share.neverExpires') : formatDate(s.expiresAt))
 const when = s => h('div', { class: 'when' }, [
-  h('div', { class: 'nowrap' }, formatDate(s.expiresAt)),
+  h('div', { class: 'nowrap' }, expiry(s)),
   h('div', { class: 'muted small' }, t('share.createdAt', { date: formatDate(s.createdAt) })),
 ])
 
@@ -168,7 +169,7 @@ const columns = computed(() => (narrow.value
         h('div', { class: 'stacked-meta' }, [
           stateTag(s),
           all.value ? h('span', { class: 'owner' }, `${t('share.owner')}: ${s.owner}`) : null,
-          h('span', {}, `${t('share.expiresCol')} ${formatDate(s.expiresAt)}`),
+          h('span', {}, `${t('share.expiresCol')} ${expiry(s)}`),
           h('span', {}, t('share.createdAt', { date: formatDate(s.createdAt) })),
           h('span', { class: 'dl' }, [`${isUpload(s) ? t('share.receivedCol') : t('share.downloads')}: `, downloads(s)]),
           h('span', {}, [`${t('share.passwordCol')}: `, passwordCell(s)]),

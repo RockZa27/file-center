@@ -25,7 +25,7 @@
         />
         <n-alert v-if="pwError" type="error" class="pw-error">{{ pwErrorText }}</n-alert>
         <n-button type="primary" attr-type="submit" block :loading="unlocking" :disabled="!password">{{ t('shareView.open') }}</n-button>
-        <div class="muted small">{{ t('shareView.expires', { date: formatDate(info.expiresAt) }) }}</div>
+        <div class="muted small">{{ expiresText(info) }}</div>
       </form>
 
       <!-- a request link: the visitor only sends files in. Nothing of the folder is shown, only their own uploads. -->
@@ -34,7 +34,7 @@
           <div class="head-text">
             <div class="muted small">{{ t('shareView.sendTo') }}</div>
             <h1 class="name">{{ info.name }}</h1>
-            <div class="muted small">{{ t('shareView.expires', { date: formatDate(info.expiresAt) }) }}</div>
+            <div class="muted small">{{ expiresText(info) }}</div>
           </div>
         </div>
 
@@ -109,7 +109,7 @@
         <n-button v-if="isZip(info.name)" secondary @click="openZip('/', info.name)">
           <template #icon><n-icon :component="ArchiveOutline" /></template>{{ t('zip.lookInside') }}
         </n-button>
-        <div class="muted small">{{ t('shareView.expires', { date: formatDate(info.expiresAt) }) }}</div>
+        <div class="muted small">{{ expiresText(info) }}</div>
       </div>
 
       <!-- a folder: look inside, download a file, a sub folder or the whole folder as zip -->
@@ -118,7 +118,7 @@
           <div class="head-text">
             <div class="muted small">{{ t('shareView.folder') }}</div>
             <h1 class="name">{{ info.name }}</h1>
-            <div class="muted small">{{ t('shareView.total', { size: formatBytes(info.size) }) }} · {{ t('shareView.expires', { date: formatDate(info.expiresAt) }) }}</div>
+            <div class="muted small">{{ t('shareView.total', { size: formatBytes(info.size) }) }} · {{ expiresText(info) }}</div>
           </div>
           <n-button tag="a" type="primary" :href="api.shareDownloadUrl(token, here)" class="zip">
             <template #icon><n-icon :component="DownloadOutline" /></template>{{ here === '/' ? t('shareView.downloadAll') : t('shareView.downloadHere') }}
@@ -229,6 +229,8 @@ import { createPool } from '../uploadPool'
 import { extOf, formatBytes, formatDate, parentPath } from '../utils'
 
 const { t, locale } = useI18n()
+// a link made without an end date has a date in year 9999 on the server: say so instead of showing it
+const expiresText = i => (new Date(i.expiresAt).getFullYear() >= 9999 ? t('share.neverExpires') : t('shareView.expires', { date: formatDate(i.expiresAt) }))
 const app = useAppStore()
 const route = useRoute()
 const router = useRouter()

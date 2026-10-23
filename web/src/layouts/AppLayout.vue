@@ -31,7 +31,7 @@
           </template>
         </nav>
         <div class="right">
-          <span class="bell-wrap" data-tour="bell"><notification-bell @settings="openProfile('notify')" /></span>
+          <span class="bell-wrap" data-tour="bell"><notification-bell v-if="!app.user?.mustSetup2fa" @settings="openProfile('notify')" /></span>
           <n-dropdown trigger="click" placement="bottom-end" :options="helpOptions" @select="onHelp">
             <n-button class="help-btn" quaternary circle data-tour="help-button" :title="t('nav.helpTip')" :aria-label="t('nav.helpTip')">
               <template #icon><n-icon :component="HelpCircleOutline" /></template>
@@ -45,7 +45,8 @@
           </n-dropdown>
         </div>
       </header>
-      <main><router-view :key="viewKey" /></main>
+      <!-- nothing behind the forced 2FA dialog: the server refuses every page call until it is on -->
+      <main><router-view v-if="!app.user?.mustSetup2fa" :key="viewKey" /></main>
     </div>
     <profile-modal v-model:show="profileOpen" :open-tab="profileTab" />
     <whats-new-modal />
@@ -200,7 +201,7 @@ async function onSelect(key) {
 }
 
 async function loadWarnings() {
-  if (!app.isStaff) return
+  if (!app.isStaff || app.user?.mustSetup2fa) return
   try { warnings.value = (await api.status()).warnings } catch { /* the dashboard shows errors */ }
 }
 
@@ -219,11 +220,16 @@ const viewKey = ref(0)
 watch(() => app.user?.mustChangePassword, (now, before) => {
   if (before && !now) { viewKey.value++; loadWarnings() }
 })
+// the same for the 2FA the admin requires: the setup dialog opens (also when a call finds out first) and the page reloads once it is on
+watch(() => app.user?.mustSetup2fa, (now, before) => {
+  if (now) openProfile('security')
+  if (before && !now) { viewKey.value++; loadWarnings(); app.loadGroups() }
+})
 
 // a new user gets the welcome (and the tour), a user who updated gets what is new; nothing while the forced password dialog is up
 let guideChecked = false
 function showGuide() {
-  if (guideChecked || !guide.loaded || !app.user || app.user.mustChangePassword || profileOpen.value) return
+  if (guideChecked || !guide.loaded || !app.user || app.user.mustChangePassword || app.user.mustSetup2fa || profileOpen.value) return
   const version = app.config.version
   if (!version) return
   guideChecked = true
@@ -235,16 +241,18 @@ function showGuide() {
 }
 // (the server answers nothing until a handed-out password is changed, so the guide is fetched after that)
 function bootGuide() {
-  if (!app.user || app.user.mustChangePassword) return
+  if (!app.user || app.user.mustChangePassword || app.user.mustSetup2fa) return
   guide.loaded = false
   loadGuide().then(showGuide).catch(() => { /* a nicety */ })
 }
 watch(() => app.user?.mustChangePassword, (now, before) => { if (before && !now) bootGuide() })
+watch(() => app.user?.mustSetup2fa, (now, before) => { if (before && !now) bootGuide() })
 watch(profileOpen, showGuide)
 const onVisible = () => document.visibilityState === 'visible' && checkSession()
 
 onMounted(() => {
   if (app.user?.mustChangePassword) profileOpen.value = true
+  else if (app.user?.mustSetup2fa) openProfile('security')
   loadWarnings()
   app.loadGroups()
   bootGuide()

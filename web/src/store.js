@@ -47,11 +47,11 @@ export const useAppStore = defineStore('app', {
       if (!snapshot.user) { this.favorites = []; this.groups = [] }
     },
     async loadGroups() {
-      if (!this.user) return
+      if (!this.user || this.user.mustSetup2fa) return
       try { this.groups = (await api.myGroups()).items } catch { /* the menu item just stays as it was */ }
     },
     async loadFavorites() {
-      if (!this.user) return
+      if (!this.user || this.user.mustSetup2fa) return
       try { this.favorites = (await api.favorites()).items.map(i => `${i.space}:${i.path}`) } catch { /* the stars are a nicety */ }
     },
     /** answers whether the place is a favorite now; throws the server's error (e.g. the list is full) */
@@ -70,6 +70,10 @@ export const useAppStore = defineStore('app', {
       hooks.onUnauthorized = () => {
         // offline: the next call or the next visit finds out again, nobody needs an error for this
         if (this.user) this.refresh().catch(() => { /* kept as it was */ })
+      }
+      // the admin now asks this account for 2FA: learn it from the session, the shell then opens the setup
+      hooks.onTwoFactorRequired = () => {
+        if (this.user && !this.user.mustSetup2fa) this.refresh().catch(() => { /* kept as it was */ })
       }
       i18n.global.locale.value = this.lang
       try {

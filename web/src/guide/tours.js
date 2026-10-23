@@ -123,7 +123,12 @@ export const steps = {
   'sys-settings': {
     target: 'sys-settings', route: { name: 'settings' }, roles: ['admin'],
     title: { th: 'ตั้งค่า', en: 'Settings' },
-    text: { th: 'ชื่อระบบ สี โลโก้ ขนาดอัปโหลด การแจ้งเตือน และการตั้งค่าอื่นๆ', en: 'App name, colour, logo, upload limits, notifications and more.' },
+    text: { th: 'ชื่อระบบ สี โลโก้ หน้าสาธารณะ นโยบายแชร์ ความปลอดภัย 2FA โควตา อีเมล และการแจ้งเตือน แยกเป็นหมวด', en: 'App name, colour, logo, the public page, share rules, security and 2FA, quotas, email and alerts, in categories.' },
+  },
+  'settings-cats': {
+    target: ['settings-cats'], route: { name: 'settings' }, roles: ['admin'],
+    title: { th: 'หมวดการตั้งค่า', en: 'Setting categories' },
+    text: { th: 'เลือกหมวดทั่วไป หน้าสาธารณะ แชร์ ความปลอดภัย ไฟล์และพื้นที่ หรืออีเมลและแจ้งเตือน เมื่อแก้ค่า จะมีแถบบันทึกลอยอยู่ด้านล่าง', en: 'Pick General, Public page, Sharing, Security, Files and storage, or Email and alerts. When you change something, a save bar appears at the bottom.' },
   },
   'sys-backup': {
     target: 'sys-backup', route: { name: 'backup' }, roles: ['admin'],
@@ -141,7 +146,7 @@ export const steps = {
 export const tours = {
   basics: ['file-list', 'upload', 'new-folder', 'search', 'view-switch', 'share', 'nav-favorites', 'nav-with-me', 'nav-groups', 'nav-links', 'nav-my-trash', 'bell', 'user-menu', 'help-button'],
   manage: ['nav-dashboard', 'nav-users', 'nav-admin-groups', 'nav-activity'],
-  system: ['sys-menu', 'sys-settings', 'sys-backup', 'sys-update'],
+  system: ['sys-menu', 'sys-settings', 'settings-cats', 'sys-backup', 'sys-update'],
 }
 
 /** a list of step ids and/or inline steps -> steps (with an id) */
@@ -153,7 +158,7 @@ export const tourSteps = (id, role) => forRole(resolve(tours[id] || []), role)
  * The tour of one page (the "?" menu in the top bar offers it): step ids by route name. A page not listed has no tour.
  * Each step brings its own route, so the tour starts correctly from anywhere.
  */
-const systemPageTour = ['sys-menu', 'sys-settings', 'sys-backup', 'sys-update']
+const systemPageTour = ['sys-menu', 'sys-settings', 'settings-cats', 'sys-backup', 'sys-update']
 export const pageTours = {
   files: ['file-list', 'upload', 'new-folder', 'search', 'view-switch', 'share'],
   favorites: ['nav-favorites'],

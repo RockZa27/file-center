@@ -18,7 +18,7 @@ export class ApiError extends Error {
 }
 
 /** set by the store: called when the server says the session is gone */
-export const hooks = { onUnauthorized: null }
+export const hooks = { onUnauthorized: null, onTwoFactorRequired: null }
 
 async function resync() {
   const res = await fetch('/api/session', { headers: { 'x-lang': lang() }, credentials: 'same-origin' })
@@ -49,6 +49,8 @@ async function call(method, url, body, extraHeaders = {}, retried = false) {
       return call(method, url, body, extraHeaders, true)
     }
     if (res.status === 401 && hooks.onUnauthorized) hooks.onUnauthorized()
+    // the admin asked for a second factor from this account: the shell opens the setup
+    if (res.status === 403 && data?.code === 'auth.2fa-required' && hooks.onTwoFactorRequired) hooks.onTwoFactorRequired()
     throw new ApiError(res.status, data?.error || t('api.failed', { status: res.status }), data?.code, data?.params)
   }
   return data
@@ -222,6 +224,10 @@ export const api = {
   /** { enabled, kind, host, lastSent: { <kind>: ISO time } }: never the webhook URL itself */
   alerts: () => get('/api/admin/alerts'),
   alertTest: () => post('/api/admin/alerts/test'),
+  /** { items: [{ code, severity, message }] }: risky or odd .env values */
+  configWarnings: () => get('/api/admin/config-warnings'),
+  /** a test e-mail with the settings in force, to `to` or else the admin's confirmed address */
+  mailTest: to => post('/api/admin/mail/test', to ? { to } : {}),
 
   backups: () => get('/api/admin/backups'),
   backupNow: () => post('/api/admin/backups'),

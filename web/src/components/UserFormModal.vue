@@ -37,11 +37,16 @@
         </n-form-item>
         <n-form-item :label="t('users.quota')">
           <div class="quota">
+            <!-- a new user: the server applies the default of the settings page when no quota is sent -->
+            <n-checkbox v-if="!isEdit" v-model:checked="f.useDefault">{{ t('users.quotaDefault') }}</n-checkbox>
+            <template v-if="!f.useDefault">
             <n-switch v-model:value="f.limited"><template #checked>{{ t('users.limited') }}</template><template #unchecked>{{ t('users.noLimit') }}</template></n-switch>
             <template v-if="f.limited">
               <n-input-number v-model:value="f.quotaValue" :min="0.01" :precision="2" :show-button="false" placeholder="" class="qnum" :input-props="{ inputmode: 'decimal', 'aria-label': t('users.quota') }" />
               <n-select v-model:value="f.quotaUnit" :options="[{ label: 'MB', value: 'MB' }, { label: 'GB', value: 'GB' }]" class="qunit" />
             </template>
+            </template>
+            <div v-else class="muted hint grow">{{ t('users.quotaDefaultHint') }}</div>
           </div>
         </n-form-item>
         <n-form-item :label="t('users.ownPerms')"><perm-select v-model="f.permissions" /></n-form-item>
@@ -93,7 +98,7 @@ const app = useAppStore()
 const fb = useFeedback()
 const busy = ref(false)
 const picker = ref(false)
-const f = reactive({ username: '', name: '', password: '', role: 'user', homedir: '', permissions: [], publicPermissions: [], limited: false, quotaValue: null, quotaUnit: 'GB', confirmPassword: '' })
+const f = reactive({ username: '', name: '', password: '', role: 'user', homedir: '', permissions: [], publicPermissions: [], limited: false, quotaValue: null, quotaUnit: 'GB', useDefault: false, confirmPassword: '' })
 // a manager hands out public-folder rights no wider than their own (the session's user carries them)
 const publicAllowed = computed(() => (app.isAdmin ? null : app.user?.publicPermissions || []))
 const isEdit = computed(() => !!props.user)
@@ -101,16 +106,27 @@ const needsOwn = computed(() => !app.isAdmin && isEdit.value && !!f.password)
 // visitors' uploads and activity go under the name 'guest' (any case), so the server refuses it: say so before saving
 const reserved = computed(() => !isEdit.value && f.username.trim().toLowerCase() === 'guest')
 // the password rules are hinted live; the server judges them (its common-password list too)
-const ready = computed(() => (!f.limited || f.quotaValue > 0) && f.username.trim().length >= 3 && !reserved.value && f.name.trim() && (isEdit.value || f.password) && (!needsOwn.value || f.confirmPassword))
+const ready = computed(() => (f.useDefault || !f.limited || f.quotaValue > 0) && f.username.trim().length >= 3 && !reserved.value && f.name.trim() && (isEdit.value || f.password) && (!needsOwn.value || f.confirmPassword))
 const parentOf = p => (p ? parentPath(p) : '/')
 
 watch(() => props.show, v => {
   if (!v) return
   const u = props.user
   Object.assign(f, { confirmPassword: '' }, u
-    ? { username: u.username, name: u.name, password: '', role: u.role, homedir: u.homedir, permissions: [...u.permissions], publicPermissions: [...u.publicPermissions], limited: !!u.quotaBytes, quotaValue: splitQuota(u.quotaBytes).value, quotaUnit: splitQuota(u.quotaBytes).unit }
-    : { username: '', name: '', password: '', role: 'user', homedir: '', permissions: ['read', 'download', 'batchdownload', 'upload', 'write', 'zip'], publicPermissions: ['read', 'download', 'batchdownload'].filter(k => !publicAllowed.value || publicAllowed.value.includes(k)), limited: false, quotaValue: null, quotaUnit: 'GB' })
+    ? { username: u.username, name: u.name, password: '', role: u.role, homedir: u.homedir, permissions: [...u.permissions], publicPermissions: [...u.publicPermissions], useDefault: false, limited: !!u.quotaBytes, quotaValue: splitQuota(u.quotaBytes).value, quotaUnit: splitQuota(u.quotaBytes).unit }
+    : { username: '', name: '', password: '', role: 'user', homedir: '', permissions: ['read', 'download', 'batchdownload', 'upload', 'write', 'zip'], publicPermissions: ['read', 'download', 'batchdownload'].filter(k => !publicAllowed.value || publicAllowed.value.includes(k)), limited: false, quotaValue: null, quotaUnit: 'GB', useDefault: true })
+  if (!u) prefillQuota()
 })
+
+// a super admin sees the default in the field (editable); a manager can not read the settings, so the server's default applies
+async function prefillQuota() {
+  if (!app.isAdmin) return
+  try {
+    const bytes = (await api.settings()).files.defaultQuotaBytes.value
+    if (props.user || !props.show) return
+    Object.assign(f, { useDefault: false, limited: !!bytes, quotaValue: splitQuota(bytes).value, quotaUnit: splitQuota(bytes).unit })
+  } catch { /* stays on "the default of the system" */ }
+}
 
 async function save() {
   if (!ready.value || busy.value) return
@@ -118,7 +134,7 @@ async function save() {
   try {
     const body = { name: f.name.trim(), role: f.role, permissions: f.permissions, publicPermissions: f.publicPermissions }
     if (f.role === 'user' && app.isAdmin) body.homedir = f.homedir.trim() || undefined
-    body.quotaBytes = f.role === 'user' && f.limited ? joinQuota(f.quotaValue, f.quotaUnit) : 0
+    if (isEdit.value || f.role !== 'user' || !f.useDefault) body.quotaBytes = f.role === 'user' && f.limited ? joinQuota(f.quotaValue, f.quotaUnit) : 0
     if (isEdit.value) {
       if (f.password) { body.password = f.password; if (needsOwn.value) body.confirmPassword = f.confirmPassword }
       await api.updateUser(props.user.username, body)

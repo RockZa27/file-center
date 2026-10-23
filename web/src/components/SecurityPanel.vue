@@ -1,7 +1,7 @@
 <template>
   <div class="sec">
     <!-- storage use: only for an account with a quota -->
-    <section v-if="usage && usage.quota > 0" class="block">
+    <section v-if="!forced && usage && usage.quota > 0" class="block">
       <h3>{{ t('security.storage') }}</h3>
       <n-progress type="line" :percentage="pct" :status="pct >= 100 ? 'error' : pct >= 90 ? 'warning' : 'default'" :show-indicator="false" :height="10" />
       <div class="muted small">{{ t('security.usedOf', { used: formatBytes(usage.used), quota: formatBytes(usage.quota) }) }} ({{ pct }}%)</div>
@@ -73,8 +73,8 @@
       </template>
     </section>
 
-    <!-- signed-in devices -->
-    <section class="block">
+    <!-- signed-in devices (the server answers nothing else until the forced 2FA setup is done) -->
+    <section v-if="!forced" class="block">
       <div class="head">
         <h3>{{ t('devices.title') }}</h3>
         <n-button v-if="others > 0" size="small" secondary type="warning" :loading="busyId === '*'" @click="revokeOthers">{{ t('devices.signOutOthers') }}</n-button>
@@ -123,10 +123,13 @@ async function loadSessions() {
   loadingSessions.value = true
   try { sessions.value = (await api.sessions()).sessions } catch (e) { fb.fail(e) } finally { loadingSessions.value = false }
 }
-onMounted(async () => {
+// the admin requires 2FA from this account and it is not on yet: only the 2FA block, the rest is refused by the server
+const forced = computed(() => !!app.user?.mustSetup2fa)
+async function loadAll() {
   loadSessions()
   try { usage.value = await api.usage() } catch { /* the bar is a nicety */ }
-})
+}
+onMounted(() => { if (!forced.value) loadAll() })
 
 function reset() { mode.value = ''; password.value = ''; code.value = ''; setup.value = { secret: '', uri: '' }; qr.value = '' }
 const cancel = () => reset()
@@ -162,7 +165,7 @@ async function enable() {
     const r = await api.twoFactorEnable(code.value)
     showCodes(r.backupCodes)
     await app.refresh()
-    loadSessions()
+    loadAll()
   } catch (e) { fb.fail(e); code.value = '' } finally { busy.value = false }
 }
 

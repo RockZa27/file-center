@@ -17,15 +17,17 @@
         <n-form-item :label="t('share.expires')">
           <n-radio-group v-model:value="days">
             <n-radio-button v-for="d in allowedDays" :key="d" :value="d">{{ t('share.days', d) }}</n-radio-button>
+            <n-radio-button v-if="allowNever" :value="0">{{ t('share.never') }}</n-radio-button>
           </n-radio-group>
         </n-form-item>
-        <n-form-item :label="t('share.password')">
+        <n-form-item :label="needPassword ? t('share.passwordRequired') : t('share.password')">
           <div class="field">
             <n-input
-              v-model:value="password" type="password" show-password-on="click" :placeholder="t('share.passwordNone')"
-              :status="tooShort ? 'warning' : undefined" :input-props="{ autocomplete: 'new-password', name: 'share-password' }"
+              v-model:value="password" type="password" show-password-on="click" :placeholder="needPassword ? t('share.passwordNeedHint') : t('share.passwordNone')"
+              :status="tooShort ? 'warning' : missing ? 'error' : undefined" :input-props="{ autocomplete: 'new-password', name: 'share-password' }"
             />
             <div v-if="tooShort" class="hint warn">{{ t('share.passwordShort', { n: PASSWORD_MIN }) }}</div>
+            <div v-else-if="needPassword" class="hint" :class="{ warn: missing }">{{ t('share.passwordPolicy') }}</div>
           </div>
         </n-form-item>
         <n-form-item v-if="!isUpload" :label="t('share.limit')">
@@ -66,7 +68,8 @@
         </n-button>
       </div>
       <div class="summary muted">
-        <span>{{ t('share.expiresAt', { date: formatDate(result.share.expiresAt) }) }}</span>
+        <span v-if="result.share.neverExpires">{{ t('share.neverExpires') }}</span>
+        <span v-else>{{ t('share.expiresAt', { date: formatDate(result.share.expiresAt) }) }}</span>
         <span v-if="result.share.kind === 'upload'">{{ t('share.kindUploadShort') }}</span>
         <span v-if="result.share.maxFileBytes">{{ t('share.limitFile', { size: formatBytes(result.share.maxFileBytes) }) }}</span>
         <span v-if="result.share.maxFiles">{{ t('share.limitFiles', { n: result.share.maxFiles }) }}</span>
@@ -81,7 +84,7 @@
       <div class="foot">
         <template v-if="!result">
           <n-button :disabled="busy" @click="emit('update:show', false)">{{ t('common.cancel') }}</n-button>
-          <n-button type="primary" :loading="busy" :disabled="tooShort || noteTooLong || !kindOk" @click="create">
+          <n-button type="primary" :loading="busy" :disabled="tooShort || missing || noteTooLong || !kindOk" @click="create">
             <template #icon><n-icon :component="LinkOutline" /></template>{{ t('share.create') }}
           </n-button>
         </template>
@@ -121,6 +124,9 @@ const { t } = useI18n()
 const store = useAppStore()
 const allowedDays = ref(store.config?.shareDays?.length ? [...store.config.shareDays] : [1, 7, 30])
 const days = ref(7)
+// set by the admin on the settings page: links may never expire / must have a password
+const allowNever = computed(() => !!store.config?.shareAllowNever)
+const needPassword = computed(() => !!store.config?.shareRequirePassword)
 const password = ref('')
 const limit = ref(null)
 const kind = ref('download')
@@ -144,10 +150,13 @@ const isUpload = computed(() => kind.value === 'upload')
 const noteLength = computed(() => Array.from(note.value.trim()).length)
 const noteTooLong = computed(() => noteLength.value > NOTE_MAX)
 const tooShort = computed(() => password.value.length > 0 && password.value.length < PASSWORD_MIN)
+const missing = computed(() => needPassword.value && !password.value)
 
 watch(() => props.show, v => {
   if (!v) return
-  days.value = allowedDays.value.includes(7) ? 7 : allowedDays.value[allowedDays.value.length - 1]
+  allowedDays.value = store.config?.shareDays?.length ? [...store.config.shareDays] : allowedDays.value
+  const wanted = store.config?.shareDefaultDays
+  days.value = allowedDays.value.includes(wanted) ? wanted : allowedDays.value.includes(7) ? 7 : allowedDays.value[allowedDays.value.length - 1]
   password.value = ''
   limit.value = null
   kind.value = canDownload.value ? 'download' : 'upload'
@@ -162,7 +171,7 @@ watch(() => props.show, v => {
 })
 
 async function create() {
-  if (busy.value || tooShort.value || noteTooLong.value || !kindOk.value || !props.item) return
+  if (busy.value || tooShort.value || missing.value || noteTooLong.value || !kindOk.value || !props.item) return
   busy.value = true
   error.value = ''
   try {

@@ -66,7 +66,8 @@ export function useFeedback() {
         h(NButton, { text: true, type: 'primary', style: 'margin-left:12px;font-weight:600', onClick: () => { m.destroy(); onClick() } }, () => label),
       ]), { duration: ms, closable: true, keepAliveOnHover: true })
     },
-    fail: (e, fallback) => message.error(errorText(e, fallback || t('common.unknownError')), { duration: 6000 }),
+    // the 2FA setup dialog says why; a toast from every page behind it would only repeat it
+    fail: (e, fallback) => e?.code === 'auth.2fa-required' ? undefined : message.error(errorText(e, fallback || t('common.unknownError')), { duration: 6000 }),
     confirm: ({ title, content, positive, danger = false }) =>
       new Promise(resolve => {
         dialog[danger ? 'warning' : 'info']({

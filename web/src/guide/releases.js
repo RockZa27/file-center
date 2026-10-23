@@ -6,6 +6,70 @@ import { compareVersions, forRole } from './util'
  */
 export const releases = [
   {
+    version: '1.13.0',
+    items: [
+      {
+        id: '113-more', icon: 'menu', roles: ['user'], to: { name: 'files' },
+        title: { th: 'ปุ่ม ⋯ และแถบเลือกไฟล์ด้านล่างบนมือถือ', en: 'The ⋯ button and a selection bar on phones' },
+        text: { th: 'แต่ละไฟล์มีปุ่ม ⋯ สำหรับเมนูการทำงาน และเมื่อเลือกไฟล์บนมือถือ จะมีแถบปุ่มลัดอยู่ด้านล่างของหน้าจอ กดง่ายด้วยนิ้วเดียว', en: 'Every file has a ⋯ button for its actions, and when you select files on a phone a bar of actions appears at the bottom of the screen, easy to reach with one thumb.' },
+        tour: ['file-list'],
+      },
+      {
+        id: '113-longpress', icon: 'drag', roles: ['user'], to: { name: 'files' },
+        title: { th: 'กดค้างเพื่อเลือกไฟล์', en: 'Press and hold to select' },
+        text: { th: 'บนมือถือ กดค้างที่ไฟล์หรือโฟลเดอร์เพื่อเริ่มเลือก แล้วแตะรายการอื่นเพื่อเลือกเพิ่ม', en: 'On a phone, press and hold a file or folder to start selecting, then tap others to add them.' },
+        tour: ['file-list'],
+      },
+      {
+        id: '113-sort', icon: 'gallery', roles: ['user'], to: { name: 'files' },
+        title: { th: 'เมนูเรียงลำดับ และจำวิธีเรียงให้', en: 'A sort menu that remembers' },
+        text: { th: 'เลือกเรียงตามชื่อ ขนาด หรือวันที่ได้จากเมนูเรียงลำดับ ระบบจำวิธีที่คุณเลือกไว้ในเครื่องนี้', en: 'Sort by name, size or date from the sort menu. The way you choose is remembered on this device.' },
+        tour: ['file-list'],
+      },
+      {
+        id: '113-looks', icon: 'share', roles: ['user'], to: { name: 'files' },
+        title: { th: 'หน้าแชร์ลิงก์และหน้าเข้าสู่ระบบหน้าตาใหม่', en: 'A new look for share and sign-in pages' },
+        text: { th: 'หน้าที่คนเปิดจากลิงก์แชร์และหน้าเข้าสู่ระบบ ปรับดีไซน์ใหม่ ดูง่ายขึ้น โดยเฉพาะบนมือถือ', en: 'The page people open from a share link and the sign-in page have a fresh design that is easier to read, especially on a phone.' },
+      },
+      {
+        id: '113-settings', icon: 'system', roles: ['admin'], to: { name: 'settings' },
+        title: { th: 'หน้าตั้งค่าจัดใหม่เป็นหมวด', en: 'Settings reorganised into categories' },
+        text: { th: 'หน้าตั้งค่าแบ่งเป็นหมวด ทั่วไป หน้าสาธารณะ แชร์ ความปลอดภัย ไฟล์และพื้นที่ อีเมลและแจ้งเตือน ทุกช่องมีคำอธิบายและบอกว่าค่ามาจาก .env ตั้งในเว็บ หรือค่าเริ่มต้น และคืนค่าเริ่มต้นได้', en: 'Settings are split into categories: general, public page, sharing, security, files and storage, email and alerts. Every field has a short explanation, says whether its value is from .env, set on the web or the default, and can be reset.' },
+        tour: ['sys-settings', 'settings-cats'],
+      },
+      {
+        id: '113-share-policy', icon: 'share', roles: ['admin'], to: { name: 'settings' },
+        title: { th: 'นโยบายลิงก์แชร์', en: 'Share link policy' },
+        text: { th: 'กำหนดอายุลิงก์ที่เลือกไว้ให้ อายุนานที่สุด อนุญาตลิงก์ไม่หมดอายุ และบังคับให้ลิงก์ต้องมีรหัสผ่าน', en: 'Set the preselected lifetime, the longest lifetime, whether links may never expire, and whether every link needs a password.' },
+        tour: [{ id: '113-share-policy', target: ['settings-cat-share', 'settings-cats'], route: { name: 'settings' }, title: { th: 'หมวด "แชร์"', en: 'The "Sharing" category' }, text: { th: 'นโยบายของลิงก์แชร์ทั้งหมดอยู่ที่หมวดนี้', en: 'All the share link rules are in this category.' } }],
+      },
+      {
+        id: '113-2fa', icon: 'lock', roles: ['admin'], to: { name: 'settings' },
+        title: { th: 'บังคับใช้ 2FA และตั้งอายุการเข้าสู่ระบบ', en: 'Require 2FA, and session rules' },
+        text: { th: 'บังคับให้ผู้ดูแลหรือทุกคนต้องเปิด 2FA ตั้งอายุการเข้าสู่ระบบ จำนวนครั้งที่ใส่รหัสผ่านผิดได้ และเวลาล็อก ที่หมวด "ความปลอดภัย" ผู้ที่ยังไม่มี 2FA จะถูกพาไปตั้งค่าก่อนใช้งานต่อ', en: 'Require 2FA for admins or everybody, and set the sign-in lifetime, the wrong-password limit and the lock time, in the "Security" category. People without 2FA are taken to set it up before they continue.' },
+        tour: [{ id: '113-2fa', target: ['settings-cat-security', 'settings-cats'], route: { name: 'settings' }, title: { th: 'หมวด "ความปลอดภัย"', en: 'The "Security" category' }, text: { th: 'บังคับ 2FA และกฎการเข้าสู่ระบบอยู่ที่นี่ การเปลี่ยนค่าต้องยืนยันด้วยรหัสผ่าน', en: 'Required 2FA and the sign-in rules are here. Changes ask for your password.' } }],
+      },
+      {
+        id: '113-quota', icon: 'backup', roles: ['admin'], to: { name: 'settings' },
+        title: { th: 'โควตาเริ่มต้นและค่าไฟล์ตั้งในเว็บได้', en: 'Default quota and file limits on the web' },
+        text: { th: 'ตั้งพื้นที่เริ่มต้นของผู้ใช้ใหม่ ขนาดอัปโหลดสูงสุด อายุถังขยะ และจำนวนเวอร์ชันที่เก็บ ได้ที่หมวด "ไฟล์และพื้นที่" ไม่ต้องแก้ไฟล์ .env แล้วรีสตาร์ต', en: 'Set the default storage for new users, the upload limit, the trash lifetime and how many versions are kept in "Files and storage", with no .env edit and restart.' },
+        tour: [{ id: '113-quota', target: ['settings-cat-files', 'settings-cats'], route: { name: 'settings' }, title: { th: 'หมวด "ไฟล์และพื้นที่"', en: 'The "Files and storage" category' }, text: { th: 'โควตา ขนาดอัปโหลด ถังขยะ และเวอร์ชันของไฟล์', en: 'Quota, upload size, trash and file versions.' } }],
+      },
+      {
+        id: '113-mail', icon: 'bell', roles: ['admin'], to: { name: 'settings' },
+        title: { th: 'ตั้งค่าอีเมล (SMTP) และ webhook แจ้งเตือนในเว็บ', en: 'Set up SMTP email and the alert webhook on the web' },
+        text: { th: 'กรอกเซิร์ฟเวอร์อีเมลและ webhook ได้ที่หมวด "อีเมลและแจ้งเตือน" มีปุ่มส่งอีเมลทดสอบ รหัสผ่านและ URL ถูกเก็บแบบเข้ารหัสและไม่แสดงกลับ', en: 'Fill in the email server and the webhook in "Email and alerts", with a button to send a test email. The password and the URL are stored encrypted and never shown again.' },
+        tour: [{ id: '113-mail', target: ['settings-cat-mail', 'settings-cats'], route: { name: 'settings' }, title: { th: 'หมวด "อีเมลและแจ้งเตือน"', en: 'The "Email and alerts" category' }, text: { th: 'SMTP, อีเมลทดสอบ และ webhook อยู่ที่นี่', en: 'SMTP, the test email and the webhook are here.' } }],
+      },
+      {
+        id: '113-warnings', icon: 'system', roles: ['admin'], to: { name: 'settings' },
+        title: { th: 'คำเตือนเมื่อค่าใน .env เสี่ยง', en: 'Warnings about risky .env values' },
+        text: { th: 'หน้าระบบแสดงแถบเตือนเมื่อพบค่าใน .env ที่เสี่ยงหรือไม่เหมาะกับการใช้งาน เช่น เปิดอัปเดตแบบไม่ตรวจลายเซ็น สีแดงคือเรื่องที่ควรแก้ทันที', en: 'The System page shows a banner when a .env value is risky or does not fit how the app is used, for example updates without signature checks. Red means fix it right away.' },
+        tour: ['sys-settings'],
+      },
+    ],
+  },
+  {
     version: '1.12.0',
     items: [
       {
