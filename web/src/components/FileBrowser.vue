@@ -1,5 +1,5 @@
 <template>
-  <div ref="root" class="browser" :class="{ 'has-bar': selected.length }" @click.capture="onClickCapture" @dragenter="onDragEnter" @dragover="onDragOver" @dragleave="onDragLeave" @drop.prevent="onDrop" @contextmenu="onBlankContext">
+  <div ref="root" class="browser" :class="{ 'has-bar': selected.length }" @pointerdown.capture="lastPointer = $event.pointerType" @click.capture="onClickCapture" @dragenter="onDragEnter" @dragover="onDragOver" @dragleave="onDragLeave" @drop.prevent="onDrop" @contextmenu="onBlankContext">
     <div class="toolbar">
       <div class="left">
         <n-dropdown v-if="can('upload')" trigger="click" :options="uploadOptions" @select="onUploadSelect">
@@ -82,7 +82,7 @@
     </transition>
 
     <!-- a phone: the same actions in a bar at the bottom of the screen, within reach of the thumb -->
-    <div v-if="selected.length" class="selbar" role="toolbar" :aria-label="t('files.selected', { n: selected.length })">
+    <div v-if="selected.length" ref="selbarEl" class="selbar" role="toolbar" :aria-label="t('files.selected', { n: selected.length })">
       <div class="selbar-head">
         <span class="selbar-count">{{ t('files.selected', { n: selected.length }) }}</span>
         <button type="button" class="selbar-clear" @click="checked = []"><n-icon :component="CloseOutline" />{{ t('files.clearSelection') }}</button>
@@ -120,7 +120,7 @@
           <div v-if="galleryDirs.length" class="g-folders" role="list" :aria-label="t('gallery.folders')">
             <button
               v-for="d in galleryDirs" :key="d.path" type="button" class="g-folder" role="listitem" :data-path="d.path" :class="{ cursor: cursor === d.path, 'drop-on': dropKey === d.path }"
-              @click="go(d.path)" @contextmenu.prevent.stop="openContext($event, d)"
+              @click="open(d)" @contextmenu.prevent.stop="openContext($event, d)"
               @dragover="dropOver($event, d.path)" @dragleave="dropLeave($event, d.path)" @drop="dropDo($event, d.path)"
             ><n-icon :component="Folder" color="var(--folder)" :size="18" /><span>{{ d.name }}</span></button>
           </div>
@@ -131,7 +131,7 @@
               :class="{ on: checked.includes(it.path), cursor: cursor === it.path }"
               @contextmenu.prevent.stop="openContext($event, it)" @click="cursor = it.path" @dragstart="dragStart($event, it)" @dragend="dragEnd"
             >
-              <button type="button" class="g-main" :aria-label="`${t('gallery.open')} ${it.name}`" @click="openLightbox(it)">
+              <button type="button" class="g-main" :aria-label="`${t('gallery.open')} ${it.name}`" @click="tapSelect(it) || openLightbox(it)">
                 <span class="g-img">
                   <thumb-img v-if="thumbOf(it, tileSize)" :src="thumbOf(it, tileSize)" alt="">
                     <template #fallback><file-icon :item="it" :size="40" /></template>
@@ -523,6 +523,31 @@ const justPressed = () => Date.now() - lpAt < 800
 function onClickCapture(e) { if (justPressed()) { e.stopPropagation(); e.preventDefault() } }
 onBeforeUnmount(lpStop)
 
+/** what the last press was made with: only a finger turns a tap into a selection while something is selected */
+let lastPointer = ''
+/** once a long press has started selecting, a tap on a row or tile adds it to the selection (or drops it) instead of opening it; true when it did */
+function tapSelect(it) {
+  if (lastPointer !== 'touch' || !selected.value.length || !selectable.value) return false
+  toggle(it, !checked.value.includes(it.path))
+  cursor.value = it.path
+  anchor = it.path
+  return true
+}
+
+// the height of the bar for a selection (phone) is shared with the upload panel, which sits above it
+const selbarEl = ref(null)
+let selbarObs = null
+watch(selbarEl, el => {
+  selbarObs?.disconnect()
+  selbarObs = null
+  if (!el) return document.documentElement.style.removeProperty('--selbar-h')
+  const set = () => document.documentElement.style.setProperty('--selbar-h', `${el.offsetHeight}px`)
+  set()
+  selbarObs = new ResizeObserver(set)
+  selbarObs.observe(el)
+}, { flush: 'post' })
+onBeforeUnmount(() => { selbarObs?.disconnect(); document.documentElement.style.removeProperty('--selbar-h') })
+
 // ───── favorites ─────
 const starrable = computed(() => !!app.user && !viewing.value)
 const isFav = it => app.isFavorite(props.space, it.path)
@@ -553,6 +578,7 @@ function triggerDownload(url) {
 }
 
 function open(it) {
+  if (tapSelect(it)) return
   if (it.type === 'dir') return go(it.path)
   if (app.view === 'gallery' && mediaKindOf(it.name) && can('read')) return openLightbox(it)
   if (isZip(it) && canLook.value) return openZip(it)
@@ -850,7 +876,11 @@ const rowProps = row => ({
   draggable: can('write') && !coarse,
   ...lp(row),
   onContextmenu: e => { e.preventDefault(); e.stopPropagation(); openContext(e, row) },
-  onClick: () => { cursor.value = row.path; anchor = row.path },
+  onClick: e => {
+    cursor.value = row.path; anchor = row.path
+    // a tap beside the name (the name button does its own) while selecting adds or drops the row
+    if (!e.target.closest?.('button, a, input, .n-checkbox, .n-dropdown')) tapSelect(row)
+  },
   onDragstart: e => dragStart(e, row),
   onDragend: dragEnd,
   ...(row.type === 'dir' ? { onDragover: e => dropOver(e, row.path), onDragleave: e => dropLeave(e, row.path), onDrop: e => dropDo(e, row.path) } : {}),
@@ -1088,6 +1118,7 @@ function onSearchSelect(it) {
 <style scoped>
 /* tall enough to leave empty space under a short list: that is where a right-click opens the folder's own menu */
 .browser { position: relative; min-height: calc(100vh - 240px); }
+@media (max-width: 960px) { .browser { padding-bottom: calc(var(--upload-h, 0px) + 12px); } }
 .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
 .left, .right { display: flex; align-items: center; gap: 8px; }
 .usage { display: flex; align-items: center; gap: 8px; width: 120px; }
@@ -1188,7 +1219,7 @@ function onSearchSelect(it) {
 .sb.danger { color: var(--danger); }
 @media (max-width: 640px) {
   .selection { display: none; }
-  .browser.has-bar { padding-bottom: 96px; }
+  .browser.has-bar { padding-bottom: calc(var(--selbar-h, 96px) + var(--upload-h, 0px) + 24px); }
   .selbar { display: block; position: fixed; left: 0; right: 0; bottom: 0; z-index: 32; background: var(--surface); border-top: 1px solid var(--border); box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.12); padding: 6px 8px calc(6px + env(safe-area-inset-bottom)); }
   .selbar-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 6px 2px; }
   .selbar-count { font-size: 12.5px; font-weight: 600; color: var(--primary); }

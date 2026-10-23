@@ -178,7 +178,7 @@ const th = {
     codeOrBackup: 'รหัสจากแอปหรือรหัสสำรอง', turnedOff: 'ปิดการยืนยันสองขั้นตอนแล้ว',
     codesWarning: 'เก็บรหัสสำรองเหล่านี้ไว้ในที่ปลอดภัย จะแสดงเพียงครั้งนี้ครั้งเดียว ไม่แสดงอีก ใช้เมื่อโทรศัพท์หายหรือเข้าแอปไม่ได้ แต่ละรหัสใช้ได้ครั้งเดียว',
     copy: 'คัดลอก', downloadTxt: 'ดาวน์โหลด .txt', copied: 'คัดลอกแล้ว', copyFailed: 'คัดลอกไม่ได้ กรุณาจดเอง', backupTitle: 'รหัสสำรองสำหรับเข้าสู่ระบบ',
-    savedCodes: 'ฉันเก็บรหัสไว้แล้ว', savedConfirm: 'รหัสเหล่านี้จะไม่แสดงอีก เก็บไว้เรียบร้อยแล้วใช่ไหม?', savedYes: 'เก็บแล้ว',
+    savedCodes: 'ฉันเก็บรหัสไว้แล้ว', 
     since: 'เปิดใช้งานตั้งแต่ {date}',
   },
   devices: {
@@ -745,7 +745,7 @@ const en = {
     codeOrBackup: 'App code or backup code', turnedOff: 'Two-factor sign-in turned off',
     codesWarning: 'Keep these backup codes somewhere safe. They are shown only now and never again. Use them if you lose your phone. Each works once.',
     copy: 'Copy', downloadTxt: 'Download .txt', copied: 'Copied', copyFailed: 'Could not copy. Please write them down.', backupTitle: 'Backup codes for signing in',
-    savedCodes: 'I have saved them', savedConfirm: 'These codes will not be shown again. Have you saved them?', savedYes: 'Saved',
+    savedCodes: 'I have saved them', 
     since: 'On since {date}',
   },
   devices: {

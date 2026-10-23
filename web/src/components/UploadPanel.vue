@@ -1,7 +1,7 @@
 <template>
   <transition name="slide">
-    <div v-if="queue.length" class="panel surface">
-      <div class="head" @click="collapsed = !collapsed">
+    <div v-if="queue.length" ref="panelEl" class="panel surface" :class="{ strip: collapsed }">
+      <div class="head" role="button" tabindex="0" :aria-expanded="!collapsed" @click="collapsed = !collapsed" @keydown.enter="collapsed = !collapsed">
         <n-icon :component="CloudUploadOutline" size="18" />
         <div class="grow">
           <div class="title">{{ busy ? t('upload.uploading', { n: active }) : t('upload.finished') }}</div>
@@ -10,6 +10,7 @@
         <n-button v-if="!busy" quaternary circle size="small" :title="t('common.close')" @click.stop="clearFinished"><template #icon><n-icon :component="CloseOutline" /></template></n-button>
         <n-icon :component="collapsed ? ChevronUpOutline : ChevronDownOutline" />
       </div>
+      <n-progress v-if="busy" class="overall" type="line" :percentage="overall" :show-indicator="false" :height="3" :border-radius="0" :processing="true" />
       <div v-show="!collapsed" class="list">
         <div v-for="it in queue" :key="it.key" class="item">
           <div class="line">
@@ -33,7 +34,7 @@
 </template>
 
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { NButton, NIcon, NProgress } from 'naive-ui'
 import { ChevronDownOutline, ChevronUpOutline, CloseOutline, CloudUploadOutline } from '@vicons/ionicons5'
@@ -51,7 +52,9 @@ const app = useAppStore()
 const fb = useFeedback()
 
 const queue = ref([])
-const collapsed = ref(false)
+// a phone starts with a one-line strip (it sits above the bar for a selection); a wide screen with the list open
+const phone = window.matchMedia('(max-width: 960px)').matches
+const collapsed = ref(phone)
 let runners = 0
 const FILES_AT_ONCE = 3
 // one limit of chunk requests in flight for all files together
@@ -65,6 +68,23 @@ const counts = computed(() => ({
 }))
 const active = computed(() => queue.value.filter(i => ['queued', 'uploading', 'paused'].includes(i.status)).length)
 const busy = computed(() => active.value > 0)
+const overall = computed(() => {
+  const total = queue.value.reduce((a, i) => a + (i.size || 0), 0)
+  return total ? Math.min(100, Math.round((queue.value.reduce((a, i) => a + (i.status === 'done' ? i.size : i.loaded || 0), 0) / total) * 100)) : 0
+})
+
+// the height of the panel is shared, so the list can leave room for it at the bottom of a phone screen
+const panelEl = ref(null)
+let panelObs = null
+watch(panelEl, el => {
+  panelObs?.disconnect()
+  panelObs = null
+  if (!el) return document.documentElement.style.removeProperty('--upload-h')
+  const set = () => document.documentElement.style.setProperty('--upload-h', `${el.offsetHeight}px`)
+  set()
+  panelObs = new ResizeObserver(set)
+  panelObs.observe(el)
+}, { flush: 'post' })
 
 const percent = it => (it.size ? Math.min(100, Math.round((it.loaded / it.size) * 100)) : it.status === 'done' ? 100 : 0)
 const statusOf = it => ({ done: 'success', error: 'error' })[it.status] || 'default'
@@ -106,7 +126,7 @@ function add(list, path) {
     }
     queue.value.push(item)
   }
-  collapsed.value = false
+  if (!phone) collapsed.value = false
   pump()
 }
 
@@ -247,7 +267,7 @@ function clearFinished() {
 
 const beforeUnload = e => { if (busy.value) { e.preventDefault(); e.returnValue = '' } }
 onMounted(() => window.addEventListener('beforeunload', beforeUnload))
-onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
+onBeforeUnmount(() => { window.removeEventListener('beforeunload', beforeUnload); panelObs?.disconnect(); document.documentElement.style.removeProperty('--upload-h') })
 
 defineExpose({ add })
 </script>
@@ -265,6 +285,15 @@ defineExpose({ add })
 .size { flex: none; font-size: 12px; }
 .err { color: var(--danger); overflow-wrap: anywhere; min-width: 0; }
 .actions { display: flex; gap: 10px; flex: none; }
+@media (max-width: 960px) {
+  /* a strip across the bottom, above the bar for a selection */
+  .panel { left: 8px; right: 8px; width: auto; bottom: calc(var(--selbar-h, 0px) + 8px + env(safe-area-inset-bottom)); }
+  .head { padding: 8px 12px; }
+  .sub { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .grow { min-width: 0; }
+  .list { max-height: 40vh; }
+}
+.overall { display: block; }
 .slide-enter-active, .slide-leave-active { transition: transform 0.2s ease, opacity 0.2s; }
 .slide-enter-from, .slide-leave-to { transform: translateY(16px); opacity: 0; }
 </style>

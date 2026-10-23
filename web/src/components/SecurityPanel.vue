@@ -214,7 +214,6 @@ function downloadCodes() {
 }
 
 async function finishCodes() {
-  if (!(await fb.confirm({ title: t('security.savedCodes'), content: t('security.savedConfirm'), positive: t('security.savedYes') }))) return
   codes.value = []
   mode.value = ''
   emit('lock', false)

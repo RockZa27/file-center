@@ -21,7 +21,7 @@
             <section class="surface block">
               <h2>{{ t('settings.brand') }}</h2>
               <setting-row :label="t('settings.appName')" :help="t('settings.appNameHelp')" :changed="isChanged('appName')" for-id="s-appname">
-                <n-input id="s-appname" v-model:value="f.appName" :placeholder="t('settings.appName')" maxlength="60" class="ctl" />
+                <n-input :input-props="{ id: 's-appname' }" v-model:value="f.appName" :placeholder="t('settings.appName')" maxlength="60" class="ctl" />
               </setting-row>
               <setting-row :label="t('settings.color')" :help="t('settings.colorHelp')" :changed="isChanged('primaryColor')">
                 <div class="colors">
@@ -56,13 +56,13 @@
               </setting-row>
               <n-alert type="info" :show-icon="true" class="std">{{ t('settings.standardHint') }}</n-alert>
               <setting-row :label="t('settings.welcomeTitle')" :changed="isChanged('welcomeTitle')" for-id="s-wtitle">
-                <n-input id="s-wtitle" v-model:value="f.welcomeTitle" maxlength="120" :placeholder="t('settings.stdWelcomeTitle')" clearable class="ctl wide" />
+                <n-input :input-props="{ id: 's-wtitle' }" v-model:value="f.welcomeTitle" maxlength="120" :placeholder="t('settings.stdWelcomeTitle')" clearable class="ctl wide" />
               </setting-row>
               <setting-row :label="t('settings.welcomeText')" :changed="isChanged('welcomeText')" for-id="s-wtext">
-                <n-input id="s-wtext" v-model:value="f.welcomeText" type="textarea" :autosize="{ minRows: 3, maxRows: 6 }" maxlength="600" :placeholder="t('settings.stdWelcomeText')" clearable class="ctl wide" />
+                <n-input :input-props="{ id: 's-wtext' }" v-model:value="f.welcomeText" type="textarea" :autosize="{ minRows: 3, maxRows: 6 }" maxlength="600" :placeholder="t('settings.stdWelcomeText')" clearable class="ctl wide" />
               </setting-row>
               <setting-row :label="t('settings.emptyText')" :changed="isChanged('publicEmptyText')" for-id="s-wempty">
-                <n-input id="s-wempty" v-model:value="f.publicEmptyText" maxlength="300" :placeholder="t('settings.stdEmptyText')" clearable class="ctl wide" />
+                <n-input :input-props="{ id: 's-wempty' }" v-model:value="f.publicEmptyText" maxlength="300" :placeholder="t('settings.stdEmptyText')" clearable class="ctl wide" />
               </setting-row>
             </section>
             <section class="surface block">

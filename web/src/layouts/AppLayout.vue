@@ -297,8 +297,8 @@ onBeforeUnmount(() => {
 main { flex: 1; }
 .scrim { display: none; }
 @media (max-width: 960px) {
-  .sidebar { transform: translateX(-100%); transition: transform 0.2s ease; box-shadow: 0 0 24px rgba(0, 0, 0, 0.2); }
-  .sidebar.open { transform: none; }
+  .sidebar { transform: translateX(-100%); transition: transform 0.2s ease; }
+  .sidebar.open { transform: none; box-shadow: 0 0 24px rgba(0, 0, 0, 0.2); }
   .scrim { display: block; position: fixed; inset: 0; background: rgba(0, 0, 0, 0.35); z-index: 35; }
   .main { margin-left: 0; }
   .menu-btn { display: inline-flex; }

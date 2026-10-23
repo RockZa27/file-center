@@ -8,7 +8,7 @@
 
     <n-alert v-if="error" type="error" class="gap">{{ error }}</n-alert>
     <div v-if="s?.warnings?.length" class="warnings">
-      <n-alert v-for="w in s.warnings" :key="w.code + w.message" :type="w.level === 'critical' ? 'error' : w.level === 'warning' ? 'warning' : 'info'" :show-icon="true">
+      <n-alert v-for="w in s.warnings" :key="w.code + w.message" :type="w.level === 'critical' || w.code === 'update.allow-unsigned' ? 'error' : w.level === 'warning' ? 'warning' : 'info'" :show-icon="true">
         <span class="warn-row">
           <span>{{ w.message }}</span>
           <router-link v-if="w.code === 'errors'" :to="{ name: 'logs', query: { level: 'error' } }" class="warn-link">{{ t('dash.viewLogs') }} →</router-link>
