@@ -166,7 +166,14 @@ GitHub Actions (`.github/workflows/qa.yml`) ทำงานทุก push แล
 | `bench` | `bun run bench --quick --json bench.json` เก็บ `bench.json` เป็น artifact `bench-results` **ไม่ตัดสินผ่าน/ไม่ผ่านจากตัวเลข** (runner ต่างกัน ไฟล์ไว้ดู) |
 | `security` | `bun audit` และ Trivy (โค้ดและอิมเมจ) ล้มเฉพาะ HIGH/CRITICAL ที่มีเวอร์ชันแก้แล้ว ผลอยู่ใน artifact `security-results` รายละเอียดที่ [ความปลอดภัย: ตรวจช่องโหว่ใน CI](security.md#ตรวจช่องโหว่ใน-ci) |
 
-Action ทุกตัวใน workflow ใช้เวอร์ชันเต็ม (`vX.Y.Z`) และมีเทสต์ตรวจ เทสต์ทั้งหมดต้องผ่านบน runner ธรรมดา (ไม่ใช่ root ไม่มี Chromium)
+Action ทุกตัวใน workflow ปักด้วย commit SHA มีเวอร์ชันเต็มเขียนกำกับไว้ข้าง ๆ (`@<sha> # vX.Y.Z`) ส่วนอิมเมจใน `Dockerfile` และ `docker-compose.yml` ปักด้วย digest ต่อท้าย tag (`:1.4.4@sha256:...`) มีเทสต์ตรวจทั้งสองแบบ เพราะ tag ย้ายไปชี้เนื้อหาอื่นได้แต่ SHA และ digest ย้ายไม่ได้
+
+**Dependabot** (`.github/dependabot.yml`) เปิด pull request ทุกสัปดาห์สำหรับ npm, GitHub Actions และอิมเมจ Docker โดยอัป SHA, digest และป้ายเวอร์ชันข้างกันไปพร้อมกัน
+- npm ระดับ minor/patch รวมเป็น PR เดียว
+- major ของ vite, typescript, pinia, vue-router และ concurrently ไม่เปิด PR เพราะต้องแก้โค้ด ให้อัปเองเมื่อพร้อม
+- PR ของ Dependabot ไม่ merge เอง ต้องผ่าน CI ทุกงานและมีคนอ่านก่อน โดยเฉพาะ action กับอิมเมจ ให้ดูว่า SHA หรือ digest ใหม่มาจาก release ของเจ้าของจริง
+
+เทสต์ทั้งหมดต้องผ่านบน runner ธรรมดา (ไม่ใช่ root ไม่มี Chromium)
 
 **รันสคริปต์ Docker บนเครื่องตัวเอง** (ต้องมี Docker และ Bun)
 

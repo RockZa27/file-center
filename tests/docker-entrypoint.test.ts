@@ -186,11 +186,17 @@ describe('hardening and security job', () => {
 
   test('the runtime stage is the slim image, the build stage is unchanged', () => {
     const froms = read('Dockerfile').split('\n').filter(l => l.startsWith('FROM '))
-    expect(froms).toEqual(['FROM oven/bun:1.4.4 AS build', 'FROM oven/bun:1.4.4-slim'])
+    expect(froms).toEqual(['FROM oven/bun:1.4.4@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d AS build', 'FROM oven/bun:1.4.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4'])
+  })
+
+  test('base images, other images and CI actions are pinned to a digest or commit, not only a moving tag', () => {
+    for (const l of read('Dockerfile').split('\n').filter(l => l.startsWith('FROM '))) expect(l).toMatch(/@sha256:[0-9a-f]{64}/)
+    for (const l of read('docker-compose.yml').split('\n').filter(l => /^\s*image:/.test(l) && !l.includes('${'))) expect(l).toMatch(/@sha256:[0-9a-f]{64}/)
+    for (const l of read('.github/workflows/qa.yml').split('\n').filter(l => /^\s*(- )?uses:/.test(l))) expect(l).toMatch(/@[0-9a-f]{40}\b/)
   })
 
   test('the runtime stage installs the Debian security updates by default (the image scan found fixed HIGH/CRITICAL ones)', () => {
-    const runtime = read('Dockerfile').split('FROM oven/bun:1.4.4-slim')[1]
+    const runtime = read('Dockerfile').split('FROM oven/bun:1.4.4-slim@')[1]
     expect(runtime).toMatch(/^ARG APT_UPGRADE=true$/m)
     expect(runtime).toMatch(/apt-get update && apt-get upgrade -y/)
     expect(runtime).toMatch(/rm -rf \/var\/lib\/apt\/lists/)
@@ -226,10 +232,11 @@ describe('hardening and security job', () => {
     expect(job.match(/exit-code: "1"/g)?.length).toBe(2)
     expect(job).toContain('format: sarif')
     expect(job).toContain('name: security-results')
-    // every action: a full version (vX.Y.Z), none of the Node 20 majors
-    const uses = [...wf.matchAll(/uses: (\S+)@(\S+)/g)]
+    // every action: a commit SHA with its full version (vX.Y.Z) beside it, none of the Node 20 majors
+    const uses = [...wf.matchAll(/uses: (\S+)@(\S+) # (\S+)/g)]
+    expect(uses.length).toBe([...wf.matchAll(/uses: /g)].length)
     expect(uses.length).toBeGreaterThan(8)
-    for (const [, name, ver] of uses) expect(`${name}@${ver}`).toMatch(/@v\d+\.\d+\.\d+$/)
+    for (const [, name, sha, ver] of uses) expect(`${name}@${sha} # ${ver}`).toMatch(/@[0-9a-f]{40} # v\d+\.\d+\.\d+$/)
     expect(wf).not.toMatch(/checkout@v4|upload-artifact@v4|setup-bun@v2\.0/)
   })
 
