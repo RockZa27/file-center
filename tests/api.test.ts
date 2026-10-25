@@ -1533,6 +1533,13 @@ describe('hardening: visitors\' daily upload allowance', () => {
     const v2 = new Client()
     await v1.start()
     await v2.start()
+    // some of today's allowance used already, whatever ran before: one address may hold only a quarter of the
+    // allowance in unfinished uploads, so with nothing used a limit of 100 would let no 40-byte upload through
+    config.guestUploadDailyBytes = guestUploadUsage().used + 10_000
+    const warm = await announce(v1, 400, 'warm.bin')
+    expect(warm.status).toBe(200)
+    expect((await putChunk(v1, warm.data.id, 0, new Uint8Array(400))).status).toBe(200)
+    expect((await v1.json('POST', `/api/upload/${warm.data.id}/complete`)).status).toBe(200)
     config.guestUploadDailyBytes = guestUploadUsage().used + 100
     try {
       // announced at the same time, they still can not go past the allowance together
