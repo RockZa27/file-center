@@ -611,6 +611,22 @@ function lostTwoFactor(dir: string): string[] {
 }
 
 /**
+ * Sessions are not in a backup and name their account only: after a restore, one of an account the backup does not
+ * have, or made before the restored account of that name existed, would sign in as whoever gets that name next.
+ */
+function keepSessionsOf(users: { username: string; createdAt?: string }[]) {
+  if (!existsSync(paths.sessions)) return
+  const since = new Map(users.map(u => [u.username.toLowerCase(), Date.parse(u.createdAt ?? '') || 0]))
+  const all = JSON.parse(readFileSync(paths.sessions, 'utf8')) as Record<string, { username: string | null; created?: number }>
+  const kept = Object.fromEntries(Object.entries(all).filter(([, s]) => {
+    if (!s.username) return true
+    const born = since.get(s.username.toLowerCase())
+    return born !== undefined && (s.created ?? 0) >= born
+  }))
+  writeFileSync(paths.sessions, JSON.stringify(kept, null, 2))
+}
+
+/**
  * Put back the users, settings and logo of a backup. The current state is backed up first, so a wrong restore
  * can itself be undone. The caller restarts the app afterwards: the stores in memory still hold the old data.
  */
@@ -630,7 +646,9 @@ export function restoreBackup(name: string): Promise<{ safety: BackupItem; twoFa
       await JsonStore.flushAll()
       JsonStore.freeze()
       try {
+        const restoredUsers = (JSON.parse(readFileSync(join(work, 'users.json'), 'utf8')) as { users: { username: string; createdAt?: string }[] }).users
         renameSync(join(work, 'users.json'), paths.users)
+        keepSessionsOf(restoredUsers)
         if (existsSync(join(work, 'settings.json'))) renameSync(join(work, 'settings.json'), paths.settings)
         const branding = join(work, 'branding')
         mkdirSync(branding, { recursive: true })

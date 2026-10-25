@@ -107,15 +107,33 @@ export function guestUploadUsage(): { day: string; used: number; limit: number }
   return { day, used: s.day === day && Number.isFinite(s.bytes) ? s.bytes : 0, limit: config.guestUploadDailyBytes }
 }
 
-function reserveGuest(size: number): string {
+// One address may hold at most this part of the day's allowance in uploads it has announced but not finished: one
+// visitor announcing a big file and sending nothing would otherwise stop every other visitor's uploads for the day.
+const GUEST_PENDING_SHARE = 4
+const guestPending = new Map<string, number>()
+const pendingKey = (meta: Pick<Meta, 'ip'>) => meta.ip ?? ''
+
+function reserveGuest(size: number, ip: string): string {
   const { day, used, limit } = guestUploadUsage()
   if (limit <= 0) throw new HttpError(429, 'upload.guest-disabled')
   if (used + size > limit) throw new HttpError(429, 'upload.guest-quota')
+  const pending = guestPending.get(ip) ?? 0
+  if (pending + size > Math.floor(limit / GUEST_PENDING_SHARE)) throw new HttpError(429, 'upload.guest-quota')
+  guestPending.set(ip, pending + size)
   guestStore.replace({ day, bytes: used + size })
   return day
 }
 
+/** the upload is no longer waiting (finished, cancelled or dropped): its address may announce again */
+function settleGuest(meta: Meta) {
+  if (!meta.guestDay) return
+  const left = (guestPending.get(pendingKey(meta)) ?? 0) - meta.size
+  if (left > 0) guestPending.set(pendingKey(meta), left)
+  else guestPending.delete(pendingKey(meta))
+}
+
 function releaseGuest(meta: Meta) {
+  settleGuest(meta)
   // bytes counted on an earlier day are not taken off today's count: that one started from zero
   if (!meta.guestDay || guestStore.value.day !== meta.guestDay) return
   guestStore.update(d => { d.bytes = Math.max(0, d.bytes - meta.size) })
@@ -129,7 +147,10 @@ let restored = false
 function restoreReservations() {
   if (restored) return
   restored = true
-  for (const meta of allMetas()) if (meta.quotaUser) restoreReservation(meta.quotaUser, meta.size)
+  for (const meta of allMetas()) {
+    if (meta.quotaUser) restoreReservation(meta.quotaUser, meta.size)
+    if (meta.guestDay) guestPending.set(pendingKey(meta), (guestPending.get(pendingKey(meta)) ?? 0) + meta.size)
+  }
 }
 
 function allMetas(): Meta[] {
@@ -209,9 +230,10 @@ export function initUpload(args: {
   const total = Math.max(1, Math.ceil(size / chunkSize))
   const meta: Meta = { id, owner: args.owner, destDir, name, size, chunkSize, total, createdAt: Date.now() }
   // counted before anything is written and in the same tick as the check: nothing can slip in between
-  if (args.guest) meta.guestDay = reserveGuest(size)
+  if (args.guest || args.shareId) meta.ip = args.ip ?? ''
+  if (args.guest) meta.guestDay = reserveGuest(size, meta.ip ?? '')
   if (args.space) meta.space = args.space
-  if (args.shareId) { meta.shareId = args.shareId; meta.ip = args.ip ?? '' }
+  if (args.shareId) meta.shareId = args.shareId
   if (args.quotaUser) {
     try {
       reserveBytes(args.quotaUser, size)
@@ -315,6 +337,7 @@ async function finishUpload(id: string, owner: string, user?: User | null) {
   rmSync(dirOf(id), { recursive: true, force: true })
   // the file is in the home now: the reservation turns into counted bytes
   if (meta.quotaUser) commitBytes(meta.quotaUser, meta.size)
+  settleGuest(meta)
   return { path: finalPath, size: meta.size }
 }
 

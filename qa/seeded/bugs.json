@@ -1846,5 +1846,65 @@
         "replace": ""
       }
     ]
+  },
+  {
+    "id": "dav-skips-2fa-rule",
+    "difficulty": "subtle",
+    "category": "auth",
+    "severity": "medium",
+    "tests": "tests/security-1131.test.ts",
+    "description": "WebDAV app passwords keep working for an account the 2FA rule says must turn on 2FA first",
+    "patches": [
+      {
+        "file": "src/webdav.ts",
+        "find": "  if (policy.mustSetup2fa(found.user)) return reply(request, 403, 'auth.2fa-required')\n",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "dav-misses-cli-revoke",
+    "difficulty": "subtle",
+    "category": "auth",
+    "severity": "medium",
+    "tests": "tests/security-1131.test.ts",
+    "description": "WebDAV does not read the changes of `bun src/cli.ts`, so a revoked app password keeps working",
+    "patches": [
+      {
+        "file": "src/webdav.ts",
+        "find": "  reloadIfChangedByCli()\n  try {",
+        "replace": "  try {"
+      }
+    ]
+  },
+  {
+    "id": "name-reuse-inherits",
+    "difficulty": "subtle",
+    "category": "authz",
+    "severity": "medium",
+    "tests": "tests/security-1131.test.ts",
+    "description": "a new account with the name of one a restore dropped inherits its sign-ins, share links, grants and groups",
+    "patches": [
+      {
+        "file": "src/routes/admin.ts",
+        "find": "    tombstoneTrashOf(username)\n    forgetAccount(username)\n",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "unzip-blocks-thread",
+    "difficulty": "subtle",
+    "category": "dos",
+    "severity": "medium",
+    "tests": "tests/security-1131.test.ts",
+    "description": "unzip writes with a blocking call, so a small zip that unpacks big holds the server thread",
+    "patches": [
+      {
+        "file": "src/zip.ts",
+        "find": "at += (await file.write(chunk, at)).bytesWritten",
+        "replace": "at += require('node:fs').writeSync(file.fd, chunk, at)"
+      }
+    ]
   }
 ]

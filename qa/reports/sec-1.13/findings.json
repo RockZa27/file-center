@@ -1,0 +1,948 @@
+[
+ {
+  "verdict": "confirmed",
+  "fingerprint": "admin-2fa-reset-keeps-webdav-app-passwords",
+  "title": "Admin 2FA reset leaves the user's WebDAV app passwords working",
+  "description": "The admin 2FA reset endpoint clears the target's second factor, login tickets and web sessions, but not the target's WebDAV app passwords. An app password is a long-lived Basic-auth credential that never goes through 2FA. Anyone who held one before the reset keeps WebDAV access at its scope afterwards. The reset already signs every device out, so it is partly a cut-off action. The sibling handlers that cut off a possibly compromised account (admin password reset and update, user delete, admin sessions revoke, the user's own password change) all revoke app passwords. The docs (docs/security.md:105, docs/admin-guide.md:108) tie app-password removal to the 'lost device / stolen account' case. The 2FA reset docs (docs/admin-guide.md:109, the UI text in web/src/i18n.js:762) promise only 'turn off 2FA, clear backup codes, sign out all devices' and never say app passwords are kept. Nothing documents keeping them as intended. The operator CLI `reset-2fa` has the same gap, while the CLI `sessions-revoke` does revoke them. Because the app password is an independent credential issued to the account itself, this is a lifecycle inconsistency and hardening gap. It does not widen the account's own rights, and the reset is not guaranteed to be a compromise response (a user who simply lost a phone is the stated use).",
+  "root_cause": "The POST /admin/users/:username/2fa/reset handler (and the CLI reset-2fa branch) omits the removeAppPasswordsOf(target.username) call that the other credential-ending handlers make.",
+  "intended_behavior": "A staff-run recovery that already signs the account out of every device should also end credentials that do not depend on the second factor. The sessions-revoke handler's comment says 'a stolen cookie and a stolen app password are the same emergency', so the 2FA reset should remove the user's app passwords too, or the docs should state that they are kept.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/routes/admin.ts",
+    "line": 232,
+    "scope": "POST /admin/users/:username/2fa/reset",
+    "description": "A staff user who passes manageable() and confirms their own password triggers the reset."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/routes/admin.ts",
+    "line": 236,
+    "scope": "2FA reset handler",
+    "description": "delete target.twoFactor, then dropLoginTickets and destroyUserSessions at lines 238-239. The app-password store is not touched."
+   },
+   {
+    "kind": "sink",
+    "file": "src/webdav.ts",
+    "line": 143,
+    "scope": "authenticate()",
+    "description": "verifyAppPassword still finds the record and accepts the Basic credential after the reset. The request proceeds with the app password's scope."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/routes/admin.ts",
+    "line": 226,
+    "description": "Sibling sessions-revoke handler calls removeAppPasswordsOf, with the comment (line 225) that a stolen cookie and a stolen app password are the same emergency."
+   },
+   {
+    "file": "src/routes/admin.ts",
+    "line": 180,
+    "description": "The admin password reset and update handler calls removeAppPasswordsOf."
+   },
+   {
+    "file": "src/routes/admin.ts",
+    "line": 209,
+    "description": "The user delete handler calls removeAppPasswordsOf."
+   },
+   {
+    "file": "src/routes/session.ts",
+    "line": 263,
+    "description": "The user's own password change calls removeAppPasswordsOf."
+   },
+   {
+    "file": "src/routes/admin.ts",
+    "line": 239,
+    "description": "The 2FA reset handler ends at destroyUserSessions with no removeAppPasswordsOf call."
+   },
+   {
+    "file": "src/cli.ts",
+    "line": 29,
+    "description": "The CLI reset-2fa branch (lines 29-36) also omits removeAppPasswordsOf, while the sessions-revoke branch at line 39 calls it."
+   },
+   {
+    "file": "docs/security.md",
+    "line": 105,
+    "description": "Documents that the sessions revoke removes WebDAV app passwords for lost-device or stolen-account cases. No document says a 2FA reset keeps them."
+   },
+   {
+    "file": "agents/v8-2fareset/artifacts/v1.out",
+    "line": 1,
+    "description": "Independent verifier run in the sandbox: WebDAV PROPFIND returned 207 before the reset, 207 after the admin 2FA reset, and 401 after an admin password reset."
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "authorization_role",
+    "description": "A manager or admin must run the 2FA reset and confirm their own password."
+   },
+   {
+    "kind": "data_state",
+    "description": "The target must already hold an app password, and WebDAV must be enabled."
+   },
+   {
+    "kind": "environmental_dependency",
+    "description": "The holder of the app password must be someone who should no longer have access, such as a lost or stolen device or a leaked secret. Without that there is no security consequence."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "A holder of a leaked or stolen app password for a user whose 2FA was just reset by an admin.",
+   "payloads": [
+    "PROPFIND /dav/ with Authorization: Basic base64(dummy1:fc-<secret>) and Depth: 0"
+   ],
+   "instructions": [
+    "A dummy user enables 2FA and creates a readwrite app password.",
+    "PROPFIND /dav/ with it returns 207.",
+    "The admin POSTs /api/admin/users/dummy1/2fa/reset with their own password.",
+    "Repeat the same PROPFIND.",
+    "As a control, an admin password reset on the same account makes the same PROPFIND return 401."
+   ],
+   "observed_result": "Verifier's own run (agents/v8-2fareset/artifacts/v1.out): PROPFIND returned 207 before the reset and 207 after the 2FA reset. After the admin password reset it returned 401."
+  },
+  "remediation": {
+   "strategy": "Revoke the target's app passwords in the 2FA reset handler and in the CLI reset-2fa branch, and record the count in the audit detail. Add a regression test: create an app password, run the 2FA reset, and expect 401 on /dav. If keeping them is intended, say so in docs/admin-guide.md and the reset dialog.",
+   "code_changes": [
+    {
+     "file_name": "src/routes/admin.ts",
+     "fixed_code": "    delete target.twoFactor\n    saveUsers()\n    dropLoginTickets(target.username)\n    destroyUserSessions(target.username)\n    const appPasswords = removeAppPasswordsOf(target.username)\n    audit({ user: admin.username, ip, action: '2fa-reset', target: target.username, detail: `${appPasswords} app password` })"
+    }
+   ]
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Staff must run the reset, and a leaked or stolen app password must already exist. The reset is often just a lost phone, not a compromise."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "The old credential keeps only the access the account already had, at the app password's read or readwrite scope. It gives no escalation, and the user could have created it only with a password step-up."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "The source shows the missing call. My own sandbox run reproduced the 207 after the 2FA reset and the 401 after the control password reset. No document or UI text declares the retention intended."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "backup-restore:orphaned-shares-grants-groups-inherited-by-same-name-account",
+  "title": "Backup restore leaves shares, grants and group memberships of removed accounts, which a new same-name account inherits",
+  "description": "POST /api/admin/backups/restore replaces users.json with the backup's list but does not touch shares.json, grants.json or groups.json. Accounts created after the backup disappear without the cleanup that account deletion performs (revokeSharesOf, removeGrantsOf, removeUserFromGroups, removeAppPasswordsOf, tombstoneTrashOf). Shares, grants and group members are keyed by username only. When an admin (or a manager, if the home folder is not already taken) later creates an account with a removed name, the new account silently inherits the old account's state. The verifier reproduced this independently in the sandbox: (1) alice's folder grant to the old bob became listable and downloadable by the new bob; (2) the new bob became an 'edit' member of group 'team'; (3) the old bob's share link, held by anyone, went from 404 to 200 and served a file again with no authentication. Account creation does not purge stale records and nothing reconciles at startup. App passwords avoid this problem with a createdAt guard, but shares, grants and groups have no such guard.",
+  "root_cause": "Identity-bound records in shares.json, grants.json and groups.json reference accounts by username with no account-creation-time or stable-id binding. restoreBackup swaps users.json without reconciling these stores, and the user-create handler does not purge leftovers. The only cleanup lives in the delete-user handler.",
+  "intended_behavior": "shares.ts documents that a deleted account takes its links along so that 'a new account by the same name must not bring them back'. Records of a removed account should not authorize a later account of the same name, whether the account was deleted or dropped by a restore.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/routes/backup.ts",
+    "line": 73,
+    "scope": "POST /api/admin/backups/restore",
+    "description": "Admin (password step-up, supervised mode) restores an older backup; the app then restarts and reads the restored users.json."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/backup.ts",
+    "line": 618,
+    "scope": "restoreBackup",
+    "description": "Only users.json, settings.json and branding/ are replaced; accounts created after the backup vanish and no reconciliation of shares, grants, groups or app passwords runs."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/routes/admin.ts",
+    "line": 193,
+    "scope": "DELETE /api/admin/users/:username",
+    "description": "Contrast: deletion runs tombstoneTrashOf, revokeSharesOf, removeGrantsOf, removeAppPasswordsOf and removeUserFromGroups; none of this runs on restore, and POST /admin/users (line 98) does not purge stale records either."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/shares.ts",
+    "line": 149,
+    "scope": "sharedItem",
+    "description": "findUser(s.owner) matches by name only and does not compare owner.createdAt with share.createdAt, so the new account is accepted as owner and the old token serves its files."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/grants.ts",
+    "line": 61,
+    "scope": "grantPermsFor / grantTarget",
+    "description": "The recipient is matched by same(g.to, user.username) with no account-age check, so grants given to the old name resolve for the new account."
+   },
+   {
+    "kind": "sink",
+    "file": "src/groups.ts",
+    "line": 75,
+    "scope": "groupSpace",
+    "description": "Membership is matched by username only: the new account gets the group folder with the old member's edit rights."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/app-passwords.ts",
+    "line": 126,
+    "description": "usable() requires record.createdAt >= user.createdAt, the guard that shares, grants and groups lack."
+   },
+   {
+    "file": "src/routes/admin.ts",
+    "line": 204,
+    "description": "Delete-user handler performs the full cleanup (revokeSharesOf, removeGrantsOf, removeUserFromGroups) that restore skips."
+   },
+   {
+    "file": "src/backup.ts",
+    "line": 8,
+    "description": "Header comment: groups.json is in the zip but not restored and only users.json, settings.json and branding/ are put back, so the stores can disagree; grants.json and shares.json are likewise not restored."
+   },
+   {
+    "file": "src/shares.ts",
+    "line": 139,
+    "description": "Comment on revokeSharesOf states the intent: a deleted account takes its links along so a new account by the same name must not bring them back."
+   },
+   {
+    "file": "agents/v5-orphans/artifacts/v1.out",
+    "line": 1,
+    "description": "Independent verifier reproduction (phase 1 then phase 2): users.json = [admin, alice] while shares, grants and groups still reference bob; old share link 404 before the new account and 200 'old-bob.txt' after; new bob lists the grant, downloads alice-private.txt (200, ALICE-DATA) and is in group team with edit."
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "authorization_role",
+    "description": "An admin restores a backup older than some accounts (needs password step-up and a supervised process)."
+   },
+   {
+    "kind": "data_state",
+    "description": "The removed account had shares, received grants or group memberships."
+   },
+   {
+    "kind": "user_interaction",
+    "description": "An admin (or a manager, when the home folder is not already taken) later creates a new account with the same username, possibly for a different person."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "A new account holder (or an anonymous holder of an old share link) who benefits from the stale records after the admin's restore and re-creation of the name.",
+   "payloads": [
+    "POST /api/admin/backups (backup while 'bob' does not exist)",
+    "bob creates a share, alice grants /proj to bob, admin adds bob to group 'team' (edit)",
+    "restoreBackup(backup), then restart",
+    "POST /api/admin/users {username:'bob', ...} (new account)",
+    "GET /api/grants/to-me; GET /api/download?space=grant:<id>&path=/alice-private.txt; GET /api/groups/mine; GET /api/s/<old token>"
+   ],
+   "instructions": [
+    "In the sandbox, run the harness (v1.ts) phase 1 and then phase 2 against the same TMPDIR. Phase 1 creates alice, takes a backup, creates bob, adds the grant, group membership and share, then calls restoreBackup (the route's function, without the restart). Phase 2 is a fresh process: it creates a new bob and probes."
+   ],
+   "observed_result": "users.json = [admin, alice]; shares.json, grants.json and groups.json still reference bob. Old share link: 404 before the new account, 200 with name 'old-bob.txt' after. New bob lists grants received: [alice proj view]; lists alice's folder and downloads alice-private.txt (200, 'ALICE-DATA'). New bob groups: [team, edit]."
+  },
+  "remediation": {
+   "strategy": "In restoreBackup, after swapping users.json, revoke shares, drop grants and remove group memberships (and app passwords) for every username absent from the restored list or whose createdAt differs, and tombstone their trash. Also bind records to the account (store owner createdAt or a stable account id) and refuse them in sharedItem, grantPermsFor and groupSpace when the account is newer than the record. Consider purging leftovers in POST /admin/users. Add a regression test: restore, recreate the same name, then assert 404 and no grants or groups.",
+   "code_changes": [
+    {
+     "file_name": "src/shares.ts",
+     "fixed_code": "// in sharedItem: if (Date.parse(owner.createdAt) > Date.parse(s.createdAt)) return null"
+    }
+   ]
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Requires an admin restore that removes accounts, followed by re-creation of the same username."
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "The new account gains read access to other users' granted folders and group folders (with the old member's rights), and anonymous holders of old share links regain access to the new account's files."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "Reproduced independently in the sandbox through the real routes and restoreBackup. Source shows no reconciliation on restore, no purge on user creation, no startup cleanup, and no createdAt guard in shares, grants or groups. The code comments state the opposite intent."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "cli-revoke-not-applied-to-webdav-and-undone-by-app-password-touch",
+  "title": "Operator CLI 'sessions-revoke' is ignored by WebDAV and is silently undone by the app's stale app-password store",
+  "description": "The operator command `bun src/cli.ts sessions-revoke <user>` removes a user's app passwords by rewriting DATA_DIR/app-passwords.json. It then touches the cli-changed marker. The running app re-reads the files only in reloadIfChangedByCli(), and the only caller is the /api derive hook in src/context.ts. WebDAV requests are answered from onRequest in src/index.ts before routing, so they never trigger the reload. Until an unrelated /api request arrives, the revoked app password keeps authenticating on /dav, because verifyAppPassword checks the in-memory list. Each successful DAV authentication also calls touchAppPassword. Once lastUsedAt is more than 60 s old, that call runs store.updateSoon on the stale in-memory list, and about 5 s later the revoked entry is written back over the CLI's change. A later /api request then reloads the resurrected file, so the revoked app password is valid again. The CLI prints a success message throughout.",
+  "root_cause": "CLI-to-app synchronisation is a marker file polled only in the /api request pipeline. The WebDAV entry point in onRequest bypasses that pipeline. The app-passwords JsonStore also persists its stale in-memory copy through touchAppPassword (updateSoon), which overwrites the file the CLI just changed.",
+  "intended_behavior": "After `sessions-revoke`, the running app must stop honouring the user's app passwords on every surface (WebDAV included), as the comments in app-passwords.ts and the header of cli.ts promise. The app must never write its old list back over the CLI's change.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/cli.ts",
+    "line": 39,
+    "scope": "sessions-revoke branch",
+    "description": "The operator runs sessions-revoke. removeAppPasswordsOf rewrites app-passwords.json, and the cli-changed marker is touched at the end (cli.ts:46)."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/index.ts",
+    "line": 243,
+    "scope": "app onRequest",
+    "description": "isDavPath requests are handled by handleDav before routing. The /api derive hook that calls reloadIfChangedByCli (src/context.ts:108) never runs for them."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/webdav.ts",
+    "line": 153,
+    "scope": "authenticate",
+    "description": "verifyAppPassword answers from the stale in-memory store, which still holds the revoked entry. authenticate then calls touchAppPassword(found.item, ip)."
+   },
+   {
+    "kind": "sink",
+    "file": "src/app-passwords.ts",
+    "line": 164,
+    "scope": "touchAppPassword",
+    "description": "store.updateSoon rewrites the stale in-memory list to app-passwords.json after 5 s. The revoked entry is written back over the CLI's change, and the later reloadIfChangedByCli (src/auth.ts:289) reads this resurrected file."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/context.ts",
+    "line": 108,
+    "description": "reloadIfChangedByCli is called only in the global derive of the Elysia pipeline. A grep of src/ finds no timer, watcher or other caller, and onCliChange is the only way the app-passwords store is reloaded."
+   },
+   {
+    "file": "src/index.ts",
+    "line": 243,
+    "description": "handleDav is returned from onRequest before routing and before the derive hook."
+   },
+   {
+    "file": "src/app-passwords.ts",
+    "line": 101,
+    "description": "The onCliChange callback that reloads app-passwords.json runs only through reloadIfChangedByCli."
+   },
+   {
+    "file": "src/app-passwords.ts",
+    "line": 164,
+    "description": "touchAppPassword writes the in-memory store back with updateSoon(..., 5000) whenever lastUsedAt is more than 60 s old."
+   },
+   {
+    "file": "src/cli.ts",
+    "line": 5,
+    "description": "The header says the running app notices the change on its next request, which is false for /dav requests."
+   },
+   {
+    "file": "agents/v6-clirevoke/artifacts/v1.out",
+    "line": 1,
+    "description": "Independent real-time run with the real CLI process against the same DATA_DIR. After sessions-revoke removed the entry (file 0 items), PROPFIND still returned 207 with and without a 2 s delay. After 62 s real time, a PROPFIND touched lastUsedAt and 6.5 s later app-passwords.json had 1 item again. After an /api request (reload) and a cache clear, PROPFIND still returned 207."
+   },
+   {
+    "file": "agents/v6-clirevoke/artifacts/v2.out",
+    "line": 1,
+    "description": "Control run: when an /api request arrives right after the CLI revoke and before any touch write-back, the next PROPFIND returns 401 and the file stays at 0 items. The defect is therefore the DAV path bypassing the reload plus the touch write-back race."
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "authentication_level",
+    "description": "The attacker holds a valid WebDAV app password for the account, for example one stolen from a client device. The operator then revokes it with the CLI."
+   },
+   {
+    "kind": "system_configuration",
+    "description": "WebDAV is enabled (policy.webdav) and the operator runs `bun src/cli.ts sessions-revoke` against a running instance."
+   },
+   {
+    "kind": "timing_dependency",
+    "description": "The revocation is ignored on /dav until some /api request arrives. Permanent resurrection needs a DAV request after lastUsedAt is more than 60 s old and before any /api request, so that the touch write-back fires. The check waited 62 s of real time and did not simulate it."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Holder of a revoked (stolen) WebDAV app password of a normal user.",
+   "payloads": [
+    "PROPFIND /dav/ with Authorization: Basic <user>:<fc-app-password>",
+    "bun src/cli.ts sessions-revoke <user>"
+   ],
+   "instructions": [
+    "Start the app with a dummy DATA_DIR, create a user and an app password, and send a PROPFIND to /dav/ (207).",
+    "Wait until the first lastUsedAt write is done, then run `bun src/cli.ts sessions-revoke <user>` with the same DATA_DIR. It reports 1 app password removed and app-passwords.json has 0 items.",
+    "Send PROPFIND again without any /api call: it still returns 207.",
+    "Wait more than 60 s since the last touch and send PROPFIND again (207), then wait about 6 s: app-passwords.json has the revoked item again.",
+    "Make an /api request (reload from the marker), clear the cache and send PROPFIND again: it still returns 207, so the revocation is gone."
+   ],
+   "observed_result": "Verifier run (v1.out): DAV status 207 before the CLI revoke, 207 after it with no API call, file 0 items right after the CLI. After 62 s real time a DAV request returned 207 and the file went from 0 to 1 items 6.5 s later. After an API request and a cache clear, DAV still returned 207 and the file held 1 item. Control (v2.out): an API request immediately after the CLI gave a DAV 401 and 0 items."
+  },
+  "remediation": {
+   "strategy": "Call reloadIfChangedByCli() at the start of handleDav, before authenticate, so the CLI's change is read before any DAV state is used. Also make the write-back safe: re-read the file before touchAppPassword persists, or do not persist lastUsedAt through a store that can overwrite a newer file. Add a regression test that creates an app password, runs the CLI revoke, expects 401 on /dav without any prior /api call, and expects app-passwords.json to stay at 0 items after another DAV attempt.",
+   "code_changes": [
+    {
+     "file_name": "src/webdav.ts",
+     "fixed_code": "export async function handleDav(request: Request, socketIp: string): Promise<Response> {\n  if (!policy.webdav()) return reply(request, 404, 'request.no-route')\n  reloadIfChangedByCli() // users, sessions and app passwords changed by `bun src/cli.ts`\n  try {\n    // ...unchanged\n  }\n}"
+    }
+   ]
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "It needs a previously obtained app password and an operator running the CLI revoke. On a busy instance an unrelated /api request soon triggers the reload. The write-back resurrection also needs a DAV request after lastUsedAt is more than 60 s old and before that /api request."
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "A compromised account's WebDAV access, with the read/write rights of its scope, survives or returns after the operator's emergency revocation, and the CLI reports success."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "Independently reproduced with my own harness and the real CLI process in the offline sandbox, in real time without simulating idle time. A control run shows the expected 401 when an /api request comes first, and the source shows no other reload path."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "guest-upload-allowance-reserved-at-announce",
+  "title": "A single upload-link visitor can lock the visitors' daily upload allowance for everyone",
+  "description": "All anonymous visitors share one daily allowance, GUEST_UPLOAD_DAILY_BYTES (1 GiB by default). An upload takes its full declared size when it is announced, before any byte is sent. For an upload-request link whose space is public or whose owner has no quota (the default for new users), any visitor can announce one file up to the link's maximum (1 GiB by default) and send nothing. Every other visitor, on every other link and in the public space, then gets 429 upload.guest-quota. The per-link cap of 5 uploads and the per-IP cap of 3 do not help, because one announce is enough. Without further action the hold lasts 15 minutes (UPLOAD_REQUEST_IDLE_MINUTES) for link uploads. It then ends the next time any link announce runs shareUploadLoad, or at the hourly cleanStaleUploads. Writing a valid chunk calls touch() on meta.json and restarts the idle clock. Re-sending chunk 0 (8 MiB) before each 15-minute window ends therefore keeps the hold until the day's counter resets at midnight. The chunk-refresh and idle-expiry steps are from source reading, not a local run.",
+  "root_cause": "The shared daily allowance is reserved on the declared size at announce time (reserveGuest in initUpload). It is not tied to bytes actually received. There is no per-link, per-IP or per-visitor sub-budget of the allowance. Idle expiry is renewed by any single chunk write (saveChunk calls touch), and nothing stops the same chunk being re-sent.",
+  "intended_behavior": "One visitor must not be able to hold other visitors' allowance without sending data. Charge at completion or per received chunk, or give each link or IP a bounded share. Do not let a chunk re-send renew the idle timer indefinitely.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/routes/shares.ts",
+    "line": 332,
+    "scope": "POST /api/s/:token/upload",
+    "description": "The visitor's cookie-bound announce with an arbitrary size up to the link's maxFile (default 1 GiB)."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/routes/shares.ts",
+    "line": 361,
+    "scope": "POST /api/s/:token/upload",
+    "description": "guest is set when the space is public or the owner has no quota."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/uploads.ts",
+    "line": 212,
+    "scope": "initUpload",
+    "description": "reserveGuest(size) is called before any data is written."
+   },
+   {
+    "kind": "sink",
+    "file": "src/uploads.ts",
+    "line": 114,
+    "scope": "reserveGuest",
+    "description": "The global daily store is incremented by the declared size, and the next visitor's announce gets 429 upload.guest-quota."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/uploads.ts",
+    "line": 110,
+    "description": "reserveGuest uses a single global counter with no per-source sub-budget."
+   },
+   {
+    "file": "src/uploads.ts",
+    "line": 259,
+    "description": "saveChunk ends with touch(), which resets the idle clock used by shareUploadLoad and cleanStaleUploads."
+   },
+   {
+    "file": "agents/h4-resource/artifacts/c1.out",
+    "line": 1,
+    "description": "Attacker announce of 1 GiB returned 200, the victim on another link got 429 upload.guest-quota, and the victim succeeded after cancel. The verifier re-read the repro script and the source and found them consistent."
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "system_configuration",
+    "description": "The target link is in the public space or its owner has no quota (the default for new users). Home-space links of owners with a quota are charged to the owner instead."
+   },
+   {
+    "kind": "authentication_level",
+    "description": "The attacker only needs any upload-request link, or an enabled public upload. No account is needed."
+   },
+   {
+    "kind": "timing_dependency",
+    "description": "Holding past 15 minutes needs one valid 8 MiB chunk re-sent before each idle window ends. Without that, the hold ends at the next announce-triggered cleanup or the hourly cleanup."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "An anonymous visitor of an upload-request link.",
+   "payloads": [
+    "POST /api/s/<token>/upload {\"name\":\"x.bin\",\"size\":1073741824}"
+   ],
+   "instructions": [
+    "As visitor A, announce a 1 GiB file on a link whose owner has no quota and send nothing.",
+    "As visitor B, announce a 10-byte file on a different link."
+   ],
+   "observed_result": "B received 429 upload.guest-quota. After A cancelled, B's announce returned 200. The chunk-refresh and idle-expiry behaviour comes from reading the source, not from a local run."
+  },
+  "remediation": {
+   "strategy": "Do not reserve the daily allowance at announce time. Count it per chunk received or at completion. Alternatively, give each link and each IP a bounded slice of the allowance. Do not renew the idle timer from chunk writes on an upload that is already holding a reservation, and cap the total lifetime of an incomplete upload.",
+   "code_changes": []
+  },
+  "severity": {
+   "likelihood": {
+    "score": "medium",
+    "reason": "It needs one unauthenticated request and any upload-request link or enabled public upload. The default configuration is affected."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "Visitor and guest uploads stop sitewide for up to the day. Signed-in uploads and all other functions are unaffected, and the hold ends at midnight."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "The source path is short and the per-link, per-IP and idle-expiry controls were checked and do not prevent it. The announce-time lock was reproduced locally. The chunk-refresh part rests on source reading only."
+  }
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "pending-upload-cardinality-sync-scan",
+  "title": "Unbounded pending uploads make every upload-link announce scan all of them synchronously",
+  "description": "POST /api/upload has no per-user cap on pending uploads, and size 0 is accepted. Each announce writes a tmp/<id> directory with an empty data file and a meta.json, which stay for UPLOAD_STALE_HOURS (3 by default). Every announce on an upload-request link calls shareUploadLoad before the per-link and per-IP checks. That call runs allMetas, which does a readdirSync and a readFileSync/JSON.parse of every meta.json in the shared tmp folder on the event loop. Stale-upload dropping inside shareUploadLoad applies only to share uploads, so ordinary pending uploads stay in the scan for the full 3 hours. I found no rate limit on /api/upload or on the share announce route. The hunter measured announce time rising linearly from 5.7 ms with no pending uploads to 52.2 ms at 4000, about 13 microseconds per pending upload. That is ordinary performance cost, not meaningful shared unavailability. A stall of roughly 1 s per announce is an extrapolation to about 100k pending uploads. Whether that is reachable depends on things I could not observe from source. Those are the inode and disk limits on the data volume, ensureSpace and minFreeSpace, any reverse-proxy rate limit, and the real per-announce cost on production storage. The finding is therefore hardening-level until it is shown at scale. I checked the source and the hunter's artifact c2.out. I did not complete an independent run, so the hunter's timings are not independently reproduced.",
+  "claimed_root_cause": "Pending-upload count is unbounded per owner, and the announce path does a full synchronous directory scan of all owners' uploads in shareUploadLoad/allMetas instead of using an in-memory index.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/routes/upload.ts",
+    "line": 12,
+    "scope": "POST /api/upload",
+    "description": "An authenticated user with upload permission announces files repeatedly, including with size 0. There is no count check."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/uploads.ts",
+    "line": 180,
+    "scope": "initUpload",
+    "description": "Each call creates tmp/<id>/data and meta.json, with no cap on pending uploads per owner or in total."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/routes/shares.ts",
+    "line": 348,
+    "scope": "POST /api/s/:token/upload",
+    "description": "Any visitor's announce on an upload-request link calls shareUploadLoad before the per-link and per-IP limits are applied, so even a refused announce pays the scan."
+   },
+   {
+    "kind": "sink",
+    "file": "src/uploads.ts",
+    "line": 135,
+    "scope": "allMetas",
+    "description": "Synchronous readdirSync plus readFileSync/JSON.parse of every meta.json in the shared tmp folder, so cost grows with the total pending count."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/uploads.ts",
+    "line": 155,
+    "description": "shareUploadLoad iterates every allMetas entry and statSyncs each share upload. Only share uploads are dropped as idle here; other pending uploads stay for UPLOAD_STALE_HOURS."
+   },
+   {
+    "file": "agents/h4-resource/artifacts/c2.out",
+    "line": 1,
+    "description": "Hunter measurement: announce latency 5.7 ms with no pending uploads, then 7.2, 16.5, 28.5 and 52.2 ms at 500, 1000, 2000 and 4000. Linear, and nowhere near a meaningful stall at the measured sizes."
+   }
+  ],
+  "blockers": [
+   "Nothing in the measured range (up to 4000 pending uploads, 52 ms) shows a meaningful shared availability effect. The claimed 1 s or longer stall at about 100k pending uploads is extrapolated and was not measured.",
+   "Inode and free-space limits on the DATA_DIR volume, and ensureSpace/minFreeSpace, may stop an attacker from creating that many tmp entries. These are deployment facts.",
+   "Any reverse-proxy or WAF rate limit in front of /api/upload is deployment-dependent. The application has none for this route.",
+   "Real per-entry scan cost on production storage (network or overlay filesystem, cold cache) differs from the sandbox tmpfs measurement."
+  ],
+  "validation_plan": {
+   "local": "In the sandbox, use the in-process harness with a fresh DATA_DIR. As one user, create pending zero-byte uploads in steps of at most 4000. After each step, time 20 refused or accepted announces on an upload-request link from another client, and record the median and p95. Also time an unrelated cheap endpoint concurrently, to show the event-loop stall rather than per-request cost. Fit the per-entry slope and check it holds across repeated runs. Do not go past 4000 entries locally.",
+   "deployment": "The owner should check the filesystem inode headroom on the DATA_DIR volume, the reverse-proxy rate limits on /api/upload, and the p95 latency of the share announce endpoint in a staging copy. In staging, create pending uploads in stages with one test account, up to the largest count the volume allows. Confirm whether announce latency or other endpoints degrade beyond an acceptable bound, and how long recovery takes after the 3-hour stale cleanup."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "session-store:sessions-survive-restore-and-bind-to-username-only",
+  "title": "Sessions are bound only to a username and survive backup restore, so an old cookie signs in as a later same-name account",
+  "description": "Backup restore replaces users.json but deliberately leaves sessions.json untouched, and nothing reconciles the two. A session whose account is absent from the restored users.json stays on disk and goes dormant. It is not purged at restart: startup housekeeping only removes sessions past their TTL. getSession and the derive hook also do not drop it. A session stores only a username, and the account is looked up by name on every request. If an admin later creates a new account with that name for a different person, the old cookie authenticates as the new account. POST /admin/users does not purge sessions for the name, whereas the account-delete route does. The same missing binding means a restore that brings back an older account with the same name keeps pre-restore sessions valid against the restored credentials and role.",
+  "root_cause": "Session records carry no binding to account identity (no user id, createdAt or credential epoch). Neither restoreBackup nor POST /admin/users invalidates or reconciles sessions.json against the replaced or newly created user list. Startup housekeeping purges sessions by TTL only, not by missing user.",
+  "intended_behavior": "Deleting an account, or removing it by restore, ends all of its sessions. A newly created account never inherits sessions issued to an earlier account with the same name.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/routes/backup.ts",
+    "line": 73,
+    "scope": "POST /api/admin/backups/restore",
+    "description": "Admin restore calls restoreBackup and then restartSoon."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/backup.ts",
+    "line": 633,
+    "scope": "restoreBackup",
+    "description": "users.json is renamed over paths.users. sessions.json is in SKIP (backup.ts:58) and is never reconciled or purged."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/routes/admin.ts",
+    "line": 98,
+    "scope": "POST /admin/users",
+    "description": "Creates the new account without calling destroyUserSessions for that username."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/auth.ts",
+    "line": 229,
+    "scope": "getSession",
+    "description": "Looks up the session by sid hash and checks only the TTL. It does not check that the user exists, and returns the stored username."
+   },
+   {
+    "kind": "sink",
+    "file": "src/context.ts",
+    "line": 111,
+    "scope": "derive",
+    "description": "The user is resolved with findUser(session.username), so the old cookie becomes the newly created account."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "agents/v7-sessions/artifacts/v1.out",
+    "line": 1,
+    "description": "Independent run through the HTTP restore route with FC_SUPERVISED=1, then a fresh process. After restore, users.json lists only admin and sessions.json still holds bob. In the new process the old cookie returns user null and sessions.json still holds bob, so nothing purged it. After an admin creates a new bob, the old cookie returns user bob with the new account's createdAt (17:27:09.359Z), the same as the new bob's own login."
+   },
+   {
+    "file": "src/auth.ts",
+    "line": 254,
+    "description": "destroyUserSessions is called on delete, password reset and the CLI, but not on restore or account creation. purgeExpiredSessions (auth.ts:303) removes by TTL only."
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "authorization_role",
+    "description": "An admin runs a restore from a backup in which the user is absent. The server must be supervised (FC_SUPERVISED=1)."
+   },
+   {
+    "kind": "data_state",
+    "description": "The old cookie must still be within the session TTL when a new account with that name is created. Each request refreshes the session's last-seen time."
+   },
+   {
+    "kind": "user_interaction",
+    "description": "An admin creates a new account with the same name for a different person."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "A former holder of a valid session cookie for an account that a restore later removed from users.json. The holder waits until an admin re-creates that username for someone else.",
+   "payloads": [
+    "Cookie: fc_sid=<old sid>"
+   ],
+   "instructions": [
+    "Run agents/v7-sessions/artifacts/v1.ts with argument 1 inside the sandbox, then again with argument 2. Both runs share the same data dir under TMPDIR.",
+    "Phase 1: take a backup, create and log in bob, then POST /api/admin/backups/restore with the admin password. The restore returns 200 and requests a restart with exit code 75.",
+    "Phase 2: start a fresh process, then request /api/session with the old cookie, which returns user null. Then create a new bob as admin and request /api/session with the old cookie again."
+   ],
+   "observed_result": "Before the account was recreated the old cookie returned user null, and sessions.json still held it. After an admin created a new bob, the old cookie returned user bob with the new account's createdAt, which matched the new bob's own login."
+  },
+  "remediation": {
+   "strategy": "Add a per-account identifier or credential epoch to the session record and compare it in getSession or derive. As a minimum, call destroyUserSessions(username) in POST /admin/users and in the CLI create path. In restoreBackup, drop every signed-in session whose username is missing from the restored users, or all sessions, since credentials and roles were replaced.",
+   "code_changes": []
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs an admin restore that drops an account, then a later same-name re-creation by an admin while the old cookie is still within its TTL."
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "The previous holder gets authenticated access as the new account, including its home folder and any grants or shares the account holds."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "Reproduced independently through the real HTTP restore route and a fresh process. The source shows no startup purge of sessions with unknown users, no user check in getSession or the derive hook, and no purge in POST /admin/users."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "unzip-event-loop-blocking",
+  "title": "Unzip of a small zip blocks the single server thread for seconds to minutes",
+  "description": "POST /api/unzip extracts on the main server thread. Each inflated chunk is written with a blocking writeSync inside the zip.js WritableStream. The only output limit is UNZIP_MAX_BYTES (20 GiB by default), bounded further by free space and any per-user quota. A highly compressible zip of about 1000:1 is therefore a few KB to tens of MB of upload that holds the event loop for the whole extraction. During that time nobody else is served (sessions, logins, downloads, WebDAV, other uploads). Verifier reproduction: a 131 KB zip expanding to 128 MiB blocked a 10 ms timer completely, with 0 ticks over 1.6 s. The same inflate with a no-op sink held the loop for only about 0.18 s with 0 ticks. Replacing the sync write with an async write let the timer tick (67 ticks, largest gap 43 ms), though the run took longer (0.7 s). So the sync write is the dominant cost, about 9x the inflate in this sandbox. The inflate and CRC work itself also runs on the loop and is not fixed by async writes alone (roughly 28 s per 20 GiB). Time grows with output size, so a 20 GiB extraction would hold the loop for minutes. The 2-slot limit caps how many extractions run at once, not how long each holds the loop.",
+  "root_cause": "unzipTo writes each inflated chunk with blocking fs.writeSync on the shared event-loop thread, and zip.js is configured with useWebWorkers:false, so inflate and CRC also run on that thread. The extraction cap is by bytes only (default 20 GiB), with no ratio cap, no deadline and no yielding.",
+  "intended_behavior": "Extraction should not starve other users: use asynchronous writes or a worker/child process for the inflate, a much smaller per-request byte budget or a compression-ratio cap, and a deadline.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/routes/files.ts",
+    "line": 326,
+    "scope": "POST /api/unzip",
+    "description": "A user with zip and write permission names a .zip file in their own space."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/routes/files.ts",
+    "line": 337,
+    "scope": "POST /api/unzip",
+    "description": "maxBytes = min(UNZIP_MAX_BYTES (20 GiB), free space minus reserve, quota room). There is no ratio or time limit."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/routes/files.ts",
+    "line": 342,
+    "scope": "POST /api/unzip",
+    "description": "takeUnzipSlot allows 2 concurrent extractions. This limits how many run at once, not how long each holds the loop."
+   },
+   {
+    "kind": "sink",
+    "file": "src/zip.ts",
+    "line": 210,
+    "scope": "unzipTo",
+    "description": "writeSync is called per inflated chunk inside entry.getData's WritableStream on the main thread, so the loop is held for the whole extraction."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/zip.ts",
+    "line": 210,
+    "description": "Synchronous writeSync loop for every chunk; zip.js runs with useWebWorkers:false (src/zip.ts line 7), so inflate is on the main thread too."
+   },
+   {
+    "file": "src/config.ts",
+    "line": 79,
+    "description": "UNZIP_MAX_BYTES defaults to 20 GiB."
+   },
+   {
+    "file": "agents/h4-resource/artifacts/c3.out",
+    "line": 7,
+    "description": "Hunter run through app.handle: a 131096-byte zip expanded to 128 MiB, the call returned in 1.58 s, the 10 ms timer ticked 2 times (about 158 expected), largest gap 1571 ms. Line 8 shows a third concurrent extraction got 503 archive.busy."
+   },
+   {
+    "file": "agents/v2-unzip/artifacts/v1.out",
+    "line": 1,
+    "description": "Verifier run of zip.js alone on the same kind of 128 MiB bomb: writeSync sink took 1635 ms with 0 timer ticks (line 1); no-op sink took 178 ms with 0 ticks (line 2); async-write sink had 67 ticks and a 43 ms largest gap (line 3). This shows the sync write is the main cause and inflate is a smaller residual cost."
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "authentication_level",
+    "description": "A signed-in user (or guest, if guestPermissions allow it) with zip and write permission in a space."
+   },
+   {
+    "kind": "data_state",
+    "description": "The attacker uploads a highly compressible .zip of a few KB to MB, within the upload limit."
+   },
+   {
+    "kind": "system_configuration",
+    "description": "A small per-user quota or low free disk space, if set, bounds the output and so the stall."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "An authenticated ordinary user with zip and write permission.",
+   "payloads": [
+    "zip containing one entry of N MiB of zeros, deflate level 1, ratio about 1000:1"
+   ],
+   "instructions": [
+    "Upload the zip to the user's home space.",
+    "POST /api/unzip {space:'home',path:'/bomb.zip'} while a second client polls GET /api/session or a timer tick is observed.",
+    "Repeat for a larger N within the sandbox limits."
+   ],
+   "observed_result": "A 131096-byte zip expanding to 128 MiB: /api/unzip returned 200 after about 1.58 s, and the loop ticked only twice. A third concurrent extraction got 503 archive.busy. In the verifier's isolated zip.js run, writeSync took 1635 ms with 0 ticks, a no-op sink took 178 ms with 0 ticks, and an async-write sink let the timer run. Only 128 MiB was tried. The multi-minute stall at 20 GiB is an extrapolation."
+  },
+  "remediation": {
+   "strategy": "Move extraction off the request thread (child process or worker), or at least use async FileHandle writes so the loop can interleave. Add a compression-ratio cap, a much lower default per-request byte budget than 20 GiB, and a deadline. Make unzip slots per user.",
+   "code_changes": [
+    {
+     "file_name": "src/zip.ts",
+     "fixed_code": "const fh = await open(uniquePath(target), 'wx'); ... async write(chunk) { total += chunk.length; if (total > limits.maxBytes) throw (failure = tooBig()); await fh.write(chunk) } ... finally { await fh.close() }  // plus run inflate in a worker or child process"
+    }
+   ]
+  },
+  "severity": {
+   "likelihood": {
+    "score": "medium",
+    "reason": "Any signed-in user with zip permission can trigger it with a few KB to MB of upload. No special timing is needed."
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "The whole server is unresponsive while the extraction runs, and the time scales with the cap (minutes at the 20 GiB default). It recovers on its own, and the extracted data stays on disk until deleted. A per-user quota, if set, reduces it. It needs an authenticated account and only costs availability."
+   },
+   "overall_severity": "medium"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "The stall was observed locally at 128 MiB in two independent harnesses, and the write-versus-inflate split was measured. The minutes-long stall at 20 GiB is extrapolated, and no deployed quota or disk speed was available to check."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "webdav-app-password-bypasses-require2fa-gate",
+  "title": "WebDAV app-password sign-in ignores the forced-2FA setup gate",
+  "description": "When an admin sets security.require2fa so that an account's role needs 2FA, an account that has not enrolled is held to the 2FA setup routes on every /api route (403 auth.2fa-required). The /dav handler is answered in onRequest before that gate, and its Basic-auth path never checks mustSetup2fa. An app password that already exists keeps working for that account. Making a new one is blocked, because /api/me/app-passwords is not a setup route. Local reproduction: with require2fa='all', a user without 2FA got /api/me/notify-prefs refused with 403 and /api/session reporting mustSetup2fa true, while PROPFIND /dav/ with the app password still returned 207. Write access was not demonstrated: PUT returned 403 both before and after the policy change, so that 403 does not come from the policy.",
+  "root_cause": "The forced-2FA check exists only as a global Elysia onBeforeHandle hook on cookie-session users (context.ts). WebDAV is answered in onRequest before routing, and authenticate() in webdav.ts applies the mustChangePassword gate but has no mustSetup2fa equivalent. Turning the policy on does not revoke existing app passwords.",
+  "intended_behavior": "The 'must set up 2FA' policy should apply to every way into the account. An account held at 2FA setup should not be able to use WebDAV until it enrolls, just as WebDAV already refuses accounts with mustChangePassword. Alternatively, existing app passwords should be revoked when the policy tightens.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/index.ts",
+    "line": 243,
+    "scope": "app.onRequest",
+    "description": "/dav requests are handled before routing, so the context.ts hooks (CSRF, mustChangePassword, forced-2FA) never run for them."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/webdav.ts",
+    "line": 127,
+    "scope": "authenticate",
+    "description": "Basic auth with an app password. It verifies the secret via verifyAppPassword and applies lockouts."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/webdav.ts",
+    "line": 152,
+    "scope": "authenticate",
+    "description": "Only found.user.mustChangePassword is checked. policy.mustSetup2fa(found.user) is never consulted."
+   },
+   {
+    "kind": "sink",
+    "file": "src/webdav.ts",
+    "line": 154,
+    "scope": "authenticate",
+    "description": "Returns the Ctx with the user and the app password's scope. The WebDAV methods then operate on the user's spaces."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/context.ts",
+    "line": 132,
+    "description": "The forced-2FA gate throws auth.2fa-required for every /api route outside SETUP_2FA_ROUTES, but only for cookie-session users."
+   },
+   {
+    "file": "src/policy.ts",
+    "line": 82,
+    "description": "mustSetup2fa = !u.twoFactor && roleNeeds2fa(role). It is used only in context.ts and the session snapshot, not in webdav.ts."
+   },
+   {
+    "file": "src/webdav.ts",
+    "line": 152,
+    "description": "The mustChangePassword gate is applied to WebDAV with the comment 'WebDAV included'. The parallel 2FA gate is missing."
+   },
+   {
+    "file": "agents/v1b-webdav2fa/artifacts/v1.ts",
+    "line": 1,
+    "description": "In-process harness run in the sandbox. It creates a user and an app password under policy 'none', then sets require2fa='all'."
+   },
+   {
+    "file": "agents/v1b-webdav2fa/artifacts/v1.out",
+    "line": 1,
+    "description": "Observed output: after the policy change, session mustSetup2fa true and /api returns 403, but PROPFIND /dav/ with the app password returns 207. PUT returned 403 both before and after, so write was not shown."
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "system_configuration",
+    "description": "An admin has set security.require2fa to admin, staff or all, and WebDAV is enabled."
+   },
+   {
+    "kind": "data_state",
+    "description": "The affected account has no 2FA enrolled and holds an app password. The password was made before the policy tightened, or while the account was not yet affected."
+   },
+   {
+    "kind": "authentication_level",
+    "description": "The caller needs a valid app password for the account (a first-factor-equivalent secret). That is the only credential WebDAV asks for."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Holder of a valid app password (a stolen or leaked one) for an account that the policy now requires to have 2FA, but which has not enrolled.",
+   "payloads": [
+    "PROPFIND /dav/ with the header Authorization: Basic base64(user:fc-<secret>) and Depth: 1"
+   ],
+   "instructions": [
+    "Sandbox harness v1.ts: start the app in-process and sign in as admin.",
+    "Create the user bob, give bob a home folder, and create a readwrite app password for bob while the policy is 'none'.",
+    "Call settings.update({security:{require2fa:'all'}}).",
+    "Confirm GET /api/session for bob shows mustSetup2fa true and an /api route returns 403.",
+    "Send PROPFIND /dav/ with Basic bob:<secret>."
+   ],
+   "observed_result": "Before the policy change PROPFIND /dav/ returned 207. After require2fa='all', /api/session showed mustSetup2fa true and /api/me/notify-prefs returned 403. PROPFIND /dav/ with the same app password still returned 207, so listing was reachable without the second factor. PUT /dav/poc.txt returned 403 both before and after the change (cause not investigated), so write access was not demonstrated and is inferred only from the readwrite scope."
+  },
+  "remediation": {
+   "strategy": "In webdav.ts authenticate(), reject the request when policy.mustSetup2fa(found.user), as is already done for mustChangePassword. Optionally also revoke or suspend the account's app passwords when require2fa is tightened.",
+   "code_changes": [
+    {
+     "file_name": "src/webdav.ts",
+     "fixed_code": "if (found.user.mustChangePassword) return reply(request, 403, 'must-change-password')\nif (policy.mustSetup2fa(found.user)) return reply(request, 403, 'auth.2fa-required')"
+    }
+   ]
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "It needs the admin to enable the policy, an affected account that has not enrolled, and a stolen or leaked app password. App passwords are created with the account password on purpose and are not themselves a second factor."
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "The forced-2FA guarantee is undermined for WebDAV file access. Listing was observed; read and write follow from the scope and the account's rights, but write was not shown. The access stays within the account's own rights and the app password's scope."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "The missing check and the 207 response after the policy change were both observed locally. Medium rather than high because the code header says app passwords exist to avoid 2FA, so the bypass may be intended, and because PUT was refused so write was not shown."
+  }
+ },
+ {
+  "verdict": "needs_validation",
+  "fingerprint": "webdav:propfind-duplicate-property-response-amplification",
+  "title": "WebDAV PROPFIND allows 50 repeated copies of the same property, multiplying the Depth:1 answer for large folders",
+  "description": "An app-password client with write access can send a PROPFIND with Depth: 1 naming one property 50 times (e.g. <D:displayname/>), a body under the 64 KB cap. propfind() caps only the count of requested property names (PROPFIND_MAX_PROPS = 50), not distinct names, so propstat() emits the same value 50 times per item. Locally reproduced at 50-4,000 entries (240-char names): the repeated-50 answer is a stable ~21.7x the single-property answer (~14,690 bytes/item vs ~676 bytes/item), confirming linear, non-superlinear growth with a fixed per-item multiplier - the hunter's own ~43x figure measured only the duplicated-property fragment in isolation, not the full per-item response including the fixed href/propstat overhead; end-to-end the real amplification is ~21.7x. The only cardinality bound on the folder is davMaxItems (config.davMaxItems, default 100,000); there is no total-byte cap and no streaming - propfind() builds one string per item, joins them, then wraps and returns the whole multistatus in one Response. Linearly extrapolating the measured per-item costs to davMaxItems-1 (99,999) gives roughly 1.47 GB for the joined XML string alone, before counting the intermediate per-item string array, against docker-compose.yml's mem_limit of 2g for the single shared process. Quota is byte-based only (src/quota.ts via src/webdav.ts:422-427) with no per-folder or per-user file-count cap, and WebDAV PUT/MKCOL carry no additional per-request throttling beyond the login-failure lockouts, so a write-capable account is not blocked from growing one folder's entry count by any source-visible control other than time.",
+  "claimed_root_cause": "propfind() caps only the number of requested properties (PROPFIND_MAX_PROPS = 50), not distinct properties, and caps only the number of entries (config.davMaxItems), not the total answer size. propstat() therefore emits each repeated name per item (src/webdav.ts:339, not the hunter's cited 329, which is an unrelated local-variable declaration), and the whole multistatus is materialized as an array of per-item strings and joined in memory before the response is built (src/webdav.ts:405-406).",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/webdav.ts",
+    "line": 351,
+    "scope": "propfind",
+    "description": "PROPFIND with Depth: 1 and an XML body naming one property 50 times; the count is checked against the 50-property cap a few lines later (line 360)."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/webdav.ts",
+    "line": 361,
+    "scope": "propfind",
+    "description": "wanted = prop.children.map(c => ({ ns: c.ns, name: c.name })) keeps every duplicate name from the request body."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/webdav.ts",
+    "line": 393,
+    "scope": "propfind",
+    "description": "The only cardinality bound is readdirSync(place.abs).length >= config.davMaxItems (100,000, config.ts:96); below that, listStats builds an Item for every entry with no total-size check."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/webdav.ts",
+    "line": 339,
+    "scope": "propstat",
+    "description": "else ok.push(namesOnly || value === '' ? ... ) emits one <D:name>value</D:name> (or <D:name/>) per entry in `wanted`, including exact duplicates, so a 255-character displayname is written 50 times for one item (verified local measurement: ~14,690 bytes/item at 50 repeats vs ~676 bytes/item for one, a stable ~21.7x across 50-4,000 items)."
+   },
+   {
+    "kind": "sink",
+    "file": "src/webdav.ts",
+    "line": 406,
+    "scope": "propfind",
+    "description": "xmlResponse(207, `<D:multistatus ...>${body.join('')}</D:multistatus>`) concatenates every item's full response string (line 405: body = items.map(...)) into one string in memory, with no size cap or streaming, before the Response is created."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/webdav.ts",
+    "line": 320,
+    "description": "Doc comment: \"100,000 items x 50 properties stays in the tens of MB, a photo folder of 20,000 still lists\" - the design assumption behind leaving the answer unbounded in total size (the constant PROPFIND_MAX_PROPS = 50 itself is declared two lines later, at line 323)."
+   },
+   {
+    "file": "src/webdav.ts",
+    "line": 405,
+    "description": "const body = items.map(it => `<D:response>...</D:response>`) fully materializes every item's XML before the join at line 406; no size cap is applied anywhere in propfind()."
+   },
+   {
+    "file": "src/config.ts",
+    "line": 96,
+    "description": "davMaxItems defaults to 100_000 and is documented as bounding entry count, not answer size (\"a WebDAV folder listing ... answers folders with fewer entries than this; bigger ones get 507\")."
+   },
+   {
+    "file": "docker-compose.yml",
+    "line": 50,
+    "description": "mem_limit defaults to 2g (${FC_MEMORY_LIMIT:-2g}) for the single shared server process that every user's requests, including WebDAV, run in."
+   }
+  ],
+  "blockers": [
+   "Peak memory of a PROPFIND answering near davMaxItems (100,000) entries with 50 repeated properties, against the deployed mem_limit, was not run. A safe local measurement up to the 4,000-entry ceiling used here (agents/v9-propfind/artifacts/v1.out, script at agents/v9-propfind/artifacts/v1.ts) showed linear, stable per-item cost (~676 bytes/item for one property, ~14,690 bytes/item for 50 repeated, a steady ~21.7x ratio across 50/100/200/500/1000/2000/4000 entries) and a response that reached 58.8 MB at 4,000 items. Linearly extrapolating to 99,999 items gives roughly 1.47 GB for the joined XML string alone (not counting the intermediate per-item string array built by items.map before the join), against the compose mem_limit of 2g - but no run was made at or near that scale, so the real peak RSS, whether Bun's string/array overhead multiplies that further, and whether the shared process is actually OOM-killed at the deployed limit remain unmeasured here.",
+   "Whether a normal, non-admin, write-capable user can realistically grow one folder to the tens of thousands of entries needed is not fully established from source alone. Quota is confirmed byte-based only (src/webdav.ts:422-427, via src/quota.ts) with no per-folder or per-user file-count cap, and WebDAV PUT/MKCOL carry no additional per-request throttling beyond the login-failure lockouts (src/webdav.ts:122-155) - so the only source-visible friction is the time needed to issue on the order of 100k authenticated requests. An owner must check realistic PUT/MKCOL throughput against this server and any operational policy that limits file count in practice.",
+   "How the launcher/supervisor behaves after the shared process is OOM-killed (restart time, whether in-flight requests from other tenants are dropped, whether this is a one-shot or repeatable denial-of-service) was not inspected here and needs an owner observation on a staging deployment."
+  ],
+  "validation_plan": {
+   "local": "Already done, safely, at 50-4,000 entries with 240-character names: measured PROPFIND response size and process RSS for one vs. 50 repeated <D:displayname/> properties (agents/v9-propfind/artifacts/v1.ts, output agents/v9-propfind/artifacts/v1.out). The per-item byte cost and the ~21.7x amplification ratio were stable across that whole range, supporting linear (not superlinear) growth. No further local run should go materially beyond this range or attempt to approach davMaxItems - that would cross from a bounded local check into a stress test of the shared sandbox.",
+   "deployment": "On a staging copy with the production mem_limit and the real launcher/supervisor wired up, give a test non-admin user write/upload permission and roughly 50,000-99,999 zero-byte, long-named files in one folder, then send one PROPFIND with 50 repeated properties and observe: peak RSS of the server process, whether it is OOM-killed, how long the service is unavailable to other users while the supervisor restarts it, and whether the same 50k-99,999 files could realistically be created by that account under normal upload throughput and any operational file-count policy."
+  }
+ }
+]

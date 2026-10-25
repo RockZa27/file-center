@@ -1,4 +1,5 @@
-import { closeSync, lstatSync, mkdirSync, openSync, readdirSync, readSync, writeSync } from 'node:fs'
+import { closeSync, lstatSync, mkdirSync, openSync, readdirSync, readSync } from 'node:fs'
+import { open } from 'node:fs/promises'
 import { dirname, extname, join } from 'node:path'
 import { BlobReader, configure, ZipReader, ZipWriter } from '@zip.js/zip.js'
 import { config } from './config'
@@ -199,21 +200,23 @@ export async function unzipTo(zipAbs: string, destDir: string, limits: { maxByte
         continue
       }
       mkdirSync(dirname(target), { recursive: true })
-      const fd = openSync(uniquePath(target), 'wx')
+      // written with awaited writes, not writeSync: a small zip that unpacks to gigabytes must not hold the one
+      // server thread for the whole time (everyone else's requests wait while it runs)
+      const file = await open(uniquePath(target), 'wx')
       let failure: Error | null = null
       try {
         await entry.getData(new WritableStream<Uint8Array>({
-          write(chunk) {
+          async write(chunk) {
             total += chunk.length
             // the header may lie about the size: count what really comes out
             if (total > limits.maxBytes) throw (failure = tooBig())
-            for (let at = 0; at < chunk.length;) at += writeSync(fd, chunk, at)
+            for (let at = 0; at < chunk.length;) at += (await file.write(chunk, at)).bytesWritten
           },
         }), { checkSignature: true })
       } catch (err) {
         throw failure ?? err
       } finally {
-        closeSync(fd)
+        await file.close()
       }
       count++
     }

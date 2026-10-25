@@ -27,7 +27,7 @@ import { basename, dirname, join } from 'node:path'
 import { alert } from './alerts'
 import { touchAppPassword, verifyAppPassword, type AppPassword, type AppScope } from './app-passwords'
 import { audit, auditOnce } from './audit'
-import { accessFor, clearFailures, lockedFor, recordFailure, USER_SPACE, type Access, type Lockout, type User } from './auth'
+import { accessFor, clearFailures, lockedFor, recordFailure, reloadIfChangedByCli, USER_SPACE, type Access, type Lockout, type User } from './auth'
 import { config, paths } from './config'
 import * as policy from './policy'
 import { clientIp } from './context'
@@ -150,6 +150,8 @@ async function authenticate(request: Request, ip: string): Promise<Ctx | Respons
   clearFailures(userKey)
   // an account that must change its password first may do nothing else, WebDAV included
   if (found.user.mustChangePassword) return reply(request, 403, 'must-change-password')
+  // and one the 2FA rule says must turn on two-step sign-in first: an app password made before the rule does not skip it
+  if (policy.mustSetup2fa(found.user)) return reply(request, 403, 'auth.2fa-required')
   touchAppPassword(found.item, ip)
   return { request, user: found.user, ip, scope: found.item.scope, item: found.item }
 }
@@ -358,7 +360,9 @@ async function propfind(ctx: Ctx, segs: string[], place: Place | null): Promise<
     if (doc.name !== 'propfind' || doc.ns !== DAV_NS) throw bad('files.dav-bad-xml')
     const prop = child(doc, 'prop')
     if (prop && prop.children.length > PROPFIND_MAX_PROPS) throw bad('files.dav-too-many-props', { max: PROPFIND_MAX_PROPS })
-    if (prop) { wanted = prop.children.map(c => ({ ns: c.ns, name: c.name })); explicit = true }
+    // the same property asked for twice is answered once: 50 copies of a long name for every item of a big folder
+    // would make the answer 50 times bigger for nothing
+    if (prop) { wanted = [...new Map(prop.children.map(c => [`${c.ns} ${c.name}`, { ns: c.ns, name: c.name }])).values()]; explicit = true }
     else if (child(doc, 'propname')) { wanted = Object.keys(PROPS).map(name => ({ ns: DAV_NS, name })); namesOnly = true }
   }
   if (!place) throw notFound()
@@ -863,6 +867,8 @@ async function proppatchMethod(ctx: Ctx, segs: string[], place_: Place | null): 
 
 export async function handleDav(request: Request, socketIp: string): Promise<Response> {
   if (!policy.webdav()) return reply(request, 404, 'request.no-route')
+  // /dav is answered before the /api hooks, so pick up `bun src/cli.ts` changes (revoked app passwords) here too
+  reloadIfChangedByCli()
   try {
     const ip = clientIp(request, socketIp)
     const ctx = await authenticate(request, ip)

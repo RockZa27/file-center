@@ -6,6 +6,19 @@ import { compareVersions, forRole } from './util'
  */
 export const releases = [
   {
+    version: '1.13.1',
+    items: [
+      {
+        id: '1131-security', icon: 'system', roles: ['admin'], to: { name: 'dashboard' },
+        title: { th: 'ปิดช่องโหว่ที่พบจากการตรวจความปลอดภัย', en: 'Fixes from a security audit' },
+        text: {
+          th: 'WebDAV ทำตามกฎบังคับ 2FA และเห็นคำสั่ง sessions-revoke ทันที การรีเซ็ต 2FA ลบรหัสผ่านแอปด้วย บัญชีที่สร้างใหม่ชื่อซ้ำกับบัญชีที่หายไปหลังกู้คืนข้อมูลสำรองไม่ได้ลิงก์ สิทธิ์ กลุ่ม หรือการเข้าสู่ระบบของบัญชีเดิม ผู้เยี่ยมชมคนเดียวจองโควตาอัปโหลดรายวันของทุกคนไม่ได้อีก และการแตกไฟล์ zip ใหญ่ไม่ทำให้ระบบค้าง',
+          en: 'WebDAV follows the 2FA rule and sees sessions-revoke at once, a 2FA reset also removes app passwords, a new account with the name of one a backup restore dropped gets none of its links, grants, groups or sign-ins, one visitor can no longer use up the visitors\' daily upload allowance, and unzipping a big archive no longer makes the server stall.',
+        },
+      },
+    ],
+  },
+  {
     version: '1.13.0',
     items: [
       {

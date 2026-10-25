@@ -378,6 +378,13 @@ describe('restore (end to end)', () => {
 
     expect((await api('DELETE', '/api/admin/users/carol')).status).toBe(200)
     expect((await api('PUT', '/api/admin/settings', { appName: 'หลังลบ' })).status).toBe(200)
+    // an account made after the backup, signed in: the restore drops the account, so its sign-in must go too
+    expect((await api('POST', '/api/admin/users', { username: 'dora', name: 'Dora', password: 'red-kite-flies-2', role: 'user', permissions: ['read'], publicPermissions: [] })).status).toBe(200)
+    const doraStart = await fetch(url('/api/session'))
+    const doraCookie = doraStart.headers.get('set-cookie')!.split(';')[0]
+    const doraLogin = await fetch(url('/api/login'), { method: 'POST', headers: { cookie: doraCookie, 'x-csrf-token': ((await doraStart.json()) as any).csrf, 'content-type': 'application/json' }, body: JSON.stringify({ username: 'dora', password: 'red-kite-flies-2' }) })
+    expect(doraLogin.status).toBe(200)
+    const doraSid = doraLogin.headers.get('set-cookie')!.split(';')[0]
     expect((await api('GET', '/api/admin/users')).data.users.map((u: any) => u.username)).not.toContain('carol')
 
     const before = (await health()).boot
@@ -392,6 +399,8 @@ describe('restore (end to end)', () => {
 
     expect((await api('GET', '/api/session')).data.user.username).toBe('admin')
     expect((await api('GET', '/api/admin/users')).data.users.map((u: any) => u.username)).toContain('carol')
+    expect(((await (await fetch(url('/api/session'), { headers: { cookie: doraSid } })).json()) as any).user).toBeNull()
+    expect(readFileSync(join(e2e.data, 'sessions.json'), 'utf8')).not.toContain('"dora"')
     expect((await api('GET', '/api/admin/settings')).data.appName).toBe('ก่อนกู้คืน')
     // the state before the restore was kept as a backup of its own
     const names = (await api('GET', '/api/admin/backups')).data.items.map((i: any) => i.name)

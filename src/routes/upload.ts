@@ -9,7 +9,7 @@ export const uploadRoutes = new Elysia({ prefix: '/api/upload' })
   .use(context)
 
   // 1) announce a file, 2) PUT its chunks (any order, retried freely), 3) complete
-  .post('/', async ({ user, body }) => {
+  .post('/', async ({ user, ip, body }) => {
     const a = need({ user, ip: '' }, body.space, 'upload')
     const relDir = (body.relativeDir ?? '').split('/').filter(Boolean)
     if (relDir.length > 30) throw bad('upload.too-deep')
@@ -21,6 +21,7 @@ export const uploadRoutes = new Elysia({ prefix: '/api/upload' })
       space: a.space,
       owner: user?.username ?? 'guest',
       guest: !user,
+      ip,
       root: a.root,
       dir: normRel(body.path),
       relativeDir: relDir,

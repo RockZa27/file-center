@@ -58,6 +58,18 @@ function checkPublicPerms(actor: User, wanted: Perm[], already: Perm[] = []) {
   if (wanted.some(p => !mine.has(p) && !already.includes(p))) throw forbidden('admin.public-perms-exceed')
 }
 
+/** everything an account left behind outside users.json: sign-ins, links, grants, groups, app passwords, own settings */
+function forgetAccount(username: string) {
+  destroyUserSessions(username)
+  revokeSharesOf(username)
+  removeUserState(username)
+  forgetNotifications(username)
+  forgetGuide(username)
+  removeGrantsOf(username)
+  removeAppPasswordsOf(username)
+  removeUserFromGroups(username)
+}
+
 export const adminRoutes = new Elysia({ prefix: '/api' })
   .use(context)
   // /api/admin/alerts: mounted here so the app's route list in index.ts stays as it is
@@ -113,6 +125,10 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     // a manager never takes over a folder that is there already (an admin's shared folder, a deleted user's leftovers)
     if (!isAdmin(admin) && homeIsTaken(username)) throw conflict('admin.home-exists')
     ensureDir(resolveIn(config.storageDir, homedir))
+    // a name used before (an account a backup restore dropped, not deleted here) starts clean: no old sign-ins,
+    // share links, grants, group places or trash of that earlier account
+    tombstoneTrashOf(username)
+    forgetAccount(username)
     // no quota given: the default of the settings page (an admin has no quota)
     const quotaBytes = body.quotaBytes === undefined ? (body.role === 'admin' ? 0 : policy.defaultQuotaBytes()) : cleanQuota(body.quotaBytes)
     allUsers().push({
@@ -200,14 +216,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     const list = allUsers()
     list.splice(list.indexOf(target), 1)
     saveUsers()
-    destroyUserSessions(target.username)
-    revokeSharesOf(target.username)
-    removeUserState(target.username)
-    forgetNotifications(target.username)
-    forgetGuide(target.username)
-    removeGrantsOf(target.username)
-    removeAppPasswordsOf(target.username)
-    removeUserFromGroups(target.username)
+    forgetAccount(target.username)
     audit({ user: admin.username, ip, action: 'user-delete', target: target.username })
     return { ok: true }
   })
@@ -237,8 +246,10 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     saveUsers()
     dropLoginTickets(target.username)
     destroyUserSessions(target.username)
-    audit({ user: admin.username, ip, action: '2fa-reset', target: target.username })
-    return { ok: true }
+    // a lost phone is often a lost laptop too: the WebDAV app passwords on it never asked for the code either
+    const appPasswords = removeAppPasswordsOf(target.username)
+    audit({ user: admin.username, ip, action: '2fa-reset', target: target.username, detail: `${appPasswords} app password` })
+    return { ok: true, appPasswords }
   }, { body: t.Object({ password: t.String({ maxLength: 1000 }) }) })
 
   // folder tree for the "home folder" picker

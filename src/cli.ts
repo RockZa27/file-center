@@ -32,8 +32,9 @@ if (command === 'reset-2fa') {
   saveUsers()
   dropLoginTickets(user.username)
   const n = destroyUserSessions(user.username)
-  audit({ user: 'cli', ip: '-', action: '2fa-reset', target: user.username })
-  console.log(`${had ? 'Two-factor sign-in turned off' : 'Two-factor sign-in was not on'} for ${user.username}; ${n} session(s) ended.`)
+  const apps = removeAppPasswordsOf(user.username)
+  audit({ user: 'cli', ip: '-', action: '2fa-reset', target: user.username, detail: `${n} session, ${apps} app password` })
+  console.log(`${had ? 'Two-factor sign-in turned off' : 'Two-factor sign-in was not on'} for ${user.username}; ${n} session(s) ended, ${apps} app password(s) removed.`)
 } else {
   const n = destroyUserSessions(user.username)
   const apps = removeAppPasswordsOf(user.username)
