@@ -27,3 +27,14 @@
 - นิยามใน `.claude/agents/` เรียกตามชื่อได้ใน session ใหม่เท่านั้น ใน session เดิมใช้ `prompt.ts` ส่งให้ subagent ทั่วไป (เนื้อหาเดียวกัน)
 - บั๊กฝังวัดได้เฉพาะสิ่งที่เรารู้ล่วงหน้า finding ใหม่ที่ไม่ได้ฝังขึ้นกับ verifier + การรัน repro ซ้ำ
 - คะแนน reviewer 30% เป็นดุลยพินิจของผู้ตรวจ จึงต้องเขียนเหตุผลอ้างหลักฐานทุกครั้ง
+
+## ตรวจความปลอดภัยเต็มรูปแบบ (security-audit skill)
+skill จาก Cloudflare อยู่ที่ `.claude/skills/security-audit/` (ปักเวอร์ชันไว้ใน `UPSTREAM.md`) เรียกด้วย "security audit this codebase"
+- ผลลัพธ์อยู่นอก repo: `~/security-audit-skill/file-center/run-<N>` และคัดลอกแค่ `REPORT.md` มาไว้ที่ `qa/reports/sec-<version>/`
+- hunter ใช้นิยามของ `security-auditor` ส่วน verifier ใช้ `verifier` ทำงานพร้อมกันได้ไม่เกิน 2 ตัว และ verifier ต้องไม่ใช่ตัวที่เจอ finding นั้น
+- โค้ดของแอปต้องรันผ่าน `scripts/qa/sandbox.sh <scratch> <cmd...>` เท่านั้น (ตั้ง `SBX_CWD` เป็นโฟลเดอร์ที่จะรัน)
+  - ไม่มีเครือข่ายภายนอก ใช้ได้แค่ loopback
+  - env ว่าง มีเฉพาะค่าที่อนุญาต
+  - ไฟล์ทั้งเครื่องอ่านอย่างเดียว ยกเว้น scratch
+  - จำกัด CPU/หน่วยความจำ/process/ขนาดไฟล์/เวลา
+- ตรวจไฟล์ผลด้วย `node .claude/skills/security-audit/validate-findings.cjs <dir>/findings.json` และ `validate-coverage-ledger.cjs <dir>/coverage-ledger.json`
