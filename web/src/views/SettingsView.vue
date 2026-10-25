@@ -224,7 +224,7 @@
       </div>
     </n-spin>
 
-    <!-- security, mail and rights for visitors to change files ask for the admin's password -->
+    <!-- security, mail, alerts and rights for visitors to change files ask for the admin's password -->
     <n-modal v-model:show="pwOpen" preset="card" :title="t('settings.pwTitle')" style="width: min(420px, 94vw)" :mask-closable="!saving" :closable="!saving">
       <p class="muted pw-text">{{ t('settings.pwText') }}</p>
       <n-input v-model:value="pw" type="password" show-password-on="click" :placeholder="t('security.yourPassword')" :status="pwError ? 'error' : undefined" :input-props="{ autocomplete: 'current-password', 'aria-label': t('security.yourPassword') }" @keyup.enter="confirmPw" />
@@ -402,7 +402,7 @@ const covers = { none: [], admin: ['admin'], staff: ['admin', 'manager'], all: [
 const warn2fa = computed(() => ready.value && isChanged('security.require2fa') && !resets.value.includes('security.require2fa') && !app.user?.twoFactor && (covers[f['security.require2fa']] || []).includes(app.user?.role))
 
 // ───────── save ─────────
-const needsPassword = computed(() => changedPaths.value.some(p => p.startsWith('security.') || p.startsWith('mail.'))
+const needsPassword = computed(() => changedPaths.value.some(p => p.startsWith('security.') || p.startsWith('mail.') || p.startsWith('alerts.'))
   || ADVANCED.some(p => hasPerm(p) && !orig.guestPermissions.includes(p)))
 
 function toApi(p) {

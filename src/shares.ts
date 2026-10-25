@@ -72,6 +72,8 @@ const UPLOAD_LOG_MAX = 2000
 export const SHARES_PER_USER = 500
 /** wrong passwords per link and address before it is locked, and for how long */
 export const SHARE_LOCKOUT: Lockout = { max: 5, lockMs: 15 * 60_000 }
+/** wrong passwords of one link from all addresses together: holds even when the address behind a proxy can not be trusted */
+export const SHARE_LINK_LOCKOUT: Lockout = { max: 50, lockMs: 15 * 60_000, windowMs: 15 * 60_000 }
 /** the password of a link is asked again after this */
 export const UNLOCK_MS = 60 * 60_000
 export const SHARE_COOKIE = 'fc_share'
@@ -302,6 +304,8 @@ export function isUnlocked(share: Share, request: Request): boolean {
 }
 
 export const lockoutKey = (share: Share, ip: string) => `share|${share.id}|${ip}`
+/** the counter of the link across all addresses */
+export const linkLockoutKey = (share: Share) => `share-link|${share.id}`
 
 // ───────────── housekeeping ─────────────
 

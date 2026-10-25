@@ -12,7 +12,7 @@ import { config, paths } from './config'
 import { appendLine } from './logger'
 import { text, type MessageCode, type Params } from './messages'
 import {
-  EXIT_RESTART, readManifest, readState, releasePath, releaseUsable, SERVER_FILE, writeState, compareVersions,
+  EXIT_RESTART, readManifest, readState, releasePath, releaseUsable, serverIntact, SERVER_FILE, writeState, compareVersions,
   type ReleaseState,
 } from './release'
 
@@ -42,6 +42,16 @@ function chooseTarget(): Target {
   if (!manifest || compareVersions(manifest.version, config.version) <= 0) {
     log('skip-update', `ข้ามอัปเดต ${state.current}: ${manifest ? 'ระบบในอิมเมจใหม่กว่าหรือเท่ากัน' : 'ไฟล์ไม่ครบ'} ใช้เวอร์ชัน ${config.version} ที่มากับระบบ`)
     writeState(config.dataDir, { ...state, current: null, pending: null })
+    return builtin
+  }
+  // the file must still be the one that was installed; a changed server.js is never started
+  if (!serverIntact(config.dataDir, state.current, state)) {
+    const why = outcome('update.server-changed', { name: state.current })
+    log('server-changed', `ข้ามอัปเดต ${state.current}: server.js ไม่ตรงกับที่ติดตั้งไว้ (แฮชไม่ตรง) ใช้เวอร์ชัน ${config.version} ที่มากับระบบ`, 'error')
+    writeState(config.dataDir, {
+      ...state, current: null, pending: null,
+      last: { dir: state.current, version: manifest.version, ok: false, ...why, at: new Date().toISOString() },
+    })
     return builtin
   }
   const dir = releasePath(config.dataDir, state.current)
@@ -76,7 +86,7 @@ function rollBack(state: ReleaseState, name: string, why: ReturnType<typeof outc
   const rest = state.history.filter(h => h !== name && h !== previous)
   writeState(config.dataDir, {
     ...state,
-    current: previous && releaseUsable(config.dataDir, previous) ? previous : null,
+    current: previous && releaseUsable(config.dataDir, previous) && serverIntact(config.dataDir, previous, state) ? previous : null,
     history: keepRelease ? [name, ...rest].slice(0, 2) : rest,
     pending: null,
     last: { dir: name, version, ok: false, ...why, at: new Date().toISOString() },

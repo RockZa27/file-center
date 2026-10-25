@@ -150,7 +150,55 @@ function restoreReservations() {
   for (const meta of allMetas()) {
     if (meta.quotaUser) restoreReservation(meta.quotaUser, meta.size)
     if (meta.guestDay) guestPending.set(pendingKey(meta), (guestPending.get(pendingKey(meta)) ?? 0) + meta.size)
+    let at = Date.now()
+    try { at = statSync(join(dirOf(meta.id), 'meta.json')).mtimeMs } catch { /* gone meanwhile: counts as new */ }
+    track(meta, at)
   }
+}
+
+// ───────────── uploads in progress, counted in memory ─────────────
+
+// What announce needs to know (how many uploads an owner, a link or an address has in progress) is kept as counters,
+// built once from the disk in restoreReservations and changed where an upload starts or ends. Reading every meta.json
+// on every announce would let one visitor make the server do that work again and again.
+type Live = { owner: string; shareId?: string; ip?: string; size: number; at: number; idle: number }
+const live = new Map<string, Live>()
+const byOwner = new Map<string, number>()
+const byShare = new Map<string, { count: number; bytes: number }>()
+const byIp = new Map<string, number>()
+const bump = <K>(m: Map<K, number>, k: K, by: number) => { const n = (m.get(k) ?? 0) + by; if (n > 0) m.set(k, n); else m.delete(k) }
+
+function track(meta: Meta, at: number) {
+  if (live.has(meta.id)) return
+  live.set(meta.id, { owner: meta.owner, shareId: meta.shareId, ip: meta.ip, size: meta.size, at, idle: idleLimit(meta) })
+  bump(byOwner, meta.owner, 1)
+  if (!meta.shareId) return
+  const c = byShare.get(meta.shareId) ?? { count: 0, bytes: 0 }
+  byShare.set(meta.shareId, { count: c.count + 1, bytes: c.bytes + meta.size })
+  bump(byIp, meta.ip ?? '', 1)
+}
+
+/** the upload is over (finished, cancelled, dropped or cleaned): it stops counting */
+function untrack(id: string) {
+  const l = live.get(id)
+  if (!l) return
+  live.delete(id)
+  bump(byOwner, l.owner, -1)
+  if (!l.shareId) return
+  const c = byShare.get(l.shareId)
+  if (c && c.count > 1) byShare.set(l.shareId, { count: c.count - 1, bytes: Math.max(0, c.bytes - l.size) })
+  else byShare.delete(l.shareId)
+  bump(byIp, l.ip ?? '', -1)
+}
+
+/** announced and then left alone: it does not keep a place (removed here, not only by the hourly cleaning) */
+function sweepIdle() {
+  const now = Date.now()
+  for (const [id, l] of live) if (now - l.at > l.idle) dropUpload(id, readMeta(id))
+}
+
+function readMeta(id: string): Meta | null {
+  try { return JSON.parse(readFileSync(join(dirOf(id), 'meta.json'), 'utf8')) as Meta } catch { return null }
 }
 
 function allMetas(): Meta[] {
@@ -168,25 +216,23 @@ const idleLimit = (meta: Pick<Meta, 'shareId'>) => meta.shareId ? Math.min(confi
 
 /** the upload is gone (idle, or never finished): its folder, the visitors' allowance and the quota are given back */
 function dropUpload(id: string, meta: Meta | null) {
+  untrack(id)
   rmSync(dirOf(id), { recursive: true, force: true })
   if (meta) { releaseGuest(meta); releaseQuota(meta) }
 }
 
 /** what an upload-request link has in progress, and what this address has in progress on any link */
 export function shareUploadLoad(shareId: string, ip: string): { count: number; bytes: number; byIp: number } {
-  let count = 0
-  let bytes = 0
-  let byIp = 0
-  for (const m of allMetas()) {
-    if (!m.shareId) continue
-    // announced and then left alone: it does not keep a place (it is removed here, not only by the hourly cleaning)
-    try {
-      if (Date.now() - statSync(join(dirOf(m.id), 'meta.json')).mtimeMs > idleLimit(m)) { dropUpload(m.id, m); continue }
-    } catch { continue }
-    if (m.shareId === shareId) { count++; bytes += m.size }
-    if (m.ip === ip) byIp++
+  restoreReservations()
+  // the few uploads of this link and address are checked against their meta.json time (the clock of the chunks); the
+  // others only against the time kept in memory. The disk is never scanned for the rest.
+  for (const [id, l] of live) {
+    if (l.shareId !== shareId && !(l.shareId && l.ip === ip)) continue
+    try { l.at = statSync(join(dirOf(id), 'meta.json')).mtimeMs } catch { /* keep the time in memory */ }
   }
-  return { count, bytes, byIp }
+  sweepIdle()
+  const c = byShare.get(shareId)
+  return { count: c?.count ?? 0, bytes: c?.bytes ?? 0, byIp: byIp.get(ip) ?? 0 }
 }
 
 function releaseQuota(meta: Meta) {
@@ -195,6 +241,8 @@ function releaseQuota(meta: Meta) {
 
 const touch = (id: string) => {
   const now = new Date()
+  const l = live.get(id)
+  if (l) l.at = now.getTime()
   try { utimesSync(join(dirOf(id), 'meta.json'), now, now) } catch { /* ignore */ }
 }
 
@@ -220,6 +268,9 @@ export function initUpload(args: {
   if (!Number.isSafeInteger(size) || size < 0) throw bad('upload.bad-size')
   if (size > policy.uploadMaxSize()) throw new HttpError(413, 'upload.too-big')
   ensureSpace(paths.tmp, size)
+  // announced and never finished: one owner can not fill tmp with them (idle ones go first)
+  sweepIdle()
+  if (config.uploadMaxPending > 0 && (byOwner.get(args.owner) ?? 0) >= config.uploadMaxPending) throw new HttpError(429, 'upload.too-many-pending')
 
   const segments = args.relativeDir.map(validName)
   const destDir = resolveIn(args.root, [args.dir, ...segments].join('/').replace(/\/+/g, '/'))
@@ -253,6 +304,7 @@ export function initUpload(args: {
     rmSync(dirOf(id), { recursive: true, force: true })
     throw err
   }
+  track(meta, meta.createdAt)
   return { id, chunkSize, total }
 }
 
@@ -334,6 +386,7 @@ async function finishUpload(id: string, owner: string, user?: User | null) {
     }
   }
   indexTouched(finalPath)
+  untrack(id)
   rmSync(dirOf(id), { recursive: true, force: true })
   // the file is in the home now: the reservation turns into counted bytes
   if (meta.quotaUser) commitBytes(meta.quotaUser, meta.size)
@@ -366,6 +419,7 @@ async function putInPlace(data: string, finalPath: string, meta: Meta) {
 export function cancelUpload(id: string, owner: string) {
   restoreReservations()
   const meta = loadMeta(id, owner)
+  untrack(id)
   rmSync(dirOf(id), { recursive: true, force: true })
   releaseGuest(meta)
   releaseQuota(meta)
@@ -382,6 +436,7 @@ export function cleanStaleUploads(): number {
       let meta: Meta | null = null
       try { meta = JSON.parse(readFileSync(join(paths.tmp, id, 'meta.json'), 'utf8')) as Meta } catch { /* unreadable: nothing to give back */ }
       if (Date.now() - stamp > (meta ? idleLimit(meta) : config.uploadStaleMs)) {
+        untrack(id)
         rmSync(join(paths.tmp, id), { recursive: true, force: true })
         if (meta) { releaseGuest(meta); releaseQuota(meta) }
         n++

@@ -17,7 +17,7 @@ import { errorsSince } from '../logger'
 import { langOf, type MessageCode, type Params, text } from '../messages'
 import type { User } from '../auth'
 import { cleanQuota, forget, usage } from '../quota'
-import { settings } from '../settings'
+import { logoExt, settings } from '../settings'
 import { policyView, savePolicy, STEP_UP_GROUPS } from '../policy'
 import { forgetNotifications } from '../notify'
 import { revokeSharesOf } from '../shares'
@@ -79,9 +79,8 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
 
   // ───────────── public branding ─────────────
   .get('/branding/logo', () => {
-    const logo = settings.get().logo
-    if (!logo) throw notFound()
-    const ext = logo.split(':')[0]
+    const ext = logoExt(settings.get().logo)
+    if (!ext) throw notFound()
     const file = Bun.file(join(paths.branding, `logo.${ext}`))
     return new Response(file, {
       headers: {
@@ -368,7 +367,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
   })
 
   // A key left out stays; inside share/security/files/mail/alerts a key set to null goes back to the env value.
-  // Security and mail settings, and guest rights that let visitors change things, ask for the admin's password.
+  // Security, mail and alert settings, and guest rights that let visitors change things, ask for the admin's password.
   .put('/admin/settings', async ({ user, ip, body }) => {
     const admin = requireAdmin({ user, ip })
     const patch: Record<string, unknown> = {}
@@ -398,7 +397,8 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     settings.update(patch)
     // the names of what changed, never a value (a password or a webhook URL is among them)
     audit({ user: admin.username, ip, action: 'settings-update', detail: [...Object.keys(patch), ...changed].join(', ') })
-    const security = changed.filter(k => k.startsWith('security.'))
+    // mail and alerts decide where messages go: a changed webhook or SMTP server is worth a message to the admins
+    const security = changed.filter(k => k.startsWith('security.') || k.startsWith('mail.') || k.startsWith('alerts.'))
     if (security.length) alert('settings-security', 'admin.alert-security-changed', { user: admin.username, keys: security.join(', ') })
     return settingsView()
   }, {
@@ -420,8 +420,8 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     if (!ext) throw bad('admin.logo-type')
     const data = await request.arrayBuffer()
     if (data.byteLength === 0 || data.byteLength > 1024 * 1024) throw bad('admin.logo-size')
-    const old = settings.get().logo
-    if (old) rmSync(join(paths.branding, `logo.${old.split(':')[0]}`), { force: true })
+    const old = logoExt(settings.get().logo)
+    if (old) rmSync(join(paths.branding, `logo.${old}`), { force: true })
     await Bun.write(join(paths.branding, `logo.${ext}`), data)
     settings.update({ logo: `${ext}:${Date.now()}` })
     audit({ user: admin.username, ip, action: 'logo-update' })
@@ -430,8 +430,8 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
 
   .delete('/admin/logo', ({ user, ip }) => {
     const admin = requireAdmin({ user, ip })
-    const old = settings.get().logo
-    if (old) rmSync(join(paths.branding, `logo.${old.split(':')[0]}`), { force: true })
+    const old = logoExt(settings.get().logo)
+    if (old) rmSync(join(paths.branding, `logo.${old}`), { force: true })
     settings.update({ logo: null })
     audit({ user: admin.username, ip, action: 'logo-remove' })
     return settingsView()

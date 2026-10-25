@@ -21,7 +21,7 @@ import { BUILTIN_UPDATE_KEY } from './update-key'
 import { bad, conflict, ensureSpace, freeSpace, HttpError, notFound } from './fsx'
 import { MESSAGES, text, type Lang, type MessageCode, type Params } from './messages'
 import {
-  compareVersions, isVersion, readManifest, readState, releasePath, releasesDir, releaseUsable, RELEASE_NAME, SERVER_FILE,
+  compareVersions, isVersion, readManifest, readState, releasePath, releasesDir, releaseUsable, RELEASE_NAME, serverIntact, SERVER_FILE,
   stagingDir, writeState, type Manifest, type ReleaseState,
 } from './release'
 import { unzipTo } from './zip'
@@ -281,6 +281,13 @@ export function discardStaged(id: string) {
 
 const keep = (state: { current: string | null; history: string[] }) => new Set([state.current, ...state.history].filter(Boolean) as string[])
 
+/** the recorded server.js hashes of the releases state.json still reaches, plus the one being installed */
+function serverHashesKept(state: ReleaseState, adding: string) {
+  const wanted = keep(state)
+  wanted.add(adding)
+  return Object.fromEntries(Object.entries(state.serverHashes ?? {}).filter(([n]) => wanted.has(n)))
+}
+
 /** delete installed releases that can no longer be reached from state.json */
 function pruneReleases() {
   const state = readState(config.dataDir)
@@ -320,6 +327,8 @@ export function applyStaged(id: string): Promise<{ version: string; dir: string;
       history: [previous, ...state.history].filter((h): h is string => !!h && h !== name).slice(0, 2),
       pending: { dir: name, previous, at: new Date().toISOString() },
       last: null,
+      // what the launcher checks before it starts this release
+      serverHashes: { ...serverHashesKept(state, name), [name]: manifest.files[SERVER_FILE].sha256 },
     })
     pruneReleases()
     return { version: manifest.version, dir: name, signed }
@@ -334,6 +343,7 @@ export function rollbackTo(target: string | null): Promise<{ version: string }> 
       throw notFound('update.rollback-missing')
     }
     if (target === state.current) throw bad('update.version-in-use')
+    if (target !== null && !serverIntact(config.dataDir, target, state)) throw bad('update.server-changed', { name: target })
     const version = target ? readManifest(releasePath(config.dataDir, target))!.version : (process.env.FC_BUILTIN_VERSION ?? config.version)
     writeState(config.dataDir, {
       ...state,

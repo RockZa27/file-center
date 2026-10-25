@@ -279,11 +279,13 @@ describe('settings: step-up password', () => {
     // dropping or keeping a right is not a widening
     expect((await put({ guestPermissions: ['read'] })).status).toBe(200)
     expect((await put({ guestPermissions: ['read', 'download'] })).status).toBe(200)
-    expect((await put({ share: { requirePassword: true }, files: { thumbnails: false }, alerts: { lang: 'en' } })).status).toBe(200)
+    expect((await put(withPw({ share: { requirePassword: true }, files: { thumbnails: false }, alerts: { lang: 'en' } }))).status).toBe(200)
   })
 
   test('a security change is in the activity log by key (no value) and goes out as an alert', async () => {
-    expect((await put({ alerts: { webhookUrl: hookUrl() } })).status).toBe(200)
+    expect((await put(withPw({ alerts: { webhookUrl: hookUrl() } }))).status).toBe(200)
+    // saving the webhook raises the settings alert itself: let it go out, then start counting
+    await alerts.alertsIdle()
     alerts.resetAlerts()
     hookBodies = []
     expect((await put(withPw({ security: { loginMaxAttempts: 9, sessionTtlHours: 77 } }))).status).toBe(200)
@@ -405,7 +407,7 @@ describe('settings: shares', () => {
 describe('settings: secrets', () => {
   test('the SMTP password is sealed on disk, never in GET, logs, activity or alerts, and survives a backup with secret.key', async () => {
     const PASS = 'smtp-s3cret-pass-ZZ9'
-    expect((await put({ alerts: { webhookUrl: hookUrl() } })).status).toBe(200)
+    expect((await put(withPw({ alerts: { webhookUrl: hookUrl() } }))).status).toBe(200)
     alerts.resetAlerts()
     const r = await put(withPw({ mail: { host: 'smtp.example.com', port: 587, secure: 'starttls', user: 'mailer', pass: PASS, from: 'files@example.com' }, security: { loginMaxAttempts: 8 } }))
     expect(r.status).toBe(200)
@@ -453,7 +455,7 @@ describe('settings: secrets', () => {
   })
 
   test('the webhook URL is masked in GET and the test button uses the saved one', async () => {
-    const r = await put({ alerts: { webhookUrl: hookUrl(), kind: 'json', lang: 'en' } })
+    const r = await put(withPw({ alerts: { webhookUrl: hookUrl(), kind: 'json', lang: 'en' } }))
     expect(r.status).toBe(200)
     expect(r.data.alerts.webhookUrl).toEqual({ value: `http://127.0.0.1:${hook.port}…`, source: 'web' })
     expect(JSON.stringify(r.data)).not.toContain(HOOK_SECRET)
@@ -461,12 +463,15 @@ describe('settings: secrets', () => {
     expect((await settings.idle(), readFileSync(paths.settings, 'utf8'))).not.toContain(HOOK_SECRET)
     expect(JSON.stringify((await admin.json('GET', '/api/admin/alerts')).data)).not.toContain(HOOK_SECRET)
 
+    // the save itself raised the settings alert: count from the test button on
+    await alerts.alertsIdle()
+    hookBodies = []
     const t = await admin.json('POST', '/api/admin/alerts/test')
     expect(t.status).toBe(200)
     expect(hookBodies.length).toBe(1)
     expect(JSON.parse(hookBodies[0]).lang).toBe('en')
     // back to the env value: no webhook in the test setup, so the button says alerts are off
-    await put({ alerts: { webhookUrl: null, lang: null } })
+    await put(withPw({ alerts: { webhookUrl: null, lang: null } }))
     expect((await admin.json('POST', '/api/admin/alerts/test')).data.code).toBe('admin.alert-off')
   })
 

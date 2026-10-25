@@ -5,6 +5,7 @@ import { context, need, requireUser } from '../context'
 import { HttpError, normRel, resolveIn, storagePath } from '../fsx'
 import { etagMatches } from '../static'
 import { planThumb, thumbFile, thumbStatus } from '../thumbs'
+import { startDownload } from '../shares'
 import { shareFile } from './shares'
 
 /**
@@ -56,8 +57,19 @@ export const thumbRoutes = new Elysia({ prefix: '/api' })
     return thumbResponse(abs, query.size, request, set)
   }, { query: t.Object({ space: t.String(), path: t.String(), size: sizeQ }) })
 
-  // a folder link: the same checks as its download (a used-up or expired link is 404, and every link here is a download link, so 1024 is fine), and no download is counted
-  .get('/s/:token/thumb', ({ params, query, request, set }) => {
-    const { abs } = shareFile(params.token, query.path, request)
-    return thumbResponse(abs, query.size, request, set)
+  // a folder link: the same checks as its download (a used-up or expired link is 404, and every link here is a download
+  // link, so 1024 is fine). 256 px is a preview and counts nothing; 1024 px is nearly the file itself, so on a link with a
+  // download limit it takes one download, counted once the picture is sent (a repeat the browser already holds, 304, is free)
+  .get('/s/:token/thumb', async ({ params, query, request, set }) => {
+    const { share, abs } = shareFile(params.token, query.path, request)
+    if (Number(query.size) !== 1024 || share.maxDownloads === null) return thumbResponse(abs, query.size, request, set)
+    const slot = startDownload(share)
+    try {
+      const res = await thumbResponse(abs, query.size, request, set)
+      if (res.status === 200) slot.finish(); else slot.release()
+      return res
+    } catch (err) {
+      slot.release()
+      throw err
+    }
   }, { query: t.Object({ path: t.Optional(t.String()), size: sizeQ }) })

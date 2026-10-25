@@ -476,7 +476,7 @@
     "patches": [
       {
         "file": "src/routes/shares.ts",
-        "find": "      if (recordFailure(key, SHARE_LOCKOUT)) alert('lockout', 'admin.alert-share-locked', { share: share.id, owner: share.owner, ip })\n",
+        "find": "      const here = recordFailure(key, SHARE_LOCKOUT)\n      const anywhere = recordFailure(linkKey, SHARE_LINK_LOCKOUT)\n      if (here || anywhere) alert('lockout', 'admin.alert-share-locked', { share: share.id, owner: share.owner, ip })\n",
         "replace": ""
       }
     ]
@@ -1904,6 +1904,81 @@
         "file": "src/zip.ts",
         "find": "at += (await file.write(chunk, at)).bytesWritten",
         "replace": "at += require('node:fs').writeSync(file.fd, chunk, at)"
+      }
+    ]
+  },
+  {
+    "id": "logo-path-unchecked",
+    "difficulty": "subtle",
+    "category": "path-traversal",
+    "severity": "medium",
+    "tests": "tests/security-1132.test.ts",
+    "description": "a logo value from a restored settings.json is joined into a path without a shape check",
+    "patches": [
+      {
+        "file": "src/settings.ts",
+        "find": "typeof logo === 'string' && LOGO_RE.test(logo) ? logo.split(':')[0] : null",
+        "replace": "typeof logo === 'string' ? logo.split(':')[0] : null"
+      }
+    ]
+  },
+  {
+    "id": "alerts-no-step-up",
+    "difficulty": "easy",
+    "category": "authz",
+    "severity": "medium",
+    "tests": "tests/security-1132.test.ts",
+    "description": "the alert webhook can be repointed without the admin's password",
+    "patches": [
+      {
+        "file": "src/policy.ts",
+        "find": "['security', 'mail', 'alerts']",
+        "replace": "['security', 'mail']"
+      }
+    ]
+  },
+  {
+    "id": "launcher-skips-hash",
+    "difficulty": "subtle",
+    "category": "supply-chain",
+    "severity": "medium",
+    "tests": "tests/security-1132.test.ts",
+    "description": "the launcher starts a release whose server.js no longer matches the hash recorded at install",
+    "patches": [
+      {
+        "file": "src/release.ts",
+        "find": "return hashFile(join(releasePath(dataDir, name), SERVER_FILE)) === want",
+        "replace": "return true"
+      }
+    ]
+  },
+  {
+    "id": "pending-uploads-uncapped",
+    "difficulty": "easy",
+    "category": "dos",
+    "severity": "low",
+    "tests": "tests/security-1132.test.ts",
+    "description": "one owner can announce unlimited unfinished uploads",
+    "patches": [
+      {
+        "file": "src/uploads.ts",
+        "find": "if (config.uploadMaxPending > 0 && (byOwner",
+        "replace": "if (false && (byOwner"
+      }
+    ]
+  },
+  {
+    "id": "share-link-lock-per-address",
+    "difficulty": "subtle",
+    "category": "auth",
+    "severity": "medium",
+    "tests": "tests/security-1132.test.ts",
+    "description": "a share link's password can be guessed from many addresses: only the per-address lockout is checked",
+    "patches": [
+      {
+        "file": "src/routes/shares.ts",
+        "find": "const wait = Math.max(lockedFor(key), lockedFor(linkKey))",
+        "replace": "const wait = lockedFor(key)"
       }
     ]
   }
