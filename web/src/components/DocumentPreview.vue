@@ -119,8 +119,8 @@ onBeforeUnmount(release)
 .doc-preview { width: 100%; min-width: 0; }
 .state { margin-bottom: 12px; }
 .loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 48px 0; }
-.docx-host { max-height: 70vh; overflow: auto; border-radius: 8px; --doc-backdrop: var(--surface-2); border: 1px solid var(--border); }
-.slides-scroll { max-height: 70vh; overflow: auto; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); padding: 12px; }
+.docx-host { max-height: 70vh; overflow: auto; contain: paint; border-radius: 8px; --doc-backdrop: var(--surface-2); border: 1px solid var(--border); }
+.slides-scroll { max-height: 70vh; overflow: auto; contain: paint; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); padding: 12px; }
 .slides-host { width: 100%; margin: 0 auto; }
 .tabs { margin-bottom: 8px; }
 </style>

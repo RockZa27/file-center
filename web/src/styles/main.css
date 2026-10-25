@@ -80,3 +80,7 @@ html, body {
 @media (max-width: 768px) {
   .page { padding: 16px; }
 }
+
+/* file previews (Markdown, Word, slides) are drawn inside their own box: nothing they contain, such as a position:fixed
+   layer, can paint over the app outside it */
+.md-body, .docx-host, .slides-scroll { contain: paint; overflow: auto; isolation: isolate; }

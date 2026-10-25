@@ -12,12 +12,18 @@ const EXTERNAL = /^[a-z][a-z+.-]*:/i
 const purify = DOMPurify(window)
 /** set during one sanitize call: maps a relative address in the file to a URL of this app (or null) */
 let resolveRelative = null
+/** set during one safeFragment call: ids and names are prefixed, so a file can not clobber page globals */
+let prefixIds = false
 
 purify.addHook('afterSanitizeAttributes', node => {
   const tag = node.nodeName
   if (tag === 'A' && node.hasAttribute('href')) {
     const href = node.getAttribute('href')
-    if (href.startsWith('#')) return
+    if (href.startsWith('#')) {
+      // named ids get a prefix in Markdown (see safeFragment), so same-page links follow them
+      if (prefixIds && href.length > 1 && !href.startsWith('#user-content-')) node.setAttribute('href', `#user-content-${href.slice(1)}`)
+      return
+    }
     if (!EXTERNAL.test(href) && !href.startsWith('//')) {
       const url = resolveRelative?.(href, 'link')
       if (url) node.setAttribute('href', url)
@@ -58,10 +64,19 @@ const BASE = {
 /** an HTML string from a converter (Markdown) as clean nodes; never assigned with innerHTML */
 export function safeFragment(html, { resolve = null } = {}) {
   resolveRelative = resolve
+  prefixIds = true
   try {
-    return outsidePictures(purify.sanitize(html, { ...BASE, FORBID_TAGS: [...BASE.FORBID_TAGS, 'style'], RETURN_DOM_FRAGMENT: true }))
+    // Markdown shows in the page itself (not a shadow root): no style attribute, ids and names prefixed (DOM clobbering)
+    return outsidePictures(purify.sanitize(html, {
+      ...BASE,
+      FORBID_TAGS: [...BASE.FORBID_TAGS, 'style'],
+      FORBID_ATTR: [...BASE.FORBID_ATTR, 'style'],
+      SANITIZE_NAMED_PROPS: true,
+      RETURN_DOM_FRAGMENT: true,
+    }))
   } finally {
     resolveRelative = null
+    prefixIds = false
   }
 }
 
@@ -74,6 +89,22 @@ export function cleanInPlace(node, { resolve = null } = {}) {
     resolveRelative = null
   }
   return outsidePictures(node)
+}
+
+/** one rendered slide: cleaned where it is (inline SVG, positioning styles and blob: pictures stay), then its links */
+export function cleanSlide(el) {
+  // a slide is drawn from shapes and text: no stylesheet of its own, no SVG that points elsewhere
+  purify.sanitize(el, { ...BASE, FORBID_TAGS: [...BASE.FORBID_TAGS, 'style', 'foreignObject', 'use', 'script'], IN_PLACE: true })
+  outsidePictures(el)
+  for (const n of [el, ...el.querySelectorAll('[style]')]) {
+    const style = n.getAttribute?.('style')
+    // a style that loads something from another site (url(https://...), @import) would call out as soon as it is shown
+    if (style && /url\s*\(|@import|expression\s*\(/i.test(style)) {
+      n.setAttribute('style', style.replace(/url\(\s*(['"]?)(?!blob:|data:image\/|#)[^)]*\1\s*\)/gi, 'none').replace(/@import|expression\s*\(/gi, ''))
+    }
+  }
+  cleanLinks(el)
+  return el
 }
 
 /** links in slides the viewer already put in the page: only safe addresses, opened in a new tab */
