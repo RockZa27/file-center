@@ -1282,7 +1282,7 @@
     "patches": [
       {
         "file": "src/routes/admin.ts",
-        "find": "    removeGrantsOf(target.username)\n",
+        "find": "  removeGrantsOf(username)\n",
         "replace": ""
       }
     ]
@@ -1507,7 +1507,7 @@
     "patches": [
       {
         "file": "src/routes/admin.ts",
-        "find": "    removeUserFromGroups(target.username)\n",
+        "find": "  removeUserFromGroups(username)\n",
         "replace": ""
       }
     ]
@@ -1612,8 +1612,8 @@
     "patches": [
       {
         "file": "src/routes/admin.ts",
-        "find": "const appPasswords = removeAppPasswordsOf(target.username)",
-        "replace": "const appPasswords = 0"
+        "find": "the WebDAV passwords go too\n    const appPasswords = removeAppPasswordsOf(target.username)",
+        "replace": "the WebDAV passwords go too\n    const appPasswords = 0"
       }
     ]
   },
