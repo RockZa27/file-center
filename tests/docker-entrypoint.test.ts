@@ -186,11 +186,11 @@ describe('hardening and security job', () => {
 
   test('the runtime stage is the slim image, the build stage is unchanged', () => {
     const froms = read('Dockerfile').split('\n').filter(l => l.startsWith('FROM '))
-    expect(froms).toEqual(['FROM oven/bun:1.4.2 AS build', 'FROM oven/bun:1.4.2-slim'])
+    expect(froms).toEqual(['FROM oven/bun:1.4.4 AS build', 'FROM oven/bun:1.4.4-slim'])
   })
 
   test('the runtime stage installs the Debian security updates by default (the image scan found fixed HIGH/CRITICAL ones)', () => {
-    const runtime = read('Dockerfile').split('FROM oven/bun:1.4.2-slim')[1]
+    const runtime = read('Dockerfile').split('FROM oven/bun:1.4.4-slim')[1]
     expect(runtime).toMatch(/^ARG APT_UPGRADE=true$/m)
     expect(runtime).toMatch(/apt-get update && apt-get upgrade -y/)
     expect(runtime).toMatch(/rm -rf \/var\/lib\/apt\/lists/)

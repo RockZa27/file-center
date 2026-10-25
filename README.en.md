@@ -111,7 +111,7 @@ Moving machines, using a domain through a Cloudflare Tunnel, running behind 1Pan
 
 ## Run without Docker
 
-You need [Bun](https://bun.sh) (Docker and CI use 1.4.2).
+You need [Bun](https://bun.sh) (Docker and CI use 1.4.4).
 
 ```bash
 bun install

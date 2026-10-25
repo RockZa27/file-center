@@ -109,7 +109,7 @@ data/backups/    ไฟล์สำรองของระบบ (ควรย�
 
 ## รันโดยไม่ใช้ Docker
 
-ต้องมี [Bun](https://bun.sh) (Docker และ CI ใช้ 1.4.2)
+ต้องมี [Bun](https://bun.sh) (Docker และ CI ใช้ 1.4.4)
 
 ```bash
 bun install
