@@ -37,4 +37,7 @@ skill จาก Cloudflare อยู่ที่ `.claude/skills/security-audit/
   - env ว่าง มีเฉพาะค่าที่อนุญาต
   - ไฟล์ทั้งเครื่องอ่านอย่างเดียว ยกเว้น scratch
   - จำกัด CPU/หน่วยความจำ/process/ขนาดไฟล์/เวลา
+- **เบราว์เซอร์ใน sandbox:** Chromium ต้องใช้ `SBX_AS=unlimited` เพราะจองหน่วยความจำเสมือนไว้เยอะแต่ใช้จริงน้อย ข้อจำกัดอื่นยังเหมือนเดิม
+  - ส่ง `SBX_NODE_PATH=/opt/node-tools/node_modules` ให้ `require('playwright')` หาเจอ แล้วเปิดด้วย `chromium.launch({ args: ['--no-sandbox'] })` (sandbox ของ OS ครอบอยู่แล้ว)
+  - เปิดหน้าใน loopback ได้ แต่ภายนอกได้ `ERR_INTERNET_DISCONNECTED`
 - ตรวจไฟล์ผลด้วย `node .claude/skills/security-audit/validate-findings.cjs <dir>/findings.json` และ `validate-coverage-ledger.cjs <dir>/coverage-ledger.json`
