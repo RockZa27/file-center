@@ -476,7 +476,7 @@
     "patches": [
       {
         "file": "src/routes/shares.ts",
-        "find": "      if (recordFailure(key, SHARE_LOCKOUT)) alert('lockout', 'admin.alert-share-locked', { share: share.id, owner: share.owner, ip })\n",
+        "find": "      const here = recordFailure(key, SHARE_LOCKOUT)\n      const anywhere = recordFailure(linkKey, SHARE_LINK_LOCKOUT)\n      if (here || anywhere) alert('lockout', 'admin.alert-share-locked', { share: share.id, owner: share.owner, ip })\n",
         "replace": ""
       }
     ]
