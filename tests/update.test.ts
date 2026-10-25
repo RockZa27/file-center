@@ -282,6 +282,10 @@ suite('update from the web', () => {
     expect(status.pending).toBeNull()
     expect(status.runningVersion).toBe('9.9.9')
 
+    // the SHA-256 of the installed server.js is recorded for the launcher to check at the next start
+    const installed = JSON.parse(readFileSync(join(dirs.data, 'app', 'state.json'), 'utf8'))
+    expect(installed.serverHashes[after.release]).toBe(new Bun.CryptoHasher('sha256').update(readFileSync(join(dirs.data, 'app', 'releases', after.release, 'server.js'))).digest('hex'))
+
     // back to what came with the image
     const back = await api('POST', '/api/admin/update/rollback', { dir: 'builtin', password: PASSWORD })
     expect(back.status).toBe(200)

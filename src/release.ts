@@ -8,6 +8,7 @@
  *   <DATA_DIR>/app/releases/<name>/      server.js + web/ + manifest.json of one installed update
  *   <DATA_DIR>/app/staging/<id>/         an uploaded package that is checked but not installed yet
  */
+import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -32,6 +33,11 @@ export type ReleaseState = {
   history: string[]
   /** an update that has not proven itself yet; if it fails to start the launcher goes back to `previous` */
   pending: { dir: string; previous: string | null; at: string } | null
+  /**
+   * SHA-256 of server.js by release name, written when an update is installed (from 1.13.2). The launcher hashes the
+   * file again before it starts it. A release with no entry (installed by an older version) starts as before.
+   */
+  serverHashes?: Record<string, string>
   /**
    * what happened to the last switch, for the update page. `message` is the Thai text and is always written: an
    * older app reads only that. `code` + `params` (a code of messages.ts) let a newer app answer in the page's
@@ -80,6 +86,7 @@ export function readState(dataDir: string): ReleaseState {
       schema: 1,
       current: name(s.current) ? s.current : null,
       history: Array.isArray(s.history) ? s.history.filter(name) : [],
+      ...(s.serverHashes && typeof s.serverHashes === 'object' && !Array.isArray(s.serverHashes) ? { serverHashes: s.serverHashes } : {}),
     }
   } catch {
     return emptyState()
@@ -111,4 +118,19 @@ export function releaseUsable(dataDir: string, name: string): boolean {
   } catch {
     return false
   }
+}
+
+/** the SHA-256 (hex) of a file, or null when it can not be read */
+export function hashFile(file: string): string | null {
+  try { return createHash('sha256').update(readFileSync(file)).digest('hex') } catch { return null }
+}
+
+/**
+ * The release's server.js is the one that was installed: its hash equals the one recorded in state.json. true when
+ * nothing was recorded (an update installed by an older version), false when the file changed or can not be read.
+ */
+export function serverIntact(dataDir: string, name: string, state: ReleaseState): boolean {
+  const want = state.serverHashes?.[name]
+  if (typeof want !== 'string') return true
+  return hashFile(join(releasePath(dataDir, name), SERVER_FILE)) === want
 }

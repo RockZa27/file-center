@@ -56,6 +56,13 @@ export type Settings = {
   alerts?: AlertPrefs
 }
 
+/** the only shape a stored logo may have; anything else (a settings.json from a backup) is treated as no logo */
+export const LOGO_RE = /^(png|jpe?g|webp|svg|gif):\d+$/
+/** the file extension of the stored logo, or null when there is none or the value is not of the shape above */
+export function logoExt(logo: string | null | undefined): string | null {
+  return typeof logo === 'string' && LOGO_RE.test(logo) ? logo.split(':')[0] : null
+}
+
 const defaults = (): Settings => ({
   appName: 'File Center',
   primaryColor: '#2563eb',

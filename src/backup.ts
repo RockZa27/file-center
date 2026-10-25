@@ -22,7 +22,7 @@ import { log } from './logger'
 import { mirrorAlert } from './notify'
 import { open as openSealed } from './secret-box'
 import { type Lang, MESSAGES, type MessageCode, type Params, sizeText, text } from './messages'
-import { type BackupPrefs, settings } from './settings'
+import { type BackupPrefs, logoExt, settings } from './settings'
 import { recountStorage, storageStats } from './stats'
 import { JsonStore } from './store'
 import { collectZipItems, zipStream, type ZipItem } from './zip'
@@ -576,7 +576,7 @@ async function extractData(zipAbs: string, dest: string) {
 }
 
 /** a restore that leaves nobody able to log in as admin would lock everyone out */
-function checkData(dir: string) {
+export function checkData(dir: string) {
   const parse = (file: string) => { try { return JSON.parse(readFileSync(file, 'utf8')) } catch { return undefined } }
   const users = parse(join(dir, 'users.json'))?.users
   const admins = Array.isArray(users) ? users.filter(u => u?.role === 'admin' && typeof u.username === 'string' && typeof u.passwordHash === 'string') : []
@@ -584,6 +584,8 @@ function checkData(dir: string) {
   if (existsSync(join(dir, 'settings.json'))) {
     const s = parse(join(dir, 'settings.json'))
     if (!s || typeof s !== 'object' || Array.isArray(s)) throw bad('backup.bad-settings')
+    // the logo value ends up in a path: a hand-made backup must not carry one that leaves the branding folder
+    if (s.logo != null && logoExt(s.logo) === null) throw bad('backup.bad-settings')
   }
 }
 

@@ -6,6 +6,19 @@ import { compareVersions, forRole } from './util'
  */
 export const releases = [
   {
+    version: '1.13.2',
+    items: [
+      {
+        id: '1132-hardening', icon: 'system', roles: ['admin'], to: { name: 'dashboard' },
+        title: { th: 'เสริมความแข็งแรงจากการตรวจความปลอดภัย', en: 'Hardening from the security audit' },
+        text: {
+          th: 'การตั้งปลายทางแจ้งเตือน (webhook) ต้องยืนยันรหัสผ่านและแจ้งผู้ดูแลเหมือนหมวดความปลอดภัย launcher ตรวจ server.js ของอัปเดตก่อนเริ่มทุกครั้งและกลับไปใช้เวอร์ชันที่มากับระบบถ้าไฟล์ถูกแก้ ผู้ใช้ถืออัปโหลดค้างได้ไม่เกิน UPLOAD_MAX_PENDING งาน ลิงก์แชร์ที่มีรหัสผ่านล็อกทั้งลิงก์เมื่อเดารหัสผิดมากจากหลาย IP ลิงก์ที่จำกัดจำนวนดาวน์โหลดนับตอนดูภาพขนาดใหญ่ และการกดเสร็จอัปโหลดซ้ำไม่นับเป็นไฟล์ใหม่',
+          en: 'Setting the alert webhook now asks for your password and tells the admins, like the security category. The launcher checks an update\'s server.js before every start and falls back to the built-in version if it was changed. A user can hold at most UPLOAD_MAX_PENDING unfinished uploads. A share link with a password locks as a whole after many wrong guesses from several addresses. A link with a download limit counts the large preview as a download, and completing an upload twice no longer counts a new file.',
+        },
+      },
+    ],
+  },
+  {
     version: '1.13.1',
     items: [
       {

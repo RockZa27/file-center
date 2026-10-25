@@ -403,7 +403,7 @@ const th = {
     reset: 'คืนค่าเริ่มต้น', willReset: 'จะคืนค่าเริ่มต้นเมื่อบันทึก', undo: 'ยกเลิก',
     unsaved: 'มี {n} รายการที่ยังไม่ได้บันทึก', unsavedBar: 'บันทึกการตั้งค่า', discard: 'ละทิ้งการเปลี่ยนแปลง',
     leaveTitle: 'ออกจากหน้านี้?', leaveText: 'มี {n} รายการที่ยังไม่ได้บันทึก ถ้าออกตอนนี้การเปลี่ยนแปลงจะหายไป', leaveYes: 'ออกโดยไม่บันทึก',
-    pwTitle: 'ยืนยันด้วยรหัสผ่าน', pwText: 'การตั้งค่าความปลอดภัย อีเมล หรือสิทธิ์ที่ให้ผู้เยี่ยมชมเปลี่ยนแปลงไฟล์ ต้องยืนยันด้วยรหัสผ่านของคุณ',
+    pwTitle: 'ยืนยันด้วยรหัสผ่าน', pwText: 'การตั้งค่าความปลอดภัย อีเมลและการแจ้งเตือน หรือสิทธิ์ที่ให้ผู้เยี่ยมชมเปลี่ยนแปลงไฟล์ ต้องยืนยันด้วยรหัสผ่านของคุณ',
     range: 'ใส่ตัวเลขระหว่าง {min} ถึง {max}', required: 'จำเป็นต้องกรอก', badValue: 'ค่านี้ไม่ถูกต้อง', fixErrors: 'มีช่องที่ค่าไม่ถูกต้อง กรุณาแก้ก่อนบันทึก',
     unit: { hours: 'ชั่วโมง', times: 'ครั้ง', seconds: 'วินาที', days: 'วัน', versions: 'เวอร์ชัน' },
     share: {
@@ -969,7 +969,7 @@ const en = {
     reset: 'Reset to default', willReset: 'Will go back to default on save', undo: 'Undo',
     unsaved: '{n} unsaved changes', unsavedBar: 'Save settings', discard: 'Discard changes',
     leaveTitle: 'Leave this page?', leaveText: 'You have {n} unsaved changes. If you leave now they are lost.', leaveYes: 'Leave without saving',
-    pwTitle: 'Confirm with your password', pwText: 'Security settings, email settings and rights that let visitors change files need your password.',
+    pwTitle: 'Confirm with your password', pwText: 'Security settings, email and alert settings and rights that let visitors change files need your password.',
     range: 'Enter a number from {min} to {max}', required: 'This is required', badValue: 'This value is not valid', fixErrors: 'Some fields are not valid. Please fix them before saving.',
     unit: { hours: 'hours', times: 'times', seconds: 'seconds', days: 'days', versions: 'versions' },
     share: {

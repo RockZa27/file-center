@@ -13,8 +13,8 @@ import { sizeText } from '../messages'
 import { nameOf, notify } from '../notify'
 import { limitOf as quotaOf, ready } from '../quota'
 import {
-  allowedShareDays, allShares, createShare, findShare, isUnlocked, kindOf, lockoutKey, openShare, publicShare,
-  recordUpload, revokeShare, type Share, SHARE_COOKIE, SHARE_LOCKOUT, SHARE_MAX_DOWNLOADS, SHARE_MAX_FILES,
+  allowedShareDays, allShares, createShare, findShare, isUnlocked, kindOf, linkLockoutKey, lockoutKey, openShare, publicShare,
+  recordUpload, revokeShare, type Share, SHARE_COOKIE, SHARE_LINK_LOCKOUT, SHARE_LOCKOUT, SHARE_MAX_DOWNLOADS, SHARE_MAX_FILES,
   SHARE_MAX_TOTAL, SHARE_NOTE_MAX, SHARE_PASSWORD_MIN, SHARE_UPLOADS_PER_IP, SHARE_UPLOADS_PER_LINK, SHARES_PER_USER,
   sharesOf, shareTarget, shareToken, startDownload, stateOf, UNLOCK_MS, unlockCookie, uploadFull, uploadsBy
 } from '../shares'
@@ -272,10 +272,13 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
     const { share } = openShare(params.token)
     if (!share.passwordHash) return { ok: true }
     const key = lockoutKey(share, ip)
-    const wait = lockedFor(key)
+    const linkKey = linkLockoutKey(share)
+    const wait = Math.max(lockedFor(key), lockedFor(linkKey))
     if (wait) throw new HttpError(429, 'auth.confirm-locked', { seconds: wait })
     if (!(await Bun.password.verify(body.password, share.passwordHash).catch(() => false))) {
-      if (recordFailure(key, SHARE_LOCKOUT)) alert('lockout', 'admin.alert-share-locked', { share: share.id, owner: share.owner, ip })
+      const here = recordFailure(key, SHARE_LOCKOUT)
+      const anywhere = recordFailure(linkKey, SHARE_LINK_LOCKOUT)
+      if (here || anywhere) alert('lockout', 'admin.alert-share-locked', { share: share.id, owner: share.owner, ip })
       throw new HttpError(403, 'auth.wrong-password')
     }
     clearFailures(key)
@@ -390,6 +393,8 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
     const { share, owner, key } = visitorUpload(params.token, request)
     const done = await completeUpload(params.id, owner)
     const name = basename(done.path)
+    // a client that lost the answer asks again: the file is the same one, so it is not counted or told a second time
+    if (done.again) return { ok: true, name, size: done.size }
     recordUpload(share, key, name, done.size)
     // only the owner of the link is told
     notify(share.owner, 'upload-received', { link: nameOf(share.path), linkId: share.id, file: name, size: done.size }, filesLink(share))

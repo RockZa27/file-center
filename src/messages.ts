@@ -125,6 +125,7 @@ export const MESSAGES = {
   // ───────────── upload ─────────────
   'upload.not-found': { th: 'ไม่พบการอัปโหลดนี้', en: 'This upload was not found.' },
   'upload.guest-disabled': { th: 'ผู้เยี่ยมชมอัปโหลดไฟล์ไม่ได้ กรุณาเข้าสู่ระบบก่อน', en: 'Visitors cannot upload files. Please sign in first.' },
+  'upload.too-many-pending': { th: 'มีการอัปโหลดค้างอยู่เกินจำนวนที่กำหนด กรุณารอให้เสร็จหรือยกเลิกบางรายการก่อน', en: 'Too many uploads are waiting to be finished. Wait for some to finish or cancel some first.' },
   'upload.guest-quota': { th: 'ผู้เยี่ยมชมอัปโหลดครบปริมาณของวันนี้แล้ว กรุณาลองใหม่พรุ่งนี้หรือเข้าสู่ระบบ', en: 'Visitors have used up today\'s upload allowance. Try again tomorrow or sign in.' },
   'upload.bad-size': { th: 'ขนาดไฟล์ไม่ถูกต้อง', en: 'The file size is not valid.' },
   'upload.too-big': { th: 'ไฟล์ใหญ่เกินกำหนด', en: 'The file is too big.' },
@@ -187,7 +188,7 @@ export const MESSAGES = {
   'admin.upload-over-ceiling': { th: 'ขนาดอัปโหลดสูงสุดตั้งเกิน {max} ไบต์ (ค่า UPLOAD_MAX_SIZE ของเซิร์ฟเวอร์) ไม่ได้', en: 'The upload limit cannot be set above {max} bytes (the server UPLOAD_MAX_SIZE).' },
   'auth.2fa-required': { th: 'ผู้ดูแลระบบกำหนดให้บัญชีของคุณต้องเปิดใช้การยืนยันตัวตนสองขั้นตอน (2FA) ก่อนใช้งานต่อ', en: 'Your account must turn on two-factor authentication (2FA) before you can continue.' },
   'share.must-have-password': { th: 'ลิงก์แชร์ต้องตั้งรหัสผ่าน', en: 'A share link must have a password.' },
-  'admin.alert-security-changed': { th: '{user} เปลี่ยนการตั้งค่าความปลอดภัย: {keys}', en: '{user} changed the security settings: {keys}' },
+  'admin.alert-security-changed': { th: '{user} เปลี่ยนการตั้งค่าความปลอดภัย อีเมล หรือการแจ้งเตือน: {keys}', en: '{user} changed the security, email or alert settings: {keys}' },
   'admin.mail-test-wait': { th: 'ส่งอีเมลทดสอบได้ทุก {seconds} วินาที กรุณารอสักครู่', en: 'A test e-mail can be sent every {seconds} seconds. Please wait a moment.' },
   'admin.mail-test-no-address': { th: 'ไม่มีที่อยู่อีเมลปลายทาง: ระบุอีเมลหรือยืนยันอีเมลของคุณที่หน้าการแจ้งเตือนก่อน', en: 'There is no address to send to: give an address or confirm your own e-mail in the notification settings first.' },
   'admin.mail-test-failed': { th: 'ส่งอีเมลทดสอบไม่สำเร็จ: {reason}', en: 'The test e-mail could not be sent: {reason}' },
@@ -389,6 +390,7 @@ export const MESSAGES = {
   'update.staged-not-newer': { th: 'แพ็กเกจไม่ใหม่กว่าเวอร์ชันที่ใช้อยู่', en: 'The package is not newer than the running version.' },
   'update.staged-missing': { th: 'ไม่พบแพ็กเกจที่เตรียมไว้ กรุณาอัปโหลดใหม่', en: 'The prepared package was not found. Please upload it again.' },
   'update.rollback-missing': { th: 'ไม่พบเวอร์ชันที่ต้องการย้อนกลับ', en: 'The version to roll back to was not found.' },
+  'update.server-changed': { th: 'ไฟล์ server.js ของอัปเดต {name} ไม่ตรงกับที่ติดตั้งไว้ จึงไม่เริ่มใช้งาน', en: 'The server.js of update {name} is not the file that was installed, so it was not started.' },
   'update.version-in-use': { th: 'เวอร์ชันนี้กำลังใช้งานอยู่', en: 'This version is already running.' },
   // the result of the last switch, written to state.json by the launcher
   'update.installed': { th: 'ติดตั้งสำเร็จ', en: 'Installed successfully.' },
