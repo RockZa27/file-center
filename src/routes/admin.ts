@@ -19,14 +19,9 @@ import type { User } from '../auth'
 import { cleanQuota, forget, usage } from '../quota'
 import { logoExt, settings } from '../settings'
 import { policyView, savePolicy, STEP_UP_GROUPS } from '../policy'
-import { forgetNotifications } from '../notify'
-import { revokeSharesOf } from '../shares'
+import { forgetAccount } from '../account-records'
 import { DISK_CRITICAL_PERCENT, DISK_LOW_PERCENT, diskInfo, storageStats } from '../stats'
-import { removeUserState } from '../favorites'
-import { forgetGuide } from '../guide'
-import { removeGrantsOf } from '../grants'
 import { removeAppPasswordsOf } from '../app-passwords'
-import { removeUserFromGroups } from '../groups'
 import { listTrash, purge, restore, tombstoneTrashOf, trashSummary } from '../trash'
 import { isBeta } from '../release'
 import { availableVersion } from '../update-source'
@@ -56,18 +51,6 @@ function checkPublicPerms(actor: User, wanted: Perm[], already: Perm[] = []) {
   if (isAdmin(actor)) return
   const mine = new Set(actor.publicPermissions)
   if (wanted.some(p => !mine.has(p) && !already.includes(p))) throw forbidden('admin.public-perms-exceed')
-}
-
-/** everything an account left behind outside users.json: sign-ins, links, grants, groups, app passwords, own settings */
-function forgetAccount(username: string) {
-  destroyUserSessions(username)
-  revokeSharesOf(username)
-  removeUserState(username)
-  forgetNotifications(username)
-  forgetGuide(username)
-  removeGrantsOf(username)
-  removeAppPasswordsOf(username)
-  removeUserFromGroups(username)
 }
 
 export const adminRoutes = new Elysia({ prefix: '/api' })

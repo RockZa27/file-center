@@ -1981,5 +1981,20 @@
         "replace": "const wait = lockedFor(key)"
       }
     ]
+  },
+  {
+    "id": "restore-same-name-account",
+    "difficulty": "subtle",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/security-1132-restore.test.ts",
+    "description": "a restore keeps the records (sessions, app passwords, links, grants, group places) of any live account of the same name, even one made later than the account in the backup",
+    "patches": [
+      {
+        "file": "src/account-records.ts",
+        "find": "if (born && liveBorn.get(name) === born && !Number.isNaN(ms) && !drop.has(name)) same.set(name, ms)",
+        "replace": "if (liveBorn.has(name) && !Number.isNaN(ms)) same.set(name, ms)"
+      }
+    ]
   }
 ]
