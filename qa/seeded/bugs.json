@@ -1281,7 +1281,7 @@
     "description": "deleting a user leaves the grants they gave and received in grants.json, so a new account by the same name gets them back",
     "patches": [
       {
-        "file": "src/routes/admin.ts",
+        "file": "src/account-records.ts",
         "find": "  removeGrantsOf(username)\n",
         "replace": ""
       }
@@ -1506,7 +1506,7 @@
     "description": "a deleted account stays in its groups, and a new account by the same name gets its place",
     "patches": [
       {
-        "file": "src/routes/admin.ts",
+        "file": "src/account-records.ts",
         "find": "  removeUserFromGroups(username)\n",
         "replace": ""
       }
