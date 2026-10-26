@@ -146,3 +146,16 @@ None. Every candidate in this run was validated to `confirmed`.
 - Critics: critic1 (post-wave) reassigned 2 units; critic2 (final-clean) reassigned 2; critic3 (final-clean) added 2 units (dependency bumps, audit tooling); critic4 (final-clean) returned `stop: true` with no missing units or reassignments.
 - Validators: `validate-findings.cjs` and `validate-coverage-ledger.cjs` pass on the final files.
 - Not established without network: registry comparison of the lockfile's sha512 hashes (shape only). OOM thresholds for the PROPFIND finding are extrapolated from measurements up to 400 items.
+
+## Fix status (feature/1.13.2, before release)
+
+| Finding | Fix |
+|---|---|
+| `webdav:propfind-duplicate-property-response-amplification` (medium) | 524bdfa: requested namespace over 256 characters → 400; answer over 32 MiB → 507 |
+| `upload-pending-cap-shared-guest-owner` | 524bdfa: visitors' pending cap counted per address (`guest|<ip>`) |
+| `guest-upload-allowance-reserved-at-announce` | 524bdfa: only a chunk not received before renews the idle clock; a visitor upload with no new bytes for 15 min gives its reservation back |
+| `session-store:restore-keeps-sessions-of-later-same-name-account` | 44eef1d: an account is (name, createdAt); a restore drops every record of a name not proven to be the live account |
+| `backup-restore:later-same-name-account-app-passwords-shares-grants-groups-carry-over` | 44eef1d: same change (app passwords, shares, grants, groups, state, notifications) |
+| `scripts/qa/sandbox.sh:dev-rbind-not-readonly` | a0b70f5: minimal read-only /dev, empty read-only /root and /tmp |
+
+Each fix has tests that fail on the code before it (`tests/security-1132.test.ts`, `tests/security-1132-restore.test.ts`) and seeded bugs. Checks on aea040f: `bun run qa` 996/997 (1 skipped), lines 96.37%; `qa:seed` 136/136; `bun audit` 0. Upgrade test on loopback: 1.13.1 → 1.13.2 by the one-click route keeps data; the 1.13.2 launcher records the server.js hash, falls back to the built-in version when the file changed, and still starts a release without a recorded hash. These fixes were not re-audited by a third run.
