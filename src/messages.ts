@@ -110,6 +110,7 @@ export const MESSAGES = {
   'files.dav-virtual': { th: 'ที่นี่เป็นโฟลเดอร์จัดกลุ่มของระบบ สร้าง แก้ไข หรือลบอะไรในนี้ไม่ได้', en: 'This is a folder that only groups other folders; nothing can be created, changed or deleted here.' },
   'files.dav-unsupported-body': { th: 'คำขอนี้ต้องไม่มีเนื้อหา', en: 'This request must not have a body.' },
   'files.dav-too-many-props': { th: 'ขอคุณสมบัติ (property) มากเกินไป ขอได้ไม่เกิน {max} รายการต่อคำขอ', en: 'Too many properties asked for; at most {max} per request.' },
+  'files.dav-ns-too-long': { th: 'ชื่อ namespace ของคุณสมบัติ (property) ยาวเกินไป ยาวได้ไม่เกิน {max} ตัวอักษร', en: 'A property namespace is too long; at most {max} characters.' },
   'files.dav-is-folder': { th: 'นี่คือโฟลเดอร์ ใช้ PROPFIND เพื่อดูรายการ', en: 'This is a folder. Use PROPFIND to list it.' },
   'files.dav-bad-method': { th: 'ไม่รองรับคำสั่งนี้', en: 'This method is not supported.' },
   'files.dav-lock-not-found': { th: 'ไม่พบ lock ที่ระบุ', en: 'The lock was not found.' },

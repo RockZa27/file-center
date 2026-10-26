@@ -1996,5 +1996,85 @@
         "replace": "if (liveBorn.has(name) && !Number.isNaN(ms)) same.set(name, ms)"
       }
     ]
+  },
+  {
+    "id": "guest-pending-cap-shared",
+    "difficulty": "subtle",
+    "category": "dos",
+    "severity": "low",
+    "tests": "tests/security-1132.test.ts",
+    "description": "the cap on unfinished uploads counts all visitors together, so one address can block everyone",
+    "patches": [
+      {
+        "file": "src/uploads.ts",
+        "find": "const capKey = (meta: Pick<Meta, 'owner' | 'guestDay' | 'ip'>) => meta.guestDay ? `guest|${meta.ip ?? ''}` : meta.owner",
+        "replace": "const capKey = (meta: Pick<Meta, 'owner' | 'guestDay' | 'ip'>) => meta.owner"
+      },
+      {
+        "file": "src/uploads.ts",
+        "find": "const capOf = args.guest ? `guest|${args.ip ?? ''}` : args.owner",
+        "replace": "const capOf = args.owner"
+      }
+    ]
+  },
+  {
+    "id": "guest-chunk-rewrite-keeps-hold",
+    "difficulty": "subtle",
+    "category": "dos",
+    "severity": "low",
+    "tests": "tests/security-1132.test.ts",
+    "description": "sending a chunk that was already received renews the idle clock, so a reserved share of the visitors' allowance can be held for ever",
+    "patches": [
+      {
+        "file": "src/uploads.ts",
+        "find": "if (fresh) touch(id)",
+        "replace": "touch(id)"
+      }
+    ]
+  },
+  {
+    "id": "guest-upload-idle-3h",
+    "difficulty": "subtle",
+    "category": "dos",
+    "severity": "low",
+    "tests": "tests/security-1132.test.ts",
+    "description": "a visitor's upload holds its share of the daily allowance for the full stale time instead of 15 minutes",
+    "patches": [
+      {
+        "file": "src/uploads.ts",
+        "find": "meta.guestDay ? Math.min(config.uploadStaleMs, GUEST_IDLE_MS) : config.uploadStaleMs",
+        "replace": "config.uploadStaleMs"
+      }
+    ]
+  },
+  {
+    "id": "propfind-ns-length-unchecked",
+    "difficulty": "easy",
+    "category": "dos",
+    "severity": "medium",
+    "tests": "tests/security-1132.test.ts",
+    "description": "PROPFIND accepts property namespaces of any length and echoes them for every item",
+    "patches": [
+      {
+        "file": "src/webdav.ts",
+        "find": "c.ns.length > PROPFIND_MAX_NS",
+        "replace": "false"
+      }
+    ]
+  },
+  {
+    "id": "propfind-bytes-unbounded",
+    "difficulty": "easy",
+    "category": "dos",
+    "severity": "medium",
+    "tests": "tests/security-1132.test.ts",
+    "description": "a PROPFIND answer has no size cap",
+    "patches": [
+      {
+        "file": "src/webdav.ts",
+        "find": "if (bytes > PROPFIND_MAX_BYTES) return tooMany()",
+        "replace": ""
+      }
+    ]
   }
 ]
