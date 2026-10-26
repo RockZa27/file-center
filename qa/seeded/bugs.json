@@ -1281,7 +1281,7 @@
     "description": "deleting a user leaves the grants they gave and received in grants.json, so a new account by the same name gets them back",
     "patches": [
       {
-        "file": "src/routes/admin.ts",
+        "file": "src/account-records.ts",
         "find": "  removeGrantsOf(username)\n",
         "replace": ""
       }
@@ -1506,7 +1506,7 @@
     "description": "a deleted account stays in its groups, and a new account by the same name gets its place",
     "patches": [
       {
-        "file": "src/routes/admin.ts",
+        "file": "src/account-records.ts",
         "find": "  removeUserFromGroups(username)\n",
         "replace": ""
       }
@@ -1979,6 +1979,21 @@
         "file": "src/routes/shares.ts",
         "find": "const wait = Math.max(lockedFor(key), lockedFor(linkKey))",
         "replace": "const wait = lockedFor(key)"
+      }
+    ]
+  },
+  {
+    "id": "restore-same-name-account",
+    "difficulty": "subtle",
+    "category": "authz",
+    "severity": "high",
+    "tests": "tests/security-1132-restore.test.ts",
+    "description": "a restore keeps the records (sessions, app passwords, links, grants, group places) of any live account of the same name, even one made later than the account in the backup",
+    "patches": [
+      {
+        "file": "src/account-records.ts",
+        "find": "if (born && liveBorn.get(name) === born && !Number.isNaN(ms) && !drop.has(name)) same.set(name, ms)",
+        "replace": "if (liveBorn.has(name) && !Number.isNaN(ms)) same.set(name, ms)"
       }
     ]
   }
