@@ -35,8 +35,11 @@ skill จาก Cloudflare อยู่ที่ `.claude/skills/security-audit/
 - โค้ดของแอปต้องรันผ่าน `scripts/qa/sandbox.sh <scratch> <cmd...>` เท่านั้น (ตั้ง `SBX_CWD` เป็นโฟลเดอร์ที่จะรัน)
   - ไม่มีเครือข่ายภายนอก ใช้ได้แค่ loopback
   - env ว่าง มีเฉพาะค่าที่อนุญาต
-  - ไฟล์ทั้งเครื่องอ่านอย่างเดียว ยกเว้น scratch
+  - ไฟล์ทั้งเครื่องอ่านอย่างเดียว ยกเว้น scratch และ `/dev/shm` ส่วนตัว
+  - `/root` และ `/tmp` ว่างเปล่า (เห็นแค่ `/root/.bun` กับ scratch ของตัวเอง) agent จึงไม่เห็น scratch ของ agent อื่น, transcript หรือ key
+  - `/dev` มีแค่ null, zero, full, random, urandom, tty ไม่ใช่ devtmpfs ของเครื่อง (รอบ 2 พบว่าเดิมเขียนไฟล์ลง `/dev` ของเครื่องได้)
   - จำกัด CPU/หน่วยความจำ/process/ขนาดไฟล์/เวลา
+  - ESM `import 'playwright'` ไม่ใช้ `NODE_PATH` ให้ใช้ `createRequire(process.env.NODE_PATH + '/x')('playwright')`
 - **เบราว์เซอร์ใน sandbox:** Chromium ต้องใช้ `SBX_AS=unlimited` เพราะจองหน่วยความจำเสมือนไว้เยอะแต่ใช้จริงน้อย ข้อจำกัดอื่นยังเหมือนเดิม
   - ส่ง `SBX_NODE_PATH=/opt/node-tools/node_modules` ให้ `require('playwright')` หาเจอ แล้วเปิดด้วย `chromium.launch({ args: ['--no-sandbox'] })` (sandbox ของ OS ครอบอยู่แล้ว)
   - เปิดหน้าใน loopback ได้ แต่ภายนอกได้ `ERR_INTERNET_DISCONNECTED`

@@ -17,11 +17,21 @@ for d in /bin /sbin /lib /lib64 /usr /etc /opt /root /home /var /tmp /srv; do
   if [ -L "$d" ]; then cp -P "$d" "$R$d"; continue; fi
   mkdir -p "$R$d"; mount --rbind "$d" "$R$d"; mount -o remount,bind,ro "$R$d"
 done
+# /root and /tmp hold the scratch of other agents, transcripts and keys: inside they are empty and read-only, except
+# bun (/root/.bun) and the scratch of this agent, mounted below (no single quote in this block: it is one sh -c string)
+mount -t tmpfs -o size=1m none $R/root; mount -t tmpfs -o size=1m none $R/tmp
+if [ -d /root/.bun ]; then mkdir -p $R/root/.bun; mount --rbind /root/.bun $R/root/.bun; mount -o remount,bind,ro $R/root/.bun; fi
+# /dev: only the plain device nodes and a private /dev/shm, never the host devtmpfs itself (it would be writable)
 mkdir -p $R/dev $R/proc "$R$SCR"
-mount --rbind /dev $R/dev; mount --rbind /proc $R/proc
-mount -t tmpfs -o size=256m none $R/dev/shm 2>/dev/null || true
+mount -t tmpfs -o size=1m,mode=755 none $R/dev
+for n in null zero full random urandom tty; do touch $R/dev/$n; mount --bind /dev/$n $R/dev/$n; done
+ln -s /proc/self/fd $R/dev/fd; ln -s /proc/self/fd/0 $R/dev/stdin; ln -s /proc/self/fd/1 $R/dev/stdout; ln -s /proc/self/fd/2 $R/dev/stderr
+mkdir -p $R/dev/shm; mount -t tmpfs -o size=256m,nosuid,nodev none $R/dev/shm
+mount -o remount,ro,nosuid,noexec $R/dev
+mount --rbind /proc $R/proc
 mount --bind "$SCR" "$R$SCR"; mount -o remount,bind,rw "$R$SCR"
+mount -o remount,ro $R/root; mount -o remount,ro $R/tmp
 mkdir -p "$SCR/home" "$SCR/tmp"
-exec chroot $R env -i PATH=/opt/node22/bin:/root/.bun/bin:/usr/local/bin:/usr/bin:/bin HOME="$SCR/home" TMPDIR="$SCR/tmp" LANG=C.UTF-8 ${SBX_NODE_PATH:+NODE_PATH=$SBX_NODE_PATH} ${PLAYWRIGHT_BROWSERS_PATH:+PLAYWRIGHT_BROWSERS_PATH=$PLAYWRIGHT_BROWSERS_PATH} \
+exec chroot $R env -i PATH=/opt/node22/bin:/root/.bun/bin:/usr/local/bin:/usr/bin:/bin HOME="$SCR/home" TMPDIR="$SCR/tmp" LANG=C.UTF-8 ${SBX_NODE_PATH:+"NODE_PATH=$SBX_NODE_PATH"} ${PLAYWRIGHT_BROWSERS_PATH:+"PLAYWRIGHT_BROWSERS_PATH=$PLAYWRIGHT_BROWSERS_PATH"} \
   prlimit --cpu=300 --as=${SBX_AS:-8000000000} --nproc=256 --fsize=200000000 --nofile=1024 -- timeout 300 sh -c "cd \"\$0\" && exec \"\$@\"" "${SBX_CWD:-$SCR}" "$@"
 ' sbx "$SCR" "$@"
