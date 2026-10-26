@@ -1170,8 +1170,10 @@ describe('webdav: over a real connection', () => {
         expect(res.status).toBe(201)
         expect(statSync(join(dir, 'storage', name)).size).toBe(total * MB)
       }
-      // 100 MB held in memory, even once, would show here; the buffers of a stream are a few MB
-      expect(peak() - before).toBeLessThan(40 * MB)
+      // 100 MB held in memory, even once, would show here (the peak would grow by 100 MB or more). The buffers of a
+      // stream are a few MB, but when the collector runs varies: 2-33 MB here and up to 47 MB on CI runners, so the
+      // line sits between that noise and the 100 MB it is meant to catch
+      expect(peak() - before).toBeLessThan(64 * MB)
       expect(readdirSync(join(dir, 'data', 'tmp')).filter(n => n.startsWith('dav-'))).toEqual([])
     } finally {
       child.kill()

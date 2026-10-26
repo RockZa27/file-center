@@ -238,14 +238,17 @@ describe('the launcher checks server.js against the hash recorded at install', (
   test('a rollback to a history release checks the hash too', async () => {
     const stateFile = join(config.dataDir, 'app', 'state.json')
     const had = existsSync(stateFile) ? readFileSync(stateFile, 'utf8') : null
-    const release = join(config.dataDir, 'app', 'releases', NAME)
+    const releases = join(config.dataDir, 'app', 'releases')
+    // the data folder is shared by every test file: a releases/ folder made here would show in a later file
+    // (update-source.test.ts checks that nothing was installed)
+    const hadReleases = existsSync(releases)
     try {
       setup(config.dataDir, { current: null, history: [NAME], serverHashes: { [NAME]: sha('something else') } }, 'console.log(1)')
       await expect(updater.rollbackTo(NAME)).rejects.toMatchObject({ status: 400 })
       writeFileSync(stateFile, JSON.stringify({ schema: 1, current: null, history: [NAME], pending: null, last: null, serverHashes: { [NAME]: sha('console.log(1)') } }))
       expect((await updater.rollbackTo(NAME)).version).toBe('9.9.7')
     } finally {
-      rmSync(release, { recursive: true, force: true })
+      rmSync(hadReleases ? join(releases, NAME) : releases, { recursive: true, force: true })
       if (had === null) rmSync(stateFile, { force: true }); else writeFileSync(stateFile, had)
     }
   })
