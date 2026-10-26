@@ -322,6 +322,10 @@ const ALL = ['displayname', 'resourcetype', 'getlastmodified', 'creationdate', '
  * is items x properties: 100,000 items x 50 properties stays in the tens of MB, a photo folder of 20,000 still lists)
  */
 export const PROPFIND_MAX_PROPS = 50
+/** a requested property namespace is written back for every item, so a long one multiplies: longer than this is refused */
+export const PROPFIND_MAX_NS = 256
+/** the answer is built in memory: past this many bytes it is refused whole (507), however few the properties asked for */
+export const PROPFIND_MAX_BYTES = 32 * 1024 * 1024
 const tooMany = () => xmlResponse(507, '<D:error xmlns:D="DAV:"><D:number-of-matches-within-limits/></D:error>')
 
 type Wanted = { ns: string; name: string }
@@ -360,6 +364,7 @@ async function propfind(ctx: Ctx, segs: string[], place: Place | null): Promise<
     if (doc.name !== 'propfind' || doc.ns !== DAV_NS) throw bad('files.dav-bad-xml')
     const prop = child(doc, 'prop')
     if (prop && prop.children.length > PROPFIND_MAX_PROPS) throw bad('files.dav-too-many-props', { max: PROPFIND_MAX_PROPS })
+    if (prop && prop.children.some(c => c.ns.length > PROPFIND_MAX_NS)) throw bad('files.dav-ns-too-long', { max: PROPFIND_MAX_NS })
     // the same property asked for twice is answered once: 50 copies of a long name for every item of a big folder
     // would make the answer 50 times bigger for nothing
     if (prop) { wanted = [...new Map(prop.children.map(c => [`${c.ns} ${c.name}`, { ns: c.ns, name: c.name }])).values()]; explicit = true }
@@ -406,7 +411,14 @@ async function propfind(ctx: Ctx, segs: string[], place: Place | null): Promise<
     quota: () => (quota === undefined ? (quota = quotaOf(ctx, items[0]?.space)) : quota),
     locksAt: segs => (byPath ??= lockMap(user)).get(pathKey(segs)) ?? [],
   }
-  const body = items.map(it => `<D:response><D:href>${esc(hrefOf(it.segs, it.dir))}</D:href>${propstat(it, wanted, env, namesOnly, explicit)}</D:response>`)
+  const body: string[] = []
+  let bytes = 0
+  for (const it of items) {
+    const part = `<D:response><D:href>${esc(hrefOf(it.segs, it.dir))}</D:href>${propstat(it, wanted, env, namesOnly, explicit)}</D:response>`
+    bytes += Buffer.byteLength(part)
+    if (bytes > PROPFIND_MAX_BYTES) return tooMany()
+    body.push(part)
+  }
   return xmlResponse(207, `<D:multistatus xmlns:D="DAV:">${body.join('')}</D:multistatus>`)
 }
 

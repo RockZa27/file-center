@@ -4,7 +4,7 @@
  * and counters instead of a disk scan per announce, the password lockout of a whole share link, and two ways to get
  * more out of a share link than it allows. Runs in-process on the same app as api.test.ts; every user here starts with "s132-".
  */
-import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeAll, describe, expect, setSystemTime, test } from 'bun:test'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { deflateSync } from 'node:zlib'
@@ -402,5 +402,147 @@ describe('what a share link counts', () => {
     }
     expect(await received()).toBe(1)
     expect(JSON.stringify((await owner.json('GET', '/api/notifications')).data)).toBe(notes)
+  })
+})
+
+// ───────────── audit run 2: visitors' uploads and PROPFIND ─────────────
+
+describe('visitors\' unfinished uploads (audit run 2)', () => {
+  const asVisitor = async () => { const c = new Client(); c.csrf = (await c.json('GET', '/api/session')).data.csrf; return c }
+  const from = (ip: string) => ({ 'x-forwarded-for': ip })
+  const announce = (c: Client, ip: string, size: number, name = 'v.bin') => c.json('POST', '/api/upload', { space: 'public', path: '/', name, size }, from(ip))
+  const gset = (v: { perms: string[]; limit: number; proxy: string; pending: number }) => {
+    settings.update({ guestPermissions: v.perms as any })
+    ;(config as any).guestUploadDailyBytes = v.limit
+    ;(config as any).trustProxy = v.proxy
+    ;(config as any).uploadMaxPending = v.pending
+  }
+  const saved = () => ({ perms: [...settings.get().guestPermissions], limit: config.guestUploadDailyBytes, proxy: config.trustProxy as string, pending: config.uploadMaxPending })
+
+  test('the cap on unfinished uploads counts per address for visitors; another address still announces', async () => {
+    const was = saved()
+    gset({ perms: ['read', 'download', 'upload'], limit: uploads.guestUploadUsage().used + 1024 ** 3, proxy: 'true', pending: 3 })
+    const a = await asVisitor()
+    const b = await asVisitor()
+    const ids: string[] = []
+    try {
+      for (let i = 0; i < 3; i++) {
+        const r = await announce(a, '198.51.100.7', 0, `z${i}.txt`)
+        expect(r.status).toBe(200)
+        ids.push(r.data.id)
+      }
+      const full = await announce(a, '198.51.100.7', 0, 'z3.txt')
+      expect([full.status, full.data.code]).toEqual([429, 'upload.too-many-pending'])
+      const other = await announce(b, '203.0.113.50', 1024, 'other.txt')
+      expect(other.status).toBe(200)
+      expect((await b.json('DELETE', `/api/upload/${other.data.id}`, undefined, from('203.0.113.50'))).status).toBe(200)
+      // a place comes back when one is cancelled
+      expect((await a.json('DELETE', `/api/upload/${ids.pop()}`, undefined, from('198.51.100.7'))).status).toBe(200)
+      const again = await announce(a, '198.51.100.7', 0, 'z4.txt')
+      expect(again.status).toBe(200)
+      ids.push(again.data.id)
+    } finally {
+      for (const id of ids) await a.json('DELETE', `/api/upload/${id}`, undefined, from('198.51.100.7'))
+      gset(was)
+    }
+  })
+
+  test('four addresses holding limit/4 each: rewriting a received chunk does not keep the hold; the idle limit releases it', async () => {
+    const was = saved()
+    const SIZE = 2 * config.uploadChunkSize
+    gset({ perms: ['read', 'download', 'upload'], limit: uploads.guestUploadUsage().used + 4 * SIZE, proxy: 'true', pending: 500 })
+    const chunk = new Uint8Array(config.uploadChunkSize)
+    const t0 = Date.now()
+    const held: { c: Client; ip: string; id: string }[] = []
+    try {
+      expect(uploads.GUEST_IDLE_MS).toBe(15 * 60_000)
+      for (const ip of ['10.9.0.1', '10.9.0.2', '10.9.0.3', '10.9.0.4']) {
+        const c = await asVisitor()
+        const r = await announce(c, ip, SIZE)
+        expect(r.status).toBe(200)
+        held.push({ c, ip, id: r.data.id })
+      }
+      const v = await asVisitor()
+      expect((await announce(v, '10.9.0.5', 1024)).status).toBe(429)
+      const put = (h: (typeof held)[number], i: number) => h.c.raw('PUT', `/api/upload/${h.id}/${i}`, chunk, { ...OCTET, ...from(h.ip) })
+      // real progress at +10 min, then the same chunk again at +20 and +30 min
+      setSystemTime(t0 + 10 * 60_000)
+      for (const h of held) expect((await put(h, 0)).status).toBe(200)
+      setSystemTime(t0 + 20 * 60_000)
+      for (const h of held) expect((await put(h, 0)).status).toBe(200)
+      expect((await announce(v, '10.9.0.5', 1024)).status).toBe(429)
+      setSystemTime(t0 + 30 * 60_000)
+      for (const h of held) expect((await put(h, 0)).status).toBe(200)
+      const free = await announce(v, '10.9.0.5', 1024)
+      expect(free.status).toBe(200)
+      await v.json('DELETE', `/api/upload/${free.data.id}`, undefined, from('10.9.0.5'))
+      // the dropped uploads are gone
+      expect((await held[0].c.json('PUT', `/api/upload/${held[0].id}/1`, undefined, from(held[0].ip))).status).toBe(404)
+    } finally {
+      setSystemTime()
+      for (const h of held) await h.c.json('DELETE', `/api/upload/${h.id}`, undefined, from(h.ip))
+      gset(was)
+    }
+  })
+
+  test('an upload that keeps sending new chunks is not released', async () => {
+    const was = saved()
+    gset({ perms: ['read', 'download', 'upload'], limit: uploads.guestUploadUsage().used + 1024 ** 3, proxy: 'true', pending: 500 })
+    const c = await asVisitor()
+    const ip = '10.9.1.1'
+    const t0 = Date.now()
+    let id = ''
+    try {
+      id = (await announce(c, ip, 3 * config.uploadChunkSize)).data.id
+      const chunk = new Uint8Array(config.uploadChunkSize)
+      for (let i = 0; i < 3; i++) {
+        setSystemTime(t0 + (i + 1) * 10 * 60_000)
+        expect((await c.raw('PUT', `/api/upload/${id}/${i}`, chunk, { ...OCTET, ...from(ip) })).status).toBe(200)
+        await announce(await asVisitor(), '10.9.1.2', 0).then(r => r.data?.id && c.json('DELETE', `/api/upload/${r.data.id}`, undefined, from('10.9.1.2')))
+      }
+      // all three chunks were taken 10 minutes apart: each was new progress, so the upload was never dropped
+    } finally {
+      setSystemTime()
+      if (id) await c.json('DELETE', `/api/upload/${id}`, undefined, from(ip))
+      gset(was)
+    }
+  })
+})
+
+describe('PROPFIND answer size (audit run 2)', () => {
+  const dav = (username: string, secret: string, path: string, body: string) =>
+    app.handle(new Request('http://localhost' + path, {
+      method: 'PROPFIND',
+      headers: { authorization: 'Basic ' + Buffer.from(`${username}:${secret}`).toString('base64'), depth: '1', 'content-type': 'application/xml' },
+      body,
+    })) as Promise<Response>
+  const secretOf = async (c: Client) => (await c.json('POST', '/api/me/app-passwords', { name: 'laptop', scope: 'read', password: PW })).data.secret as string
+  const distinct = (n: number, len: number) =>
+    '<propfind xmlns="DAV:"><prop>' + Array.from({ length: n }, (_, i) => `<p xmlns="urn:x:${String(i).padStart(3, '0')}${'a'.repeat(len)}"/>`).join('') + '</prop></propfind>'
+
+  test('a requested property namespace longer than 256 characters is refused with 400', async () => {
+    const u = await userWith('s132-dav1', ['read'])
+    const secret = await secretOf(u)
+    writeFileSync(home('s132-dav1', 'a.txt'), 'x')
+    expect((await dav('s132-dav1', secret, '/dav/home/', distinct(3, 240))).status).toBe(207)
+    const r = await dav('s132-dav1', secret, '/dav/home/', distinct(3, 260))
+    expect(r.status).toBe(400)
+    expect(r.headers.get('x-error-code')).toBe('files.dav-ns-too-long')
+  })
+
+  test('an answer past 32 MiB is refused whole with 507', async () => {
+    const u = await userWith('s132-dav2', ['read'])
+    const secret = await secretOf(u)
+    mkdirSync(home('s132-dav2', 'big'), { recursive: true })
+    for (let i = 0; i < 20; i++) writeFileSync(home('s132-dav2', 'big', `f${i}`), '')
+    const body = distinct(50, 230)
+    expect((await dav('s132-dav2', secret, '/dav/home/big/', body)).status).toBe(207)
+    // 50 properties x ~280 bytes x 2,700 items is well past 32 MiB
+    for (let i = 20; i < 2700; i++) writeFileSync(home('s132-dav2', 'big', `f${i}`), '')
+    const r = await dav('s132-dav2', secret, '/dav/home/big/', body)
+    expect(r.status).toBe(507)
+    expect(await r.text()).toContain('number-of-matches-within-limits')
+    // the plain listing of the same folder is small and still answers
+    expect((await dav('s132-dav2', secret, '/dav/home/big/', '')).status).toBe(207)
   })
 })

@@ -112,6 +112,11 @@ export function guestUploadUsage(): { day: string; used: number; limit: number }
 const GUEST_PENDING_SHARE = 4
 const guestPending = new Map<string, number>()
 const pendingKey = (meta: Pick<Meta, 'ip'>) => meta.ip ?? ''
+// A visitor's upload that has seen no new bytes for this long gives its share of the allowance back: holding the allowance
+// takes sending new data, not only announcing and touching the upload now and then.
+export const GUEST_IDLE_MS = 15 * 60_000
+/** who the cap on unfinished uploads counts: all visitors share the owner "guest", so they are counted per address */
+const capKey = (meta: Pick<Meta, 'owner' | 'guestDay' | 'ip'>) => meta.guestDay ? `guest|${meta.ip ?? ''}` : meta.owner
 
 function reserveGuest(size: number, ip: string): string {
   const { day, used, limit } = guestUploadUsage()
@@ -161,7 +166,7 @@ function restoreReservations() {
 // What announce needs to know (how many uploads an owner, a link or an address has in progress) is kept as counters,
 // built once from the disk in restoreReservations and changed where an upload starts or ends. Reading every meta.json
 // on every announce would let one visitor make the server do that work again and again.
-type Live = { owner: string; shareId?: string; ip?: string; size: number; at: number; idle: number }
+type Live = { owner: string; key: string; shareId?: string; ip?: string; size: number; at: number; idle: number }
 const live = new Map<string, Live>()
 const byOwner = new Map<string, number>()
 const byShare = new Map<string, { count: number; bytes: number }>()
@@ -170,8 +175,8 @@ const bump = <K>(m: Map<K, number>, k: K, by: number) => { const n = (m.get(k) ?
 
 function track(meta: Meta, at: number) {
   if (live.has(meta.id)) return
-  live.set(meta.id, { owner: meta.owner, shareId: meta.shareId, ip: meta.ip, size: meta.size, at, idle: idleLimit(meta) })
-  bump(byOwner, meta.owner, 1)
+  live.set(meta.id, { owner: meta.owner, key: capKey(meta), shareId: meta.shareId, ip: meta.ip, size: meta.size, at, idle: idleLimit(meta) })
+  bump(byOwner, capKey(meta), 1)
   if (!meta.shareId) return
   const c = byShare.get(meta.shareId) ?? { count: 0, bytes: 0 }
   byShare.set(meta.shareId, { count: c.count + 1, bytes: c.bytes + meta.size })
@@ -183,7 +188,7 @@ function untrack(id: string) {
   const l = live.get(id)
   if (!l) return
   live.delete(id)
-  bump(byOwner, l.owner, -1)
+  bump(byOwner, l.key, -1)
   if (!l.shareId) return
   const c = byShare.get(l.shareId)
   if (c && c.count > 1) byShare.set(l.shareId, { count: c.count - 1, bytes: Math.max(0, c.bytes - l.size) })
@@ -212,7 +217,8 @@ function allMetas(): Meta[] {
 }
 
 /** how long an upload may sit without a new chunk: upload-request links (strangers) get far less than the others */
-const idleLimit = (meta: Pick<Meta, 'shareId'>) => meta.shareId ? Math.min(config.uploadStaleMs, config.uploadRequestIdleMs) : config.uploadStaleMs
+const idleLimit = (meta: Pick<Meta, 'shareId' | 'guestDay'>) =>
+  meta.shareId ? Math.min(config.uploadStaleMs, config.uploadRequestIdleMs) : meta.guestDay ? Math.min(config.uploadStaleMs, GUEST_IDLE_MS) : config.uploadStaleMs
 
 /** the upload is gone (idle, or never finished): its folder, the visitors' allowance and the quota are given back */
 function dropUpload(id: string, meta: Meta | null) {
@@ -270,7 +276,8 @@ export function initUpload(args: {
   ensureSpace(paths.tmp, size)
   // announced and never finished: one owner can not fill tmp with them (idle ones go first)
   sweepIdle()
-  if (config.uploadMaxPending > 0 && (byOwner.get(args.owner) ?? 0) >= config.uploadMaxPending) throw new HttpError(429, 'upload.too-many-pending')
+  const capOf = args.guest ? `guest|${args.ip ?? ''}` : args.owner
+  if (config.uploadMaxPending > 0 && (byOwner.get(capOf) ?? 0) >= config.uploadMaxPending) throw new HttpError(429, 'upload.too-many-pending')
 
   const segments = args.relativeDir.map(validName)
   const destDir = resolveIn(args.root, [args.dir, ...segments].join('/').replace(/\/+/g, '/'))
@@ -328,9 +335,12 @@ export async function saveChunk(id: string, owner: string, index: number, data: 
   } finally {
     await fh.close()
   }
-  // the marker is written only after the bytes are in place
-  writeFileSync(join(dirOf(id), String(index)), '')
-  touch(id)
+  // the marker is written only after the bytes are in place; only a chunk not received before counts as progress, so
+  // sending the same chunk again and again does not keep an upload (and its share of the allowance) alive
+  const marker = join(dirOf(id), String(index))
+  const fresh = !existsSync(marker)
+  writeFileSync(marker, '')
+  if (fresh) touch(id)
 }
 
 // A client that lost the answer to "complete" asks again. The file has landed and the upload folder is gone by then, so
