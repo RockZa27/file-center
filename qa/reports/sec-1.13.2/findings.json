@@ -1,0 +1,689 @@
+[
+ {
+  "verdict": "confirmed",
+  "fingerprint": "backup-restore:later-same-name-account-app-passwords-shares-grants-groups-carry-over",
+  "title": "Backup restore lets a later same-name account's app passwords, share links, grants and group memberships act as the restored older account",
+  "description": "restoreBackup() swaps only users.json (plus settings and branding) and keeps sessions of users that exist and were created before the session. app-passwords.json, shares.json, grants.json and groups.json stay as they are on disk, and their records name the owner only by lowercase username. If an account was deleted and the name re-created by a different person after the backup was taken, an admin restore of that backup brings back the older account under the same name. The newer account's records then resolve to the older account. Its app-password secret authenticates over WebDAV as the restored account. Its share links serve files from the restored account's space. Its grants expose the restored account's folder when the grant path lies inside the restored home. Its group memberships grant the restored account group access. This has the same root cause as the session-store hole that keepSessionsOf closes, extended to the other identity-bound stores.",
+  "root_cause": "Identity-bound records reference accounts by username with no binding to the account instance. App passwords have only a lower-bound check (record.createdAt >= user.createdAt), which a record made by a newer account passes for an older restored account. Shares, grants and group members have no check at all. restoreBackup() does not reconcile or purge these stores. The clean-up in forgetAccount() runs only in the admin create-user and delete-user handlers, which a restore bypasses.",
+  "intended_behavior": "After a restore, every record keyed to an account must belong to that account instance. Records made by a later account of the same name must be dropped or ignored, as keepSessionsOf does for sessions. App passwords, share links, grants and group memberships must be usable only by the account that made them.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/routes/backup.ts",
+    "line": 80,
+    "scope": "POST /api/admin/backups/restore",
+    "description": "An admin (with step-up) restores an older backup that holds account X (created T1). X was deleted afterwards and a different person was given the name X (created T2 > T1)."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/backup.ts",
+    "line": 653,
+    "scope": "restoreBackup",
+    "description": "users.json is replaced by the backup's copy, so the older X is back. Only keepSessionsOf filters the sessions. app-passwords.json, shares.json, grants.json and groups.json are not touched."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/routes/admin.ts",
+    "line": 130,
+    "scope": "POST /api/admin/users (forgetAccount at line 62)",
+    "description": "forgetAccount(username) purges the stale records only when a name is created or deleted through the API. A restore brings the old account back without calling it, so the newer account's records survive."
+   },
+   {
+    "kind": "sink",
+    "file": "src/app-passwords.ts",
+    "line": 126,
+    "scope": "usable",
+    "description": "The newer account's app-password record passes the check because its createdAt is later than the restored account's createdAt. The secret now authenticates as the restored account over WebDAV. The same carry-over exists in shares.ts:152 (sharedItem), grants.ts:82 (grantTarget) and groups.ts:47 (memberOf), which resolve by username only."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/backup.ts",
+    "line": 653,
+    "description": "restoreBackup renames users.json (and settings and branding) into place and calls only keepSessionsOf. No other identity-bound store is reconciled."
+   },
+   {
+    "file": "src/app-passwords.ts",
+    "line": 126,
+    "description": "usable() applies only a lower bound on createdAt, so a record made by a newer account passes for the older restored account."
+   },
+   {
+    "file": "src/shares.ts",
+    "line": 152,
+    "description": "sharedItem() resolves the owner with findUser(s.owner), by name only, with no createdAt comparison."
+   },
+   {
+    "file": "src/grants.ts",
+    "line": 82,
+    "description": "grantTarget() resolves the owner with findUser(g.owner), by name only. The recipient is also resolved by name."
+   },
+   {
+    "file": "src/groups.ts",
+    "line": 47,
+    "description": "memberOf() matches group members by username only."
+   },
+   {
+    "file": "src/routes/admin.ts",
+    "line": 62,
+    "description": "forgetAccount() is the only place these stores are cleaned. It is called on user create (line 130) and delete (line 218), not on restore."
+   },
+   {
+    "file": "agents/v5-restorerecords/artifacts/v1.out",
+    "line": 1,
+    "description": "Independent sandbox run (v1.ts, A2 home /users/bob2, setup process then a separate check process modelling the restart). After restore, A2's app-password secret returns 207 on PROPFIND /dav/home/ and 200 on GET /dav/home/shared.txt with the restored A1's content (A1-FILE). A2's share token downloads A1-FILE. The restored A1 is listed in team-x with edit. Carol's grant is not exposed, because the paths differ."
+   },
+   {
+    "file": "agents/v5-restorerecords/artifacts/v2.out",
+    "line": 1,
+    "description": "Independent sandbox run (v1.ts same, A2 uses the default home /users/bob). A2's app password works over WebDAV, and A2's share link downloads. Carol's grants/to-me lists owner bob and listing the grant space returns a1-pub.txt and a2-pub.txt. The restored A1 is in team-x with edit."
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "authorization_role",
+    "description": "An admin must restore a backup taken before the account was deleted and the name re-created. The restore needs admin plus step-up."
+   },
+   {
+    "kind": "data_state",
+    "description": "Account X existed in the backup. X was later deleted or dropped and a different person was given the name X, with app passwords, share links, grants or group memberships made after the older account's createdAt."
+   },
+   {
+    "kind": "data_state",
+    "description": "Grants carry over only when the grant's path lies inside the restored account's home, which the default /users/<name> makes likely. App passwords, shares and group memberships carry over regardless of home."
+   },
+   {
+    "kind": "system_configuration",
+    "description": "WebDAV must be enabled for the app-password path. The share, grant and group paths do not depend on it."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "The holder of the later same-name account, or a holder of a share link or grant that account made, after an admin restore of an older backup.",
+   "payloads": [
+    "PROPFIND /dav/home/ and GET /dav/home/shared.txt with Authorization: Basic base64('bob:<A2 app-password secret>')",
+    "GET /api/s/<A2 share token>/download",
+    "GET /api/grants/to-me and GET /api/list?space=grant:<id>&path=/ as carol",
+    "GET /api/groups/mine as the restored bob"
+   ],
+   "instructions": [
+    "Run `SBX_CWD=/home/user/fc-audit2 scripts/qa/sandbox.sh <scratch> bun <scratch>/v1.ts setup diff`, then `... bun <scratch>/v1.ts check diff`. Each phase is a separate process, so check models the restart after a restore.",
+    "setup: create bob A1 with a file and take a backup. Delete bob. Create bob A2 with a different password and home. As A2 make an app password, a share link, a grant to carol and a group membership. Then call restoreBackup(oldBackup).",
+    "check: start the app again on the same directories and exercise WebDAV with A2's secret, A2's share token, carol's grants and the restored A1's group list.",
+    "Repeat with `same` in place of `diff` for the default-home case, where the grant also carries over."
+   ],
+   "observed_result": "After restore and restart, A2's app-password secret authenticates as the restored A1 (207 on PROPFIND, 200 on GET /dav/home/shared.txt returning A1-FILE in the different-home run). A2's share token serves A1's file. The restored A1 holds A2's team-x membership with edit. In the same-home run carol's grant from A2 lists the restored A1's /pub folder."
+  },
+  "remediation": {
+   "strategy": "Reconcile the identity-bound stores during restore, in the same step as keepSessionsOf. Drop app passwords, shares, grants and group memberships whose owner or user was created after the restored account's createdAt, and drop records for usernames absent from the restored users.json. Alternatively, give each user a stable account id and store it on each record, then compare it on use. A cheaper hardening is to add the same createdAt bound that usable() applies to sharedItem, grantTarget and memberOf.",
+   "code_changes": [
+    {
+     "file_name": "src/backup.ts",
+     "fixed_code": "// in restoreBackup, right after keepSessionsOf(restoredUsers): call a new reconcileIdentityStores(restoredUsers) that, for each of app-passwords, shares, grants and groups, removes entries whose username is absent from restoredUsers or whose createdAt is later than the restored account's createdAt. Rewrite the stores on disk before the restart, as keepSessionsOf does."
+    }
+   ]
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "It needs an admin-initiated restore of a backup that predates a delete-and-recreate of the same username. Account churn and disaster recovery make it plausible but uncommon."
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "It crosses account boundaries. The newer account's holder, and holders of its links and grants, reach the restored account's files. The restored account also inherits the newer account's group rights. Access is bounded by the app password's scope and the restored account's permissions."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "I reproduced it independently in the sandbox with a restart between setup and check, for the different-home and same-home cases. The source trace is complete, and no other layer re-checks the account instance."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "guest-upload-allowance-reserved-at-announce",
+  "title": "Visitors' daily upload allowance is still lockable: four addresses hold all of it on announced size alone",
+  "description": "Run 1 reported that one visitor could lock the visitors' daily upload allowance. Version 1.13.2 added a per-address pending share of one quarter of the allowance, but the allowance is still charged for the announced size when the upload is announced. A chunk write renews the idle clock. Four addresses (or a few IPv6 addresses) can therefore reserve the whole allowance and keep it. Every other visitor then gets 429 upload.guest-quota until the day rolls over.",
+  "root_cause": "reserveGuest charges the shared daily allowance for the announced size, not for received bytes. The per-address cap (GUEST_PENDING_SHARE = 4, uploads.ts:112) is a fixed fraction of the allowance, so four addresses reach 100%. saveChunk calls touch() after any chunk write, which renews the idle clock (15 minutes for links, 3 hours otherwise) and so keeps the reservation alive.",
+  "intended_behavior": "One visitor, or a small number of addresses, should not be able to take the visitors' shared allowance from everyone else by announcing uploads without sending the data.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/routes/shares.ts",
+    "line": 335,
+    "scope": "POST /api/s/:token/upload",
+    "description": "A link visitor announces a file on an upload-request link. The bytes count against the visitors' allowance when the link is in the public space or the owner has no quota. POST /api/upload with the guest upload right takes the same path."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/uploads.ts",
+    "line": 285,
+    "scope": "initUpload",
+    "description": "reserveGuest(size, ip) is called with the declared size."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/uploads.ts",
+    "line": 116,
+    "scope": "reserveGuest",
+    "description": "Checks used+size <= limit and per-address pending+size <= floor(limit/4), then adds size to the day's bytes."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/uploads.ts",
+    "line": 333,
+    "scope": "saveChunk",
+    "description": "One chunk write calls touch(), which renews the idle clock, so the reservation stays."
+   },
+   {
+    "kind": "sink",
+    "file": "src/uploads.ts",
+    "line": 116,
+    "scope": "reserveGuest",
+    "description": "The next visitor from any other address gets 429 upload.guest-quota."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "agents/v3-guestallow/artifacts/v1.out",
+    "line": 2,
+    "description": "The verifier's own harness run against the real handlers (allowance scaled to 100 MiB). Four distinct addresses each announce 26214400 bytes and get 200 (lines 2-5)."
+   },
+   {
+    "file": "agents/v3-guestallow/artifacts/v1.out",
+    "line": 6,
+    "description": "Before any chunk write, a fifth address announcing 1 KiB is already refused with 429, because the allowance is fully reserved by announces alone."
+   },
+   {
+    "file": "agents/v3-guestallow/artifacts/v1.out",
+    "line": 11,
+    "description": "A 1 MiB last-chunk write on each of the four uploads returns 200 (lines 7-10), and the fifth address is still refused with 429 upload.guest-quota afterwards."
+   },
+   {
+    "file": "agents/v3-guestallow/artifacts/v1.ts",
+    "line": 1,
+    "description": "The script that produced v1.out."
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "system_configuration",
+    "description": "An upload surface that charges the visitors' allowance must exist. That means an upload-request link in the public space, or for an owner without a quota, or the guest upload right enabled by an admin (guestPermissions includes upload)."
+   },
+   {
+    "kind": "network_routing",
+    "description": "The attacker needs four distinct client addresses as seen by the app. IPv6 /64 rotation makes that cheap. The harness modeled them with TRUST_PROXY=true and X-Forwarded-For."
+   },
+   {
+    "kind": "environmental_dependency",
+    "description": "The harness scaled GUEST_UPLOAD_DAILY_BYTES to 100 MiB to stay under the sandbox file limit. The logic is the same at the default 1 GiB, where each address announces 256 MiB. Writing a single small chunk per upload before the idle limit is enough to keep it."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Anonymous visitor with a few client addresses and one upload-request link or a public guest-upload right.",
+   "payloads": [
+    "announce size = floor(allowance/4) from each of 4 addresses",
+    "PUT chunk <last> (1 MiB) per upload, repeated before the idle limit (15 min for links, 3 h otherwise)"
+   ],
+   "instructions": [
+    "Set GUEST_UPLOAD_DAILY_BYTES=104857600 in a local instance and enable the guest upload right.",
+    "From four addresses announce 26214400-byte uploads.",
+    "Write the last chunk of each upload.",
+    "From a fifth address announce 1 KiB."
+   ],
+   "observed_result": "All four announces returned 200. The fifth address was refused with 429 upload.guest-quota both before and after the keepalive chunk writes, and the four chunk writes returned 200. The verifier reproduced this independently with its own script."
+  },
+  "remediation": {
+   "strategy": "Charge the allowance for bytes actually received, or a small deposit at announce. Release a reservation when no new chunk bytes arrive for a short time. Renew the idle clock only for chunks not received before. Optionally cap the total outstanding reservations of all visitors to half of the allowance.",
+   "code_changes": [
+    {
+     "file_name": "src/uploads.ts",
+     "fixed_code": "// reserveGuest: reserve at most a fixed deposit (e.g. min(size, 8 MiB)) per upload at announce and charge the rest as chunks arrive;\n// saveChunk: call touch() only when the chunk marker file did not exist before this write."
+    }
+   ]
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "It needs an upload surface that charges the visitors' allowance (an admin opt-in or a public/no-quota upload link) and four distinct addresses. That is cheap with IPv6 but not available to every attacker. Keeping the lock needs periodic chunk writes."
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "Visitor uploads through such surfaces are denied until the day rolls over. Other users, quota-holding owners and stored data are unaffected, and recovery is automatic."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "The reserve-at-announce path (uploads.ts:116-124, 285) and the touch-on-write path (uploads.ts:242, 333) are in source. The verifier reproduced the result independently with its own script in the sandbox."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "scripts/qa/sandbox.sh:dev-rbind-not-readonly",
+  "title": "Audit sandbox leaves /dev writable, so sandboxed target code can write persistent files to the host's /dev",
+  "description": "scripts/qa/sandbox.sh (target copy, commit 608365e) remounts each host directory in its list read-only, but /dev is rbind-mounted separately on line 21 and never remounted. Target code in the sandbox can therefore create files in the host's devtmpfs. This contradicts the stated boundary of a read-only filesystem with scratch-only writes. The file survives after the sandbox exits and sits outside the scratch directory, so the promotion allowlist never sees it. I reproduced this independently. A 1-byte write to /dev/v6-probe from inside the sandbox succeeded, while writes to /etc, /usr, /tmp and the target repo all failed with EROFS. After the sandbox exited, the host showed a root-owned 1-byte file /dev/v6-probe containing 'x'.",
+  "root_cause": "Line 21 runs `mount --rbind /dev $R/dev` without the `mount -o remount,bind,ro` step that line 18 applies to every other host directory. The sandbox's own /proc/self/mountinfo lists `/dev rw,relatime - devtmpfs devtmpfs rw`, which is the host's devtmpfs.",
+  "intended_behavior": "Everything except the agent's own scratch directory should be read-only to sandboxed processes. Only device nodes such as null, zero and urandom need to be usable.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "scripts/qa/sandbox.sh",
+    "line": 25,
+    "scope": "exec chroot $R env -i ... prlimit ... \"$@\"",
+    "description": "Target-controlled commands (bun, tests, the app) run here, inside a chroot over the mount tree built above."
+   },
+   {
+    "kind": "propagation",
+    "file": "scripts/qa/sandbox.sh",
+    "line": 18,
+    "scope": "for d in /bin ... /srv loop: mount --rbind \"$d\" \"$R$d\"; mount -o remount,bind,ro \"$R$d\"",
+    "description": "Each listed host directory is rbind-mounted and then remounted read-only. /dev is not in this list."
+   },
+   {
+    "kind": "sink",
+    "file": "scripts/qa/sandbox.sh",
+    "line": 21,
+    "scope": "mount --rbind /dev $R/dev",
+    "description": "The host's devtmpfs is exposed read-write. A create in /dev from the sandboxed process lands on the host filesystem."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "agents/v6-devrbind/artifacts/v1.out",
+    "line": 1,
+    "description": "The script v1.ts ran through the target copy of sandbox.sh and wrote its own output. It reports a 1-byte write to /dev/v6-probe as OK, while writes to /etc, /usr, /tmp and /home/user/fc-audit2 all fail with EROFS. The sandbox's mountinfo lists `/dev rw,relatime - devtmpfs devtmpfs rw`. After the sandbox exited, `ls -la /dev/v6-probe` on the host showed a root-owned 1-byte file containing 'x'."
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "system_configuration",
+    "description": "The harness is launched by a user who can write to the host's /dev. Here it ran as real root. As a non-root user the user-namespace-mapped uid would probably be denied."
+   },
+   {
+    "kind": "user_interaction",
+    "description": "The attacker is a dependency or target code that the audit runs inside the sandbox, such as a malicious package or fixture."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Target-controlled code running under scripts/qa/sandbox.sh during an audit.",
+   "payloads": [
+    "writeFileSync('/dev/<name>', data)"
+   ],
+   "instructions": [
+    "Run `SBX_CWD=<target> <target>/scripts/qa/sandbox.sh <scratch> bun <script>`.",
+    "In the script, create a file under /dev.",
+    "After the sandbox exits, list /dev from the host."
+   ],
+   "observed_result": "The 1-byte write to /dev/v6-probe succeeded inside the sandbox and the file remained on the host after the sandbox exited, as a root-owned regular file. Writes to /etc, /usr, /tmp and the target repo failed with EROFS. I did not test file sizes beyond 1 byte, so how large a /dev file can grow under the prlimit --fsize cap is not established. I did not attempt raw block device access."
+  },
+  "remediation": {
+   "strategy": "Remount the /dev bind read-only after the rbind, as is already done for the other host directories, and add nosuid and noexec. Device nodes such as /dev/null stay usable. The sandbox already mounts its own tmpfs on /dev/shm, so /dev/shm stays writable.",
+   "code_changes": [
+    {
+     "file_name": "scripts/qa/sandbox.sh",
+     "fixed_code": "mount --rbind /dev $R/dev; mount -o remount,bind,ro,nosuid,noexec $R/dev; mount --rbind /proc $R/proc"
+    }
+   ]
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "It needs target code to be run in the sandbox by a harness running as a user that can write to /dev, and a malicious target to exploit it deliberately."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "It lets sandboxed code leave files on the host outside the declared scratch-only write boundary. The other hunter's observation that raw block device opens were denied was not re-tested here. No network egress or host code execution was shown."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "I reproduced the write from inside the sandbox using the target copy of the script. I also saw the file on the host after exit, and the mountinfo shows /dev mounted rw."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "session-store:restore-keeps-sessions-of-later-same-name-account",
+  "title": "Backup restore keeps sessions of a later, different same-name account, which then authenticate as the restored account",
+  "description": "The 1.13.1 fix keepSessionsOf() in src/backup.ts keeps a session when its username exists in the restored users.json and `session.created >= restoredUser.createdAt`. That drops sessions that predate the restored account. It keeps a session issued to a later account that reused the name, because that session is newer than the restored account's createdAt. If an admin deletes a user, creates a different person under the same name, and then restores a backup that contains the original account, the second person's session cookie becomes a valid session for the restored original account. The second person's own password stops working and the first person's old password works again. The same one-directional createdAt test protects app passwords (src/app-passwords.ts usable()). Shares, grants and group memberships have no binding at all and are not reconciled by restore, but those paths were not tested here.",
+  "root_cause": "Sessions name their account by username only, and restore decides whether to keep a session by comparing session.created with the restored account's createdAt. That comparison cannot tell an earlier account from a later one with the same name. There is no stable account id or credential epoch in the session. Restore does not purge sessions of an account whose users.json record it replaces.",
+  "intended_behavior": "After a restore, only sessions issued to the very account record that the restore reinstates should remain valid. Sessions of any account whose identity changed (replaced, or deleted and re-created) should be dropped.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/routes/backup.ts",
+    "line": 73,
+    "scope": "POST /api/admin/backups/restore",
+    "description": "An admin, after the confirmPassword step-up, restores a named backup by calling restoreBackup()."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/backup.ts",
+    "line": 652,
+    "scope": "restoreBackup",
+    "description": "users.json from the backup replaces paths.users. The restored createdAt values come from the backup."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/backup.ts",
+    "line": 626,
+    "scope": "keepSessionsOf",
+    "description": "A session is kept when its username exists in the backup and `session.created >= restored createdAt`. A session of a later same-name account passes this test."
+   },
+   {
+    "kind": "sink",
+    "file": "src/context.ts",
+    "line": 111,
+    "scope": "global derive (getSession then findUser)",
+    "description": "After the restart the kept session is resolved by username through findUser(session.username), so it authorizes as the restored account."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/backup.ts",
+    "line": 626,
+    "description": "The only retention test is the one-directional timestamp comparison. There is no identity binding and no check that the session belongs to the restored record."
+   },
+   {
+    "file": "src/app-passwords.ts",
+    "line": 126,
+    "description": "usable() for app passwords has the same one-directional createdAt >= user.createdAt test, so the same-name root cause applies there. Not exercised locally."
+   },
+   {
+    "file": "src/routes/admin.ts",
+    "line": 218,
+    "description": "The delete handler runs forgetAccount() at deletion time, so the later same-name account's sessions and records are created after the purge. Nothing re-checks them on restore."
+   },
+   {
+    "file": "agents/v1-restoresess/artifacts/v1.out",
+    "line": 9,
+    "description": "Independent run in the sandbox, fresh process after restoreBackup(): the cookie issued to the later bob#2 resolved to user bob with createdAt 2026-10-26T00:56:56.569Z, the restored bob#1 record's createdAt. Line 7 shows bob#2's own createdAt was later (…56.775Z)."
+   },
+   {
+    "file": "agents/v1-restoresess/artifacts/v1.out",
+    "line": 11,
+    "description": "Original bob#1 password login returns 200 after the restore, while line 12 shows the bob#2 password login returns 401. The restored record is bob#1's, and the bob#2 session now acts as it."
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "authorization_role",
+    "description": "An admin must restore the backup, and the restore needs step-up (confirmPassword). The affected user cannot trigger it."
+   },
+   {
+    "kind": "data_state",
+    "description": "The account was deleted and re-created under the same name for a different person after the backup was taken. The later account's session must still be live (not expired) at restore time."
+   },
+   {
+    "kind": "authentication_level",
+    "description": "The holder of the later same-name account must hold an authenticated session for that account before the restore."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "The second holder of a re-used username. They are a legitimate user who signed in after the original account was deleted and the name was reused.",
+   "payloads": [
+    "POST /api/admin/users {username:'bob', ...} (original account)",
+    "POST /api/admin/backups, then DELETE /api/admin/users/bob, then POST /api/admin/users {username:'bob', ...} (different person), then that person POSTs /api/login",
+    "POST /api/admin/backups/restore {name, password}"
+   ],
+   "instructions": [
+    "Create bob#1 and take a backup.",
+    "Delete bob, create bob#2 with a different password, and log in as bob#2 to get a session cookie.",
+    "Restore the backup. The harness calls restoreBackup() directly because the route needs a supervised process.",
+    "Start a new process on the same data dir and send the bob#2 session cookie to GET /api/session."
+   ],
+   "observed_result": "In a fresh process the bob#2 cookie returned 200 with user bob and createdAt equal to the restored bob#1 record's createdAt. The bob#1 password logged in again (200) and the bob#2 password was rejected (401). The bob#2 session therefore acts as the restored bob#1 account."
+  },
+  "remediation": {
+   "strategy": "Give each account a stable random id at creation and store it in the session. On restore, drop any session whose id does not match the restored user's id. If a backup lacks ids, drop every non-admin session during restore, or all sessions except the acting admin's. Apply the same id check to app passwords, and purge or id-bind shares, grants and group memberships on restore.",
+   "code_changes": [
+    {
+     "file_name": "src/backup.ts",
+     "fixed_code": "// in keepSessionsOf: keep only sessions whose accountId matches the restored user's id; without ids, keep only the acting admin's session\nconst kept = Object.fromEntries(Object.entries(all).filter(([, s]) => s.username && idOf.get(s.username.toLowerCase()) === s.accountId))"
+    }
+   ]
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "It needs an admin to delete and re-create a name for a different person, then restore a backup from before the delete while the later session is still live. The restore is admin-only and needs step-up."
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "A user keeps working as an account that now belongs to another person, with that account's role, files and permissions, until the session expires or is revoked. The effect is limited to a username that was reused across a restore."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "Reproduced independently in the sandbox with a fresh process: the later account's cookie resolved to the restored account. The source shows keepSessionsOf is the only gate and context.ts resolves sessions by username only."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "upload-pending-cap-shared-guest-owner",
+  "title": "One anonymous visitor can fill the shared 'guest' pending-upload cap and block every other guest upload",
+  "description": "Anonymous visitors with the upload right in the public space all use the same owner name 'guest'. The 1.13.2 pending cap (UPLOAD_MAX_PENDING, default 500) counts announced-and-unfinished uploads per owner. A single address can announce 500 zero-byte uploads, which cost nothing against the daily byte allowance or the per-address byte share. Every other visitor is then refused with upload.too-many-pending. A write to chunk 0 with an empty body renews an upload's idle clock, so the block can be kept up. The verifier reproduced this independently with the real app handler in the sandbox, including a control: cancelling one of the attacker's uploads let the other address announce again.",
+  "root_cause": "The pending-count dimension (owner) is the same string 'guest' for every anonymous principal, and no per-address or per-visitor sub-limit applies to the count. Only announced bytes are limited per address, and zero-byte announces avoid that limit.",
+  "intended_behavior": "The pending cap should bound each anonymous principal separately (per address or per visitor). One visitor should not be able to use up the budget of the other visitors, as the cap already behaves for signed-in users and link visitors.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/routes/upload.ts",
+    "line": 19,
+    "scope": "POST /api/upload",
+    "description": "An anonymous caller with the upload right in public announces a file. initUpload is called with owner set to the shared string 'guest' (line 22) and guest set to true (line 23)."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/uploads.ts",
+    "line": 285,
+    "scope": "initUpload",
+    "description": "reserveGuest(size 0, ip) passes because used+0 <= limit and pending+0 <= limit/4. The byte budgets never stop zero-byte announces."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/uploads.ts",
+    "line": 333,
+    "scope": "saveChunk",
+    "description": "An empty chunk write for index 0 (expected size 0) calls touch(), which renews the idle clock, so sweepIdle does not free the entry."
+   },
+   {
+    "kind": "sink",
+    "file": "src/uploads.ts",
+    "line": 273,
+    "scope": "initUpload",
+    "description": "The check byOwner.get(args.owner) >= uploadMaxPending throws 429 upload.too-many-pending. The counter is keyed by the shared owner 'guest', so every other anonymous announce hits the same 429 while the 500 entries stay live."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "agents/v2-guestcap/artifacts/v1.out",
+    "line": 4,
+    "description": "Address 198.51.100.7: 500 zero-byte announces accepted, the 501st refused with upload.too-many-pending."
+   },
+   {
+    "file": "agents/v2-guestcap/artifacts/v1.out",
+    "line": 5,
+    "description": "Unrelated address 203.0.113.50 announcing 1 KiB is refused with upload.too-many-pending, although the same address was accepted before the attack (line 3)."
+   },
+   {
+    "file": "agents/v2-guestcap/artifacts/v1.out",
+    "line": 6,
+    "description": "The attacker's empty chunk 0 write returned 200, so the idle clock is renewed."
+   },
+   {
+    "file": "agents/v2-guestcap/artifacts/v1.out",
+    "line": 7,
+    "description": "Control: after the attacker cancels one upload, the other address announces successfully, so the shared pending cap is the cause of the block."
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "system_configuration",
+    "description": "The admin has given the guest the upload right in the public space (guestPermissions includes upload) and public access is enabled. This is not the default."
+   },
+   {
+    "kind": "authentication_level",
+    "description": "None. The caller is anonymous and needs one client address."
+   },
+   {
+    "kind": "network_routing",
+    "description": "Addresses come from the socket, or from a trusted proxy when TRUST_PROXY is set. The check used X-Forwarded-For with TRUST_PROXY=true to model distinct peers. The attack itself needs only one address."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Anonymous visitor to a File Center whose admin allows guest uploads in the public space.",
+   "payloads": [
+    "POST /api/upload {\"space\":\"public\",\"path\":\"/\",\"name\":\"x<n>.txt\",\"size\":0} repeated 500 times",
+    "PUT /api/upload/<id>/0 with an empty body, repeated before the idle limit (3 h)"
+   ],
+   "instructions": [
+    "Enable guest upload in a local test instance (admin settings, guestPermissions with upload).",
+    "As an anonymous client, announce 500 uploads of size 0.",
+    "As a different anonymous client, announce any upload.",
+    "Optionally send an empty chunk 0 for an id to renew its idle time."
+   ],
+   "observed_result": "The 501st announce returned 429 upload.too-many-pending. The announce from a second address returned the same 429 after being accepted before the attack. The empty chunk write returned 200. After one of the attacker's uploads was cancelled, the second address's announce returned 200."
+  },
+  "remediation": {
+   "strategy": "Key the pending count by address for anonymous callers, for example by counting guest uploads under a per-address key or using owner `guest:<ip>`. Alternatively count a zero-byte announce against a per-address budget. Add a regression test where one address fills its share and a second address still announces.",
+   "code_changes": [
+    {
+     "file_name": "src/uploads.ts",
+     "fixed_code": "// in initUpload: for args.guest, count pending per address, not per shared 'guest' owner\nconst capKey = args.guest ? `guest|${args.ip ?? ''}` : args.owner\nif (config.uploadMaxPending > 0 && (byOwner.get(capKey) ?? 0) >= config.uploadMaxPending) throw new HttpError(429, 'upload.too-many-pending')\n// and use capKey in track()/untrack() for the byOwner counter"
+    }
+   ]
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs the admin to have enabled guest upload, which is off by default, and then a few hundred cheap requests from one address."
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "Denies the public upload feature to all other visitors for as long as the attacker renews the uploads. No data is exposed and signed-in users' uploads are unaffected."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "Reproduced independently with the real app handler in the sandbox, with a before-attack and a slot-freed control. The shared owner string and the cap check are in source."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "webdav:propfind-duplicate-property-response-amplification",
+  "title": "WebDAV PROPFIND answer size is not bounded by request size: 50 distinct long-namespace properties multiply every Depth:1 item by about 51 KB",
+  "description": "The 1.13.1 fix de-duplicates repeated (namespace, name) pairs. Fifty properties that differ only in a ~1 KB namespace URI all survive it. Each unknown property is echoed in a 404 propstat with its full namespace for every listed item. A 51 KB request therefore yields about 51 KB of XML per directory entry. The multistatus is built as one string per item, joined and returned in memory. The only cap is the entry count (WEBDAV_MAX_ITEMS, default 100000), so the answer grows with item count times request-controlled text. The verifier reproduced the linear growth locally, using a read-scope app password.",
+  "root_cause": "propfind() caps the number of requested properties (50) and the entry count, but not the total size of the multistatus. The de-dup keys on namespace plus name, so it does not limit the attacker-chosen namespace text that propstat() writes back for each item. There is no aggregate output byte budget and no streaming.",
+  "intended_behavior": "A PROPFIND answer should stay within a small multiple of the request size per item, or be refused with 507 once it passes a total byte budget. One app-password client should not be able to make the shared server build a multi-gigabyte set of strings.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/webdav.ts",
+    "line": 355,
+    "scope": "propfind()",
+    "description": "The PROPFIND body (up to 64 KB) is read and parsed. It may name up to 50 properties, each with its own xmlns attribute (cap check at line 362)."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/webdav.ts",
+    "line": 365,
+    "scope": "propfind()",
+    "description": "The de-dup key is `${ns} ${name}`, so 50 properties with distinct 1 KB namespaces stay as 50 wanted properties."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/webdav.ts",
+    "line": 397,
+    "scope": "propfind()",
+    "description": "Depth 1 lists every entry of the folder. The only bound is config.davMaxItems (default 100000), which caps item count, not bytes."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/webdav.ts",
+    "line": 340,
+    "scope": "propstat()",
+    "description": "Each unknown property is written back as `<X:name xmlns:X=\"{ns}\"/>` for every item, so the request-controlled namespace is repeated per item."
+   },
+   {
+    "kind": "sink",
+    "file": "src/webdav.ts",
+    "line": 409,
+    "scope": "propfind()",
+    "description": "One string per item is built into an array (line 409), then joined into a single in-memory 207 body (line 410) with no total size check."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/webdav.ts",
+    "line": 324,
+    "description": "PROPFIND_MAX_PROPS = 50 caps only the property count. The comment above it assumes the answer is items x properties of small names."
+   },
+   {
+    "file": "src/webdav-xml.ts",
+    "line": 9,
+    "description": "The 64 KB body cap allows about 1 KB of namespace text for each of 50 properties."
+   },
+   {
+    "file": "src/config.ts",
+    "line": 98,
+    "description": "davMaxItems defaults to 100000, the only cardinality bound on a Depth:1 answer."
+   },
+   {
+    "file": "agents/v4-propfind/artifacts/v1.out",
+    "line": 1,
+    "description": "Independent run in the sandbox with a read-scope app password. A 51,147-byte request gave 1.34 MB at 25 items, 5.20 MB at 100 and 15.48 MB at 300, about 51.4 KB per item and 26x to 303x the request size. The de-duplicated 50x getetag request on the same folders gave 4.5 KB to 52 KB. RSS rose from 93 MB to 155 MB at 300 items."
+   },
+   {
+    "file": "agents/v4-propfind/artifacts/v1.ts",
+    "line": 1,
+    "description": "The script that produced v1.out. It uses the in-process app, creates a dummy user and a read-scope app password, and measures only up to 300 items."
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "authentication_level",
+    "description": "A WebDAV app password for any account. A read-scope password is enough, since PROPFIND needs only read."
+   },
+   {
+    "kind": "system_configuration",
+    "description": "WebDAV is enabled and WEBDAV_MAX_ITEMS is at its default (100000) or larger."
+   },
+   {
+    "kind": "data_state",
+    "description": "The attacker's own folder holds many entries. Empty files are enough. Answer size grows linearly with the count, and a folder just under the 100000-entry limit is the worst case."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "A normal user with a WebDAV app password (read scope is enough) and a folder of many small or empty files in their own home.",
+   "payloads": [
+    "PROPFIND /dav/home/<folder>/ with header Depth: 1 and body <propfind xmlns=\"DAV:\"><prop> followed by 50 elements <p xmlns=\"urn:x:NNN{1000 x 'a'}\"/> with NNN = 000 to 049, then </prop></propfind> (51,147 bytes in total)"
+   ],
+   "instructions": [
+    "Create a folder with N empty files in the account's home.",
+    "Send the PROPFIND with Depth: 1 and the body above, using Basic auth with an app password.",
+    "Compare the response size against the de-duplicated 50x <getetag/> request on the same folder."
+   ],
+   "observed_result": "Verifier run with a read-scope app password: 25, 100 and 300 files gave answers of 1.34 MB, 5.20 MB and 15.48 MB, about 51.4 KB per item. The de-duplicated request gave 4.5 KB to 52 KB. Process RSS rose from 93 MB to 155 MB at 300 items, and the 300-item answer took 47 ms. Nothing larger was run. The behaviour at the 100000-item cap is extrapolated. Per-item strings alone would reach several GB there. The final join may fail earlier on the engine's maximum string length, but the memory for the per-item strings is already allocated by then."
+  },
+  "remediation": {
+   "strategy": "Bound the answer, not just the request. Track the running byte total while building the multistatus and return the existing 507 number-of-matches-within-limits error once it passes a cap (for example 32 MB). Alternatively reject or truncate namespace URIs longer than about 100 characters before they are echoed back, or stream the response in chunks instead of joining one string."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "medium",
+    "reason": "It needs an authenticated app password (read scope is enough) and a folder with many entries. Empty files are cheap to create, and a single request triggers the amplification."
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "One request makes the shared single-process server build a response whose size is item count times about 51 KB. That risks memory pressure or an out-of-memory crash and stalls other users. Growth was measured only up to 300 items, so the large end is extrapolated. The container and supervisor memory limits are outside the repository."
+   },
+   "overall_severity": "medium"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "The amplification and its linear growth were reproduced independently with the real app and a read-scope password. The out-of-memory threshold depends on deployment memory limits and on how many entries an attacker can create. Neither was stressed."
+  }
+ }
+]
