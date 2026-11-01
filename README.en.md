@@ -34,6 +34,8 @@ designed to work and look much like the File Center built on FileGator, but it u
 - **Thumbnails, gallery and zip viewer:** pictures, PDF and video previews, and a look inside a zip without extracting it.
 - **Notifications:** a bell in the web app, plus e-mail and LINE.
   Admins get system alerts on Discord, Slack, Telegram or any webhook.
+- **Storage insight:** see what takes space (largest files, size by file type) and find files with identical content; move copies to the trash. Admins can look at the whole system, managers at the users they manage (read only).
+- **Audit log forwarding:** every activity entry is also sent to syslog (RFC 5424 over UDP/TCP) and/or a webhook, in the background; a destination that is down never affects use.
 - **Your own trash:** restore a deleted file or press "Undo". Admins also have a system-wide trash.
 - **Scheduled backups:** daily, weekly or every N hours, with a compression level, a number of copies to keep,
   an option to include the uploaded files, and a free-disk-space check first.

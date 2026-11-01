@@ -6,7 +6,8 @@
 import { allUsers } from './auth'
 import { config } from './config'
 import type { MessageCode } from './messages'
-import { unreadableSecrets } from './policy'
+import { forwardFailing } from './audit-forward'
+import { auditForwardValues, unreadableSecrets } from './policy'
 
 export type ConfigWarning = { code: MessageCode; severity: 'warning' | 'critical' }
 
@@ -16,6 +17,16 @@ export function envWarnings(): ConfigWarning[] {
   if (config.updateAllowUnsigned) out.push({ code: 'update.allow-unsigned', severity: 'critical' })
   if (!config.secureCookie && /^https:/i.test(config.publicUrl)) out.push({ code: 'admin.config-insecure-cookie', severity: 'warning' })
   if (config.adminPassword && allUsers().some(u => u.role === 'admin')) out.push({ code: 'admin.config-admin-password-env', severity: 'warning' })
+  out.push(...auditForwardWarnings())
+  return out
+}
+
+/** audit forwarding: a plain-text link to a host that is not this machine, and a destination that has been failing */
+function auditForwardWarnings(): ConfigWarning[] {
+  const out: ConfigWarning[] = []
+  const v = auditForwardValues()
+  if (v.syslogHost && !/^(127\.0\.0\.1|localhost|\[?::1\]?)$/i.test(v.syslogHost)) out.push({ code: 'admin.config-audit-syslog-plain', severity: 'warning' })
+  if ((v.syslogHost || v.webhookUrl) && forwardFailing()) out.push({ code: 'admin.config-audit-forward-failing', severity: 'warning' })
   return out
 }
 

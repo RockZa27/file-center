@@ -18,6 +18,7 @@ import { recordRecent, moveState } from '../favorites'
 import { exceeded, holdNow, markStale, markStaleBetween, markStaleFor, ownerOfPath, quotaUserOf, ready, roomLeft, usage } from '../quota'
 import { indexTouched, parseFilters, searchEntries } from '../search-index'
 import { moveToTrash } from '../trash'
+import { forgetInsight } from '../insight'
 import { moveVersions, reserveVersion } from '../versions'
 import { collectZipItems, unzipTo, zipStream } from '../zip'
 
@@ -288,7 +289,8 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
       }
     }
     // the trash is outside the home: the space is free again. An admin works in every home.
-    if (done) markStaleFor(a, user)
+    // a cached storage scan may list what just left; the next scan must not be refused as "recent"
+    if (done) { markStaleFor(a, user); forgetInsight() }
     return body.withTrash ? { done, failed, trashed } : { done, failed }
   }, { body: t.Object({ space: t.String(), items: itemList, withTrash: t.Optional(t.Boolean()) }) })
 

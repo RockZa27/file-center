@@ -15,6 +15,7 @@ export const router = createRouter({
       children: [
         { path: 'files', name: 'files', component: () => import('./views/FilesView.vue') },
         { path: 'favorites', name: 'favorites', component: () => import('./views/FavoritesView.vue') },
+        { path: 'storage', name: 'insight', component: () => import('./views/InsightView.vue') },
         { path: 'trash', name: 'my-trash', component: () => import('./views/MyTrashView.vue') },
         // the list of folders other people share with the user; with an id, the folder itself (a folder-shared notice links to /with-me/<id>)
         { path: 'with-me/:id?', name: 'with-me', component: () => import('./views/WithMeView.vue') },

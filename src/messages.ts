@@ -99,6 +99,7 @@ export const MESSAGES = {
   'files.move-into-self': { th: 'ไม่สามารถย้ายโฟลเดอร์เข้าไปในตัวมันเองได้', en: 'A folder cannot be moved into itself.' },
   'files.copy-into-self': { th: 'ไม่สามารถคัดลอกโฟลเดอร์เข้าไปในตัวมันเองได้', en: 'A folder cannot be copied into itself.' },
   'files.dest-name-taken': { th: 'มีชื่อเดียวกันอยู่ในปลายทางแล้ว', en: 'An item with the same name is already in the destination.' },
+  'insight.busy': { th: 'กำลังวิเคราะห์พื้นที่ของที่อื่นอยู่ กรุณารอสักครู่แล้วลองใหม่', en: 'Another storage analysis is running. Please wait a moment and try again.' },
   'files.delete-failed': { th: 'ลบไม่สำเร็จ', en: 'Could not delete.' },
   'files.transfer-failed': { th: 'ทำรายการไม่สำเร็จ', en: 'Could not complete the action.' },
 
@@ -200,6 +201,8 @@ export const MESSAGES = {
   'admin.config-proxy-no-headers': { th: 'ตั้ง TRUST_PROXY ไว้ แต่คำขอนี้ไม่มี header จาก proxy จึงเชื่อ IP ผิด หรือ proxy ไม่ได้อยู่หน้าระบบ', en: 'TRUST_PROXY is set but this request carries no proxy header: either no proxy is in front or it does not forward the address.' },
   'admin.config-admin-password-env': { th: 'ADMIN_PASSWORD ยังอยู่ใน .env ทั้งที่มีบัญชีผู้ดูแลแล้ว ควรลบออก', en: 'ADMIN_PASSWORD is still set in .env although the admin account exists. Remove it.' },
   'admin.config-admin-initial-password': { th: 'ผู้ดูแลระบบยังใช้รหัสผ่านเริ่มต้น กรุณาเปลี่ยนรหัสผ่าน', en: 'An administrator still uses the initial password. Please change it.' },
+  'admin.config-audit-syslog-plain': { th: 'ส่งบันทึกกิจกรรมไป syslog โดยไม่เข้ารหัส (UDP/TCP) ข้อมูลผู้ใช้และ IP อ่านได้ระหว่างทาง ควรใช้เครือข่ายภายในที่เชื่อถือได้หรือ VPN', en: 'Audit entries go to syslog unencrypted (UDP/TCP): user names and IPs can be read on the way. Use a trusted internal network or a VPN.' },
+  'admin.config-audit-forward-failing': { th: 'ส่งต่อบันทึกกิจกรรมไปยัง syslog/webhook ไม่สำเร็จเมื่อไม่นานมานี้ ตรวจที่อยู่ปลายทางและดู log ของระบบ', en: 'Forwarding audit entries to syslog / the webhook failed recently. Check the destination and the system log.' },
   'admin.config-secret-unreadable': { th: 'ค่าลับที่บันทึกไว้ในหน้าตั้งค่า (อีเมล/แจ้งเตือน) เปิดไม่ได้ เพราะ secret.key ไม่ตรงกัน กรุณาตั้งค่าใหม่', en: 'A secret saved in the settings (e-mail / alerts) cannot be opened because secret.key differs. Please enter it again.' },
   'admin.config-startup-warnings': { th: 'การตั้งค่าเซิร์ฟเวอร์มีข้อควรแก้ {count} ข้อ: {codes} ดูได้ที่หน้าตั้งค่า', en: 'The server configuration has {count} issue(s): {codes}. See the settings page.' },
   'admin.alert-test': { th: 'ทดสอบการแจ้งเตือน: ระบบส่งข้อความถึงช่องทางนี้ได้', en: 'Test alert: messages reach this channel.' },

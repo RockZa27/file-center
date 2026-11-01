@@ -18,6 +18,7 @@ import { appPasswordRoutes } from './routes/app-passwords'
 import { archiveRoutes } from './routes/archive'
 import { backupRoutes } from './routes/backup'
 import { fileRoutes } from './routes/files'
+import { insightRoutes } from './routes/insight'
 import { meRoutes } from './routes/me'
 import { notifyRoutes } from './routes/notify'
 import { guideRoutes } from './routes/guide'
@@ -277,6 +278,7 @@ export const app = new Elysia({ serve: { idleTimeout: 255, maxRequestBodySize: s
   .use(logRoutes)
   .use(fileRoutes)
   .use(meRoutes)
+  .use(insightRoutes)
   .use(appPasswordRoutes)
   .use(notifyRoutes)
   .use(guideRoutes)
