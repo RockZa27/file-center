@@ -1,11 +1,12 @@
 <template>
   <n-modal :show="show" preset="card" :title="item?.name" :bordered="false" style="width: min(980px, 96vw)" @update:show="v => emit('update:show', v)">
     <div v-if="item" class="stage" :class="{ fill: kind === 'pdf' || kind === 'text' }" @contextmenu.prevent>
-      <img v-if="kind === 'image'" :src="api.shareThumbUrl(token, item.path, 1024, item.mtime)" :alt="item.name" class="media" draggable="false">
+      <img v-if="kind === 'image' && !broken" @error="broken = true" :src="api.shareThumbUrl(token, item.path, 1024, item.mtime)" :alt="item.name" class="media" draggable="false">
       <video v-else-if="kind === 'video'" :src="viewUrl" controls controlslist="nodownload noplaybackrate" disablepictureinpicture class="media" />
       <audio v-else-if="kind === 'audio'" :src="viewUrl" controls controlslist="nodownload" class="audio" />
       <iframe v-else-if="kind === 'pdf'" :src="pdfUrl" class="pdf" :title="item.name" />
       <pre v-else-if="kind === 'text'" class="text">{{ text }}</pre>
+      <div v-else-if="kind === 'image'" class="muted none">{{ t('shareView.noPreview') }}</div>
       <div v-else class="muted none">{{ t('shareView.noPreview') }}</div>
       <!-- the text layer: drawn over the preview, never in the way of a click or a scroll (see docs/security.md for its limits) -->
       <div v-if="watermark && kind" class="mark" :style="{ backgroundImage: markImage }" aria-hidden="true" />
@@ -21,6 +22,8 @@ import { NAlert, NModal } from 'naive-ui'
 import { api } from '../api'
 import { extOf } from '../utils'
 
+// the picture could not be made (no image tool on the server): say so instead of a broken image
+const broken = ref(false)
 const props = defineProps({
   show: Boolean,
   token: { type: String, required: true },
@@ -53,6 +56,7 @@ const pdfUrl = computed(() => `${viewUrl.value}#toolbar=0&navpanes=0`)
 const text = ref('')
 watch(() => [props.show, props.item?.path], async () => {
   text.value = ''
+  broken.value = false
   if (!props.show || kind.value !== 'text') return
   try {
     const res = await fetch(viewUrl.value, { credentials: 'same-origin' })
