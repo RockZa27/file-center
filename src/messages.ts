@@ -124,6 +124,7 @@ export const MESSAGES = {
   'guide.bad-tours': { th: 'รายการทัวร์ไม่ถูกต้อง (ไม่เกิน {max} รายการ, ชื่อใช้ a-z 0-9 และ - ยาวไม่เกิน 40 ตัวอักษร)', en: 'The list of tours is not valid (at most {max}, each a-z, 0-9 and "-", up to 40 characters).' },
 
   // ───────────── upload ─────────────
+  'upload.completing': { th: 'ไฟล์นี้กำลังถูกบันทึกลงที่เก็บ จึงยกเลิกไม่ได้แล้ว', en: 'This file is being saved into place, so it can no longer be cancelled.' },
   'upload.not-found': { th: 'ไม่พบการอัปโหลดนี้', en: 'This upload was not found.' },
   'upload.guest-disabled': { th: 'ผู้เยี่ยมชมอัปโหลดไฟล์ไม่ได้ กรุณาเข้าสู่ระบบก่อน', en: 'Visitors cannot upload files. Please sign in first.' },
   'upload.too-many-pending': { th: 'มีการอัปโหลดค้างอยู่เกินจำนวนที่กำหนด กรุณารอให้เสร็จหรือยกเลิกบางรายการก่อน', en: 'Too many uploads are waiting to be finished. Wait for some to finish or cancel some first.' },

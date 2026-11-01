@@ -199,7 +199,7 @@ function untrack(id: string) {
 /** announced and then left alone: it does not keep a place (removed here, not only by the hourly cleaning) */
 function sweepIdle() {
   const now = Date.now()
-  for (const [id, l] of live) if (now - l.at > l.idle) dropUpload(id, readMeta(id))
+  for (const [id, l] of live) if (now - l.at > l.idle && !finishing.has(id)) dropUpload(id, readMeta(id))
 }
 
 function readMeta(id: string): Meta | null {
@@ -350,6 +350,12 @@ const COMPLETED_MS = 5 * 60_000
 const COMPLETED_MAX = 1000
 const completed = new Map<string, { path: string; size: number; at: number }>()
 const completing = new Map<string, Promise<{ path: string; size: number }>>()
+/**
+ * uploads being moved into place right now (by id). Completion claims the upload before its first wait: a cancel, the
+ * idle sweep or the stale cleaning must not give back the reservation of a file that is about to land (it would land
+ * uncounted). If completion fails, the claim goes and the upload can be cancelled or dropped as before.
+ */
+const finishing = new Set<string>()
 
 export type Completed = { path: string; size: number; /** true when this answer repeats an earlier one (nothing new happened) */ again: boolean }
 
@@ -362,6 +368,7 @@ export async function completeUpload(id: string, owner: string, user?: User | nu
   if (earlier) return { path: earlier.path, size: earlier.size, again: true }
   const running = completing.get(key)
   if (running) return { ...(await running), again: true }
+  finishing.add(id)
   const p = finishUpload(id, owner, user)
   completing.set(key, p)
   try {
@@ -370,6 +377,7 @@ export async function completeUpload(id: string, owner: string, user?: User | nu
     return { ...done, again: false }
   } finally {
     completing.delete(key)
+    finishing.delete(id)
   }
 }
 
@@ -429,6 +437,7 @@ async function putInPlace(data: string, finalPath: string, meta: Meta) {
 export function cancelUpload(id: string, owner: string) {
   restoreReservations()
   const meta = loadMeta(id, owner)
+  if (finishing.has(id)) throw conflict('upload.completing')
   untrack(id)
   rmSync(dirOf(id), { recursive: true, force: true })
   releaseGuest(meta)
@@ -441,6 +450,7 @@ export function cleanStaleUploads(): number {
   let n = 0
   if (!existsSync(paths.tmp)) return 0
   for (const id of readdirSync(paths.tmp)) {
+    if (finishing.has(id)) continue
     try {
       const stamp = statSync(join(paths.tmp, id, 'meta.json')).mtimeMs
       let meta: Meta | null = null

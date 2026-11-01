@@ -4,10 +4,13 @@
  */
 import { beforeAll, describe, expect, test } from 'bun:test'
 import { join } from 'node:path'
-import { writeFileSync } from 'node:fs'
+import { existsSync, writeFileSync } from 'node:fs'
 import './in-process-env'
 
 let app: any
+let config: typeof import('../src/config').config
+let settings: typeof import('../src/settings').settings
+let uploads: typeof import('../src/uploads')
 
 class Client {
   jar = new Map<string, string>()
@@ -55,6 +58,9 @@ async function userWith(username: string, permissions: string[]) {
 
 beforeAll(async () => {
   ;({ app } = await import('../src/index'))
+  ;({ config } = await import('../src/config'))
+  ;({ settings } = await import('../src/settings'))
+  uploads = await import('../src/uploads')
   await admin.login('admin', process.env.ADMIN_PASSWORD!)
 })
 
@@ -92,5 +98,42 @@ describe('PROPPATCH answer size (audit run 3)', () => {
       Array.from({ length: 3 }, () => `<D:remove><D:prop xmlns:q="u:x">${Array.from({ length: 20 }, (_, i) => `<q:p${i}/>`).join('')}</D:prop></D:remove>`).join('') +
       '</D:propertyupdate>'
     expect((await proppatch('s133-dav1', secret, '/dav/home/a.txt', split)).status).toBe(400)
+  })
+})
+
+describe('a cancel while the upload is completing (audit run 3)', () => {
+  test('completion claims the upload: the cancel is refused, the file lands and stays counted in the visitors\' allowance', async () => {
+    const was = { perms: [...settings.get().guestPermissions], limit: config.guestUploadDailyBytes, proxy: config.trustProxy }
+    settings.update({ guestPermissions: ['read', 'download', 'upload'] as any })
+    ;(config as any).guestUploadDailyBytes = uploads.guestUploadUsage().used + 64 * 1024 ** 2
+    ;(config as any).trustProxy = 'true'
+    const ip = { 'x-forwarded-for': '198.51.100.33' }
+    const v = new Client()
+    v.csrf = (await v.json('GET', '/api/session')).data.csrf
+    const SIZE = 4096
+    try {
+      const a = await v.json('POST', '/api/upload', { space: 'public', path: '/', name: 's133-race.bin', size: SIZE }, ip)
+      expect(a.status).toBe(200)
+      const id = a.data.id as string
+      expect((await v.raw('PUT', `/api/upload/${id}/0`, new Uint8Array(SIZE), { 'content-type': 'application/octet-stream', ...ip })).status).toBe(200)
+      const counted = uploads.guestUploadUsage().used
+      // complete starts and, before it has moved the file, the same visitor cancels
+      const done = uploads.completeUpload(id, 'guest')
+      let refused: any = null
+      try { uploads.cancelUpload(id, 'guest') } catch (err) { refused = err }
+      expect(refused?.status).toBe(409)
+      expect(refused?.code).toBe('upload.completing')
+      const landed = await done
+      expect(existsSync(landed.path)).toBe(true)
+      // the bytes that landed are still counted: the cancel gave nothing back
+      expect(uploads.guestUploadUsage().used).toBe(counted)
+      // once complete, a cancel finds nothing to give back
+      expect(() => uploads.cancelUpload(id, 'guest')).toThrow()
+      expect(uploads.guestUploadUsage().used).toBe(counted)
+    } finally {
+      settings.update({ guestPermissions: was.perms as any })
+      ;(config as any).guestUploadDailyBytes = was.limit
+      ;(config as any).trustProxy = was.proxy
+    }
   })
 })
