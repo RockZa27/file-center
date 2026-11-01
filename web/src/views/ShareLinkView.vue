@@ -103,10 +103,14 @@
         <div class="muted small">{{ t('shareView.file') }}</div>
         <h1 class="name">{{ info.name }}</h1>
         <div class="muted">{{ formatBytes(info.size) }}</div>
-        <n-button tag="a" type="primary" size="large" :href="api.shareDownloadUrl(token)" class="big">
+        <n-button v-if="!viewOnly" tag="a" type="primary" size="large" :href="api.shareDownloadUrl(token)" class="big">
           <template #icon><n-icon :component="DownloadOutline" /></template>{{ t('common.download') }}
         </n-button>
-        <n-button v-if="isZip(info.name)" secondary @click="openZip('/', info.name)">
+        <n-button v-else type="primary" size="large" class="big" @click="openPreview({ name: info.name, path: '/' })">
+          <template #icon><n-icon :component="EyeOutline" /></template>{{ t('shareView.view') }}
+        </n-button>
+        <div v-if="viewOnly" class="muted small">{{ t('shareView.viewOnlyBadge') }}</div>
+        <n-button v-if="isZip(info.name) && !viewOnly" secondary @click="openZip('/', info.name)">
           <template #icon><n-icon :component="ArchiveOutline" /></template>{{ t('zip.lookInside') }}
         </n-button>
         <div class="muted small">{{ expiresText(info) }}</div>
@@ -120,7 +124,8 @@
             <h1 class="name">{{ info.name }}</h1>
             <div class="muted small">{{ t('shareView.total', { size: formatBytes(info.size) }) }} · {{ expiresText(info) }}</div>
           </div>
-          <n-button tag="a" type="primary" :href="api.shareDownloadUrl(token, here)" class="zip">
+          <n-tag v-if="viewOnly" type="info" size="small" :bordered="false">{{ t('shareView.viewOnlyBadge') }}</n-tag>
+          <n-button v-else tag="a" type="primary" :href="api.shareDownloadUrl(token, here)" class="zip">
             <template #icon><n-icon :component="DownloadOutline" /></template>{{ here === '/' ? t('shareView.downloadAll') : t('shareView.downloadHere') }}
           </n-button>
         </div>
@@ -152,7 +157,7 @@
               <div v-if="!galleryMedia.length" class="muted g-empty">{{ t('gallery.empty') }}</div>
               <div v-else class="g-grid">
                 <div v-for="(m, i) in galleryMedia" :key="m.path" class="g-tile">
-                  <button type="button" class="g-main" :aria-label="`${t('gallery.open')} ${m.name}`" @click="openLightbox(i)">
+                  <button type="button" class="g-main" :aria-label="`${t('gallery.open')} ${m.name}`" @click="openMedia(m, i)">
                     <span class="g-img">
                       <thumb-img v-if="thumbOf(m, tileSize)" :src="thumbOf(m, tileSize)" alt="">
                         <template #fallback><file-icon :item="m" :size="40" /></template>
@@ -180,17 +185,18 @@
               </span>
               <div class="entry-text">
                 <router-link v-if="e.type === 'dir'" :to="{ query: { path: e.path } }" class="entry-name">{{ e.name }}</router-link>
+                <button v-else-if="viewOnly" type="button" class="entry-name link" @click="openPreview(e)">{{ e.name }}</button>
                 <button v-else-if="isZip(e.name)" type="button" class="entry-name link" @click="openZip(e.path, e.name)">{{ e.name }}</button>
                 <a v-else :href="api.shareDownloadUrl(token, e.path)" class="entry-name">{{ e.name }}</a>
                 <div class="muted small">{{ e.type === 'dir' ? t('common.folder') : formatBytes(e.size) }} · {{ formatDate(e.mtime) }}</div>
               </div>
               <n-button
-                v-if="e.type === 'file' && isZip(e.name)" quaternary circle :title="t('zip.lookInside')" :aria-label="t('zip.lookInside')" @click="openZip(e.path, e.name)"
+                v-if="e.type === 'file' && isZip(e.name) && !viewOnly" quaternary circle :title="t('zip.lookInside')" :aria-label="t('zip.lookInside')" @click="openZip(e.path, e.name)"
               >
                 <template #icon><n-icon :component="ArchiveOutline" /></template>
               </n-button>
               <n-button
-                tag="a" :href="api.shareDownloadUrl(token, e.path)" quaternary circle
+                v-if="!viewOnly" tag="a" :href="api.shareDownloadUrl(token, e.path)" quaternary circle
                 :title="e.type === 'dir' ? t('shareView.downloadZip') : t('common.download')" :aria-label="e.type === 'dir' ? t('shareView.downloadZip') : t('common.download')"
               >
                 <template #icon><n-icon :component="DownloadOutline" /></template>
@@ -203,8 +209,9 @@
 
     <lightbox
       v-model:show="lb.show" v-model:index="lb.index" :items="lightboxItems" :file-url="lightboxFile" :thumb-url="lightboxThumb"
-      :download-url="lightboxFile" :auto-original="false"
+      :download-url="lightboxFile" :auto-original="false" :can-original="!viewOnly"
     />
+    <share-preview v-model:show="pv.show" :token="token" :item="pv.item" :watermark="info?.watermark || null" />
     <zip-viewer v-model:show="zip.show" :name="zip.name" :source="zipSource" />
   </public-shell>
 </template>
@@ -213,13 +220,14 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute, useRouter } from 'vue-router'
-import { NAlert, NBreadcrumb, NBreadcrumbItem, NButton, NButtonGroup, NEmpty, NIcon, NInput, NProgress, NResult, NSpin } from 'naive-ui'
-import { ArchiveOutline, ArrowBackOutline, CheckmarkCircleOutline, CloudUploadOutline, DownloadOutline, Folder, FolderOpenOutline, ImagesOutline, ListOutline, LockClosedOutline, PlayOutline } from '@vicons/ionicons5'
+import { NAlert, NBreadcrumb, NBreadcrumbItem, NButton, NButtonGroup, NEmpty, NIcon, NInput, NProgress, NResult, NSpin, NTag } from 'naive-ui'
+import { ArchiveOutline, ArrowBackOutline, CheckmarkCircleOutline, CloudUploadOutline, DownloadOutline, EyeOutline, Folder, FolderOpenOutline, ImagesOutline, ListOutline, LockClosedOutline, PlayOutline } from '@vicons/ionicons5'
 import { api, ApiError, putChunk } from '../api'
 import PublicShell from '../components/PublicShell.vue'
 import FileIcon from '../components/FileIcon.vue'
 import Lightbox from '../components/Lightbox.vue'
 import ThumbImg from '../components/ThumbImg.vue'
+import SharePreview from '../components/SharePreview.vue'
 import ZipViewer from '../components/ZipViewer.vue'
 import { errorText, useFeedback } from '../composables'
 import { loadThumbStatus, mediaKindOf, sharpScreen, wantsThumb } from '../media'
@@ -331,6 +339,12 @@ const openLightbox = i => { lb.index = i; lb.show = true }
 const lightboxFile = it => api.shareDownloadUrl(token.value, it.path)
 const lightboxThumb = (it, size) => (wantsThumb(it.name) ? api.shareThumbUrl(token.value, it.path, size, it.mtime) : '')
 
+// view-only links: no download anywhere; a preview opens in a modal with the text layer over it
+const viewOnly = computed(() => !!info.value?.viewOnly)
+const pv = reactive({ show: false, item: null })
+const openPreview = e => { pv.item = { name: e.name, path: e.path, mtime: e.mtime }; pv.show = true }
+const openMedia = (m, i) => (viewOnly.value && m.kind === 'video' ? openPreview(m) : openLightbox(i))
+
 const zip = reactive({ show: false, path: '/', name: '' })
 function openZip(path, name) {
   Object.assign(zip, { show: true, path, name })
@@ -341,7 +355,7 @@ const zipSource = computed(() => {
   return { list: () => api.shareArchiveList(tk, path), fileUrl: entry => api.shareArchiveFileUrl(tk, path, entry) }
 })
 // another folder or link: nothing of the old one stays open
-watch(() => [token.value, here.value], () => { lb.show = false; zip.show = false })
+watch(() => [token.value, here.value], () => { lb.show = false; zip.show = false; pv.show = false })
 
 // ───── request link: send files in ─────
 const pickInput = ref(null)

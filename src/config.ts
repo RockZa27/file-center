@@ -174,6 +174,22 @@ export const config = {
   lineGroupId: env('LINE_GROUP_ID', '').trim(),
   /** FOR TESTS: http://127.0.0.1:<port> of a stand-in for api.line.me. Any other host is ignored (line.ts). */
   lineApiBase: env('LINE_API_BASE', '').trim(),
+  /**
+   * Virus scanning with ClamAV (antivirus.ts), off by default. clamd is reached over TCP (INSTREAM). These are the env
+   * values; the settings page overrides each of them. A file bigger than CLAMAV_MAX_SCAN_MB is not sent to clamd and is
+   * treated like an unreachable scanner. CLAMAV_ON_ERROR_LINKS / _USERS (allow | reject) say what happens to an upload
+   * that could not be scanned: from an upload link or a visitor, and from a signed-in user (WebDAV included).
+   */
+  clamavEnabled: env('CLAMAV_ENABLED', 'false').trim().toLowerCase() === 'true',
+  clamavHost: env('CLAMAV_HOST', '127.0.0.1').trim(),
+  clamavPort: num('CLAMAV_PORT', 3310),
+  clamavTimeoutSeconds: num('CLAMAV_TIMEOUT_SECONDS', 60),
+  clamavMaxScanMb: num('CLAMAV_MAX_SCAN_MB', 25),
+  clamavOnErrorLinks: (env('CLAMAV_ON_ERROR_LINKS', 'reject').trim().toLowerCase() === 'allow' ? 'allow' : 'reject') as 'allow' | 'reject',
+  clamavOnErrorUsers: (env('CLAMAV_ON_ERROR_USERS', 'allow').trim().toLowerCase() === 'reject' ? 'reject' : 'allow') as 'allow' | 'reject',
+  /** quarantined files are deleted after this many days, and the oldest go first when they take more than the cap */
+  quarantineDays: Math.max(1, Math.floor(num('QUARANTINE_DAYS', 30))),
+  quarantineMaxBytes: Math.max(0, num('QUARANTINE_MAX_MB', 2048)) * 1024 ** 2,
 }
 
 export const paths = {
@@ -200,6 +216,8 @@ export const paths = {
   /** groups, their members and limits (groups.ts) */
   groups: join(config.dataDir, 'groups.json'),
   tmp: join(config.dataDir, 'tmp'),
+  /** files the virus scanner held back (antivirus.ts): not under the storage, reachable from no route but the admin's list */
+  quarantine: join(config.dataDir, 'quarantine'),
   /** thumbnail cache (thumbs.ts): <sha1>.webp|jpg, and tmp/ for the one being made; rebuilt on demand, so not in backups */
   thumbs: join(config.dataDir, 'thumbs'),
   branding: join(config.dataDir, 'branding'),
@@ -230,7 +248,7 @@ export const paths = {
 }
 
 export function ensureDirs() {
-  for (const p of [config.storageDir, config.dataDir, paths.logs, paths.trash, paths.tmp, paths.branding, paths.app, paths.publicDir]) {
+  for (const p of [config.storageDir, config.dataDir, paths.logs, paths.trash, paths.tmp, paths.quarantine, paths.branding, paths.app, paths.publicDir]) {
     mkdirSync(p, { recursive: true })
   }
 }

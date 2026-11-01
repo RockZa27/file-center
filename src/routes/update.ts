@@ -96,7 +96,7 @@ export const updateRoutes = new Elysia({ prefix: '/api/admin/update' })
     enabled()
     if (body.size > config.updateMaxSize) throw new HttpError(413, 'update.too-big')
     ensureDir(incoming())
-    return initUpload({ owner: admin.username, root: incoming(), dir: '/', relativeDir: [], name: 'update.zip', size: body.size })
+    return initUpload({ owner: admin.username, scan: false, root: incoming(), dir: '/', relativeDir: [], name: 'update.zip', size: body.size })
   }, { body: t.Object({ size: t.Number() }) })
 
   .post('/stage', async ({ user, ip, body }) => {

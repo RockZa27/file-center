@@ -5,7 +5,7 @@ import { auditOnce } from '../audit'
 import { isForeignSpace } from '../auth'
 import { context, need } from '../context'
 import { normRel, notFound, resolveIn, storagePath } from '../fsx'
-import { startDownload } from '../shares'
+import { refuseViewOnly, startDownload } from '../shares'
 import { contentDisposition } from './files'
 import { counted, settled, shareFile } from './shares'
 
@@ -53,6 +53,8 @@ export const archiveRoutes = new Elysia({ prefix: '/api' })
 
   .get('/s/:token/archive/file', async ({ params, query, request, user, ip }) => {
     const { share, abs } = shareFile(params.token, query.path, request)
+    // an entry taken out of a zip is the file's bytes: not on a view-only link
+    refuseViewOnly(share)
     // an entry taken out of a zip is a download of the link: it counts, and waits for a place like one
     const slot = startDownload(share)
     try {

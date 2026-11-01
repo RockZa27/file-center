@@ -71,6 +71,7 @@ src/
   logger.ts         log ของระบบ (logs/system.log), หมุนไฟล์ log, ตัดความลับออกก่อนเขียน
   stats.ts          นับจำนวนและขนาดไฟล์ให้หน้าภาพรวม (เบื้องหลัง เก็บผลไว้ใน stats-cache.json)
   shares.ts, routes/shares.ts               ลิงก์แชร์ให้คนที่ไม่มีบัญชีดาวน์โหลด และลิงก์รับไฟล์
+  antivirus.ts, routes/antivirus.ts         สแกนไวรัสด้วย clamd (INSTREAM ตรง ๆ), โฟลเดอร์กักกัน, ทดสอบด้วย EICAR; ถูกเรียกจาก uploads.ts (ก่อนย้ายเข้าที่เก็บไฟล์) และ webdav.ts (PUT)
   grants.ts, routes/grants.ts               แชร์โฟลเดอร์ให้ผู้ใช้/กลุ่ม (space grant:<id>)
   groups.ts, routes/groups.ts               กลุ่มและโฟลเดอร์กลุ่ม (space group:<id>)
   webdav.ts, webdav-xml.ts, app-passwords.ts, routes/app-passwords.ts   WebDAV ที่ /dav (PROPFIND, PUT แบบสตรีม, MOVE/COPY, LOCK ที่ไม่บังคับ) รหัสผ่านแอปที่ใช้เข้า และตัวอ่าน XML เล็ก ๆ
@@ -287,6 +288,7 @@ File Center เขียนใหม่ทั้งหมดด้วย ElysiaJ
 | `GET /api/thumb?space&path&size=256\|1024` · `GET /api/thumbs/status` · `GET /api/s/:token/thumb?path&size` | ภาพตัวอย่างของรูป/PDF/วิดีโอ ดู [ภาพตัวอย่าง](#ภาพตัวอย่างและดูไฟล์-zip) |
 | `GET /api/archive/list?space&path` · `GET /api/archive/file?space&path&entry[&inline=1]` · `GET /api/s/:token/archive/list\|file` | ดูรายการใน zip และดึงรายการเดียวออกมา โดยไม่แตกไฟล์ |
 | `POST/GET /api/shares` · `DELETE /api/shares/:id` · `GET /api/s/:token` · `POST /api/s/:token/unlock` · `GET /api/s/:token/download` | ลิงก์แชร์ ดู [ลิงก์แชร์](#ลิงก์แชร์) |
+| `GET /api/s/:token/view?path=` | ดูตัวอย่างแบบ inline ของลิงก์ **ดูอย่างเดียว** (PDF วิดีโอ เสียง ข้อความเล็ก) ลิงก์ที่ไม่ใช่ดูอย่างเดียวตอบ 404 ลิงก์ดูอย่างเดียวตอบ 403 `share.view-only` ที่ `/download` และ `/archive/file` `POST /api/shares` รับ `viewOnly`, `watermark`, `watermarkText` ดู [ลิงก์แบบดูอย่างเดียว](security.md#ลิงก์แบบดูอย่างเดียว) |
 | `POST /api/s/:token/upload` → `PUT /api/s/:token/upload/:id/:n` → `POST /api/s/:token/upload/:id/complete` · `DELETE /api/s/:token/upload/:id` | ผู้เยี่ยมชมส่งไฟล์ผ่านลิงก์รับไฟล์ |
 | `GET /api/me/usage` | พื้นที่ที่ใช้และโควตาของฉัน ดู [โควตา](#โควตาและถังขยะของผู้ใช้) |
 | `/api/me/notifications` · `/api/me/notify-prefs` · `/api/me/email` · `/api/me/line` · `POST /api/line/webhook` | การแจ้งเตือนส่วนตัว: กระดิ่ง อีเมล LINE ดู [การแจ้งเตือนส่วนตัว](#การแจ้งเตือนส่วนตัว) |
@@ -304,6 +306,7 @@ File Center เขียนใหม่ทั้งหมดด้วย ElysiaJ
 | `GET /api/admin/logs/download` | zip ของ `system.log`, `launcher.log`, `audit.log` (รวมไฟล์ที่หมุนแล้ว) (เฉพาะ admin) |
 | `GET /api/admin/activity/export?format=csv` | ส่งออกประวัติการใช้งานเป็น CSV ตามตัวกรองเดียวกับหน้าประวัติ (`user`, `action`, `q`) เป็น UTF-8 มี BOM ให้ Excel แสดงภาษาไทยได้ ช่องที่ขึ้นต้นด้วย `=` `+` `-` `@` tab หรือ CR จะมี `'` นำหน้ากันสูตร Excel (เฉพาะ admin) |
 | `/api/admin/update/*` | อัปเดตระบบ: อัปโหลดแพ็กเกจ (ส่งชิ้นส่วนด้วย `PUT /api/upload/:id/:n`), ตรวจ, ติดตั้ง, ย้อนกลับ (เฉพาะ admin) `GET /api/admin/update` มี `source: { enabled, url }` และ `last.message` ตามภาษาของคำขอ ดู [อัปเดตระบบ](#อัปเดตระบบ) |
+| `GET /api/admin/antivirus` · `POST /api/admin/antivirus/test` · `GET /api/admin/antivirus/quarantine` · `DELETE /api/admin/antivirus/quarantine/:id` · `POST /api/admin/antivirus/quarantine/:id/release` | สถานะ ClamAV · ทดสอบด้วย EICAR · รายการไฟล์ที่กักกัน · ลบ · ปล่อยคืนโฟลเดอร์เดิม (เฉพาะ admin) ดู [สแกนไวรัส](security.md#สแกนไวรัสด้วย-clamav) |
 | `GET /api/admin/alerts` · `POST /api/admin/alerts/test` | สถานะการแจ้งเตือน · ส่งข้อความทดสอบ (เฉพาะ admin) |
 | `GET /api/health` | ตรวจสุขภาพ (ใช้กับ Docker healthcheck) ผู้เยี่ยมชมได้แค่ `status` เครื่อง server เองและ admin ได้เวอร์ชันด้วย |
 

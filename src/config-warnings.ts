@@ -6,6 +6,7 @@
 import { allUsers } from './auth'
 import { config } from './config'
 import type { MessageCode } from './messages'
+import { antivirusUnreachable } from './antivirus'
 import { forwardFailing } from './audit-forward'
 import { auditForwardValues, unreadableSecrets } from './policy'
 
@@ -18,6 +19,7 @@ export function envWarnings(): ConfigWarning[] {
   if (!config.secureCookie && /^https:/i.test(config.publicUrl)) out.push({ code: 'admin.config-insecure-cookie', severity: 'warning' })
   if (config.adminPassword && allUsers().some(u => u.role === 'admin')) out.push({ code: 'admin.config-admin-password-env', severity: 'warning' })
   out.push(...auditForwardWarnings())
+  if (antivirusUnreachable()) out.push({ code: 'admin.config-antivirus-unreachable', severity: 'warning' })
   return out
 }
 

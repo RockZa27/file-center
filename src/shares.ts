@@ -12,7 +12,7 @@ import { basename } from 'node:path'
 import { accessFor, findUser, type Lockout, type Space } from './auth'
 import { config, paths } from './config'
 import * as policy from './policy'
-import { notFound, resolveIn, storagePath } from './fsx'
+import { HttpError, notFound, resolveIn, storagePath } from './fsx'
 import { nameOf, notify } from './notify'
 import { open, seal } from './secret-box'
 import { JsonStore } from './store'
@@ -36,6 +36,13 @@ export type Share = {
   revokedAt?: string
   /** absent = 'download', so every link made before upload links existed keeps working unchanged */
   kind?: ShareKind
+  // ── download links only ──
+  /** the visitor may preview but not download: every download path refuses (routes/shares.ts, archive.ts, thumbs.ts) */
+  viewOnly?: boolean
+  /** view-only previews carry a text layer (the visitor's address, the time and the link's name, or `watermarkText`) */
+  watermark?: boolean
+  /** replaces the automatic watermark text */
+  watermarkText?: string
   // ── upload-request links (kind 'upload'; the folder is `path`) ──
   /** null/absent = only the server's own limits */
   maxFileBytes?: number | null
@@ -51,6 +58,7 @@ export type Share = {
 }
 
 export type ShareKind = 'download' | 'upload'
+export const WATERMARK_TEXT_MAX = 100
 export const kindOf = (s: Share): ShareKind => s.kind ?? 'download'
 
 export type ShareState = 'active' | 'expired' | 'revoked' | 'used-up' | 'unavailable'
@@ -105,6 +113,11 @@ export function createShare(input: Omit<Share, 'id' | 'tokenHash' | 'tokenSealed
     maxDownloads: input.maxDownloads,
     downloads: 0,
     ...(input.passwordHash ? { passwordHash: input.passwordHash } : {}),
+    ...(input.kind !== 'upload' && input.viewOnly ? {
+      viewOnly: true,
+      ...(input.watermark ? { watermark: true } : {}),
+      ...(input.watermark && input.watermarkText ? { watermarkText: input.watermarkText } : {}),
+    } : {}),
     ...(input.kind === 'upload' ? {
       kind: 'upload' as const,
       maxFileBytes: input.maxFileBytes ?? null,
@@ -191,6 +204,9 @@ export const publicShare = (s: Share) => ({
   downloads: s.downloads,
   hasPassword: !!s.passwordHash,
   kind: kindOf(s),
+  viewOnly: !!s.viewOnly,
+  watermark: !!s.viewOnly && !!s.watermark,
+  watermarkText: s.watermarkText ?? '',
   ...(kindOf(s) === 'upload' ? {
     maxFileBytes: s.maxFileBytes ?? null, maxFiles: s.maxFiles ?? null, maxTotalBytes: s.maxTotalBytes ?? null,
     note: s.note ?? '', uploadedFiles: s.uploadedFiles ?? 0, uploadedBytes: s.uploadedBytes ?? 0,
@@ -200,6 +216,21 @@ export const publicShare = (s: Share) => ({
   /** the link can be shown again (made from 1.8.1 on) */
   linkAvailable: !!s.tokenSealed,
 })
+
+/**
+ * The text layer a view-only preview carries, or null when the link has none: the owner's own text, else the link's name,
+ * the visitor's address and the time (UTC). It is made here for the page to draw; see docs/security.md for what it cannot do.
+ */
+export function watermarkFor(s: Share, ip: string, now = new Date()): string | null {
+  if (!s.viewOnly || !s.watermark) return null
+  if (s.watermarkText) return s.watermarkText
+  return `${basename(s.path)} · ${ip} · ${now.toISOString().slice(0, 16).replace('T', ' ')} UTC`
+}
+
+/** a view-only link answers no download: one 403 for every path that would hand over the file's bytes */
+export function refuseViewOnly(s: Share) {
+  if (s.viewOnly) throw new HttpError(403, 'share.view-only')
+}
 
 /** for the audit trail: where the item is in the storage, or space:path when the owner's space can not be found any more */
 export function shareTarget(s: Share): string {

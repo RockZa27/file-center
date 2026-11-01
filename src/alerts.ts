@@ -20,7 +20,7 @@ import { DISK_CRITICAL_PERCENT, diskInfo } from './stats'
 import { JsonStore } from './store'
 import { lookForNewVersion } from './update-source'
 
-export type AlertKind = 'test' | 'settings-security' | 'config-warnings' | 'backup-failed' | 'errors' | 'lockout' | 'disk-critical' | 'update-available' | 'store-write-failed'
+export type AlertKind = 'test' | 'settings-security' | 'config-warnings' | 'backup-failed' | 'errors' | 'lockout' | 'disk-critical' | 'update-available' | 'store-write-failed' | 'virus-found'
 const WEBHOOK_KINDS = ['discord', 'slack', 'telegram', 'json'] as const
 type WebhookKind = (typeof WEBHOOK_KINDS)[number]
 

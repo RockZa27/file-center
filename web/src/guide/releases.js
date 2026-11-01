@@ -6,6 +6,27 @@ import { compareVersions, forRole } from './util'
  */
 export const releases = [
   {
+    version: '1.15.0',
+    items: [
+      {
+        id: '1150-view-only', icon: 'share', roles: ['user'], to: { name: 'links' },
+        title: { th: 'ลิงก์แชร์แบบดูอย่างเดียว', en: 'View-only share links' },
+        text: {
+          th: 'ตอนสร้างลิงก์ดาวน์โหลด เลือก "ดูอย่างเดียว" ผู้รับดูตัวอย่างรูป PDF วิดีโอ เสียง และไฟล์ข้อความได้ แต่ดาวน์โหลดไม่ได้ (server ปฏิเสธทุกทาง รวม zip) ใส่ลายน้ำ (ชื่อลิงก์ + IP + เวลา หรือข้อความของคุณ) ได้ ผู้ดูแลบังคับหรือห้ามตัวเลือกนี้ได้ ข้อควรรู้: ไม่กันการแคปหน้าจอ และลายน้ำเป็นชั้นบนหน้าจอผู้ดู',
+          en: 'When making a download link, choose "View only". Recipients can preview pictures, PDF, video, audio and text files but cannot download (the server refuses every path, zip included). You can add a watermark (link name + IP + time, or your own text). Admins can force or forbid it. Good to know: it does not stop screenshots, and the watermark is a layer on the viewer\'s screen.',
+        },
+      },
+      {
+        id: '1150-antivirus', icon: 'system', roles: ['admin'], to: { name: 'settings' },
+        title: { th: 'สแกนไวรัสด้วย ClamAV (ไม่บังคับ)', en: 'Virus scanning with ClamAV (optional)' },
+        text: {
+          th: 'ปิดอยู่เป็นค่าเริ่มต้น เปิดที่ ระบบ → ตั้งค่า → สแกนไวรัส (compose profile `clamav`) ไฟล์ที่อัปโหลดเสร็จ ทั้งอัปโหลดปกติ ลิงก์ขอไฟล์ และ WebDAV จะถูกตรวจก่อนเข้าที่เก็บไฟล์ ไฟล์ติดไวรัสไปโฟลเดอร์กักกัน (ลบหรือปล่อยคืนได้ในหน้าเดียวกัน) ผู้ดูแลได้รับแจ้งและมีบันทึกในประวัติ เลือกได้ว่าถ้าสแกนไม่ได้ให้ปฏิเสธหรือให้ผ่าน แยกลิงก์ขอไฟล์กับผู้ใช้ มีปุ่มทดสอบด้วย EICAR',
+          en: 'Off by default. Turn it on under System → Settings → Virus scanning (compose profile `clamav`). Finished uploads (normal, upload links and WebDAV) are checked before they reach the storage. Infected files go to a quarantine folder (delete or release them on the same page); admins are alerted and the activity log records it. Choose whether an upload that cannot be scanned is rejected or let through, separately for upload links and signed-in users. A test button uses EICAR.',
+        },
+      },
+    ],
+  },
+  {
     version: '1.14.0',
     items: [
       {

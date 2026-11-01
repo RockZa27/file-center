@@ -2,6 +2,7 @@ import { existsSync, statSync } from 'node:fs'
 import { extname, join, normalize } from 'node:path'
 import { Elysia } from 'elysia'
 import { alert, startAlerts } from './alerts'
+import { startAntivirusMonitor, trimQuarantine } from './antivirus'
 import { envWarnings } from './config-warnings'
 import { UPLOAD_CEILING } from './policy'
 import { audit } from './audit'
@@ -94,6 +95,7 @@ function housekeeping() {
     // the thumbnail cache is trimmed in the background (it may hold many small files)
     void pruneThumbs().catch(err => log.error('thumbs-prune-failed', err))
     pruneLoginAttempts()
+    trimQuarantine()
     if (trash || uploads || versions) log.info('housekeeping', { trash, staleUploads: uploads, versions })
     // links about to expire, homes near their quota: told in the background, once each
     void checkNotifications()
@@ -307,6 +309,7 @@ if (import.meta.main) {
   })
   onStop(async force => { stopSearchIndex(); await app.stop(force) })
   startAlerts()
+  startAntivirusMonitor()
   // risky .env values that need no request to see: one alert, the details are on the settings page
   const risky = envWarnings()
   if (risky.length) alert('config-warnings', 'admin.config-startup-warnings', { count: risky.length, codes: risky.map(w => w.code).join(', ') })

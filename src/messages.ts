@@ -137,6 +137,13 @@ export const MESSAGES = {
   'upload.missing-chunk': { th: 'ยังขาดชิ้นส่วนที่ {n}', en: 'Chunk {n} is still missing.' },
   'upload.size-mismatch': { th: 'ขนาดไฟล์หลังรวมไม่ตรงกับที่แจ้งไว้', en: 'The assembled file does not have the announced size.' },
   'upload.dest-gone': { th: 'โฟลเดอร์ปลายทางของการอัปโหลดนี้ถูกลบ ย้าย หรือเปลี่ยนชื่อไปแล้ว จึงยกเลิกการอัปโหลด กรุณาอัปโหลดใหม่ในโฟลเดอร์ที่ต้องการ', en: 'The folder this file was being uploaded to was deleted, moved or renamed, so the upload was cancelled. Please upload it again into the folder you want.' },
+  'antivirus.infected': { th: 'ตรวจพบไวรัสในไฟล์นี้ ระบบจึงไม่บันทึกไฟล์และกักไว้ให้ผู้ดูแลระบบตรวจสอบ', en: 'A virus was found in this file, so it was not saved. It was held for the administrator to review.' },
+  'antivirus.unavailable': { th: 'ตรวจไวรัสไม่ได้ในขณะนี้ จึงยังไม่รับไฟล์ กรุณาลองใหม่ภายหลังหรือแจ้งผู้ดูแลระบบ', en: 'The virus check is not available right now, so the file was not accepted. Please try again later or tell the administrator.' },
+  'antivirus.too-big': { th: 'ไฟล์ใหญ่เกินกว่าจะตรวจไวรัสได้ จึงไม่รับไฟล์นี้', en: 'The file is too big to be checked for viruses, so it was not accepted.' },
+  'antivirus.release-dest-gone': { th: 'โฟลเดอร์ปลายทางเดิมของไฟล์นี้ไม่มีแล้ว จึงคืนไฟล์ไม่ได้', en: 'The folder this file was meant for no longer exists, so it cannot be released.' },
+  'antivirus.not-detected': { th: 'ติดต่อ ClamAV ได้ แต่ไม่พบไฟล์ทดสอบ EICAR ตรวจว่า ClamAV โหลดฐานข้อมูลไวรัสแล้ว', en: 'ClamAV answered but did not detect the EICAR test file. Check that its virus database is loaded.' },
+  'antivirus.test-unreachable': { th: 'ติดต่อ ClamAV ไม่ได้ ตรวจที่อยู่ พอร์ต และว่า clamd ทำงานอยู่', en: 'ClamAV could not be reached. Check the host, the port and that clamd is running.' },
+  'antivirus.test-timeout': { th: 'ClamAV ไม่ตอบภายในเวลาที่กำหนด', en: 'ClamAV did not answer in time.' },
   'upload.too-deep': { th: 'โฟลเดอร์ซ้อนลึกเกินไป', en: 'The folders are nested too deeply.' },
 
   // ───────────── zip ─────────────
@@ -235,6 +242,11 @@ export const MESSAGES = {
     th: 'ล็อกลิงก์แชร์ {share} ของ {owner} สำหรับ IP {ip} ชั่วคราว เพราะใส่รหัสผ่านผิดหลายครั้ง',
     en: 'Share link {share} of {owner} is locked for IP {ip} for a while after too many wrong passwords.',
   },
+  'admin.alert-virus-found': {
+    th: 'พบไวรัส "{signature}" ในไฟล์ที่ {user} (IP {ip}) ส่งมาทาง {via} ไฟล์ถูกกักไว้ที่โฟลเดอร์กักกัน ไม่ได้เข้าที่เก็บไฟล์ ดูที่ ระบบ → ตั้งค่า → สแกนไวรัส',
+    en: 'Virus "{signature}" found in a file sent by {user} (IP {ip}) via {via}. The file is held in quarantine and was not stored. See System → Settings → Virus scanning.',
+  },
+  'admin.config-antivirus-unreachable': { th: 'เปิดสแกนไวรัสไว้ แต่ติดต่อ ClamAV (clamd) ไม่ได้ ไฟล์ที่อัปโหลดจะถูกปฏิเสธหรือผ่านโดยไม่สแกนตามนโยบายที่ตั้งไว้ ตรวจที่อยู่/พอร์ต และว่า clamd ทำงานอยู่', en: 'Virus scanning is on but ClamAV (clamd) cannot be reached. Uploads are rejected or let through unscanned, as the policy says. Check the host and port and that clamd is running.' },
   'admin.alert-off': {
     th: 'ยังไม่ได้ตั้งการแจ้งเตือน หรือค่าไม่ถูกต้อง (ALERT_WEBHOOK_URL, ALERT_WEBHOOK_KIND, ALERT_TELEGRAM_CHAT_ID) ดูคำเตือนใน log ตอนเริ่มระบบ',
     en: 'Alerts are not set up, or a setting is wrong (ALERT_WEBHOOK_URL, ALERT_WEBHOOK_KIND, ALERT_TELEGRAM_CHAT_ID). See the warning in the log at startup.',
@@ -280,6 +292,11 @@ export const MESSAGES = {
   'share.password-required': { th: 'ลิงก์นี้ต้องใส่รหัสผ่านก่อน', en: 'This link needs a password.' },
   'share.too-many': { th: 'มีลิงก์แชร์ครบ {max} ลิงก์แล้ว กรุณายกเลิกลิงก์เก่าก่อน', en: 'You already have {max} share links. Please revoke an old one first.' },
 
+  'share.view-only': { th: 'ลิงก์นี้ดูได้อย่างเดียว ดาวน์โหลดไม่ได้', en: 'This link is view only. Downloading is not allowed.' },
+  'share.view-only-forbidden': { th: 'ผู้ดูแลระบบไม่อนุญาตให้สร้างลิงก์แบบดูอย่างเดียว', en: 'The administrator does not allow view-only links.' },
+  'share.view-only-download-only': { th: 'แบบดูอย่างเดียวใช้ได้กับลิงก์ดาวน์โหลดเท่านั้น', en: 'View only applies to download links only.' },
+  'share.not-previewable': { th: 'ไฟล์ชนิดนี้ดูตัวอย่างไม่ได้ ลิงก์นี้เป็นแบบดูอย่างเดียว', en: 'This kind of file cannot be previewed, and the link is view only.' },
+  'share.watermark-too-long': { th: 'ข้อความลายน้ำต้องไม่เกิน {max} ตัวอักษร', en: 'The watermark text must be at most {max} characters.' },
   'share.upload-folder-only': { th: 'ลิงก์รับไฟล์ใช้ได้กับโฟลเดอร์เท่านั้น', en: 'An upload link can only be made for a folder.' },
   'share.bad-upload-limits': { th: 'ขีดจำกัดของลิงก์รับไฟล์ไม่ถูกต้อง (ขนาดต่อไฟล์ไม่เกิน {file} ไบต์, จำนวนไฟล์ไม่เกิน {files}, ขนาดรวมไม่เกิน {total} ไบต์)', en: 'The upload link limits are not valid (file size up to {file} bytes, up to {files} files, total up to {total} bytes).' },
   'share.note-too-long': { th: 'ข้อความถึงผู้อัปโหลดต้องไม่เกิน {max} ตัวอักษร', en: 'The note for the visitor must be at most {max} characters.' },

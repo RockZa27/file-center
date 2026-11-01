@@ -10,7 +10,7 @@
 import { config } from './config'
 import { bad } from './fsx'
 import { open, seal } from './secret-box'
-import { type AlertPrefs, type AuditForwardPrefs, type FilesPrefs, type MailPrefs, type SecurityPrefs, type SharePrefs, type Settings, settings } from './settings'
+import { type AlertPrefs, type AntivirusPrefs, type AuditForwardPrefs, type FilesPrefs, type MailPrefs, type SecurityPrefs, type SharePrefs, type Settings, settings } from './settings'
 import { log } from './logger'
 
 export type Source = 'web' | 'env' | 'default'
@@ -29,7 +29,7 @@ export const NEVER_EXPIRES_AT = '9999-12-31T23:59:59.000Z'
 const DEFAULT_SHARE_DAYS = 7
 
 const envSet = (name: string | null) => !!name && process.env[name] !== undefined && process.env[name] !== ''
-const grp = <G extends 'share' | 'security' | 'files' | 'mail' | 'alerts' | 'auditForward'>(g: G): NonNullable<Settings[G]> => (settings.get()[g] ?? {}) as NonNullable<Settings[G]>
+const grp = <G extends 'share' | 'security' | 'files' | 'mail' | 'alerts' | 'auditForward' | 'antivirus'>(g: G): NonNullable<Settings[G]> => (settings.get()[g] ?? {}) as NonNullable<Settings[G]>
 
 /** a sealed secret opened; `null` when this server can not open it (the key is another one), which turns the feature off */
 function unseal(sealed: string | undefined, what: string): string | null {
@@ -55,6 +55,9 @@ export function shareDefaultDays(): number {
 }
 export const shareAllowNever = () => grp('share').allowNever ?? false
 export const shareRequirePassword = () => grp('share').requirePassword ?? false
+export type ViewOnlyPolicy = 'allow' | 'force' | 'forbid'
+export const shareViewOnly = (): ViewOnlyPolicy => grp('share').viewOnly ?? 'allow'
+export const shareForceWatermark = () => grp('share').forceWatermark ?? false
 
 // ───────────── security ─────────────
 
@@ -140,6 +143,25 @@ export function auditForwardValues(): AuditForwardValues {
   }
 }
 
+// ───────────── virus scanning ─────────────
+
+export type AntivirusValues = {
+  enabled: boolean; host: string; port: number; timeoutMs: number; maxScanBytes: number
+  onErrorLinks: 'allow' | 'reject'; onErrorUsers: 'allow' | 'reject'
+}
+export function antivirusValues(): AntivirusValues {
+  const a = grp('antivirus')
+  return {
+    enabled: a.enabled ?? config.clamavEnabled,
+    host: a.host ?? config.clamavHost,
+    port: a.port ?? config.clamavPort,
+    timeoutMs: (a.timeoutSeconds ?? config.clamavTimeoutSeconds) * 1000,
+    maxScanBytes: Math.floor((a.maxScanMb ?? config.clamavMaxScanMb) * 1024 ** 2),
+    onErrorLinks: a.onErrorLinks ?? config.clamavOnErrorLinks,
+    onErrorUsers: a.onErrorUsers ?? config.clamavOnErrorUsers,
+  }
+}
+
 /** a saved secret exists but this server can not open it */
 export function unreadableSecrets(): string[] {
   const out: string[] = []
@@ -172,7 +194,7 @@ const eff = <T>(web: T | undefined, env: T, envName: string | null): Eff<T> =>
 
 /** every runtime setting with the value in force and where it comes from; no secret in it */
 export function policyView() {
-  const sh = grp('share'), se = grp('security'), f = grp('files'), m = grp('mail'), a = grp('alerts'), af = grp('auditForward')
+  const av2 = grp('antivirus'), sh = grp('share'), se = grp('security'), f = grp('files'), m = grp('mail'), a = grp('alerts'), af = grp('auditForward')
   const afv = auditForwardValues()
   const quota = defaultQuotaBytes()
   const mv = mail()
@@ -183,6 +205,8 @@ export function policyView() {
       maxDays: eff(sh.maxDays, config.shareMaxDays, 'SHARE_MAX_DAYS'),
       allowNever: eff(sh.allowNever, false, null),
       requirePassword: eff(sh.requirePassword, false, null),
+      viewOnly: eff<ViewOnlyPolicy>(sh.viewOnly, 'allow', null),
+      forceWatermark: eff(sh.forceWatermark, false, null),
       choices: SHARE_DAY_CHOICES,
     },
     security: {
@@ -218,6 +242,15 @@ export function policyView() {
       kind: eff(a.kind, av.kind, 'ALERT_WEBHOOK_KIND'),
       telegramChatId: eff(a.telegramChatId, av.chatId, 'ALERT_TELEGRAM_CHAT_ID'),
       lang: eff(a.lang, av.lang, 'ALERT_LANG'),
+    },
+    antivirus: {
+      enabled: eff(av2.enabled, config.clamavEnabled, 'CLAMAV_ENABLED'),
+      host: eff(av2.host, config.clamavHost, 'CLAMAV_HOST'),
+      port: eff(av2.port, config.clamavPort, 'CLAMAV_PORT'),
+      timeoutSeconds: eff(av2.timeoutSeconds, config.clamavTimeoutSeconds, 'CLAMAV_TIMEOUT_SECONDS'),
+      maxScanMb: eff(av2.maxScanMb, config.clamavMaxScanMb, 'CLAMAV_MAX_SCAN_MB'),
+      onErrorLinks: eff(av2.onErrorLinks, config.clamavOnErrorLinks, 'CLAMAV_ON_ERROR_LINKS'),
+      onErrorUsers: eff(av2.onErrorUsers, config.clamavOnErrorUsers, 'CLAMAV_ON_ERROR_USERS'),
     },
     auditForward: {
       syslogHost: eff(af.syslogHost, afv.syslogHost, null),
@@ -264,6 +297,17 @@ const SPEC: Record<string, Record<string, [string, Parse]>> = {
     maxDays: ['maxDays', (v, k) => { if (typeof v !== 'number' || !SHARE_DAY_CHOICES.includes(v)) throw fail(k); return v }],
     allowNever: ['allowNever', flag],
     requirePassword: ['requirePassword', flag],
+    viewOnly: ['viewOnly', oneOf('allow', 'force', 'forbid')],
+    forceWatermark: ['forceWatermark', flag],
+  },
+  antivirus: {
+    enabled: ['enabled', flag],
+    host: ['host', (v, k) => { const s = str(253)(v, k) as string; if (!s || !/^[A-Za-z0-9.:\[\]-]+$/.test(s)) throw fail(k); return s }],
+    port: ['port', int(1, 65535)],
+    timeoutSeconds: ['timeoutSeconds', int(1, 600)],
+    maxScanMb: ['maxScanMb', int(1, 4096)],
+    onErrorLinks: ['onErrorLinks', oneOf('allow', 'reject')],
+    onErrorUsers: ['onErrorUsers', oneOf('allow', 'reject')],
   },
   security: {
     require2fa: ['require2fa', oneOf('none', 'admin', 'staff', 'all')],
@@ -310,7 +354,7 @@ const SPEC: Record<string, Record<string, [string, Parse]>> = {
 export const POLICY_GROUPS = Object.keys(SPEC)
 
 /** the groups of a request body that need the admin's password: anything that changes sign-in rules or where mail and alerts go */
-export const STEP_UP_GROUPS = ['security', 'mail', 'alerts', 'auditForward']
+export const STEP_UP_GROUPS = ['security', 'mail', 'alerts', 'auditForward', 'antivirus']
 
 /**
  * Check every given key and save them together (nothing is saved when one is wrong). A key given as `null` goes back
@@ -345,4 +389,4 @@ export function savePolicy(body: Record<string, unknown>): string[] {
   return changed
 }
 
-export type { AlertPrefs, AuditForwardPrefs, FilesPrefs, MailPrefs, SecurityPrefs, SharePrefs }
+export type { AlertPrefs, AntivirusPrefs, AuditForwardPrefs, FilesPrefs, MailPrefs, SecurityPrefs, SharePrefs }
