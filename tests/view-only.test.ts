@@ -279,7 +279,8 @@ describe('the page learns it is view only and gets the watermark text', () => {
   test('a custom text replaces it; without a watermark there is none; an ordinary link is not view only', async () => {
     expect((await new Client().json('GET', `/api/s/${await token({ viewOnly: true, watermark: true, watermarkText: 'For ACME only' })}`)).data.watermark).toBe('For ACME only')
     expect((await new Client().json('GET', `/api/s/${await token({ viewOnly: true })}`)).data).toMatchObject({ viewOnly: true, watermark: null })
-    expect((await new Client().json('GET', `/api/s/${await token()}`)).data).toMatchObject({ viewOnly: false, watermark: null })
+    // an ordinary link answers exactly as before view-only existed
+    expect((await new Client().json('GET', `/api/s/${await token()}`)).data).not.toHaveProperty('viewOnly')
   })
 
   test('the owner can not turn a view-only link into a downloadable one afterwards (there is no such edit)', async () => {

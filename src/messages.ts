@@ -294,7 +294,6 @@ export const MESSAGES = {
 
   'share.view-only': { th: 'ลิงก์นี้ดูได้อย่างเดียว ดาวน์โหลดไม่ได้', en: 'This link is view only. Downloading is not allowed.' },
   'share.view-only-forbidden': { th: 'ผู้ดูแลระบบไม่อนุญาตให้สร้างลิงก์แบบดูอย่างเดียว', en: 'The administrator does not allow view-only links.' },
-  'share.view-only-required': { th: 'ผู้ดูแลระบบกำหนดให้ลิงก์ดาวน์โหลดต้องเป็นแบบดูอย่างเดียว', en: 'The administrator requires download links to be view only.' },
   'share.view-only-download-only': { th: 'แบบดูอย่างเดียวใช้ได้กับลิงก์ดาวน์โหลดเท่านั้น', en: 'View only applies to download links only.' },
   'share.not-previewable': { th: 'ไฟล์ชนิดนี้ดูตัวอย่างไม่ได้ ลิงก์นี้เป็นแบบดูอย่างเดียว', en: 'This kind of file cannot be previewed, and the link is view only.' },
   'share.watermark-too-long': { th: 'ข้อความลายน้ำต้องไม่เกิน {max} ตัวอักษร', en: 'The watermark text must be at most {max} characters.' },

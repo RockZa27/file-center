@@ -30,6 +30,7 @@ function appConfig(user: User | null, lang: Lang) {
     ...(user ? {
       shareDays: allowedShareDays(), shareDefaultDays: policy.shareDefaultDays(),
       shareAllowNever: policy.shareAllowNever(), shareRequirePassword: policy.shareRequirePassword(),
+      shareViewOnly: policy.shareViewOnly(), shareForceWatermark: policy.shareForceWatermark(),
     } : {}),
     // whether the page shows "open in the office editor", and for which file types; visitors can not use it
     ...(user ? { office: officeClientConfig() } : {}),

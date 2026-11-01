@@ -133,7 +133,7 @@ const scanOn = (extra: Record<string, unknown> = {}) =>
 const quarantined = () => (existsSync(paths.quarantine) ? readdirSync(paths.quarantine) : [])
 const clearQuarantine = () => { for (const m of av.listQuarantine()) av.deleteQuarantined(m.id) }
 const auditText = () => (existsSync(paths.audit) ? readFileSync(paths.audit, 'utf8') : '')
-const filesUnder = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(e => (e.isDirectory() ? filesUnder(join(dir, e.name)) : [join(dir, e.name)]))
+const filesUnder = (dir: string): string[] => readdirSync(dir, { withFileTypes: true }).flatMap(e => (e.isDirectory() ? filesUnder(join(dir, e.name)) : e.isFile() ? [join(dir, e.name)] : []))
 
 let user: Client
 

@@ -16,6 +16,7 @@
 - [ใช้หลัง 1Panel หรือ nginx](#ใช้หลัง-1panel-หรือ-nginx)
 - [วัดว่าช้าที่ตรงไหน](#วัดว่าช้าที่ตรงไหน)
 - [แก้ไขเอกสาร office ด้วย ONLYOFFICE](#แก้ไขเอกสาร-office-ด้วย-onlyoffice)
+- [สแกนไวรัสด้วย ClamAV](#สแกนไวรัสด้วย-clamav-ไม่บังคับ)
 - [เครื่องมือภาพตัวอย่างในอิมเมจ](#เครื่องมือภาพตัวอย่างในอิมเมจ)
 - [เมื่อไรต้อง build อิมเมจใหม่](#เมื่อไรต้อง-build-อิมเมจใหม่)
 - [สร้างและเผยแพร่อัปเดตของคุณเอง](#สร้างและเผยแพร่อัปเดตของคุณเอง)
@@ -268,6 +269,10 @@ OFFICE_SERVER_INTERNAL_URL=http://onlyoffice
 - รันด้วย bun โดยตรง (ไม่ใช้ Docker): ติดตั้ง document server เอง เปิด JWT ด้วยความลับเดียวกัน และตั้ง `OFFICE_INTERNAL_URL` เป็นที่อยู่ที่เครื่องนั้นเรียกถึง File Center ได้
 
 กลไกและความปลอดภัยของการเชื่อมต่อ (โทเคนของลิงก์ JWT การบันทึกเป็นเวอร์ชัน CSP) อยู่ที่ [ความปลอดภัย: ONLYOFFICE](security.md#onlyoffice) และ API ที่ [คู่มือนักพัฒนา](development.md#onlyoffice)
+
+## สแกนไวรัสด้วย ClamAV (ไม่บังคับ)
+
+compose มี service `clamav` (อิมเมจ `clamav/clamav`) เป็น profile ที่ปิดอยู่ตามค่าเริ่มต้น เปิดโดยเติม `clamav` ใน `COMPOSE_PROFILES` ใน `.env` (เช่น `COMPOSE_PROFILES=tunnel,clamav`) แล้ว `docker compose up -d` service นี้ใช้ RAM ราว 1–3 GB เก็บฐานข้อมูลไวรัสใน volume `clamav-db` ไม่เปิดพอร์ตออกนอก network ของ Docker และแอปรู้ที่อยู่ผ่าน `CLAMAV_HOST=clamav` โดยอัตโนมัติ จากนั้นเปิดสแกนที่ ระบบ → ตั้งค่า → สแกนไวรัส แล้วกดทดสอบการเชื่อมต่อ ดู [คู่มือผู้ดูแล](admin-guide.md#สแกนไวรัสด้วย-clamav) อิมเมจ ClamAV ถูกล็อกด้วย digest เหมือนอิมเมจอื่น (Dependabot ตามให้) การเปิดใช้ไม่ต้อง build อิมเมจ File Center ใหม่
 
 ## เครื่องมือภาพตัวอย่างในอิมเมจ
 

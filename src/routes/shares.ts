@@ -277,7 +277,7 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
     if (!isUnlocked(share, request)) return { name: null, type: null, size: null, expiresAt, needsPassword: true }
     const name = basename(abs)
     // what a view-only visitor needs to know: no download button, and the text layer for previews (made for this visitor now)
-    const view = { viewOnly: !!share.viewOnly, watermark: watermarkFor(share, ip) }
+    const view = share.viewOnly ? { viewOnly: true, watermark: watermarkFor(share, ip) } : {}
     if (share.type === 'file') return { name, type: 'file', size: lstatSync(abs).size, expiresAt, needsPassword: false, ...view }
     const at = insideShare(abs, query.path)
     let st

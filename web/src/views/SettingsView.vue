@@ -100,6 +100,12 @@
               <setting-row v-bind="rowProps('share.requirePassword')" :label="t('settings.share.requirePassword')" :help="t('settings.share.requirePasswordHelp')" @reset="reset('share.requirePassword')" @undo="undo('share.requirePassword')">
                 <n-switch v-model:value="f['share.requirePassword']" :disabled="resets.includes('share.requirePassword')" />
               </setting-row>
+              <setting-row v-bind="rowProps('share.viewOnly')" :label="t('settings.share.viewOnly')" :help="t('settings.share.viewOnlyHelp')" @reset="reset('share.viewOnly')" @undo="undo('share.viewOnly')">
+                <n-select v-model:value="f['share.viewOnly']" :options="viewOnlyOptions" :disabled="resets.includes('share.viewOnly')" class="ctl" />
+              </setting-row>
+              <setting-row v-bind="rowProps('share.forceWatermark')" :label="t('settings.share.forceWatermark')" :help="t('settings.share.forceWatermarkHelp')" @reset="reset('share.forceWatermark')" @undo="undo('share.forceWatermark')">
+                <n-switch v-model:value="f['share.forceWatermark']" :disabled="resets.includes('share.forceWatermark')" />
+              </setting-row>
             </section>
           </template>
 
@@ -235,6 +241,43 @@
             </section>
           </template>
 
+          <!-- ───────── virus scanning ───────── -->
+          <template v-else-if="cat === 'antivirus'">
+            <section class="surface block" data-tour="settings-antivirus">
+              <h2>{{ t('settings.antivirus.title') }}</h2>
+              <div class="muted lead">{{ t('settings.antivirus.lead') }}</div>
+              <setting-row v-bind="rowProps('antivirus.enabled')" :label="t('settings.antivirus.enabled')" :help="t('settings.antivirus.enabledHelp')" @reset="reset('antivirus.enabled')" @undo="undo('antivirus.enabled')">
+                <n-switch v-model:value="f['antivirus.enabled']" :disabled="resets.includes('antivirus.enabled')" />
+              </setting-row>
+              <setting-row v-bind="rowProps('antivirus.host')" :label="t('settings.antivirus.host')" :help="t('settings.antivirus.hostHelp')" @reset="reset('antivirus.host')" @undo="undo('antivirus.host')">
+                <n-input v-model:value="f['antivirus.host']" :disabled="resets.includes('antivirus.host')" class="ctl" :input-props="{ autocomplete: 'off', spellcheck: false, name: 'clamd-host' }" />
+              </setting-row>
+              <setting-row v-bind="rowProps('antivirus.port')" :label="t('settings.antivirus.port')" @reset="reset('antivirus.port')" @undo="undo('antivirus.port')">
+                <n-input-number v-model:value="f['antivirus.port']" :min="1" :max="65535" :precision="0" :show-button="false" :disabled="resets.includes('antivirus.port')" class="ctl" />
+              </setting-row>
+              <setting-row v-bind="rowProps('antivirus.timeoutSeconds')" :label="t('settings.antivirus.timeoutSeconds')" @reset="reset('antivirus.timeoutSeconds')" @undo="undo('antivirus.timeoutSeconds')">
+                <n-input-number v-model:value="f['antivirus.timeoutSeconds']" :min="1" :max="600" :precision="0" :show-button="false" :disabled="resets.includes('antivirus.timeoutSeconds')" class="ctl"><template #suffix>{{ t('settings.unit.seconds') }}</template></n-input-number>
+              </setting-row>
+              <setting-row v-bind="rowProps('antivirus.maxScanMb')" :label="t('settings.antivirus.maxScanMb')" :help="t('settings.antivirus.maxScanMbHelp')" @reset="reset('antivirus.maxScanMb')" @undo="undo('antivirus.maxScanMb')">
+                <n-input-number v-model:value="f['antivirus.maxScanMb']" :min="1" :max="4096" :precision="0" :show-button="false" :disabled="resets.includes('antivirus.maxScanMb')" class="ctl"><template #suffix>MB</template></n-input-number>
+              </setting-row>
+              <setting-row v-bind="rowProps('antivirus.onErrorLinks')" :label="t('settings.antivirus.onErrorLinks')" :help="t('settings.antivirus.onErrorLinksHelp')" @reset="reset('antivirus.onErrorLinks')" @undo="undo('antivirus.onErrorLinks')">
+                <n-select v-model:value="f['antivirus.onErrorLinks']" :options="onErrorOptions" :disabled="resets.includes('antivirus.onErrorLinks')" class="ctl" />
+              </setting-row>
+              <setting-row v-bind="rowProps('antivirus.onErrorUsers')" :label="t('settings.antivirus.onErrorUsers')" :help="t('settings.antivirus.onErrorUsersHelp')" @reset="reset('antivirus.onErrorUsers')" @undo="undo('antivirus.onErrorUsers')">
+                <n-select v-model:value="f['antivirus.onErrorUsers']" :options="onErrorOptions" :disabled="resets.includes('antivirus.onErrorUsers')" class="ctl" />
+              </setting-row>
+              <div class="av-test">
+                <n-button :loading="avTesting" :disabled="avDirty" @click="sendAvTest"><template #icon><n-icon :component="BugOutline" /></template>{{ t('settings.antivirus.test') }}</n-button>
+                <span class="muted help-s">{{ avDirty ? t('settings.antivirus.testDirty') : t('settings.antivirus.testHelp') }}</span>
+              </div>
+              <n-alert v-if="avResult" :type="avResult.ok ? 'success' : 'error'" :title="avResult.ok ? undefined : t('settings.antivirus.testFailed')" class="av-result" closable @close="avResult = null">
+                {{ avResult.ok ? t('settings.antivirus.testOk', { signature: avResult.signature }) : avResult.message }}
+              </n-alert>
+            </section>
+            <quarantine-card />
+          </template>
+
           <!-- appears as soon as something is changed -->
           <div v-if="count" class="savebar" role="region" :aria-label="t('settings.unsavedBar')" data-tour="settings-save">
             <span class="savebar-text">{{ t('settings.unsaved', { n: count }) }}</span>
@@ -268,9 +311,10 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { onBeforeRouteLeave } from 'vue-router'
 import { NAlert, NButton, NCheckbox, NCollapse, NCollapseItem, NColorPicker, NIcon, NInput, NInputNumber, NModal, NSelect, NSpin, NSwitch, NUpload } from 'naive-ui'
-import { ColorPaletteOutline, FolderOpenOutline, GlobeOutline, ImageOutline, LinkOutline, MailOutline, PaperPlaneOutline, SaveOutline, ShieldCheckmarkOutline } from '@vicons/ionicons5'
+import { BugOutline, ColorPaletteOutline, FolderOpenOutline, GlobeOutline, ImageOutline, LinkOutline, MailOutline, PaperPlaneOutline, SaveOutline, ShieldCheckmarkOutline } from '@vicons/ionicons5'
 import { api } from '../api'
 import AlertsCard from '../components/AlertsCard.vue'
+import QuarantineCard from '../components/QuarantineCard.vue'
 import SettingRow from '../components/SettingRow.vue'
 import SizeInput from '../components/SizeInput.vue'
 import { i18n } from '../i18n'
@@ -289,6 +333,7 @@ const CATS = [
   { id: 'security', icon: ShieldCheckmarkOutline },
   { id: 'files', icon: FolderOpenOutline },
   { id: 'mail', icon: MailOutline },
+  { id: 'antivirus', icon: BugOutline },
 ]
 const FLAT = ['appName', 'primaryColor', 'welcomeTitle', 'welcomeText', 'publicEmptyText', 'publicEnabled']
 const SECURITY_NUMBERS = ['sessionTtlHours', 'loginMaxAttempts', 'loginLockoutSeconds']
@@ -298,18 +343,20 @@ const RANGE = {
   'security.sessionTtlHours': [1, 2160], 'security.loginMaxAttempts': [3, 20], 'security.loginLockoutSeconds': [30, 3600],
   'files.trashRetentionDays': [1, 365], 'files.versionsKeep': [0, 100], 'files.versionsDays': [1, 365], 'mail.port': [1, 65535],
   'auditForward.syslogPort': [1, 65535], 'auditForward.syslogFacility': [0, 23],
+  'antivirus.port': [1, 65535], 'antivirus.timeoutSeconds': [1, 600], 'antivirus.maxScanMb': [1, 4096],
 }
 const UNIT = { sessionTtlHours: 'hours', loginMaxAttempts: 'times', loginLockoutSeconds: 'seconds', trashRetentionDays: 'days', versionsKeep: 'versions', versionsDays: 'days' }
 // the settings that live in a group of the server's answer (path = group.key), and which category shows each
 const GROUPED = {
-  share: ['defaultDays', 'maxDays', 'allowNever', 'requirePassword'],
+  share: ['defaultDays', 'maxDays', 'allowNever', 'requirePassword', 'viewOnly', 'forceWatermark'],
   security: ['require2fa', ...SECURITY_NUMBERS],
   files: ['uploadMaxSize', 'defaultQuotaBytes', 'thumbnails', 'webdav', ...FILE_NUMBERS],
   mail: ['host', 'port', 'secure', 'user', 'pass', 'from'],
   alerts: ['webhookUrl', 'kind', 'telegramChatId', 'lang'],
   auditForward: ['syslogHost', 'syslogPort', 'syslogProto', 'syslogFacility', 'webhookUrl'],
+  antivirus: ['enabled', 'host', 'port', 'timeoutSeconds', 'maxScanMb', 'onErrorLinks', 'onErrorUsers'],
 }
-const CAT_OF = { appName: 'general', primaryColor: 'general', guestPermissions: 'public', welcomeTitle: 'public', welcomeText: 'public', publicEmptyText: 'public', publicEnabled: 'public', share: 'share', security: 'security', files: 'files', mail: 'mail', alerts: 'mail', auditForward: 'mail' }
+const CAT_OF = { appName: 'general', primaryColor: 'general', guestPermissions: 'public', welcomeTitle: 'public', welcomeText: 'public', publicEmptyText: 'public', publicEnabled: 'public', share: 'share', security: 'security', files: 'files', mail: 'mail', alerts: 'mail', auditForward: 'mail', antivirus: 'antivirus' }
 const catOfPath = p => CAT_OF[p.includes('.') ? p.split('.')[0] : p]
 // never shown back: a blank box means "keep what is there"
 const WRITE_ONLY = ['mail.pass', 'alerts.webhookUrl', 'auditForward.webhookUrl']
@@ -341,6 +388,8 @@ const catOptions = computed(() => CATS.map(c => ({ value: c.id, label: t(`settin
 const secureOptions = computed(() => ['starttls', 'tls', 'none'].map(v => ({ value: v, label: t(`settings.mail.secure_${v}`) })))
 const kindOptions = computed(() => ['discord', 'slack', 'telegram', 'json'].map(v => ({ value: v, label: t(`alerts.webhooks.${v}`) })))
 const protoOptions = [{ value: 'udp', label: 'UDP' }, { value: 'tcp', label: 'TCP' }]
+const viewOnlyOptions = computed(() => ['allow', 'force', 'forbid'].map(v => ({ value: v, label: t(`settings.share.viewOnly_${v}`) })))
+const onErrorOptions = computed(() => ['reject', 'allow'].map(v => ({ value: v, label: t(`settings.antivirus.${v}`) })))
 const langOptions = [{ value: 'th', label: 'ไทย' }, { value: 'en', label: 'English' }]
 const require2faOptions = computed(() => ['none', 'admin', 'staff', 'all'].map(v => ({ value: v, label: t(`settings.security.require_${v}`) })))
 function dayOptions(forDefault) {
@@ -393,6 +442,7 @@ const changedPaths = computed(() => (ready.value ? ALL_PATHS.filter(isChanged) :
 const count = computed(() => changedPaths.value.length)
 const countOf = id => changedPaths.value.filter(p => catOfPath(p) === id).length
 const mailDirty = computed(() => changedPaths.value.some(p => p.startsWith('mail.')))
+const avDirty = computed(() => changedPaths.value.some(p => p.startsWith('antivirus.')))
 
 const reset = p => { if (!resets.value.includes(p)) resets.value.push(p) }
 const undo = p => { resets.value = resets.value.filter(x => x !== p) }
@@ -412,6 +462,8 @@ function localError(p) {
   if (p === 'files.defaultQuotaBytes' && !f.quotaUnlimited && !f[p]) return t('settings.required')
   if (p === 'mail.port' && !f[p]) return t('settings.required')
   if (p === 'auditForward.syslogPort' && !f[p]) return t('settings.required')
+  if ((p === 'antivirus.port' || p === 'antivirus.timeoutSeconds' || p === 'antivirus.maxScanMb') && !f[p]) return t('settings.required')
+  if (p === 'antivirus.host' && !String(f[p] || '').trim()) return t('settings.required')
   return ''
 }
 const errorOf = p => serverErrors.value[p] || localError(p)
@@ -429,7 +481,7 @@ const covers = { none: [], admin: ['admin'], staff: ['admin', 'manager'], all: [
 const warn2fa = computed(() => ready.value && isChanged('security.require2fa') && !resets.value.includes('security.require2fa') && !app.user?.twoFactor && (covers[f['security.require2fa']] || []).includes(app.user?.role))
 
 // ───────── save ─────────
-const needsPassword = computed(() => changedPaths.value.some(p => p.startsWith('security.') || p.startsWith('mail.') || p.startsWith('alerts.') || p.startsWith('auditForward.'))
+const needsPassword = computed(() => changedPaths.value.some(p => p.startsWith('security.') || p.startsWith('mail.') || p.startsWith('alerts.') || p.startsWith('auditForward.') || p.startsWith('antivirus.'))
   || ADVANCED.some(p => hasPerm(p) && !orig.guestPermissions.includes(p)))
 
 function toApi(p) {
@@ -513,6 +565,18 @@ async function sendMailTest() {
   } catch (e) { mailTestError.value = errorText(e, t('common.unknownError')) } finally { testing.value = false }
 }
 
+const avTesting = ref(false)
+const avResult = ref(null)
+async function sendAvTest() {
+  if (avTesting.value || avDirty.value) return
+  avTesting.value = true
+  avResult.value = null
+  try {
+    const r = await api.antivirusTest()
+    avResult.value = { ok: true, signature: r.signature }
+  } catch (e) { avResult.value = { ok: false, message: errorText(e, t('common.unknownError')) } } finally { avTesting.value = false }
+}
+
 async function onLogo({ file }) {
   try { await api.uploadLogo(file.file); await app.refresh(); fb.ok(t('common.saved')) } catch (e) { fb.fail(e) }
   return false
@@ -550,6 +614,9 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 .block h2 { margin: 0 0 16px; font-size: 16px; font-weight: 600; }
 .lead { font-size: 13px; line-height: 1.6; margin: -8px 0 14px; overflow-wrap: anywhere; }
 .ctl { width: 100%; max-width: 320px; }
+.av-test { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
+.av-test .help-s { margin-top: 0; }
+.av-result { margin-top: 12px; }
 .ctl.wide { max-width: 560px; }
 .ctl.num { max-width: 200px; }
 .colors { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }

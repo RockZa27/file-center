@@ -227,6 +227,11 @@ export const api = {
   /** { enabled, kind, host, lastSent: { <kind>: ISO time } }: never the webhook URL itself */
   alerts: () => get('/api/admin/alerts'),
   alertTest: () => post('/api/admin/alerts/test'),
+  antivirusStatus: () => get('/api/admin/antivirus'),
+  antivirusTest: () => post('/api/admin/antivirus/test'),
+  quarantineList: () => get('/api/admin/antivirus/quarantine'),
+  quarantineDelete: id => call('DELETE', `/api/admin/antivirus/quarantine/${encodeURIComponent(id)}`),
+  quarantineRelease: id => post(`/api/admin/antivirus/quarantine/${encodeURIComponent(id)}/release`),
   /** { items: [{ code, severity, message }] }: risky or odd .env values */
   configWarnings: () => get('/api/admin/config-warnings'),
   /** a test e-mail with the settings in force, to `to` or else the admin's confirmed address */
@@ -270,6 +275,7 @@ export const api = {
   shareUploadComplete: (token, id) => call('POST', `/api/s/${encodeURIComponent(token)}/upload/${id}/complete`, {}, { 'x-csrf-token': null }),
   shareUploadCancel: (token, id) => call('DELETE', `/api/s/${encodeURIComponent(token)}/upload/${id}`, undefined, { 'x-csrf-token': null }),
   shareUploadChunkUrl: (token, id) => `/api/s/${encodeURIComponent(token)}/upload/${id}`,
+  shareViewUrl: (token, path) => `/api/s/${encodeURIComponent(token)}/view${path && path !== '/' ? `?${qs({ path })}` : ''}`,
   shareDownloadUrl: (token, path) => `/api/s/${encodeURIComponent(token)}/download${path && path !== '/' ? `?${qs({ path })}` : ''}`,
 }
 
