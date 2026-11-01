@@ -24,7 +24,18 @@ export type BackupPrefs = {
  * Runtime settings the admin edits on the web (policy.ts reads them). A key that is missing falls back to the env value,
  * then to the built-in default, so a settings.json from before these existed behaves exactly as it did.
  */
-export type SharePrefs = { defaultDays?: number; maxDays?: number; allowNever?: boolean; requirePassword?: boolean }
+export type SharePrefs = {
+  defaultDays?: number; maxDays?: number; allowNever?: boolean; requirePassword?: boolean
+  /** download links: `allow` = the owner chooses, `force` = every new link is view-only, `forbid` = no view-only links */
+  viewOnly?: 'allow' | 'force' | 'forbid'
+  /** every view-only link shows the watermark, whatever the owner chose */
+  forceWatermark?: boolean
+}
+/** virus scanning (antivirus.ts); a missing key falls back to the CLAMAV_* env value */
+export type AntivirusPrefs = {
+  enabled?: boolean; host?: string; port?: number; timeoutSeconds?: number; maxScanMb?: number
+  onErrorLinks?: 'allow' | 'reject'; onErrorUsers?: 'allow' | 'reject'
+}
 export type SecurityPrefs = { require2fa?: 'none' | 'admin' | 'staff' | 'all'; sessionTtlHours?: number; loginMaxAttempts?: number; loginLockoutSeconds?: number }
 export type FilesPrefs = {
   /** 0 = no limit */
@@ -58,6 +69,7 @@ export type Settings = {
   mail?: MailPrefs
   alerts?: AlertPrefs
   auditForward?: AuditForwardPrefs
+  antivirus?: AntivirusPrefs
 }
 
 /** the only shape a stored logo may have; anything else (a settings.json from a backup) is treated as no logo */

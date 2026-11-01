@@ -3,6 +3,7 @@ import { existsSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, wr
 import { open, rm } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { accessFor, type User } from './auth'
+import { gate } from './antivirus'
 import { config, paths } from './config'
 import * as policy from './policy'
 import { bad, conflict, copyTree, ensureDir, ensureSpace, forbidden, HttpError, isDir, normRel, notFound, renameNoReplace, resolveIn, uniquePath, validName, within } from './fsx'
@@ -29,6 +30,8 @@ type Meta = {
   /** set for an upload through an upload-request link, with the visitor's address (limits per link and per address) */
   shareId?: string
   ip?: string
+  /** set for an upload that is not scanned for viruses (the admin's own update package, signed and checked on its own) */
+  noScan?: boolean
 }
 
 // Every chunk is written straight to its offset in one "data" file, and an empty file named after the chunk
@@ -262,6 +265,8 @@ export function initUpload(args: {
   space?: string
   shareId?: string
   ip?: string
+  /** false = never sent to the virus scanner (an update package) */
+  scan?: boolean
   root: string
   dir: string
   relativeDir: string[]
@@ -288,7 +293,8 @@ export function initUpload(args: {
   const total = Math.max(1, Math.ceil(size / chunkSize))
   const meta: Meta = { id, owner: args.owner, destDir, name, size, chunkSize, total, createdAt: Date.now() }
   // counted before anything is written and in the same tick as the check: nothing can slip in between
-  if (args.guest || args.shareId) meta.ip = args.ip ?? ''
+  if (args.guest || args.shareId || args.ip !== undefined) meta.ip = args.ip ?? ''
+  if (args.scan === false) meta.noScan = true
   if (args.guest) meta.guestDay = reserveGuest(size, meta.ip ?? '')
   if (args.space) meta.space = args.space
   if (args.shareId) meta.shareId = args.shareId
@@ -391,6 +397,20 @@ async function finishUpload(id: string, owner: string, user?: User | null) {
   }
   const data = dataOf(id)
   if (statSync(data).size !== meta.size) throw bad('upload.size-mismatch')
+
+  // virus scan (antivirus.ts, off by default): before the file can be seen. An infected file goes to the quarantine, one that
+  // could not be checked may be refused by the policy; either way the upload is over and its holds are given back
+  if (!meta.noScan) {
+    try {
+      await gate(data, {
+        who: meta.shareId || meta.guestDay ? 'link' : 'user', via: meta.shareId ? 'link' : 'upload',
+        by: meta.shareId ? `share:${meta.shareId}` : meta.owner, ip: meta.ip ?? '', name: meta.name, destDir: meta.destDir,
+      })
+    } catch (err) {
+      if (err instanceof HttpError) dropUpload(id, meta)
+      throw err
+    }
+  }
 
   // uniquePath only looks: a file of that name can appear before the move, and a plain rename would replace it
   let finalPath = uniquePath(join(meta.destDir, meta.name))

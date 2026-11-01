@@ -20,6 +20,7 @@
  * Office, which refuse to write without them, work. They are not enforced against other clients: a lock is no promise
  * that nobody else writes to the file, and a restart forgets them all.
  */
+import { gate } from './antivirus'
 import { randomBytes, randomUUID } from 'node:crypto'
 import { lstatSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, utimesSync, writeFileSync, type Stats } from 'node:fs'
 import { copyFile, open } from 'node:fs/promises'
@@ -665,6 +666,8 @@ async function putMethod(ctx: Ctx, segs: string[], place_: Place | null): Promis
     await fh.close()
     fh = null
     if (known !== null && written !== known) throw bad('upload.size-mismatch')
+    // virus scan (antivirus.ts, off by default) before the file can replace or become anything in the storage
+    await gate(tmp, { who: 'user', via: 'webdav', by: user.username, ip, name, destDir: dirname(s.abs) })
 
     // The whole file is here. The counts are awaited, then the version, the quota and the file itself follow each other
     // with no await in between (like PUT /api/content), so the file that is replaced is the one that was kept.

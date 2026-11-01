@@ -1,9 +1,9 @@
 import { randomBytes } from 'node:crypto'
 import { lstatSync } from 'node:fs'
-import { basename, dirname, join } from 'node:path'
+import { basename, dirname, extname, join } from 'node:path'
 import { Elysia, t } from 'elysia'
 import { alert } from '../alerts'
-import { audit } from '../audit'
+import { audit, auditOnce } from '../audit'
 import { accessFor, canManage, clearFailures, findUser, hashPassword, lockedFor, recordFailure } from '../auth'
 import { config } from '../config'
 import * as policy from '../policy'
@@ -16,11 +16,17 @@ import {
   allowedShareDays, allShares, createShare, findShare, isUnlocked, kindOf, linkLockoutKey, lockoutKey, openShare, publicShare,
   recordUpload, revokeShare, type Share, SHARE_COOKIE, SHARE_LINK_LOCKOUT, SHARE_LOCKOUT, SHARE_MAX_DOWNLOADS, SHARE_MAX_FILES,
   SHARE_MAX_TOTAL, SHARE_NOTE_MAX, SHARE_PASSWORD_MIN, SHARE_UPLOADS_PER_IP, SHARE_UPLOADS_PER_LINK, SHARES_PER_USER,
-  sharesOf, shareTarget, shareToken, startDownload, stateOf, UNLOCK_MS, unlockCookie, uploadFull, uploadsBy
+  refuseViewOnly, sharesOf, shareTarget, shareToken, startDownload, stateOf, UNLOCK_MS, unlockCookie, uploadFull, uploadsBy,
+  WATERMARK_TEXT_MAX, watermarkFor
 } from '../shares'
 import { cancelUpload, checkUpload, completeUpload, initUpload, saveChunk, shareUploadLoad } from '../uploads'
 import { collectZipItems, zipStream } from '../zip'
 import { contentDisposition, fileResponse } from './files'
+
+/** what a view-only link previews as it is (the browser's own viewers), and the text types it shows as plain text */
+const VIEW_MEDIA = new Set(['.pdf', '.mp4', '.webm', '.mp3', '.wav', '.ogg', '.m4a'])
+const VIEW_TEXT = new Set(['.txt', '.md', '.csv', '.json', '.log'])
+const VIEW_TEXT_MAX = 1024 * 1024
 
 /** where the owner finds what arrived: the folder of an upload link in the file browser (a path in the app, no token) */
 const filesLink = (s: Share) => `/files?${s.space === 'home' ? '' : `space=${encodeURIComponent(s.space)}&`}path=${encodeURIComponent(s.path)}`
@@ -172,6 +178,15 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
     // upload links only: what the visitor may send, and a note that is shown as plain text
     const note = (body.note ?? '').replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '').trim()
     if (Array.from(note).length > SHARE_NOTE_MAX) throw bad('share.note-too-long', { max: SHARE_NOTE_MAX })
+    // view only: a download link only, per the admin's rule; the watermark text is plain text of limited length
+    const rule = policy.shareViewOnly()
+    if (kind === 'upload' && body.viewOnly) throw bad('share.view-only-download-only')
+    let viewOnly = kind === 'download' && !!body.viewOnly
+    if (viewOnly && rule === 'forbid') throw bad('share.view-only-forbidden')
+    if (kind === 'download' && rule === 'force') viewOnly = true
+    const wmText = (body.watermarkText ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim()
+    if (Array.from(wmText).length > WATERMARK_TEXT_MAX) throw bad('share.watermark-too-long', { max: WATERMARK_TEXT_MAX })
+    const watermark = viewOnly && (!!body.watermark || policy.shareForceWatermark())
     const upload = kind === 'upload' ? {
       kind: 'upload' as const,
       maxFileBytes: limitOf(body.maxFileBytes, policy.uploadMaxSize()),
@@ -186,14 +201,16 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
       path: rel,
       type: st.isDirectory() ? 'dir' : 'file',
       expiresAt: never ? policy.NEVER_EXPIRES_AT : new Date(Date.now() + body.days * 86_400_000).toISOString(),
-      maxDownloads: max,
+      // a view-only link hands out no download, so a download count means nothing on it
+      maxDownloads: viewOnly ? null : max,
+      ...(viewOnly ? { viewOnly: true, watermark, watermarkText: watermark ? wmText : '' } : {}),
       ...upload,
       ...(password ? { passwordHash: await hashPassword(password) } : {}),
     })
     // the path, never the token
     audit({
       user: owner.username, ip, action: 'share-create', target: storagePath(abs),
-      detail: `${kind === 'upload' ? 'ลิงก์รับไฟล์, ' : ''}${never ? 'ไม่มีวันหมดอายุ' : `${body.days} วัน`}${max ? `, ดาวน์โหลดได้ ${max} ครั้ง` : ''}${password ? ', มีรหัสผ่าน' : ''}`,
+      detail: `${kind === 'upload' ? 'ลิงก์รับไฟล์, ' : ''}${never ? 'ไม่มีวันหมดอายุ' : `${body.days} วัน`}${max ? `, ดาวน์โหลดได้ ${max} ครั้ง` : ''}${password ? ', มีรหัสผ่าน' : ''}${viewOnly ? `, ดูอย่างเดียว${watermark ? ' + ลายน้ำ' : ''}` : ''}`,
     })
     // the only time the token is told: it is not stored
     return { share: publicShare(share), token, url: `/s/${token}` }
@@ -204,6 +221,7 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
       kind: t.Optional(t.Union([t.Literal('download'), t.Literal('upload')])),
       maxFileBytes: t.Optional(t.Nullable(t.Number())), maxFiles: t.Optional(t.Nullable(t.Number())),
       maxTotalBytes: t.Optional(t.Nullable(t.Number())), note: t.Optional(t.String({ maxLength: 5000 })),
+      viewOnly: t.Optional(t.Boolean()), watermark: t.Optional(t.Boolean()), watermarkText: t.Optional(t.String({ maxLength: 1000 })),
     }),
   })
 
@@ -240,7 +258,7 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
   })
 
   // ───────────── public: whoever holds the link ─────────────
-  .get('/s/:token', async ({ params, query, request }) => {
+  .get('/s/:token', async ({ params, query, request, ip }) => {
     const { share, abs } = openShare(params.token)
     const expiresAt = share.expiresAt
     if (kindOf(share) === 'upload') {
@@ -258,14 +276,16 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
     }
     if (!isUnlocked(share, request)) return { name: null, type: null, size: null, expiresAt, needsPassword: true }
     const name = basename(abs)
-    if (share.type === 'file') return { name, type: 'file', size: lstatSync(abs).size, expiresAt, needsPassword: false }
+    // what a view-only visitor needs to know: no download button, and the text layer for previews (made for this visitor now)
+    const view = { viewOnly: !!share.viewOnly, watermark: watermarkFor(share, ip) }
+    if (share.type === 'file') return { name, type: 'file', size: lstatSync(abs).size, expiresAt, needsPassword: false, ...view }
     const at = insideShare(abs, query.path)
     let st
     try { st = lstatSync(at.abs) } catch { throw notFound() }
     if (!st.isDirectory()) throw bad('files.not-a-folder')
     // a big folder takes a while to count: other requests are answered meanwhile
     const size = (await treeStats(abs, 50_000)).size
-    return { name, type: 'dir', size, expiresAt, needsPassword: false, path: at.rel, entries: await listDirAsync(at.abs, at.rel) }
+    return { name, type: 'dir', size, expiresAt, needsPassword: false, ...view, path: at.rel, entries: await listDirAsync(at.abs, at.rel) }
   }, { query: t.Object({ path: t.Optional(t.String()) }) })
 
   .post('/s/:token/unlock', async ({ params, body, ip, cookie }) => {
@@ -293,6 +313,8 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
   .get('/s/:token/download', ({ params, query, request, user, ip }) => {
     const { share, abs } = openShare(params.token, 'download')
     needUnlocked(share, request)
+    // a view-only link: not a file, not a folder, not a zip, not a range of it
+    refuseViewOnly(share)
     let target = abs
     if (share.type === 'dir') target = insideShare(abs, query.path).abs
     else if (normRel(query.path) !== '/') throw notFound()
@@ -327,6 +349,29 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
       slot.release()
       throw err
     }
+  }, { query: t.Object({ path: t.Optional(t.String()) }) })
+
+  // The preview of a view-only link: a PDF, a video or audio file, or a small text file, shown inline. A picture is previewed
+  // through /thumb (a downscaled copy), never as the original. Any other kind answers 415. Counts nothing (nothing is downloaded).
+  .get('/s/:token/view', async ({ params, query, request, user, ip }) => {
+    const { share, abs } = shareFile(params.token, query.path, request)
+    if (!share.viewOnly) throw notFound()
+    const ext = extname(abs).toLowerCase()
+    const name = basename(abs)
+    auditOnce(`share-view|${share.id}|${ip}|${storagePath(abs)}`, {
+      user: user?.username ?? 'guest', ip, action: 'share-view', target: storagePath(abs), detail: `ลิงก์ ${share.id} ของ ${share.owner}`,
+    })
+    if (VIEW_MEDIA.has(ext)) return fileResponse(abs, name, request, true, true)
+    if (VIEW_TEXT.has(ext)) {
+      if (lstatSync(abs).size > VIEW_TEXT_MAX) throw new HttpError(413, 'share.not-previewable')
+      return new Response(await Bun.file(abs).text(), {
+        headers: {
+          'Content-Type': 'text/plain; charset=utf-8', 'Content-Disposition': contentDisposition('inline', name),
+          'X-Content-Type-Options': 'nosniff', 'Content-Security-Policy': "default-src 'none'; sandbox", 'Cache-Control': 'private, no-store',
+        },
+      })
+    }
+    throw new HttpError(415, 'share.not-previewable')
   }, { query: t.Object({ path: t.Optional(t.String()) }) })
 
   // ───────────── public: upload-request links ─────────────
