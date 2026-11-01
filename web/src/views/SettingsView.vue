@@ -210,6 +210,29 @@
               </setting-row>
             </section>
             <alerts-card :key="alertsKey" />
+
+            <section class="surface block" data-tour="settings-audit-forward">
+              <h2>{{ t('settings.auditForward.title') }}</h2>
+              <div class="muted lead">{{ t('settings.auditForward.lead') }}</div>
+              <setting-row v-bind="rowProps('auditForward.syslogHost')" :label="t('settings.auditForward.syslogHost')" :help="t('settings.auditForward.syslogHostHelp')" @reset="reset('auditForward.syslogHost')" @undo="undo('auditForward.syslogHost')">
+                <n-input v-model:value="f['auditForward.syslogHost']" :disabled="resets.includes('auditForward.syslogHost')" placeholder="logs.example.com" class="ctl" :input-props="{ autocomplete: 'off', spellcheck: false, name: 'syslog-host' }" />
+              </setting-row>
+              <setting-row v-bind="rowProps('auditForward.syslogPort')" :label="t('settings.auditForward.syslogPort')" @reset="reset('auditForward.syslogPort')" @undo="undo('auditForward.syslogPort')">
+                <n-input-number v-model:value="f['auditForward.syslogPort']" :min="1" :max="65535" :precision="0" :show-button="false" :disabled="resets.includes('auditForward.syslogPort')" class="ctl" />
+              </setting-row>
+              <setting-row v-bind="rowProps('auditForward.syslogProto')" :label="t('settings.auditForward.syslogProto')" :help="t('settings.auditForward.syslogProtoHelp')" @reset="reset('auditForward.syslogProto')" @undo="undo('auditForward.syslogProto')">
+                <n-select v-model:value="f['auditForward.syslogProto']" :options="protoOptions" :disabled="resets.includes('auditForward.syslogProto')" class="ctl" />
+              </setting-row>
+              <setting-row v-bind="rowProps('auditForward.syslogFacility')" :label="t('settings.auditForward.syslogFacility')" :help="t('settings.auditForward.syslogFacilityHelp')" @reset="reset('auditForward.syslogFacility')" @undo="undo('auditForward.syslogFacility')">
+                <n-input-number v-model:value="f['auditForward.syslogFacility']" :min="0" :max="23" :precision="0" :show-button="false" :disabled="resets.includes('auditForward.syslogFacility')" class="ctl" />
+              </setting-row>
+              <setting-row v-bind="rowProps('auditForward.webhookUrl')" :label="t('settings.auditForward.webhookUrl')" :help="t('settings.auditForward.webhookUrlHelp')" @reset="reset('auditForward.webhookUrl')" @undo="undo('auditForward.webhookUrl')">
+                <n-input v-model:value="f['auditForward.webhookUrl']" :disabled="resets.includes('auditForward.webhookUrl')" :placeholder="srv.auditForward.webhookUrl.value || 'https://…'" class="ctl wide" :input-props="{ autocomplete: 'off', spellcheck: false, name: 'audit-hook-url' }" />
+                <template #extra>
+                  <div v-if="srv.auditForward.webhookUrl.value" class="muted help-s mono wrapany">{{ t('settings.alerts.current') }} {{ srv.auditForward.webhookUrl.value }}</div>
+                </template>
+              </setting-row>
+            </section>
           </template>
 
           <!-- appears as soon as something is changed -->
@@ -274,6 +297,7 @@ const FILE_NUMBERS = ['trashRetentionDays', 'versionsKeep', 'versionsDays']
 const RANGE = {
   'security.sessionTtlHours': [1, 2160], 'security.loginMaxAttempts': [3, 20], 'security.loginLockoutSeconds': [30, 3600],
   'files.trashRetentionDays': [1, 365], 'files.versionsKeep': [0, 100], 'files.versionsDays': [1, 365], 'mail.port': [1, 65535],
+  'auditForward.syslogPort': [1, 65535], 'auditForward.syslogFacility': [0, 23],
 }
 const UNIT = { sessionTtlHours: 'hours', loginMaxAttempts: 'times', loginLockoutSeconds: 'seconds', trashRetentionDays: 'days', versionsKeep: 'versions', versionsDays: 'days' }
 // the settings that live in a group of the server's answer (path = group.key), and which category shows each
@@ -283,11 +307,12 @@ const GROUPED = {
   files: ['uploadMaxSize', 'defaultQuotaBytes', 'thumbnails', 'webdav', ...FILE_NUMBERS],
   mail: ['host', 'port', 'secure', 'user', 'pass', 'from'],
   alerts: ['webhookUrl', 'kind', 'telegramChatId', 'lang'],
+  auditForward: ['syslogHost', 'syslogPort', 'syslogProto', 'syslogFacility', 'webhookUrl'],
 }
-const CAT_OF = { appName: 'general', primaryColor: 'general', guestPermissions: 'public', welcomeTitle: 'public', welcomeText: 'public', publicEmptyText: 'public', publicEnabled: 'public', share: 'share', security: 'security', files: 'files', mail: 'mail', alerts: 'mail' }
+const CAT_OF = { appName: 'general', primaryColor: 'general', guestPermissions: 'public', welcomeTitle: 'public', welcomeText: 'public', publicEmptyText: 'public', publicEnabled: 'public', share: 'share', security: 'security', files: 'files', mail: 'mail', alerts: 'mail', auditForward: 'mail' }
 const catOfPath = p => CAT_OF[p.includes('.') ? p.split('.')[0] : p]
 // never shown back: a blank box means "keep what is there"
-const WRITE_ONLY = ['mail.pass', 'alerts.webhookUrl']
+const WRITE_ONLY = ['mail.pass', 'alerts.webhookUrl', 'auditForward.webhookUrl']
 const ALL_PATHS = [...FLAT, 'guestPermissions', ...Object.entries(GROUPED).flatMap(([g, ks]) => ks.map(k => `${g}.${k}`))]
 
 const { t } = useI18n()
@@ -315,6 +340,7 @@ const mailTestError = ref('')
 const catOptions = computed(() => CATS.map(c => ({ value: c.id, label: t(`settings.cat.${c.id}`) + (countOf(c.id) ? ` (${countOf(c.id)})` : '') })))
 const secureOptions = computed(() => ['starttls', 'tls', 'none'].map(v => ({ value: v, label: t(`settings.mail.secure_${v}`) })))
 const kindOptions = computed(() => ['discord', 'slack', 'telegram', 'json'].map(v => ({ value: v, label: t(`alerts.webhooks.${v}`) })))
+const protoOptions = [{ value: 'udp', label: 'UDP' }, { value: 'tcp', label: 'TCP' }]
 const langOptions = [{ value: 'th', label: 'ไทย' }, { value: 'en', label: 'English' }]
 const require2faOptions = computed(() => ['none', 'admin', 'staff', 'all'].map(v => ({ value: v, label: t(`settings.security.require_${v}`) })))
 function dayOptions(forDefault) {
@@ -385,6 +411,7 @@ function localError(p) {
   if (p === 'files.uploadMaxSize' && !f[p]) return t('settings.required')
   if (p === 'files.defaultQuotaBytes' && !f.quotaUnlimited && !f[p]) return t('settings.required')
   if (p === 'mail.port' && !f[p]) return t('settings.required')
+  if (p === 'auditForward.syslogPort' && !f[p]) return t('settings.required')
   return ''
 }
 const errorOf = p => serverErrors.value[p] || localError(p)
@@ -402,7 +429,7 @@ const covers = { none: [], admin: ['admin'], staff: ['admin', 'manager'], all: [
 const warn2fa = computed(() => ready.value && isChanged('security.require2fa') && !resets.value.includes('security.require2fa') && !app.user?.twoFactor && (covers[f['security.require2fa']] || []).includes(app.user?.role))
 
 // ───────── save ─────────
-const needsPassword = computed(() => changedPaths.value.some(p => p.startsWith('security.') || p.startsWith('mail.') || p.startsWith('alerts.'))
+const needsPassword = computed(() => changedPaths.value.some(p => p.startsWith('security.') || p.startsWith('mail.') || p.startsWith('alerts.') || p.startsWith('auditForward.'))
   || ADVANCED.some(p => hasPerm(p) && !orig.guestPermissions.includes(p)))
 
 function toApi(p) {

@@ -10,7 +10,7 @@
 import { config } from './config'
 import { bad } from './fsx'
 import { open, seal } from './secret-box'
-import { type AlertPrefs, type FilesPrefs, type MailPrefs, type SecurityPrefs, type SharePrefs, type Settings, settings } from './settings'
+import { type AlertPrefs, type AuditForwardPrefs, type FilesPrefs, type MailPrefs, type SecurityPrefs, type SharePrefs, type Settings, settings } from './settings'
 import { log } from './logger'
 
 export type Source = 'web' | 'env' | 'default'
@@ -29,7 +29,7 @@ export const NEVER_EXPIRES_AT = '9999-12-31T23:59:59.000Z'
 const DEFAULT_SHARE_DAYS = 7
 
 const envSet = (name: string | null) => !!name && process.env[name] !== undefined && process.env[name] !== ''
-const grp = <G extends 'share' | 'security' | 'files' | 'mail' | 'alerts'>(g: G): NonNullable<Settings[G]> => (settings.get()[g] ?? {}) as NonNullable<Settings[G]>
+const grp = <G extends 'share' | 'security' | 'files' | 'mail' | 'alerts' | 'auditForward'>(g: G): NonNullable<Settings[G]> => (settings.get()[g] ?? {}) as NonNullable<Settings[G]>
 
 /** a sealed secret opened; `null` when this server can not open it (the key is another one), which turns the feature off */
 function unseal(sealed: string | undefined, what: string): string | null {
@@ -124,6 +124,22 @@ export function alertValues(): { url: string; kind: string; chatId: string; lang
 }
 export const alertLang = () => grp('alerts').lang ?? config.alertLang
 
+// ───────────── audit forwarding ─────────────
+
+export type AuditForwardValues = { syslogHost: string; syslogPort: number; syslogProto: 'udp' | 'tcp'; syslogFacility: number; webhookUrl: string }
+/** web settings only (no env fallback): off until an admin sets a destination */
+export function auditForwardValues(): AuditForwardValues {
+  const a = grp('auditForward')
+  const url = unseal(a.webhookSealed, 'URL ส่งต่อบันทึกกิจกรรม')
+  return {
+    syslogHost: a.syslogHost ?? '',
+    syslogPort: a.syslogPort ?? 514,
+    syslogProto: a.syslogProto ?? 'udp',
+    syslogFacility: a.syslogFacility ?? 13,
+    webhookUrl: url ?? '',
+  }
+}
+
 /** a saved secret exists but this server can not open it */
 export function unreadableSecrets(): string[] {
   const out: string[] = []
@@ -133,6 +149,7 @@ export function unreadableSecrets(): string[] {
   }
   probe(grp('mail').passSealed, 'mail.pass')
   probe(grp('alerts').webhookSealed, 'alerts.webhookUrl')
+  probe(grp('auditForward').webhookSealed, 'auditForward.webhookUrl')
   return out
 }
 
@@ -155,7 +172,8 @@ const eff = <T>(web: T | undefined, env: T, envName: string | null): Eff<T> =>
 
 /** every runtime setting with the value in force and where it comes from; no secret in it */
 export function policyView() {
-  const sh = grp('share'), se = grp('security'), f = grp('files'), m = grp('mail'), a = grp('alerts')
+  const sh = grp('share'), se = grp('security'), f = grp('files'), m = grp('mail'), a = grp('alerts'), af = grp('auditForward')
+  const afv = auditForwardValues()
   const quota = defaultQuotaBytes()
   const mv = mail()
   const av = alertValues()
@@ -201,6 +219,13 @@ export function policyView() {
       telegramChatId: eff(a.telegramChatId, av.chatId, 'ALERT_TELEGRAM_CHAT_ID'),
       lang: eff(a.lang, av.lang, 'ALERT_LANG'),
     },
+    auditForward: {
+      syslogHost: eff(af.syslogHost, afv.syslogHost, null),
+      syslogPort: eff(af.syslogPort, afv.syslogPort, null),
+      syslogProto: eff<'udp' | 'tcp'>(af.syslogProto, afv.syslogProto, null),
+      syslogFacility: eff(af.syslogFacility, afv.syslogFacility, null),
+      webhookUrl: { value: maskUrl(afv.webhookUrl), source: (af.webhookSealed !== undefined ? 'web' : 'default') as Source },
+    },
   }
 }
 
@@ -217,13 +242,18 @@ const flag: Parse = (v, key) => { if (typeof v !== 'boolean') throw fail(key); r
 const oneOf = (...values: string[]): Parse => (v, key) => { if (typeof v !== 'string' || !values.includes(v)) throw fail(key); return v }
 const str = (max: number): Parse => (v, key) => { if (!isStr(v, max)) throw fail(key); return v.trim() }
 
+/** the one rule for an outbound webhook URL (alerts and audit forwarding): https, or http only to this machine */
+export function isSafeWebhookUrl(value: string): boolean {
+  let u: URL
+  try { u = new URL(value) } catch { return false }
+  return u.protocol === 'https:' || (u.protocol === 'http:' && LOCAL_HOSTS.has(u.hostname))
+}
+
 const webhook: Parse = (v, key) => {
   if (!isStr(v, 1000)) throw fail(key)
   const s = v.trim()
   if (!s) return ''
-  let u: URL
-  try { u = new URL(s) } catch { throw fail(key) }
-  if (!(u.protocol === 'https:' || (u.protocol === 'http:' && LOCAL_HOSTS.has(u.hostname)))) throw fail(key)
+  if (!isSafeWebhookUrl(s)) throw fail(key)
   return s
 }
 
@@ -268,12 +298,19 @@ const SPEC: Record<string, Record<string, [string, Parse]>> = {
     telegramChatId: ['telegramChatId', str(100)],
     lang: ['lang', oneOf('th', 'en')],
   },
+  auditForward: {
+    syslogHost: ['syslogHost', (v, k) => { const s = str(253)(v, k) as string; if (s && !/^[A-Za-z0-9.:\[\]-]+$/.test(s)) throw fail(k); return s }],
+    syslogPort: ['syslogPort', int(1, 65535)],
+    syslogProto: ['syslogProto', oneOf('udp', 'tcp')],
+    syslogFacility: ['syslogFacility', int(0, 23)],
+    webhookUrl: ['webhookSealed', (v, k) => { const s = webhook(v, k) as string; return s ? seal(s) : '' }],
+  },
 }
 
 export const POLICY_GROUPS = Object.keys(SPEC)
 
 /** the groups of a request body that need the admin's password: anything that changes sign-in rules or where mail and alerts go */
-export const STEP_UP_GROUPS = ['security', 'mail', 'alerts']
+export const STEP_UP_GROUPS = ['security', 'mail', 'alerts', 'auditForward']
 
 /**
  * Check every given key and save them together (nothing is saved when one is wrong). A key given as `null` goes back
@@ -308,4 +345,4 @@ export function savePolicy(body: Record<string, unknown>): string[] {
   return changed
 }
 
-export type { AlertPrefs, FilesPrefs, MailPrefs, SecurityPrefs, SharePrefs }
+export type { AlertPrefs, AuditForwardPrefs, FilesPrefs, MailPrefs, SecurityPrefs, SharePrefs }

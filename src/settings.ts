@@ -36,6 +36,9 @@ export type MailPrefs = { host?: string; port?: number; secure?: 'starttls' | 't
 /** `webhookSealed` is the alert URL sealed with secret.key: a bot token is part of it */
 export type AlertPrefs = { webhookSealed?: string; kind?: 'discord' | 'slack' | 'telegram' | 'json'; telegramChatId?: string; lang?: 'th' | 'en' }
 
+/** where each audit entry is sent as well (audit-forward.ts); `webhookSealed` is the URL sealed with secret.key */
+export type AuditForwardPrefs = { syslogHost?: string; syslogPort?: number; syslogProto?: 'udp' | 'tcp'; syslogFacility?: number; webhookSealed?: string }
+
 export type Settings = {
   appName: string
   primaryColor: string
@@ -54,6 +57,7 @@ export type Settings = {
   files?: FilesPrefs
   mail?: MailPrefs
   alerts?: AlertPrefs
+  auditForward?: AuditForwardPrefs
 }
 
 /** the only shape a stored logo may have; anything else (a settings.json from a backup) is treated as no logo */

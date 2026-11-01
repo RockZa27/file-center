@@ -35,7 +35,7 @@ const permsT = t.Array(t.String(), { maxItems: 50 })
 
 /** the settings as the page gets them: no sealed secret, each runtime setting with the value in force and its source */
 function settingsView() {
-  const { share: _s, security: _e, files: _f, mail: _m, alerts: _a, ...plain } = settings.get()
+  const { share: _s, security: _e, files: _f, mail: _m, alerts: _a, auditForward: _af, ...plain } = settings.get()
   return { ...plain, ...policyView() }
 }
 
@@ -381,7 +381,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     // the names of what changed, never a value (a password or a webhook URL is among them)
     audit({ user: admin.username, ip, action: 'settings-update', detail: [...Object.keys(patch), ...changed].join(', ') })
     // mail and alerts decide where messages go: a changed webhook or SMTP server is worth a message to the admins
-    const security = changed.filter(k => k.startsWith('security.') || k.startsWith('mail.') || k.startsWith('alerts.'))
+    const security = changed.filter(k => k.startsWith('security.') || k.startsWith('mail.') || k.startsWith('alerts.') || k.startsWith('auditForward.'))
     if (security.length) alert('settings-security', 'admin.alert-security-changed', { user: admin.username, keys: security.join(', ') })
     return settingsView()
   }, {
@@ -391,7 +391,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
       publicEmptyText: t.Optional(t.String()), publicEnabled: t.Optional(t.Boolean()),
       guestPermissions: t.Optional(permsT),
       share: t.Optional(t.Any()), security: t.Optional(t.Any()), files: t.Optional(t.Any()),
-      mail: t.Optional(t.Any()), alerts: t.Optional(t.Any()),
+      mail: t.Optional(t.Any()), alerts: t.Optional(t.Any()), auditForward: t.Optional(t.Any()),
       password: t.Optional(t.String({ maxLength: 1000 })),
     }),
   })

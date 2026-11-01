@@ -1,4 +1,5 @@
 import { config, paths } from './config'
+import { forwardAudit } from './audit-forward'
 import { appendLine, pageOf, readNewestFirst } from './logger'
 
 export type AuditEntry = {
@@ -11,7 +12,10 @@ export type AuditEntry = {
 }
 
 export function audit(entry: Omit<AuditEntry, 'ts'>) {
-  appendLine(paths.audit, JSON.stringify({ ts: new Date().toISOString(), ...entry }), config.auditMaxBytes, config.auditMaxFiles)
+  const full = { ts: new Date().toISOString(), ...entry }
+  appendLine(paths.audit, JSON.stringify(full), config.auditMaxBytes, config.auditMaxFiles)
+  // a copy for the syslog server / webhook the admin may have set: queued, sent in the background, never throws
+  forwardAudit(full)
 }
 
 export type AuditFilter = { user?: string; action?: string; q?: string; /** a further test every entry must pass */ only?: (r: AuditEntry) => boolean }
