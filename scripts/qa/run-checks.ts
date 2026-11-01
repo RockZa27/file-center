@@ -65,7 +65,9 @@ function parseJunit(file: string): Case[] {
     const unescape = (t: string) => t.replace(/&#(\d+);/g, (_, n) => String.fromCharCode(Number(n)))
       .replaceAll('&quot;', '"').replaceAll('&lt;', '<').replaceAll('&gt;', '>').replaceAll('&apos;', "'").replaceAll('&amp;', '&')
     const message = fail ? unescape(fail[2] || (/message="([^"]*)"/.exec(fail[1])?.[1] ?? '')).trim() : ''
-    out.push({ name: `${attr('classname')} > ${attr('name')}`.replace(/^ > /, ''), file: attr('file'), failed: /<failure|<error/.test(body), skipped: /<skipped/.test(body), message })
+    // a hook that fails or times out is one case named "(unnamed)": say which file, or the report cannot be followed
+    const name = `${attr('classname')} > ${attr('name')}`.replace(/^ > /, '')
+    out.push({ name: name === '(unnamed)' ? `(unnamed: a hook or the file failed) ${attr('file')}` : name, file: attr('file'), failed: /<failure|<error/.test(body), skipped: /<skipped/.test(body), message })
   }
   return out
 }

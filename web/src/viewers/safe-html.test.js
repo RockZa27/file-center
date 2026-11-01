@@ -33,7 +33,9 @@ beforeAll(async () => {
   page = await browser.newPage()
   await page.setContent('<!doctype html><body></body>')
   await page.addScriptTag({ content: code })
-})
+  // a cold build and browser start under the full run with coverage can take longer than the 5 s default; a hook
+  // that times out fails the file as one "(unnamed)" case and none of its tests run
+}, 60_000)
 afterAll(async () => { await browser?.close() })
 
 const t = available ? test : test.skip
