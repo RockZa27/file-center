@@ -991,6 +991,25 @@ describe('webdav: shared folders and the registry', () => {
     expect(await me.dav.status('GET', '/dav/shared/Photos%20(2)/x.txt')).toBe(404)
   })
 
+  test('two folders shared in the same millisecond keep the order they were shared in, whatever their ids', async () => {
+    const o1 = await davUser('dv-tie1')
+    const o2 = await davUser('dv-tie2')
+    const me = await davUser('dv-tie3')
+    for (const [o, perms] of [[o1, 'view'], [o2, 'edit']] as const) {
+      mkdirSync(home(o.username, 'Docs'), { recursive: true })
+      expect((await o.web.json('POST', '/api/grants', { space: 'home', path: '/Docs', to: 'dv-tie3', perms })).status).toBe(200)
+    }
+    const first = grantsMod.allGrants().find(g => g.owner === 'dv-tie1')!
+    const second = grantsMod.allGrants().find(g => g.owner === 'dv-tie2')!
+    // the same time, and ids that sort the other way
+    second.createdAt = first.createdAt
+    first.id = 'f'.repeat(24)
+    second.id = '0'.repeat(24)
+    expect((await me.dav.put('/dav/shared/Docs/a.txt', 'a')).status).toBe(403)
+    expect((await me.dav.put('/dav/shared/Docs%20(2)/a.txt', 'a')).status).toBe(201)
+    expect(readFileSync(home('dv-tie2', 'Docs', 'a.txt'), 'utf8')).toBe('a')
+  })
+
   test('a module can register a folder of spaces (user groups do): names are made safe and unique, an empty folder is left out', async () => {
     const u = await davUser('dv-reg1', 'readwrite', { publicPermissions: ['read', 'download'] })
     const seen: string[] = []

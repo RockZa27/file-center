@@ -70,10 +70,11 @@ export function registerDavFolder(name: string, entriesFor: (user: User) => DavE
 
 registerDavSpace('home', () => 'home')
 registerDavSpace('public', user => (accessFor(user, 'public') ? 'public' : null))
-// the folders other people share with this user; the name is the folder's own
+// the folders other people share with this user; the name is the folder's own. Grants are stored in the order they
+// were made and the sort is stable, so two made in the same millisecond keep that order (a random id would not).
 registerDavFolder('shared', user =>
   activeGrantsTo(user)
-    .sort((a, b) => a.grant.createdAt.localeCompare(b.grant.createdAt) || a.grant.id.localeCompare(b.grant.id))
+    .sort((a, b) => a.grant.createdAt.localeCompare(b.grant.createdAt))
     .map(g => ({ name: basename(g.abs) || g.owner.username, space: `${GRANT_SPACE}${g.grant.id}` })))
 
 /** the entries of a folder with names that are safe in a path and unique ("Photos", "Photos (2)") */
