@@ -16,8 +16,9 @@ import { removeGrantsOf } from './grants'
 import { removeUserFromGroups } from './groups'
 import { forgetNotifications } from './notify'
 import { revokeSharesOf } from './shares'
+import { dropUploadsOf } from './uploads'
 
-/** sign-ins, links, grants, groups, app passwords, own settings: a deleted account takes them along (memory, saved by the stores) */
+/** sign-ins, links, grants, groups, app passwords, own settings, unfinished uploads: a deleted account takes them along (memory, saved by the stores) */
 export function forgetAccount(username: string) {
   destroyUserSessions(username)
   revokeSharesOf(username)
@@ -27,6 +28,7 @@ export function forgetAccount(username: string) {
   removeGrantsOf(username)
   removeAppPasswordsOf(username)
   removeUserFromGroups(username)
+  dropUploadsOf(username)
 }
 
 /** the data files this touches (a test points them at its own folder) */

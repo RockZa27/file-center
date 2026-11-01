@@ -151,3 +151,48 @@ describe('an account named like an Object method (audit run 3, hardening)', () =
     }
   })
 })
+
+describe('office link tokens and a later account of the same name (audit run 3)', () => {
+  test('a token of a deleted account does not open the file of the account that took the name; the own account still does', async () => {
+    const office = await import('../src/office')
+    const { findUser } = await import('../src/auth')
+    const u = await userWith('s133-off', ['read', 'write', 'download'])
+    writeFileSync(home('s133-off', 'r.docx'), 'FIRST')
+    const first = findUser('s133-off')!
+    const f = (await import('../src/fsx')).storagePath(home('s133-off', 'r.docx'))
+    const withC = office.makeToken({ s: 'home', p: '/r.docx', f, u: first.username, c: first.createdAt, m: 'view' })
+    // a token made by 1.13.2 has no c
+    const old = office.makeToken({ s: 'home', p: '/r.docx', f, u: first.username, m: 'view' })
+    expect(office.tokenFile(office.readToken(withC), ['read']).abs).toBe(home('s133-off', 'r.docx'))
+    expect(office.tokenFile(office.readToken(old), ['read']).abs).toBe(home('s133-off', 'r.docx'))
+    void u
+    expect((await admin.json('DELETE', '/api/admin/users/s133-off')).status).toBe(200)
+    await Bun.sleep(5)
+    await userWith('s133-off', ['read', 'write', 'download'])
+    writeFileSync(home('s133-off', 'r.docx'), 'SECOND-OWNER')
+    expect(() => office.tokenFile(office.readToken(withC), ['read'])).toThrow()
+    expect(() => office.tokenFile(office.readToken(old), ['read'])).toThrow()
+    // a token made for the new account works
+    const second = findUser('s133-off')!
+    const mine = office.makeToken({ s: 'home', p: '/r.docx', f, u: second.username, c: second.createdAt, m: 'view' })
+    expect(office.tokenFile(office.readToken(mine), ['read']).abs).toBe(home('s133-off', 'r.docx'))
+  })
+})
+
+describe('unfinished uploads of a deleted account (audit run 3)', () => {
+  test('a later account of the name is not charged for them and can not reach them', async () => {
+    const make = () => admin.json('POST', '/api/admin/users', { username: 's133-upd', name: 's133-upd', password: PW, role: 'user', permissions: ['read', 'write', 'upload'], publicPermissions: [], quotaBytes: 1_000_000 })
+    expect((await make()).status).toBe(200)
+    const first = await new Client().login('s133-upd', PW)
+    const old = await first.json('POST', '/api/upload', { space: 'home', path: '/', name: 'big.bin', size: 900_000 })
+    expect(old.status).toBe(200)
+    expect((await admin.json('DELETE', '/api/admin/users/s133-upd')).status).toBe(200)
+    expect((await make()).status).toBe(200)
+    const second = await new Client().login('s133-upd', PW)
+    // the dead account's 900 KB hold is gone: the new account has its whole quota
+    const mine = await second.json('POST', '/api/upload', { space: 'home', path: '/', name: 'new.bin', size: 500_000 })
+    expect(mine.status).toBe(200)
+    expect((await second.json('GET', `/api/upload/${old.data.id}`)).status).toBe(404)
+    expect((await second.json('DELETE', `/api/upload/${mine.data.id}`)).status).toBe(200)
+  })
+})

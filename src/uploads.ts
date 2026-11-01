@@ -444,6 +444,23 @@ export function cancelUpload(id: string, owner: string) {
   releaseQuota(meta)
 }
 
+/**
+ * an account is deleted, re-created or dropped by a restore: its unfinished uploads (and the uploads others sent to
+ * its home through a link) go, and their reservations come back, so a later account of the name is not charged for
+ * them and can not finish them (an upload names its owner by name only)
+ */
+export function dropUploadsOf(username: string): number {
+  restoreReservations()
+  const same = (a: unknown) => typeof a === 'string' && a.toLowerCase() === username.toLowerCase()
+  let n = 0
+  for (const meta of allMetas()) {
+    if (finishing.has(meta.id) || !(same(meta.owner) || same(meta.quotaUser))) continue
+    dropUpload(meta.id, meta)
+    n++
+  }
+  return n
+}
+
 /** remove uploads that did not receive anything new for a few hours */
 export function cleanStaleUploads(): number {
   restoreReservations()

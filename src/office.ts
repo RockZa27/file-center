@@ -149,7 +149,8 @@ export function serverJwt(request: Request): Record<string, unknown> | null {
 
 export type OfficeMode = 'edit' | 'view'
 /** s = space, p = path in that space, f = where that was in the storage, u = user, m = mode, e = expiry (ms) */
-export type OfficeToken = { s: Space; p: string; f: string; u: string; m: OfficeMode; e: number }
+/** `c`: the createdAt of the account `u` names. An account is (name, createdAt): a later account of the name is not it */
+export type OfficeToken = { s: Space; p: string; f: string; u: string; c?: string; m: OfficeMode; e: number }
 
 let keyCache: Buffer | null = null
 /** made on first use, readable by this account only; deleting it ends every link handed out so far */
@@ -191,10 +192,21 @@ export function readToken(token: unknown): OfficeToken {
  * the file a token names, if its user still exists, still holds `perms` in that space and the path still leads to
  * the same place in the storage (an admin may have moved the user's folder since) and is a plain file
  */
+/**
+ * the account the token was made for, not a later one that took the name after a delete or a restore. A token from
+ * before 1.13.3 has no `c`: it was made at its expiry less the lifetime, and an account made after that is not its own
+ */
+function sameAccount(user: User, t: OfficeToken): boolean {
+  if (typeof t.c === 'string') return t.c === user.createdAt
+  const born = Date.parse(user.createdAt)
+  return !Number.isNaN(born) && born <= t.e - OFFICE_LIMITS.tokenTtlMs
+}
+
 export function tokenFile(t: OfficeToken, perms: ('read' | 'download' | 'write')[]): { user: User; abs: string } {
   const user = findUser(t.u)
-  const a = user ? accessFor(user, t.s) : null
-  if (!user || !a || perms.some(p => !a.perms.has(p))) throw forbidden()
+  if (!user || !sameAccount(user, t)) throw forbidden()
+  const a = accessFor(user, t.s)
+  if (!a || perms.some(p => !a.perms.has(p))) throw forbidden()
   const abs = resolveIn(a.root, normRel(t.p))
   if (storagePath(abs) !== t.f) throw notFound()
   let st
@@ -222,7 +234,7 @@ export function editorConfig(user: User, space: Space, rel: string, abs: string,
   if (!(mode === 'edit' ? OFFICE_EDIT : OFFICE_VIEW).includes(ext)) throw bad('office.bad-type')
   const size = statSync(abs).size
   if (size > config.officeMaxSize) throw new HttpError(413, 'office.too-big', { mb: Math.floor(config.officeMaxSize / 1024 ** 2) })
-  const token = makeToken({ s: space, p: rel, f: storagePath(abs), u: user.username, m: mode })
+  const token = makeToken({ s: space, p: rel, f: storagePath(abs), u: user.username, c: user.createdAt, m: mode })
   const editor: Record<string, unknown> = {
     document: {
       fileType: ext.slice(1),

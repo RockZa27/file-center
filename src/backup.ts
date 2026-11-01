@@ -27,6 +27,7 @@ import { type BackupPrefs, logoExt, settings } from './settings'
 import { recountStorage, storageStats } from './stats'
 import { JsonStore } from './store'
 import { tombstoneTrashOf } from './trash'
+import { dropUploadsOf } from './uploads'
 import { collectZipItems, zipStream, type ZipItem } from './zip'
 
 export const BACKUP_NAME_RE = /^file-center-backup-\d{8}-\d{6}\.zip$/
@@ -644,7 +645,7 @@ export function restoreBackup(name: string): Promise<{ safety: BackupItem; twoFa
         // not a store: its entries of a dropped name get the tombstone an account delete gives them (an entry from
         // before 1.10 finds its owner in the live users, so this comes before the swap too)
         dropRecordsOnDisk(plan)
-        for (const name of plan.drop) tombstoneTrashOf(name)
+        for (const name of plan.drop) { tombstoneTrashOf(name); dropUploadsOf(name) }
         renameSync(join(work, 'users.json'), paths.users)
         if (existsSync(join(work, 'settings.json'))) renameSync(join(work, 'settings.json'), paths.settings)
         const branding = join(work, 'branding')
