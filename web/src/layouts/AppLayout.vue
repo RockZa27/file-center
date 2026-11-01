@@ -61,7 +61,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { NAvatar, NBadge, NButton, NDropdown, NIcon } from 'naive-ui'
 import {
   ContrastOutline, FolderOpenOutline, FolderOutline, GlobeOutline, BookOutline, HelpCircleOutline, PlayCircleOutline, SparklesOutline, KeyOutline, LanguageOutline, LinkOutline, LogOutOutline, MenuOutline, MoonOutline, PeopleCircleOutline, PersonOutline,
-  ServerOutline, ShareSocialOutline, SpeedometerOutline, StarOutline, SunnyOutline, TimeOutline, TrashOutline,
+  PieChartOutline, ServerOutline, ShareSocialOutline, SpeedometerOutline, StarOutline, SunnyOutline, TimeOutline, TrashOutline,
 } from '@vicons/ionicons5'
 import { api } from '../api'
 import AppLogo from '../components/AppLogo.vue'
@@ -105,6 +105,7 @@ const sections = computed(() => {
   const files = [{ name: 'files', label: t('nav.files'), icon: FolderOutline }]
   files.push({ name: 'favorites', label: t('nav.favorites'), icon: StarOutline })
   if (app.groups.length) files.push({ name: 'groups', label: t('nav.groupFolders'), icon: FolderOpenOutline })
+  files.push({ name: 'insight', label: t('nav.insight'), icon: PieChartOutline })
   files.push({ name: 'my-trash', label: app.isAdmin ? t('nav.myTrash') : t('nav.trash'), icon: TrashOutline })
 
   const sharing = [{ name: 'with-me', label: t('nav.withMe'), icon: ShareSocialOutline }]

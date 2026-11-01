@@ -79,6 +79,8 @@ src/
   favorites.ts, guide.ts, routes/guide.ts   รายการโปรด/ล่าสุด และสถานะทัวร์/"มีอะไรใหม่" ต่อผู้ใช้
   office.ts, routes/office.ts               แก้ไขเอกสาร office ผ่าน ONLYOFFICE Docs: config ที่เซ็นแล้ว, โทเคนของลิงก์, JWT, รับไฟล์ที่บันทึก
   compress.ts, static.ts                    บีบ JSON ของ API (br/gzip) และเสิร์ฟไฟล์หน้าเว็บพร้อม ETag
+  insight.ts, routes/insight.ts             พื้นที่จัดเก็บ: ไฟล์ใหญ่สุด ขนาดตามชนิด และไฟล์ซ้ำ (จัดกลุ่มตามขนาดก่อน แล้ว SHA-256 แบบสตรีมเฉพาะที่ขนาดเท่ากัน) งานเบื้องหลังครั้งละหนึ่งงาน มีเพดานไฟล์/ไบต์/เวลา และแคชผล
+  audit-forward.ts                          ส่งต่อทุกรายการของ audit.ts ไป syslog (RFC 5424, UDP/TCP) และ webhook: คิวจำกัด timeout ล้มเหลวแล้วแค่บันทึก
   trash.ts, audit.ts, settings.ts, store.ts, common-passwords.ts
   routes/           session, files, upload, admin, me, update, backup, logs, shares, grants, groups, trash, versions, office, alerts, notify, archive, thumbs, guide, app-passwords
 scripts/
@@ -105,6 +107,8 @@ dist-update/        แพ็กเกจที่ bun run package สร้า�
 | `account.test.ts` | อุปกรณ์ที่เข้าสู่ระบบ 2FA (TOTP, รหัสสำรอง, ความลับที่เข้ารหัส) และ CLI |
 | `shares.test.ts`, `upload-links.test.ts` | ลิงก์แชร์: สิทธิ์ รหัสผ่าน หมดอายุ จำนวนครั้ง ไม่ออกนอกโฟลเดอร์ที่แชร์ · ลิงก์รับไฟล์: เงื่อนไขการสร้าง ไม่เห็นของในโฟลเดอร์ ไม่เขียนทับ ข้อจำกัด ผูกกับผู้เยี่ยมชม |
 | `grants.test.ts`, `groups.test.ts` | แชร์ให้ผู้ใช้/กลุ่ม, กลุ่ม, โควตากลุ่ม, ถังขยะกลุ่ม |
+| `insight.test.ts` | พื้นที่จัดเก็บ: ไฟล์ใหญ่สุด ชนิด กลุ่มไฟล์ซ้ำ (ขนาดเท่ากันแต่เนื้อหาต่างไม่ซ้ำ) สิทธิ์ของ user/manager/admin เพดาน (ไฟล์ ไบต์ที่อ่าน) งานครั้งละหนึ่งงาน แคช และย้ายสำเนาไปถังขยะ |
+| `audit-forward.test.ts` | ส่งต่อประวัติการใช้งาน: บรรทัด RFC 5424 ทาง UDP/TCP (escape, octet-counting) webhook (ชุดละหลายรายการ redirect timeout) คิวจำกัด การตั้งค่าเฉพาะ admin ต้องใส่รหัสผ่าน URL ไม่ถูกแสดงกลับ และคำเตือน |
 | `own-trash.test.ts`, `security-110.test.ts` | ถังขยะของผู้ใช้เอง · ข้อค้นพบความปลอดภัยของ 1.10.0 |
 | `quota.test.ts` | โควตา: ทุกทางที่ไบต์ลงโฟลเดอร์ การจองและคืนที่จอง อัปโหลดพร้อมกัน และ `/api/me/usage` |
 | `webdav.test.ts` (+ `dav-server.ts`) | WebDAV และรหัสผ่านแอป: การเข้าสู่ระบบ ล็อก PROPFIND PUT แบบสตรีม โควตา ถังขยะ MOVE/COPY ขอบเขต read พาธอันตราย โฟลเดอร์ที่แชร์ และขีดจำกัดขนาดคำขอของ API |
@@ -286,6 +290,7 @@ File Center เขียนใหม่ทั้งหมดด้วย ElysiaJ
 | `POST /api/s/:token/upload` → `PUT /api/s/:token/upload/:id/:n` → `POST /api/s/:token/upload/:id/complete` · `DELETE /api/s/:token/upload/:id` | ผู้เยี่ยมชมส่งไฟล์ผ่านลิงก์รับไฟล์ |
 | `GET /api/me/usage` | พื้นที่ที่ใช้และโควตาของฉัน ดู [โควตา](#โควตาและถังขยะของผู้ใช้) |
 | `/api/me/notifications` · `/api/me/notify-prefs` · `/api/me/email` · `/api/me/line` · `POST /api/line/webhook` | การแจ้งเตือนส่วนตัว: กระดิ่ง อีเมล LINE ดู [การแจ้งเตือนส่วนตัว](#การแจ้งเตือนส่วนตัว) |
+| `GET /api/insight?scope=` · `POST /api/insight/scan` | พื้นที่จัดเก็บ: `scope` = `me` (ค่าเริ่มต้น) · `all` (admin) · `user:<ชื่อ>` (admin: ใครก็ได้, manager: ผู้ใช้ที่จัดการได้ อ่านอย่างเดียว) `POST` เริ่มวิเคราะห์เบื้องหลังตอบ 202 `{ outcome: started\|running\|recent }` หรือ 429 `insight.busy` เมื่อมีงานของที่อื่นอยู่ `GET` ตอบ `{ scope, space, base, canTrash, state: none\|running\|done, result? }` (`result`: `files`, `size`, `truncated`, `largest`, `types`, `duplicates`) พาธใน `result` สัมพันธ์กับ `base` ใน `space` ที่ตอบ ใช้กับ `POST /api/delete` ได้ตรง ๆ |
 | `GET /api/me/trash` · `POST /api/me/trash/:id/restore` · `DELETE /api/me/trash/:id` · `DELETE /api/me/trash` | ถังขยะของฉัน |
 | `GET /api/groups/mine\|lookup` · `/api/admin/groups*` | กลุ่มและโฟลเดอร์กลุ่ม space `group:<id>` |
 | `POST /api/grants` · `GET /api/grants/mine\|to-me` · `PATCH/DELETE /api/grants/:id` · `GET /api/users/lookup?q=` | แชร์โฟลเดอร์ให้ผู้ใช้อื่น space `grant:<id>` |

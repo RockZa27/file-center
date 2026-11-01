@@ -6,6 +6,27 @@ import { compareVersions, forRole } from './util'
  */
 export const releases = [
   {
+    version: '1.14.0',
+    items: [
+      {
+        id: '1140-insight', icon: 'system', roles: ['user'], to: { name: 'insight' },
+        title: { th: 'ดูว่าอะไรกินพื้นที่ และหาไฟล์ซ้ำ', en: 'See what takes space, and find duplicates' },
+        text: {
+          th: 'หน้าใหม่ "พื้นที่จัดเก็บ" แสดงไฟล์ใหญ่ที่สุด ขนาดแยกตามชนิดไฟล์ และกลุ่มไฟล์ที่เนื้อหาเหมือนกันทุกไบต์ เลือกย้ายสำเนาที่ไม่ต้องการไปถังขยะ (กู้คืนได้) โดยเก็บไว้อย่างน้อยหนึ่งไฟล์ ผู้ดูแลดูได้ทั้งระบบหรือรายผู้ใช้ ผู้จัดการดูผู้ใช้ที่ตนดูแลได้อย่างเดียว',
+          en: 'The new "Storage" page shows the largest files, size by file type, and groups of files with exactly the same content. Move unwanted copies to the trash (restorable), always keeping at least one. Admins can look at the whole system or any user; managers can look at the users they manage, read only.',
+        },
+      },
+      {
+        id: '1140-audit-forward', icon: 'system', roles: ['admin'], to: { name: 'settings' },
+        title: { th: 'ส่งต่อประวัติการใช้งานไปยัง syslog หรือ webhook', en: 'Forward the activity log to syslog or a webhook' },
+        text: {
+          th: 'ตั้งที่ ระบบ → ตั้งค่า → อีเมลและแจ้งเตือน ทุกรายการในประวัติการใช้งานถูกส่งซ้ำเบื้องหลังเป็น syslog RFC 5424 (UDP หรือ TCP) และ/หรือ webhook JSON ถ้าปลายทางล่มหรือช้า การใช้งานไม่กระทบ มีคิวจำกัดและเวลารอจำกัด การตั้งค่านี้ต้องยืนยันรหัสผ่านและเก็บ URL แบบเข้ารหัส',
+          en: 'Set it under System → Settings → Email and alerts. Every activity log entry is also sent in the background as RFC 5424 syslog (UDP or TCP) and/or a JSON webhook. A destination that is down or slow never affects use: the queue and the wait are bounded. The setting asks for your password and the URL is stored sealed.',
+        },
+      },
+    ],
+  },
+  {
     version: '1.13.3',
     items: [
       {

@@ -71,6 +71,9 @@ export const api = {
   revokeSession: id => call('DELETE', `/api/sessions/${encodeURIComponent(id)}`),
   revokeOthers: () => post('/api/sessions/revoke-others'),
   usage: () => get('/api/me/usage'),
+  /** what takes space and duplicates: { scope, space, base, canTrash, state: 'none'|'running'|'done', result? } for 'me', 'all' or 'user:<name>' */
+  insight: scope => get('/api/insight', { scope }),
+  insightScan: scope => post('/api/insight/scan', { scope }),
   twoFactorSetup: password => post('/api/2fa/setup', { password }),
   twoFactorEnable: code => post('/api/2fa/enable', { code }),
   twoFactorDisable: (password, code) => post('/api/2fa/disable', { password, code }),
