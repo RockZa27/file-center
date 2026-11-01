@@ -179,17 +179,34 @@ async function start() {
   }
 }
 
+/** the type key the server uses (src/insight.ts typeOf) */
+function typeOf(path) {
+  const name = path.slice(path.lastIndexOf('/') + 1)
+  const dot = name.lastIndexOf('.')
+  const e = dot > 0 ? name.slice(dot + 1).toLowerCase() : ''
+  return /^[a-z0-9_+-]{1,10}$/.test(e) ? e : e ? 'other' : ''
+}
+
 async function trash(g) {
   const items = pickedIn(g).map(fullPath)
   if (!items.length) return
-  if (!(await fb.confirm({ title: t('insight.trashTitle'), content: t('insight.trashConfirm', { n: items.length }), positive: t('common.delete'), danger: true }))) return
+  if (!(await fb.confirm({ title: t('insight.trashTitle'), content: t('insight.trashConfirm', { n: items.length }), positive: t('insight.trashOk'), danger: true }))) return
   trashing.value = true
   try {
     const r = await api.remove('home', items, true)
     const failed = new Set(r.failed.map(f => f.path))
     const gone = new Set(pickedIn(g).filter(p => !failed.has(fullPath(p))))
     // the page follows what happened without a new scan: the copies leave the group, a group of one is no group
-    const groups = info.value.result.duplicates.groups
+    const res = info.value.result
+    const groups = res.duplicates.groups
+    // the totals, the types and the largest files lose the copies too
+    for (const f of g.files.filter(x => gone.has(x.path))) {
+      res.files -= 1; res.size -= f.size
+      const ty = res.types.find(x => x.ext === typeOf(f.path))
+      if (ty) { ty.files -= 1; ty.size -= f.size }
+    }
+    res.types = res.types.filter(x => x.files > 0)
+    res.largest = res.largest.filter(f => !gone.has(f.path))
     g.files = g.files.filter(f => !gone.has(f.path))
     g.count -= gone.size
     g.wasted = g.size * (g.count - 1)

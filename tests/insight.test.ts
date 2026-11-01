@@ -113,6 +113,8 @@ describe('what takes space and duplicates', () => {
     expect(existsSync(home('in-bob', drop[0].slice(1)))).toBe(false)
     expect(existsSync(home('in-bob', g.files[0].path.slice(1)))).toBe(true)
     expect((await bob.json('GET', '/api/me/trash')).data.items.map((i: any) => i.name)).toContain(drop[0].slice(1))
+    // the scan that listed the copy is gone, so a new scan is not refused as "recent" and shows no stale copy
+    expect((await bob.json('GET', '/api/insight?scope=me')).data.state).toBe('none')
   })
 })
 
