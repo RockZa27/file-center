@@ -849,10 +849,15 @@ async function proppatchMethod(ctx: Ctx, segs: string[], place_: Place | null): 
   if (!st) throw notFound()
   const doc = await readXml(ctx.request)
   if (!doc || doc.name !== 'propertyupdate' || doc.ns !== DAV_NS) throw bad('files.dav-bad-xml')
+  // every property is written back with its namespace, so the PROPFIND limits apply here too: one long namespace
+  // declared once and 2000 properties in it would make a 64 KB request answer with about 70 MB
+  const ops = doc.children.filter(op => op.ns === DAV_NS && (op.name === 'set' || op.name === 'remove'))
+  const props = ops.flatMap(op => child(op, 'prop')?.children ?? [])
+  if (props.length > PROPFIND_MAX_PROPS) throw bad('files.dav-too-many-props', { max: PROPFIND_MAX_PROPS })
+  if (props.some(p => p.ns.length > PROPFIND_MAX_NS)) throw bad('files.dav-ns-too-long', { max: PROPFIND_MAX_NS })
   const ok: string[] = []
   const refused: string[] = []
-  for (const op of doc.children) {
-    if (op.ns !== DAV_NS || (op.name !== 'set' && op.name !== 'remove')) continue
+  for (const op of ops) {
     for (const prop of child(op, 'prop')?.children ?? []) {
       if (!safeName(prop.name)) continue
       const tag = prop.ns === DAV_NS ? `<D:${prop.name}/>` : `<X:${prop.name} xmlns:X="${escAttr(prop.ns)}"/>`
