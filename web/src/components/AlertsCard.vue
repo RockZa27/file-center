@@ -45,7 +45,7 @@ import { errorText } from '../composables'
 import { formatDate } from '../utils'
 
 // the kinds alerts.ts sends, in the order the admin is likely to care
-const KINDS = ['test', 'backup-failed', 'errors', 'lockout', 'disk-critical', 'update-available']
+const KINDS = ['test', 'backup-failed', 'errors', 'lockout', 'disk-critical', 'update-available', 'virus-found']
 const WEBHOOKS = ['discord', 'slack', 'telegram', 'json']
 const { t, locale } = useI18n()
 const s = ref(null)

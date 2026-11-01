@@ -27,7 +27,7 @@ designed to work and look much like the File Center built on FileGator, but it u
 - **Files and upload:** drag and drop, upload a whole folder, big files sent in pieces with pause / resume / retry.
   Search, favorites, earlier versions of a file, view and edit in the browser (code, Markdown, CSV and Office documents).
 - **Share links:** download links with an expiry, a password and a download limit,
-  and upload-request links that let outsiders send files into a folder.
+  and upload-request links that let outsiders send files into a folder, plus **view-only** links (preview but no download, with an optional watermark; it does not stop screenshots).
 - **Sharing with users and groups:** the "Shared with me" page, view-only or editable.
 - **Group folders:** members share one folder, with a quota per group.
 - **WebDAV:** use your files as a drive on Windows, macOS, phones and rclone, with app passwords.
@@ -35,6 +35,7 @@ designed to work and look much like the File Center built on FileGator, but it u
 - **Notifications:** a bell in the web app, plus e-mail and LINE.
   Admins get system alerts on Discord, Slack, Telegram or any webhook.
 - **Storage insight:** see what takes space (largest files, size by file type) and find files with identical content; move copies to the trash. Admins can look at the whole system, managers at the users they manage (read only).
+- **Virus scanning with ClamAV (optional, off by default):** uploads (normal, upload links, WebDAV) are checked before they reach the storage; infected files go to a quarantine folder, admins are alerted, and there is an admin page and a test button (compose profile `clamav`).
 - **Audit log forwarding:** every activity entry is also sent to syslog (RFC 5424 over UDP/TCP) and/or a webhook, in the background; a destination that is down never affects use.
 - **Your own trash:** restore a deleted file or press "Undo". Admins also have a system-wide trash.
 - **Scheduled backups:** daily, weekly or every N hours, with a compression level, a number of copies to keep,

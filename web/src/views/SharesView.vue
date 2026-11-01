@@ -96,7 +96,7 @@ const isUpload = s => s.kind === 'upload'
 // icon + label: a request link (people send files in) or a download link
 const kindTag = s => h('span', { class: `kind ${isUpload(s) ? 'up' : ''}` }, [
   h(NIcon, { component: isUpload(s) ? CloudUploadOutline : DownloadOutline }),
-  isUpload(s) ? t('share.kindUploadShort') : t('share.kindDownloadShort'),
+  isUpload(s) ? t('share.kindUploadShort') : t('share.kindDownloadShort') + (s.viewOnly ? ` · ${t('share.viewOnlyShort')}${s.watermark ? ' + ' + t('share.watermarkShort') : ''}` : ''),
 ])
 // what an upload link has received and the limits it was made with
 const limitsOf = s => [

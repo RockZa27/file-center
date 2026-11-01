@@ -30,7 +30,18 @@
             <div v-else-if="needPassword" class="hint" :class="{ warn: missing }">{{ t('share.passwordPolicy') }}</div>
           </div>
         </n-form-item>
-        <n-form-item v-if="!isUpload" :label="t('share.limit')">
+        <n-form-item v-if="!isUpload && viewOnlyPolicy !== 'forbid'" :label="t('share.viewOnly')">
+          <div class="field">
+            <n-checkbox v-model:checked="viewOnly" :disabled="viewOnlyPolicy === 'force'">{{ t('share.viewOnlyCheck') }}</n-checkbox>
+            <div class="hint">{{ viewOnlyPolicy === 'force' ? t('share.viewOnlyForced') : t('share.viewOnlyHelp') }}</div>
+            <template v-if="viewOnly">
+              <n-checkbox v-model:checked="watermark" :disabled="forceWatermark" class="wm">{{ t('share.watermarkCheck') }}</n-checkbox>
+              <n-input v-if="watermark" v-model:value="watermarkText" maxlength="100" :placeholder="t('share.watermarkPlaceholder')" class="wm" />
+              <div class="hint">{{ t('share.viewOnlyLimits') }}</div>
+            </template>
+          </div>
+        </n-form-item>
+        <n-form-item v-if="!isUpload && !viewOnly" :label="t('share.limit')">
           <n-input-number v-model:value="limit" :min="1" :max="MAX_DOWNLOADS" :precision="0" clearable :placeholder="t('share.limitNone')" class="limit" />
         </n-form-item>
         <template v-else>
@@ -75,6 +86,7 @@
         <span v-if="result.share.maxFiles">{{ t('share.limitFiles', { n: result.share.maxFiles }) }}</span>
         <span v-if="result.share.maxTotalBytes">{{ t('share.limitTotal', { size: formatBytes(result.share.maxTotalBytes) }) }}</span>
         <span v-if="result.share.maxDownloads">{{ t('share.limitN', { n: result.share.maxDownloads }) }}</span>
+        <span v-if="result.share.viewOnly">{{ t('share.viewOnlyShort') }}</span>
         <span v-if="result.share.hasPassword">{{ t('share.withPassword') }}</span>
       </div>
       <n-alert v-if="copyFailed" type="warning" class="gap">{{ t('share.copyFailed') }}</n-alert>
@@ -100,7 +112,7 @@
 <script setup>
 import { computed, nextTick, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NAlert, NButton, NForm, NFormItem, NIcon, NInput, NInputNumber, NModal, NRadio, NRadioButton, NRadioGroup } from 'naive-ui'
+import { NAlert, NButton, NCheckbox, NForm, NFormItem, NIcon, NInput, NInputNumber, NModal, NRadio, NRadioButton, NRadioGroup } from 'naive-ui'
 import { CheckmarkOutline, CopyOutline, LinkOutline } from '@vicons/ionicons5'
 import { api } from '../api'
 import { useAppStore } from '../store'
@@ -128,8 +140,14 @@ const days = ref(7)
 const allowNever = computed(() => !!store.config?.shareAllowNever)
 const needPassword = computed(() => !!store.config?.shareRequirePassword)
 const password = ref('')
+// set by the admin: 'allow' (the owner chooses), 'force' (every download link is view only), 'forbid'
+const viewOnlyPolicy = computed(() => store.config?.shareViewOnly || 'allow')
+const forceWatermark = computed(() => !!store.config?.shareForceWatermark)
 const limit = ref(null)
 const kind = ref('download')
+const viewOnly = ref(false)
+const watermark = ref(false)
+const watermarkText = ref('')
 const maxFileMb = ref(null)
 const maxFiles = ref(null)
 const maxTotalMb = ref(null)
@@ -159,6 +177,9 @@ watch(() => props.show, v => {
   days.value = allowedDays.value.includes(wanted) ? wanted : allowedDays.value.includes(7) ? 7 : allowedDays.value[allowedDays.value.length - 1]
   password.value = ''
   limit.value = null
+  viewOnly.value = viewOnlyPolicy.value === 'force'
+  watermark.value = forceWatermark.value
+  watermarkText.value = ''
   kind.value = canDownload.value ? 'download' : 'upload'
   maxFileMb.value = null
   maxFiles.value = null
@@ -184,7 +205,10 @@ async function create() {
         ...(maxFiles.value ? { maxFiles: maxFiles.value } : {}),
         ...(maxTotalMb.value ? { maxTotalBytes: maxTotalMb.value * MB } : {}),
         ...(note.value.trim() ? { note: note.value.trim() } : {}),
-      } : limit.value ? { maxDownloads: limit.value } : {}),
+      } : {
+        ...(viewOnly.value ? { viewOnly: true, watermark: watermark.value || forceWatermark.value, ...(watermark.value && watermarkText.value.trim() ? { watermarkText: watermarkText.value.trim() } : {}) } : {}),
+        ...(limit.value && !viewOnly.value ? { maxDownloads: limit.value } : {}),
+      }),
     })
     password.value = ''
     result.value = { share: r.share, link: `${location.origin}${r.url}` }
@@ -236,6 +260,7 @@ async function copy() {
 .kinds { display: flex; flex-direction: column; align-items: flex-start; gap: 8px; }
 .limit { width: 100%; max-width: 240px; }
 .gap { margin-top: 14px; }
+.wm { margin-top: 8px; display: flex; }
 .link-row { display: flex; gap: 8px; margin-top: 14px; }
 .link { flex: 1; min-width: 0; font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace; }
 .link :deep(textarea) { word-break: break-all; }
