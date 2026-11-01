@@ -2076,5 +2076,80 @@
         "replace": ""
       }
     ]
+  },
+  {
+    "id": "proppatch-props-unbounded",
+    "difficulty": "easy",
+    "category": "dos",
+    "severity": "medium",
+    "tests": "tests/security-1133.test.ts",
+    "description": "PROPPATCH takes any number of properties and any namespace length, and writes each one back",
+    "patches": [
+      {
+        "file": "src/webdav.ts",
+        "find": "  if (props.length > PROPFIND_MAX_PROPS) throw bad('files.dav-too-many-props', { max: PROPFIND_MAX_PROPS })\n  if (props.some(p => p.ns.length > PROPFIND_MAX_NS)) throw bad('files.dav-ns-too-long', { max: PROPFIND_MAX_NS })\n",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "restore-trash-not-tombstoned",
+    "difficulty": "medium",
+    "category": "authz",
+    "severity": "low",
+    "tests": "tests/security-1132-restore.test.ts",
+    "description": "a restore leaves the trash of a dropped name to the restored account of that name",
+    "patches": [
+      {
+        "file": "src/backup.ts",
+        "find": "{ tombstoneTrashOf(name); dropUploadsOf(name) }",
+        "replace": "{ dropUploadsOf(name) }"
+      }
+    ]
+  },
+  {
+    "id": "cancel-during-complete",
+    "difficulty": "hard",
+    "category": "quota",
+    "severity": "low",
+    "tests": "tests/security-1133.test.ts",
+    "description": "a cancel while the upload is moved into place gives back the allowance of a file that lands",
+    "patches": [
+      {
+        "file": "src/uploads.ts",
+        "find": "  if (finishing.has(id)) throw conflict('upload.completing')\n",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "office-token-any-account-of-name",
+    "difficulty": "medium",
+    "category": "authz",
+    "severity": "low",
+    "tests": "tests/security-1133.test.ts",
+    "description": "an office token opens files of any account that has its name",
+    "patches": [
+      {
+        "file": "src/office.ts",
+        "find": "  if (!user || !sameAccount(user, t)) throw forbidden()",
+        "replace": "  if (!user) throw forbidden()"
+      }
+    ]
+  },
+  {
+    "id": "delete-keeps-uploads",
+    "difficulty": "medium",
+    "category": "quota",
+    "severity": "low",
+    "tests": "tests/security-1133.test.ts",
+    "description": "a deleted account's unfinished uploads and quota hold pass to a later account of the name",
+    "patches": [
+      {
+        "file": "src/account-records.ts",
+        "find": "  removeUserFromGroups(username)\n  dropUploadsOf(username)\n",
+        "replace": "  removeUserFromGroups(username)\n"
+      }
+    ]
   }
 ]

@@ -1,0 +1,565 @@
+[
+ {
+  "verdict": "confirmed",
+  "fingerprint": "backup-restore:later-same-name-account-trash-entries-carry-over",
+  "title": "Backup restore lets the restored older account see and permanently delete the trash of a later same-name account",
+  "description": "A restore reconciles nine identity-bound stores through planRestore and dropRecordsOnDisk, but not the central trash. Trash entries name their owner by bare username (meta.owner). tombstoneTrashOf renames those owners to an unmatchable value only when an admin deletes or re-creates an account, or on the group path. A restore swaps users.json back to an older account of the same name without calling it. The restored older account then matches trashOwner() == username for every trash entry the later account of that name left behind. It sees their names, sizes and deleter, and can permanently purge them through DELETE /api/me/trash/:id or DELETE /api/me/trash. It can also restore any entry whose original location lies in a space the older account can write to. Independently reproduced by the verifier in a local dummy-tenant run.",
+  "root_cause": "The account-instance rule (lowercase name plus createdAt) was applied to sessions, shares, grants, groups, app passwords, user state, notifications, notify state and guide, but not to the trash. dropRecordsOnDisk has no trash step, and the trash is not a JsonStore. The tombstone mechanism (tombstoneTrashOf in src/trash.ts, called from admin create, admin delete and the group path) is bypassed by restoreBackup, so trashOwner() keeps returning the bare username for the later account's entries.",
+  "intended_behavior": "The comment on tombstoneTrashOf and the header of src/account-records.ts both say a name reused by another account instance must not inherit the previous account's records. A restore should tombstone trash owners and deleters for every name in plan.drop, the same as the admin create/delete path does.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/routes/backup.ts",
+    "line": 80,
+    "scope": "POST /api/admin/backups/restore",
+    "description": "The admin restores a backup that holds an older account of a name, while a different later account with that name is live. The route needs an admin, a supervised process and the admin password."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/backup.ts",
+    "line": 640,
+    "scope": "restoreBackup",
+    "description": "planRestore marks the name as dropped because the live createdAt differs from the restored one. users.json is then replaced by the restored file (renameSync), and only dropRecordsOnDisk is called afterwards."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/account-records.ts",
+    "line": 77,
+    "scope": "dropRecordsOnDisk",
+    "description": "It purges sessions, shares, user state, notifications, notify state, guide, grants, app passwords and groups. It has no trash step, so the later account's entries keep owner=<name>."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/trash.ts",
+    "line": 51,
+    "scope": "trashOwner",
+    "description": "It returns meta.owner verbatim, so the entries of the later account still resolve to the bare name that the restored account now holds."
+   },
+   {
+    "kind": "sink",
+    "file": "src/routes/trash.ts",
+    "line": 51,
+    "scope": "visible()/purgeable() behind GET /api/me/trash and DELETE /api/me/trash[/:id]",
+    "description": "visible() and purgeable() grant listing and purge to the matching username. purge(meta.id) permanently removes the later account's deleted item and its versions."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/trash.ts",
+    "line": 69,
+    "description": "tombstoneTrashOf exists to stop a deleted account passing its trash to a new account of the same name. It is called from admin delete (src/routes/admin.ts:197), admin create (admin.ts:112) and the group delete path (src/routes/groups.ts:141), never from restoreBackup."
+   },
+   {
+    "file": "src/account-records.ts",
+    "line": 77,
+    "description": "dropRecordsOnDisk lists the nine file stores it reconciles. The trash is not among them."
+   },
+   {
+    "file": "agents/v2-trash/artifacts/v1.ts",
+    "line": 1,
+    "description": "Verifier's own harness, run in the sandbox as two fresh processes (setup, then check). Setup: create bob#1 (home /users/bob), take a backup, delete bob#1, create bob#2 (home /bobtwo), bob#2 deletes secret-plans.txt to the trash, then POST /api/admin/backups/restore. Check (new process, standing in for the restart): bob#1 logs in with the old password, then lists and purges the trash."
+   },
+   {
+    "file": "agents/v2-trash/artifacts/v1.out",
+    "line": 1,
+    "description": "Observed: before the restore bob#2's trash listed secret-plans.txt and the restore returned 200. After it, bob#1's login returned 200 and bob#2's password returned 401. bob#1's GET /api/me/trash listed secret-plans.txt (owner 'bob', deletedBy 'bob', restorable false), DELETE /api/me/trash/<id> returned 200, and the list was then empty."
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "authorization_role",
+    "description": "An admin must restore a backup taken while an older, different account with the same name existed. That account was later deleted and the name re-used."
+   },
+   {
+    "kind": "data_state",
+    "description": "The later account must have trash entries still within retention (owner equal to the shared name)."
+   },
+   {
+    "kind": "authentication_level",
+    "description": "The attacker holds the credentials of the older account, which the restore re-enables."
+   },
+   {
+    "kind": "system_configuration",
+    "description": "The process runs supervised (the route requires it) and restarts after the restore."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "A former user whose account was deleted and later reinstated by a restore. A different person has since taken the same username. The former user signs in with the old password after the restore.",
+   "payloads": [
+    "GET /api/me/trash",
+    "DELETE /api/me/trash/<id>"
+   ],
+   "instructions": [
+    "Create user bob (home /users/bob) and take a backup.",
+    "Delete bob, then create a different bob with a different homedir (/bobtwo). Put a file in its home and move it to the trash.",
+    "Restore the backup, then run `bun v1.ts check` in a fresh process, which stands in for the restart.",
+    "Sign in as the first bob. GET /api/me/trash lists the second bob's entry, and DELETE /api/me/trash/<id> returns 200 and purges it."
+   ],
+   "observed_result": "Under the sandbox, the restored first bob logged in (200) and the second bob's password was rejected (401). The first bob's trash listed secret-plans.txt (deletedBy bob, restorable false). DELETE /api/me/trash/<id> returned 200 and the trash was then empty. When the homes coincide, the entry would also be restorable, but those files are already name-bound in the home."
+  },
+  "remediation": {
+   "strategy": "In restoreBackup, before the users.json swap, call tombstoneTrashOf for every name in plan.drop, so owner and deletedBy become an unmatchable tombstone. Alternatively add an equivalent trash step to dropRecordsOnDisk. Add a regression case to tests/security-1132-restore.test.ts: after restoring over a recreated name, GET /api/me/trash for the restored account is empty.",
+   "code_changes": [
+    {
+     "file_name": "src/backup.ts",
+     "fixed_code": "// in restoreBackup, after planRestore(...) and before renameSync(join(work, 'users.json'), paths.users):\nfor (const name of plan.drop) tombstoneTrashOf(name)\n// tombstoneTrashOf reads the live users.json for pre-1.10 entries, so call it before the swap"
+    }
+   ]
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "It needs an admin restore across a delete-and-recreate of the same name, and the older account's holder must still hold the old credentials."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "It discloses the names, sizes and deleter of another person's deleted items and lets the older account permanently delete them. Content stays unreadable unless the homes coincide, and the home files themselves are already name-bound."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "Reproduced independently by the verifier under the sandbox in a dummy-tenant scenario with its own script. The source shows no trash step in the restore path and no other layer that binds the trash to an account instance."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "office:link-token-binds-bare-username-survives-account-recreate",
+  "title": "Office link token of a deleted account reads the files of a later account with the same name",
+  "description": "The editor config hands the browser a document.url containing a stateless office token (u = bare username, p/f = path, valid 24 h) and an editor JWT. Deleting the account does not revoke it, and tokenFile accepts it again as soon as an account with the same name exists. The former holder can therefore read, for up to 24 h, a file at the same path in the new account's home. The file route requires only a validly signed JWT in the Authorization header, and the config JWT the browser received satisfies that (it carries no exp). In edit mode the callback token is bound to the name in the same way.",
+  "root_cause": "OfficeToken identifies the account only by username (u). It carries no createdAt or account instance, and tokenFile only calls findUser(t.u). Account lifecycle code (forgetAccount, dropRecordsOnDisk) does not touch it, although account-records.ts defines an account as the pair (name, createdAt).",
+  "intended_behavior": "A token issued to a deleted account, or to an account that a restore dropped, must not act for a later account of the same name.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/office.ts",
+    "line": 225,
+    "scope": "editorConfig",
+    "description": "makeToken({s,p,f,u: user.username,m}) signs a 24 h token that is embedded in document.url and callbackUrl. The browser receives the url and the editor JWT (config.token)."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/office.ts",
+    "line": 175,
+    "scope": "readToken",
+    "description": "Checks HMAC, expiry and the shape of the fields only. There is no account-instance check."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/routes/admin.ts",
+    "line": 201,
+    "scope": "DELETE /admin/users/:username",
+    "description": "forgetAccount(username) drops sessions, shares, grants, app passwords and groups. Office tokens are not covered."
+   },
+   {
+    "kind": "sink",
+    "file": "src/office.ts",
+    "line": 195,
+    "scope": "tokenFile",
+    "description": "findUser(t.u) resolves the new same-name account. accessFor then yields its home root, and the file is returned by routes/office.ts GET /file/:token (line 42)."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "agents/v4-office/artifacts/v1.out",
+    "line": 6,
+    "description": "Independent run in the sandbox: before delete the token URL returns 200 OLD-OWNER (line 2), after delete 403 (line 4), and after the account is re-created with a new file the old URL plus old config JWT returns 200 NEW-OWNER-PRIVATE-V4 (line 6). Re-run by p5-4 with the same result."
+   },
+   {
+    "file": "agents/v4-office/artifacts/v1.ts",
+    "line": 34,
+    "description": "Reproduction script using the in-process app.handle harness. It creates user vvo, requests an office config in view mode (line 25), deletes (line 29) and re-creates vvo, and replays the GET with the old token and JWT (line 34)."
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "authorization_role",
+    "description": "The attacker held a valid user account that opened a document in the office editor, which gave them the url and JWT. Office integration must be enabled."
+   },
+   {
+    "kind": "system_configuration",
+    "description": "OFFICE_URL, OFFICE_INTERNAL_URL and OFFICE_JWT_SECRET are set."
+   },
+   {
+    "kind": "data_state",
+    "description": "An admin or manager deletes that account and later creates a new account with the same name (same home path) within 24 h, and a file exists at the same path."
+   },
+   {
+    "kind": "timing_dependency",
+    "description": "Token TTL is 24 h (OFFICE_LIMITS.tokenTtlMs)."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "A former user who kept the document.url and config.token that the editor page received before the account was deleted.",
+   "payloads": [
+    "GET <internalUrl>/api/office/file/<token> with header Authorization: Bearer <config.token>"
+   ],
+   "instructions": [
+    "As a user, POST /api/office/config for /r.docx and keep document.url and config.token.",
+    "Admin deletes the user, then re-creates the same name for another person, whose home gets /r.docx.",
+    "Replay the GET with the old token and JWT."
+   ],
+   "observed_result": "200 with the new owner's file content (NEW-OWNER-PRIVATE-V4). After the delete and before the re-create the same request returned 403."
+  },
+  "remediation": {
+   "strategy": "Bind the token to the account instance: add the account's createdAt to the token and compare it in tokenFile. Alternatively, keep a per-account token epoch that forgetAccount bumps. Add a regression test that deletes and re-creates an account and expects 403.",
+   "code_changes": []
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs an admin or manager to re-use the name within 24 h, a file at the same path, and an enabled office integration."
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "Read of one file per held token. Edit mode is bound the same way, but the saved-file URL must come from the document server's origin, so write was not shown."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "Reproduced independently in the sandbox twice, and the source shows no identity binding beyond the name."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "upload-cancel-during-complete-refunds-guest-allowance",
+  "title": "Cancelling an upload while it completes refunds the visitors' daily allowance for a file that still lands",
+  "description": "An anonymous visitor (or an upload-request-link visitor charged to the guest allowance) can announce a file, send all chunks, call complete, and send DELETE on the same upload id while complete is still moving the file from tmp to storage. The file lands, but cancel has already refunded the shared daily allowance and complete never charges it again, so the daily counter stays low or at 0 while files accumulate past GUEST_UPLOAD_DAILY_BYTES. I reproduced this over the HTTP routes (app.handle) on a cross-device layout, where the window is wide. It also happened on the same-disk layout, contrary to the hunter's claim, but only occasionally because the window is one event-loop turn. Per-user quota reservations can in principle be released twice by the same overlap. I did not exercise that path.",
+  "root_cause": "cancelUpload releases the guest allowance and quota by reading meta.json, and it does not consult the `completing` map. finishUpload does not claim the upload before its awaited putInPlace. meta.json and the upload folder stay in place until after the move, and settleGuest/untrack/rmSync run only afterwards. So a cancel that lands during the await releases the reservation of an upload whose bytes then land anyway. Completion never adds those bytes back to the counter, so a refunded file is never counted.",
+  "intended_behavior": "Once completion has started, a cancel or idle drop must not release the reservation. The reservation should be released exactly once, by whichever of complete or cancel claims the upload first, and a file that lands must stay counted against the daily allowance.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/routes/upload.ts",
+    "line": 52,
+    "scope": "POST /api/upload/:id/complete",
+    "description": "The guest owner is the shared string 'guest'. The route calls completeUpload and does not block other requests for the same upload id."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/uploads.ts",
+    "line": 376,
+    "scope": "finishUpload",
+    "description": "Loads the meta and checks the chunks. The awaited putInPlace (line 391) runs while meta.json and the upload folder still exist. untrack, rmSync, commitBytes and settleGuest come only after it."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/uploads.ts",
+    "line": 412,
+    "scope": "putInPlace",
+    "description": "Calls renameNoReplace (link then unlink, async). On EXDEV it runs copyTree and rename, which gives a wide window for big files."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/routes/upload.ts",
+    "line": 60,
+    "scope": "DELETE /api/upload/:id",
+    "description": "(concurrent second request) The same owner ('guest') can call cancelUpload during the move. The route does not check `completing`."
+   },
+   {
+    "kind": "sink",
+    "file": "src/uploads.ts",
+    "line": 429,
+    "scope": "cancelUpload",
+    "description": "Loads the meta, removes the folder, then calls releaseGuest (bytes -= size on today's counter) and releaseQuota. The in-flight copy or link keeps its file, the file lands, and its bytes are no longer counted."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/uploads.ts",
+    "line": 140,
+    "description": "releaseGuest subtracts meta.size from the shared daily counter. The only guest accounting after a file lands is settleGuest (line 133), which touches only the per-address pending map."
+   },
+   {
+    "file": "src/uploads.ts",
+    "line": 356,
+    "description": "The `completing` map is consulted only by completeUpload for retries. cancelUpload (line 429) never reads it."
+   },
+   {
+    "file": "src/fsx.ts",
+    "line": 329,
+    "description": "copyFile works from an open source fd, so removal of the source folder by cancel does not stop the copy. On the same-disk path (renameNoReplace, fsx.ts:239) the link has already created the destination name when a cancel can interleave."
+   },
+   {
+    "file": "agents/v3-upcancel/artifacts/v1.ts",
+    "line": 1,
+    "description": "Own HTTP-level harness (admin enables guest upload via PUT /api/admin/settings, then guest POST /api/upload, PUT chunks, POST complete without awaiting, DELETE the same id). Cross-device layout (DATA_DIR on tmpfs, storage on the other device), 4 rounds of 24 MiB: every DELETE returned 200 and every COMPLETE returned 200, 96 MiB landed in public/, and the daily counter read 0 of 128 MiB. Same-disk layout, 5 rounds: 2 rounds ended with DELETE 200 and COMPLETE 404 and no file (a legitimate refund). 1 round ended with DELETE 200, COMPLETE 200, f1.bin landed and used=0."
+   },
+   {
+    "file": "agents/v3-upcancel/artifacts/v2.ts",
+    "line": 1,
+    "description": "Same harness on the same-disk layout with 1 MiB files, 40 tries cycling the cancel delay (microtask, setTimeout 0, setImmediate). Run 1: 0 hits. Run 2: 1 hit (DELETE 200 and COMPLETE 200); 12 files landed (12 MiB) while the counter showed 11 MiB, so 1 MiB was uncounted. So the same-disk layout is reachable, but the window is a single event-loop turn, and a retry loop is needed."
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "system_configuration",
+    "description": "Public (or upload-request-link) uploads must be enabled for anonymous visitors, with a daily guest allowance greater than 0."
+   },
+   {
+    "kind": "authentication_level",
+    "description": "Anonymous. The attacker only needs the upload id that its own announce returned, since all visitors share the owner 'guest'."
+   },
+   {
+    "kind": "timing_dependency",
+    "description": "The DELETE must be handled between the start of the move and finishUpload's synchronous cleanup. On a cross-device layout (DATA_DIR/tmp and STORAGE_DIR on different filesystems) the copy makes the window long and the race reliable. On the default same-disk layout it is a single event-loop turn between the async link/unlink steps (about 1 hit in 40 tries in my run), so the attacker must retry."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Anonymous visitor with public upload permission, or a visitor of an upload-request link charged to the guest allowance.",
+   "payloads": [
+    "POST /api/upload {\"space\":\"public\",\"path\":\"/\",\"name\":\"x.bin\",\"size\":<N>}",
+    "PUT /api/upload/<id>/<i> for every chunk",
+    "POST /api/upload/<id>/complete (do not await), then DELETE /api/upload/<id> while it runs"
+   ],
+   "instructions": [
+    "Announce a file within the per-address share of the daily allowance and send all chunks.",
+    "Fire complete without awaiting it, then fire DELETE on the same id. Repeat the DELETE with varied small delays, or poll for the hidden .fc-up-* file when storage is cross-device.",
+    "When both calls return 200, the file is in storage and the allowance has been refunded. Repeat to accumulate files beyond the daily limit."
+   ],
+   "observed_result": "HTTP-level run, cross-device: 4 files of 24 MiB landed (96 MiB) with the daily counter at 0 of 128 MiB. Same-disk: sporadic hits where DELETE and COMPLETE both returned 200, the file landed and its bytes were refunded (1 uncounted MiB out of 12 landed in one 40-try run)."
+  },
+  "remediation": {
+   "strategy": "Make completion claim the upload. In finishUpload, before the first await, record the key (for example in the `completing` map keyed by owner and id) and have cancelUpload and the idle/stale droppers (sweepIdle, cleanStaleUploads) refuse or skip an upload that is completing. Release the reservation in exactly one place. After a file lands, keep it counted against the guest daily counter and only settle the per-address pending share.",
+   "code_changes": [
+    {
+     "file_name": "src/uploads.ts",
+     "fixed_code": "// cancelUpload / dropUpload / cleanStaleUploads: if (completing.has(`${meta.owner}\\0${id}`)) throw conflict('upload.completing') // or skip\n// finishUpload / completeUpload: mark the upload as completing before the first await and clear it on failure"
+    }
+   ]
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs public or link guest uploads enabled and a timing race. It is reliable on a cross-device tmp/storage layout and sporadic (a retry loop is needed) on the default same-disk layout."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "It bypasses the shared daily visitor-upload allowance, but each landed file is still bounded by the upload size limit, the per-address pending cap, MIN_FREE_SPACE, and the visitor's request rate. Nothing crosses a user or tenant boundary. The per-user quota double-release was not demonstrated."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "I reproduced the effect myself through the HTTP routes on the cross-device layout, and also on the same-disk layout, where it is narrower than the hunter stated. The source trace matches in every cited file and line. The quota double-release part was not exercised."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "uploads:pending-upload-and-quota-hold-bound-to-bare-username-survive-account-delete",
+  "title": "A deleted account's pending uploads and quota reservation are charged to and accessible by a later account of the same name",
+  "description": "Deleting an account (or having a restore drop it) neither cancels its pending uploads in DATA_DIR/tmp nor releases the in-memory quota reservation and the per-owner pending counter. A later account that re-uses the name is charged for the dead account's reservation, counts its pending uploads towards UPLOAD_MAX_PENDING, and passes the owner check of those uploads (receivedChunks, saveChunk, complete, cancel) if it has the id, until the idle sweep (default 3 h) or a restart.",
+  "root_cause": "Meta.owner and Meta.quotaUser are bare usernames. loadMeta compares owner strings only, and quota.reserved and byOwner are keyed by lowercase name. forgetAccount (src/account-records.ts) has no hook to cancel the account's uploads (dropUpload) or to release reservations, and planRestore/dropRecordsOnDisk do not cover DATA_DIR/tmp/<id>/meta.json.",
+  "intended_behavior": "Deleting or replacing an account cancels its in-progress uploads and returns their quota holds. A new account must not inherit them, consistent with the account-instance (name, createdAt) rule that account-records.ts states for all other per-account records.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/uploads.ts",
+    "line": 255,
+    "scope": "initUpload",
+    "description": "Writes meta.json with owner and quotaUser, reserves quota (reserveBytes) and tracks byOwner by name."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/routes/admin.ts",
+    "line": 201,
+    "scope": "DELETE /admin/users/:username",
+    "description": "forgetAccount does not touch the uploads module or the quota reservation."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/uploads.ts",
+    "line": 42,
+    "scope": "loadMeta",
+    "description": "Accepts the upload when meta.owner === owner, with no account instance check."
+   },
+   {
+    "kind": "sink",
+    "file": "src/quota.ts",
+    "line": 112,
+    "scope": "reserveBytes / usedNow",
+    "description": "Adds the dead account's reserved bytes to the new same-name account's usage until the stale sweep."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "agents/v5-upowner/artifacts/v1.ts",
+    "line": 1,
+    "description": "Independent harness (user zed, quota 1,000,000): old account announced 900000 bytes, admin deleted and re-created the name; the new account's announce of 500000 returned 507 quota.exceeded with an empty home, and GET /api/upload/<old id> returned 200 as the new account. Reproduced in the sandbox."
+   },
+   {
+    "file": "agents/h7-inventory/artifacts/c1.out",
+    "line": 7,
+    "description": "Hunter run showing the same 507 quota.exceeded (used 900000 of 1000000) for the new account, and line 8 shows GET of the old upload id returning 200."
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "authorization_role",
+    "description": "The old account had upload rights and a quota. An admin or manager deletes and re-creates the name."
+   },
+   {
+    "kind": "timing_dependency",
+    "description": "Effect lasts until the idle limit (UPLOAD_STALE_HOURS, default 3 h) or a restart."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "The deleted account's former holder, or simply a new account that inherits the name.",
+   "payloads": [
+    "POST /api/upload {space:'home',path:'/',name:'big.bin',size:900000}",
+    "DELETE /api/admin/users/zed; POST /api/admin/users (same name, quota 1000000)",
+    "POST /api/upload size 500000 as the new account"
+   ],
+   "instructions": [
+    "Run v1.ts in the sandbox."
+   ],
+   "observed_result": "507 quota.exceeded for the new account with an empty home, and GET /api/upload/<old id> returned 200 as the new account."
+  },
+  "remediation": {
+   "strategy": "In forgetAccount, cancel every upload whose meta.owner or meta.quotaUser matches (dropUpload for the live entries, then release the reservation). Bind the upload to the account instance as well, for example by storing the account createdAt in Meta and checking it in loadMeta. Cover DATA_DIR/tmp in planRestore/dropRecordsOnDisk too.",
+   "code_changes": []
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs an admin or manager to delete and re-create the same name while an upload is pending."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "The new account is charged and limited for up to 3 h; takeover of the old upload needs the id, which the new account does not learn."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "Independently reproduced locally with a separate script; the source has no cleanup on delete."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "webdav:proppatch-namespace-echo-response-amplification",
+  "title": "WebDAV PROPPATCH echoes a request-chosen namespace once per property: a 39 KB request yields a 33.6 MB answer (up to about 70 MB at the 64 KB cap) with no output bound",
+  "description": "An authenticated WebDAV client with a read-write app password can send a PROPPATCH whose d:prop element declares one very long namespace and lists up to about 1900 children in it. The server writes the full namespace into a refused-property tag for every child and builds the entire multistatus in memory with no size check. The run-2 PROPFIND fix added a 256-char namespace cap and a 32 MiB output budget, but the same echo pattern in proppatchMethod() was not covered. This is another path to the same sink as the prior propfind-duplicate-property-response-amplification finding.",
+  "root_cause": "proppatchMethod() (src/webdav.ts:845-877) writes `<X:${prop.name} xmlns:X=\"${escAttr(prop.ns)}\"/>` for every child of every set/remove prop (line 858). The namespace comes from a request xmlns declaration on d:prop and is inherited by all children, so it costs the attacker once but is output n times. safeName() (src/webdav-xml.ts:131) bounds only the element name to 101 chars; escAttr() (src/webdav-xml.ts:126) only HTML-escapes and does not truncate. There is no PROPFIND_MAX_NS-equivalent length cap on prop.ns, no cap on the number of props beyond the 2000-element parser MAX_ELEMENTS limit, and no aggregate byte budget comparable to PROPFIND_MAX_BYTES (src/webdav.ts:329, enforced only inside propfind() at line 420). The result is built with group()/join() and copied again by xmlResponse() (XML_HEAD + body, line 118) with no size check anywhere in this path.",
+  "intended_behavior": "A PROPPATCH answer should stay in proportion to the request, or be refused: cap the namespace length (PROPFIND_MAX_NS, 256, as PROPFIND does at lines 367-368), cap the number of properties, and enforce an output byte budget (PROPFIND_MAX_BYTES-style, with a 507 response) before or while building the answer.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/index.ts",
+    "line": 243,
+    "scope": "onRequest",
+    "description": "/dav requests are answered before the /api hooks, with no body-size hook other than webdav's own, so they go straight to handleDav(). Confirmed: line 243 reads `if (isDavPath(...)) return handleDav(...)` before refuseBigBody and before CSRF/session checks."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/webdav.ts",
+    "line": 128,
+    "scope": "authenticate",
+    "description": "Basic auth with an app password; Ctx carries `scope`. Confirmed at lines 126-157; scope read/readwrite gating is at line 196 (readwrite keeps write) and line 889 (ALLOW_ALL vs ALLOW_READ). PROPPATCH requires write via allow(s,'write') at line 847, so a readwrite app password suffices. No per-user request or concurrency limit is visible anywhere in this file."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/webdav.ts",
+    "line": 850,
+    "scope": "proppatchMethod",
+    "description": "readXml() accepts a body up to 64 KiB (XML_MAX_BYTES, src/webdav-xml.ts:9), up to 2000 elements (MAX_ELEMENTS, webdav-xml.ts:11) and depth 24 (MAX_DEPTH, webdav-xml.ts:10). A long xmlns:q value declared once on d:prop is inherited by every child node's `ns` field per the parser's scope-copy semantics (also exercised by the companion PROPFIND scope-cost check)."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/webdav.ts",
+    "line": 856,
+    "scope": "proppatchMethod",
+    "description": "Loops over every child of d:prop (`for (const prop of child(op,'prop')?.children ?? [])`). safeName(prop.name) passes for short plain names (regex allows up to 101 chars), so each child reaches the tag builder; this check does nothing to prop.ns."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/webdav.ts",
+    "line": 858,
+    "scope": "proppatchMethod",
+    "description": "The tag is built with escAttr(prop.ns), writing the full long namespace per child. A non-DAV, non-Win32 child goes to refused.push(tag) at line 869 (confirmed exact line: `else refused.push(tag)`)."
+   },
+   {
+    "kind": "sink",
+    "file": "src/webdav.ts",
+    "line": 874,
+    "scope": "proppatchMethod",
+    "description": "group() joins all the tags (line 872-873) and the function returns xmlResponse(207, ...) which concatenates XML_HEAD + the body (line 118) into a 207 Response. There is no byte budget anywhere in this function, unlike propfind()'s PROPFIND_MAX_BYTES check at line 420."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/webdav.ts",
+    "line": 327,
+    "description": "PROPFIND got the namespace cap (PROPFIND_MAX_NS=256) after run 2, enforced at line 368. proppatchMethod has no equivalent anywhere in its body (lines 845-877)."
+   },
+   {
+    "file": "src/webdav.ts",
+    "line": 858,
+    "description": "escAttr(prop.ns) is written once per property, confirmed verbatim: `xmlns:X=\"${escAttr(prop.ns)}\"`."
+   },
+   {
+    "file": "src/webdav-xml.ts",
+    "line": 9,
+    "description": "XML_MAX_BYTES is 64 KiB (confirmed `export const XML_MAX_BYTES = 64 * 1024`) and MAX_ELEMENTS is 2000 (confirmed `const MAX_ELEMENTS = 2000`, line 11). Those are the only bounds on the request; safeName (line 131) and escAttr (line 126) confirmed to only bound/escape the element name, never the namespace length."
+   },
+   {
+    "file": "agents/h3-dav/artifacts/c1.out",
+    "line": 1,
+    "description": "Hunter's local run (read-only, inspected as-is, not re-executed by me): PROPPATCH ns=28000 chars x 1200 props, request 38987 B -> 207 with 33,626,717 chars in 191 ms (ratio about 863x). Smaller points in the same file: ns=1000/props=200 -> 204,517 chars (ratio 73x); ns=4000/props=400 -> 1,608,917 chars (ratio 212x); ns=16000/props=800 -> 12,817,717 chars (ratio 553x). The monotonic, linear-in-(ns_len*props) growth across these four independently-reported points is internally consistent with the claimed mechanism and needs no further execution to corroborate."
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "authentication_level",
+    "description": "Any account with WebDAV enabled and an app password of scope readwrite (PROPPATCH needs write, confirmed via allow(s,'write') at webdav.ts:847)."
+   },
+   {
+    "kind": "data_state",
+    "description": "Any existing file or folder in a space the user can write, such as their own home."
+   },
+   {
+    "kind": "system_configuration",
+    "description": "WebDAV is on, which is the default (policy.webdav() gate at handleDav entry)."
+   },
+   {
+    "kind": "environmental_dependency",
+    "description": "Concurrency, memory limits and any reverse-proxy rate limiting depend on the deployment. The Docker memory limit was not examined by me or by the hunter."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "A normal low-privilege user who made a readwrite app password in their own account.",
+   "payloads": [
+    "PROPPATCH /dav/home/<existing file> with Authorization: Basic <user:fc-secret> and body <D:propertyupdate xmlns:D=\"DAV:\"><D:set><D:prop xmlns:q=\"u:AAAA...(28000 A)\"><q:p0/><q:p1/>...<q:p1199/></D:prop></D:set></D:propertyupdate>"
+   ],
+   "instructions": [
+    "The hunter's scripts/qa/sandbox.sh run with agents/h3-dav/artifacts/c1.ts created a dummy admin and a dummy user, made an app password and a file, and called app.handle in-process, sending PROPPATCH requests with growing namespace length and property count up to a single 39 KB request (no concurrency or stress)."
+   ],
+   "observed_result": "From the hunter's artifact (verified by source review, not re-executed by me): Status 207, response length 33,626,717 chars from a 38,987 B request, in 191 ms. Output grows linearly with ns length times prop count across four independently reported points. A request at the 64 KiB cap would give about 70 MB by the same linear relationship. Reported process rss was 354 MB after the full run (includes the companion PROPFIND scope-cost check in the same process)."
+  },
+  "remediation": {
+   "strategy": "Apply the PROPFIND limits to PROPPATCH: refuse any prop namespace longer than PROPFIND_MAX_NS, limit the number of props (for example PROPFIND_MAX_PROPS), and add a running byte budget that returns 507 or 400 before building a large answer. Better, for non-DAV namespaces declare each distinct namespace once in the multistatus root and refer to it by prefix instead of repeating it. Add a regression test with one long namespace and 1000 children expecting a 400 or a bounded answer.",
+   "code_changes": [
+    {
+     "file_name": "src/webdav.ts",
+     "fixed_code": "// in proppatchMethod, before the loop:\nconst props = doc.children.flatMap(op => (op.ns === DAV_NS && (op.name === 'set' || op.name === 'remove') ? child(op, 'prop')?.children ?? [] : []))\nif (props.length > PROPFIND_MAX_PROPS) throw bad('files.dav-too-many-props', { max: PROPFIND_MAX_PROPS })\nif (props.some(p => p.ns.length > PROPFIND_MAX_NS)) throw bad('files.dav-ns-too-long', { max: PROPFIND_MAX_NS })"
+    }
+   ]
+  },
+  "severity": {
+   "likelihood": {
+    "score": "medium",
+    "reason": "Needs a valid app password of a normal account, but any user can make one and the request is trivial and cheap."
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "Each request makes the shared single-process server build, copy and send a response about 800x the size of the request. That is tens of MB of transient memory per request and the same again in encoding and sending, with no concurrency limit. Repeated or concurrent requests could pressure memory for all users. The state is not persistent and recovers when the requests stop. Only one request was run (by the hunter), so the real effect at deployment scale depends on container memory limits, which neither the hunter nor I tested."
+   },
+   "overall_severity": "medium"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "Source trace is complete and verified line-by-line against the current repository (src/webdav.ts, src/webdav-xml.ts): every cited line number, function, and absent-guard claim checks out exactly as described, and the PROPFIND fix (PROPFIND_MAX_NS/PROPFIND_MAX_PROPS/PROPFIND_MAX_BYTES) is confirmed present only in propfind(), never in proppatchMethod(). The amplification was observed locally by the hunter with a monotonic, mechanism-consistent growth curve across four data points; I verified this by source review of the hunter's read-only artifact without re-executing target code. The impact at deployment scale (concurrent requests, container memory limits) was not tested by either the hunter or me."
+  }
+ }
+]

@@ -6,6 +6,19 @@ import { compareVersions, forRole } from './util'
  */
 export const releases = [
   {
+    version: '1.13.3',
+    items: [
+      {
+        id: '1133-audit', icon: 'system', roles: ['admin'], to: { name: 'dashboard' },
+        title: { th: 'แก้จุดที่พบจากการตรวจความปลอดภัยรอบ 3', en: 'Fixes from the third security audit' },
+        text: {
+          th: 'WebDAV PROPPATCH จำกัดจำนวน property และความยาว namespace เหมือน PROPFIND การกู้คืนข้อมูลสำรองไม่ให้บัญชีที่กู้คืนเห็นถังขยะ อัปโหลดค้าง หรือใช้ลิงก์ ONLYOFFICE ของบัญชีอื่นที่ใช้ชื่อเดียวกัน การลบบัญชียกเลิกอัปโหลดที่ค้างและคืนโควตาที่จองไว้ และการยกเลิกระหว่างที่ไฟล์กำลังถูกบันทึกลงที่เก็บไม่คืนโควตาของผู้เยี่ยมชมอีก',
+          en: 'WebDAV PROPPATCH now has the PROPFIND limits on properties and namespace length. A restored account no longer sees the trash, unfinished uploads or ONLYOFFICE links of another account that used the same name. Deleting an account cancels its unfinished uploads and returns their quota, and cancelling while a file is being saved no longer gives back the visitors\' allowance.',
+        },
+      },
+    ],
+  },
+  {
     version: '1.13.2',
     items: [
       {
