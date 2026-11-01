@@ -2,7 +2,7 @@
  * The fixes of 1.13.3 (security audit run 3). Runs in-process on the same app as api.test.ts; every user here starts
  * with "s133-".
  */
-import { beforeAll, describe, expect, test } from 'bun:test'
+import { beforeAll, describe, expect, setSystemTime, test } from 'bun:test'
 import { join } from 'node:path'
 import { existsSync, writeFileSync } from 'node:fs'
 import './in-process-env'
@@ -107,6 +107,9 @@ describe('a cancel while the upload is completing (audit run 3)', () => {
     settings.update({ guestPermissions: ['read', 'download', 'upload'] as any })
     ;(config as any).guestUploadDailyBytes = uploads.guestUploadUsage().used + 64 * 1024 ** 2
     ;(config as any).trustProxy = 'true'
+    // on a day of its own: the file that lands stays counted (that is the point), and the tests that start from an
+    // empty allowance today must not find it there
+    setSystemTime(Date.now() + 3 * 86_400_000)
     const ip = { 'x-forwarded-for': '198.51.100.33' }
     const v = new Client()
     v.csrf = (await v.json('GET', '/api/session')).data.csrf
@@ -131,6 +134,7 @@ describe('a cancel while the upload is completing (audit run 3)', () => {
       expect(() => uploads.cancelUpload(id, 'guest')).toThrow()
       expect(uploads.guestUploadUsage().used).toBe(counted)
     } finally {
+      setSystemTime()
       settings.update({ guestPermissions: was.perms as any })
       ;(config as any).guestUploadDailyBytes = was.limit
       ;(config as any).trustProxy = was.proxy

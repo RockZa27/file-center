@@ -438,6 +438,7 @@ describe('notifications: events', () => {
     alerts.resetAlerts()
     const adminBell = async () => (await bell(admin)).items.filter((n: any) => n.kind === 'system-alert')
     const before = (await adminBell()).length
+    const since = new Date().toISOString()
     alerts.alert('backup-failed', 'backup.failed', { reasonCode: 'backup.busy', reason: 'x' })
     alerts.alert('backup-failed', 'backup.failed', { reasonCode: 'backup.busy', reason: 'x' })
     alerts.alert('lockout', 'admin.alert-login-locked', { user: 'somchai', ip: '10.0.0.9' })
@@ -446,7 +447,10 @@ describe('notifications: events', () => {
     expect(items.map((n: any) => n.params.code)).toContain('backup.failed')
     expect(items.find((n: any) => n.params.code === 'admin.alert-login-locked').text).toContain('somchai')
     expect(items[0].text.length).toBeGreaterThan(5)
-    expect(JSON.stringify(items)).not.toMatch(/cookie|csrf|fc_sid/i)
+    // what these three alerts carry (another test may have left a startup warning whose code names a setting, such as
+    // admin.config-insecure-cookie: a name, not a secret)
+    const mine = items.filter((n: any) => ['backup.failed', 'admin.alert-login-locked'].includes(n.params.code) && n.at >= since)
+    expect(JSON.stringify(mine)).not.toMatch(/cookie|csrf|fc_sid/i)
     expect((await bell(alice)).items.some((n: any) => n.kind === 'system-alert')).toBe(false)
     expect((await alice.json('GET', '/api/me/notify-prefs')).data.events['system-alert']).toBeUndefined()
     expect((await admin.json('GET', '/api/me/notify-prefs')).data.events['system-alert']).toEqual({ web: true, email: false, line: false })
