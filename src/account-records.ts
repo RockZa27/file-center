@@ -6,7 +6,7 @@
  * An account instance is the pair (lowercase username, createdAt): a later account that reused a name is not the one
  * a backup holds, and none of the records of the first may act for it.
  */
-import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { paths as realPaths } from './config'
 import { destroyUserSessions } from './auth'
 import { removeAppPasswordsOf } from './app-passwords'
@@ -59,7 +59,10 @@ export function planRestore(live: Named[], restored: Named[]) {
 function rewrite(file: string, change: (data: any) => boolean) {
   if (!existsSync(file)) return
   const data = JSON.parse(readFileSync(file, 'utf8'))
-  if (data && typeof data === 'object' && change(data)) writeFileSync(file, JSON.stringify(data, null, 2))
+  if (!data || typeof data !== 'object' || !change(data)) return
+  // whole or not at all: a crash half way must not leave a store the app refuses to start with
+  writeFileSync(`${file}.tmp`, JSON.stringify(data, null, 2))
+  renameSync(`${file}.tmp`, file)
 }
 /** delete the keys of a plain object that name a dropped account; true when something went */
 function dropKeys(obj: unknown, drop: Set<string>): boolean {

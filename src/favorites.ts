@@ -20,14 +20,22 @@ const store = new JsonStore<Record<string, State>>(paths.userState, () => ({}))
 
 const same = (a: Ref, b: Ref) => a.space === b.space && a.path === b.path
 
+/**
+ * an account's entry, own keys only: a name like "constructor" or "toString" is a valid username, and a plain `[name]`
+ * would find the method every object inherits (and the routes that record a download answer 500 for that account)
+ */
+const mineOf = (all: Record<string, State>, username: string): State | undefined =>
+  (Object.hasOwn(all, username) ? all[username] : undefined)
+
 function stateOf(draft: Record<string, State>, username: string): State {
-  return (draft[username] ??= { favorites: [], recent: [] })
+  if (!Object.hasOwn(draft, username)) draft[username] = { favorites: [], recent: [] }
+  return draft[username]
 }
 
 export function addFavorite(user: User, space: string, path: string) {
   const ref = { space, path: normRel(path) }
   if (ref.path === '/') throw bad('files.root-item')
-  const mine = store.value[user.username]?.favorites ?? []
+  const mine = mineOf(store.value, user.username)?.favorites ?? []
   if (mine.length >= MAX_FAVORITES && !mine.some(f => same(f, ref))) throw bad('favorites.too-many', { max: MAX_FAVORITES })
   store.update(d => {
     const s = stateOf(d, user.username)
@@ -37,8 +45,8 @@ export function addFavorite(user: User, space: string, path: string) {
 
 export function removeFavorite(user: User, space: string, path: string) {
   const ref = { space, path: normRel(path) }
-  if (!store.value[user.username]?.favorites.some(f => same(f, ref))) return
-  store.update(d => { d[user.username].favorites = d[user.username].favorites.filter(f => !same(f, ref)) })
+  if (!mineOf(store.value, user.username)?.favorites.some(f => same(f, ref))) return
+  store.update(d => { stateOf(d, user.username).favorites = stateOf(d, user.username).favorites.filter(f => !same(f, ref)) })
 }
 
 /** a file was opened, downloaded or saved: newest first, once per place, at most MAX_RECENT */
@@ -77,13 +85,13 @@ function visible(user: User, refs: (Ref & { at?: string })[], forget: (gone: Ref
 }
 
 export function listFavorites(user: User): PlaceEntry[] {
-  return visible(user, store.value[user.username]?.favorites ?? [], gone =>
-    store.update(d => { d[user.username].favorites = d[user.username].favorites.filter(f => !gone.some(g => same(f, g))) }))
+  return visible(user, mineOf(store.value, user.username)?.favorites ?? [], gone =>
+    store.update(d => { stateOf(d, user.username).favorites = stateOf(d, user.username).favorites.filter(f => !gone.some(g => same(f, g))) }))
 }
 
 export function listRecent(user: User): PlaceEntry[] {
-  return visible(user, store.value[user.username]?.recent ?? [], gone =>
-    store.update(d => { d[user.username].recent = d[user.username].recent.filter(f => !gone.some(g => same(f, g))) }))
+  return visible(user, mineOf(store.value, user.username)?.recent ?? [], gone =>
+    store.update(d => { stateOf(d, user.username).recent = stateOf(d, user.username).recent.filter(f => !gone.some(g => same(f, g))) }))
 }
 
 /** a file or folder was renamed or moved: the entries of every user that point into it follow */

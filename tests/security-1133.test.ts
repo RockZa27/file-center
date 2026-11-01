@@ -137,3 +137,17 @@ describe('a cancel while the upload is completing (audit run 3)', () => {
     }
   })
 })
+
+describe('an account named like an Object method (audit run 3, hardening)', () => {
+  test('"constructor" and "toString" keep favorites and recent files like anyone else', async () => {
+    for (const name of ['constructor', 'toString']) {
+      const u = await userWith(name, ['read', 'write', 'upload', 'download'])
+      writeFileSync(home(name, 'a.txt'), 'x')
+      expect((await u.raw('GET', '/api/download?space=home&path=/a.txt')).status).toBe(200)
+      expect((await u.json('POST', '/api/me/favorites', { space: 'home', path: '/a.txt' })).status).toBe(200)
+      expect((await u.json('GET', '/api/me/favorites')).data.items.map((i: any) => i.name)).toEqual(['a.txt'])
+      expect((await u.json('DELETE', '/api/me/favorites', { space: 'home', path: '/a.txt' })).status).toBe(200)
+      expect((await u.json('GET', '/api/me/favorites')).data.items).toEqual([])
+    }
+  })
+})
