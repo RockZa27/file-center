@@ -2,7 +2,7 @@
  * Child process of tests/security-1132-restore.test.ts (not a test itself): a restore freezes the stores of the
  * process that runs it, so the scenario runs in its own process and is checked in a second one (the restart).
  *   bun tests/restore-scenario.ts setup <recreate|control> <dir>   then   bun tests/restore-scenario.ts check <mode> <dir>
- * recreate: bob#1 is backed up and deleted, bob#2 (same name) gets sessions, app password, share, grant, group; then restore.
+ * recreate: bob#1 is backed up and deleted, bob#2 (same name) gets sessions, app password, share, grant, group, a trash entry; then restore.
  * control: bob is never re-created; the same records exist when the backup is restored.
  * Prints one JSON line with what a client sees.
  */
@@ -71,6 +71,7 @@ if (phase === 'setup') {
   }
   put('users/bob/shared.txt', 'BOB-FILE')
   put('users/bob/pub/p.txt', 'BOB-PUB')
+  put('users/bob/gone.txt', 'BOB-DELETED')
   const bob = new Client()
   await bob.login('bob', mode === 'recreate' ? SECOND : FIRST)
   const ap = await bob.j('POST', '/api/me/app-passwords', { name: 'dav', scope: 'read', password: mode === 'recreate' ? SECOND : FIRST })
@@ -83,7 +84,9 @@ if (phase === 'setup') {
   const dora = new Client()
   await dora.login('dora', 'Granite-Drift-Walnut-7731')
   const received = await dora.j('POST', '/api/grants', { space: 'home', path: '/d', to: 'bob', perms: 'view' })
-  const statuses = { ap: ap.status, share: share.status, grant: grant.status, group: group.status, member: member.status, given: given.status, received: received.status }
+  // a deleted file of this bob, in the trash (audit run 3: the trash of a later same-name account)
+  const trashed = await bob.j('POST', '/api/delete', { space: 'home', items: ['/gone.txt'] })
+  const statuses = { trashed: trashed.status, ap: ap.status, share: share.status, grant: grant.status, group: group.status, member: member.status, given: given.status, received: received.status }
   writeFileSync(state, JSON.stringify({ cookie: bob.cookie, csrf: bob.csrf, secret: ap.data.secret, token: share.data.token, statuses }))
   await restoreBackup(backup.name)
   console.log(JSON.stringify({ statuses }))
@@ -105,6 +108,7 @@ const fresh = new Client()
 const login = await fresh.login('bob', FIRST)
 const mine = login.status === 200 ? await fresh.j('GET', '/api/groups/mine') : null
 const myGrants = login.status === 200 ? await fresh.j('GET', '/api/grants/to-me') : null
+const myTrash = login.status === 200 ? await fresh.j('GET', '/api/me/trash') : null
 console.log(JSON.stringify({
   sessionUser: session.data?.user?.username ?? null,
   dav: dav.status,
@@ -113,5 +117,6 @@ console.log(JSON.stringify({
   firstPasswordLogin: login.status,
   groups: (mine?.data?.items ?? []).map((g: any) => g.name),
   bobReceived: (myGrants?.data?.items ?? []).map((i: any) => i.owner),
+  trash: (myTrash?.data?.items ?? []).map((i: any) => i.name),
 }))
 process.exit(0)

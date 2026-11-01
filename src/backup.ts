@@ -26,6 +26,7 @@ import { type Lang, MESSAGES, type MessageCode, type Params, sizeText, text } fr
 import { type BackupPrefs, logoExt, settings } from './settings'
 import { recountStorage, storageStats } from './stats'
 import { JsonStore } from './store'
+import { tombstoneTrashOf } from './trash'
 import { collectZipItems, zipStream, type ZipItem } from './zip'
 
 export const BACKUP_NAME_RE = /^file-center-backup-\d{8}-\d{6}\.zip$/
@@ -638,8 +639,13 @@ export function restoreBackup(name: string): Promise<{ safety: BackupItem; twoFa
         // files (the stores are frozen and the app restarts); sessions stay only for the same account made before them
         const live = existsSync(paths.users) ? (JSON.parse(readFileSync(paths.users, 'utf8')).users ?? []) : []
         const plan = planRestore(live, restoredUsers)
-        renameSync(join(work, 'users.json'), paths.users)
+        // the records go before the restored users do: if this throws, the live users.json is still the one on disk,
+        // so no dropped name's sessions, passwords or links sit beside a restored account of that name. The trash is
+        // not a store: its entries of a dropped name get the tombstone an account delete gives them (an entry from
+        // before 1.10 finds its owner in the live users, so this comes before the swap too)
         dropRecordsOnDisk(plan)
+        for (const name of plan.drop) tombstoneTrashOf(name)
+        renameSync(join(work, 'users.json'), paths.users)
         if (existsSync(join(work, 'settings.json'))) renameSync(join(work, 'settings.json'), paths.settings)
         const branding = join(work, 'branding')
         mkdirSync(branding, { recursive: true })

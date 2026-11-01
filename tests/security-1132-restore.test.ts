@@ -27,7 +27,7 @@ describe('restore with an account that reused a name', () => {
   test('a later same-name account: its session, app password, link, grants and group place do not act as the restored one', async () => {
     const dir = join(base, 'recreate')
     const setup = await run('setup', 'recreate', dir)
-    expect(setup.statuses).toEqual({ ap: 200, share: 200, grant: 200, group: 200, member: 200, given: 200, received: 200 })
+    expect(setup.statuses).toEqual({ trashed: 200, ap: 200, share: 200, grant: 200, group: 200, member: 200, given: 200, received: 200 })
     const seen = await run('check', 'recreate', dir) // a fresh process: the restart
     expect(seen.sessionUser).toBeNull()
     expect(seen.dav).toBe(401)
@@ -35,6 +35,8 @@ describe('restore with an account that reused a name', () => {
     expect(seen.carolSees).toEqual([])
     expect(seen.groups).toEqual([])
     expect(seen.bobReceived).toEqual([])
+    // nor the deleted files of the later bob in the trash (audit run 3)
+    expect(seen.trash).toEqual([])
     // the restored (first) account itself works with its own password
     expect(seen.firstPasswordLogin).toBe(200)
   }, 60_000)
@@ -49,6 +51,7 @@ describe('restore with an account that reused a name', () => {
     expect(seen.carolSees).toEqual(['bob'])
     expect(seen.groups).toEqual(['team-x'])
     expect(seen.bobReceived).toEqual(['dora'])
+    expect(seen.trash).toEqual(['gone.txt'])
   }, 60_000)
 })
 
