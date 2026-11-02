@@ -22,7 +22,7 @@ export const archiveRoutes = new Elysia({ prefix: '/api' })
   .use(context)
 
   // ───────────── the entries of a zip, without extracting ─────────────
-  .get('/archive/list', async ({ user, ip, query }) => {
+  .get('/archive/list', { query: t.Object({ space: t.String(), path: t.String() }) }, async ({ user, ip, query }) => {
     const a = need({ user, ip }, query.space, 'read', 'download')
     const abs = zipAt(a.root, query.path)
     // looking into a managed user's home leaves a line (once a minute per file), like browsing a folder there
@@ -30,10 +30,10 @@ export const archiveRoutes = new Elysia({ prefix: '/api' })
       auditOnce(`browse|${user.username}|${a.space}|${storagePath(abs)}`, { user: user.username, ip, action: 'browse', target: storagePath(abs), detail: a.space })
     }
     return await listArchive(abs)
-  }, { query: t.Object({ space: t.String(), path: t.String() }) })
+  })
 
   // ───────────── one entry ─────────────
-  .get('/archive/file', async ({ user, ip, query }) => {
+  .get('/archive/file', { query: t.Object({ space: t.String(), path: t.String(), entry: t.String(), inline: t.Optional(t.String()) }) }, async ({ user, ip, query }) => {
     const a = need({ user, ip }, query.space, 'read', 'download')
     const abs = zipAt(a.root, query.path)
     const res = await archiveEntryResponse(abs, query.entry, query.inline === '1', contentDisposition)
@@ -43,15 +43,15 @@ export const archiveRoutes = new Elysia({ prefix: '/api' })
       detail: isForeignSpace(a.space) ? `${inside(query.entry)}, ${a.space}` : inside(query.entry),
     })
     return res
-  }, { query: t.Object({ space: t.String(), path: t.String(), entry: t.String(), inline: t.Optional(t.String()) }) })
+  })
 
   // ───────────── folder links: download links only, with the link's own checks ─────────────
-  .get('/s/:token/archive/list', async ({ params, query, request }) => {
+  .get('/s/:token/archive/list', { query: t.Object({ path: t.Optional(t.String()) }) }, async ({ params, query, request }) => {
     const { abs } = shareFile(params.token, query.path, request)
     return await listArchive(abs)
-  }, { query: t.Object({ path: t.Optional(t.String()) }) })
+  })
 
-  .get('/s/:token/archive/file', async ({ params, query, request, user, ip }) => {
+  .get('/s/:token/archive/file', { query: t.Object({ path: t.Optional(t.String()), entry: t.String() }) }, async ({ params, query, request, user, ip }) => {
     const { share, abs } = shareFile(params.token, query.path, request)
     // an entry taken out of a zip is the file's bytes: not on a view-only link
     refuseViewOnly(share)
@@ -68,4 +68,4 @@ export const archiveRoutes = new Elysia({ prefix: '/api' })
       slot.release()
       throw err
     }
-  }, { query: t.Object({ path: t.Optional(t.String()), entry: t.String() }) })
+  })

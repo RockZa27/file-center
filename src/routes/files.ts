@@ -126,7 +126,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
   .get('/me/usage', ({ user, ip }) => usage(requireUser({ user, ip })))
 
   // ───────────── browse ─────────────
-  .get('/list', async ({ user, ip, query }) => {
+  .get('/list', { query: spaceQ }, async ({ user, ip, query }) => {
     const a = need({ user, ip: '' }, query.space, 'read')
     const rel = normRel(query.path)
     const abs = resolveIn(a.root, rel)
@@ -134,18 +134,25 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     if (!isDir(abs)) throw bad('files.not-a-folder')
     browsed(user, ip, a, abs)
     return { path: rel, entries: await listDirAsync(abs, rel), permissions: [...a.perms] }
-  }, { query: spaceQ })
+  })
 
-  .get('/folders', async ({ user, query }) => {
+  .get('/folders', { query: spaceQ }, async ({ user, query }) => {
     // folders only, used by the "choose destination" dialog
     const a = need({ user, ip: '' }, query.space, 'read')
     const rel = normRel(query.path)
     const abs = resolveIn(a.root, rel)
     if (!isDir(abs)) throw notFound('files.folder-not-found')
     return { path: rel, entries: (await listDirAsync(abs, rel)).filter(e => e.type === 'dir') }
-  }, { query: spaceQ })
+  })
 
-  .get('/search', async ({ user, ip, query }) => {
+  .get('/search', {
+    query: t.Object({
+      space: t.String(), q: t.String(), path: t.Optional(t.String()),
+      type: t.Optional(t.String()), ext: t.Optional(t.String()), from: t.Optional(t.String()), to: t.Optional(t.String()),
+      minSize: t.Optional(t.String()), maxSize: t.Optional(t.String()), sort: t.Optional(t.String()), order: t.Optional(t.String()),
+      limit: t.Optional(t.String()),
+    }),
+  }, async ({ user, ip, query }) => {
     const a = need({ user, ip: '' }, query.space, 'read')
     browsed(user, ip, a, resolveIn(a.root, normRel(query.path)))
     const needle = query.q.trim().toLowerCase()
@@ -154,17 +161,10 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     const startRel = normRel(query.path)
     // the index answers when it is built, else a walk of up to 50,000 entries in batches (other requests are answered meanwhile)
     return await searchEntries(resolveIn(a.root, startRel), startRel, needle, filters)
-  }, {
-    query: t.Object({
-      space: t.String(), q: t.String(), path: t.Optional(t.String()),
-      type: t.Optional(t.String()), ext: t.Optional(t.String()), from: t.Optional(t.String()), to: t.Optional(t.String()),
-      minSize: t.Optional(t.String()), maxSize: t.Optional(t.String()), sort: t.Optional(t.String()), order: t.Optional(t.String()),
-      limit: t.Optional(t.String()),
-    }),
   })
 
   // ───────────── create / edit ─────────────
-  .post('/mkdir', ({ user, ip, body }) => {
+  .post('/mkdir', { body: t.Object({ space: t.String(), path: t.String(), name: t.String() }) }, ({ user, ip, body }) => {
     const a = need({ user, ip }, body.space, 'write')
     const dir = resolveIn(a.root, normRel(body.path))
     if (!isDir(dir)) throw notFound('files.folder-not-found')
@@ -175,9 +175,9 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     indexTouched(target)
     audit({ user: user?.username ?? 'guest', ip, action: 'mkdir', target: storagePath(target) })
     return { ok: true }
-  }, { body: t.Object({ space: t.String(), path: t.String(), name: t.String() }) })
+  })
 
-  .post('/newfile', ({ user, ip, body }) => {
+  .post('/newfile', { body: t.Object({ space: t.String(), path: t.String(), name: t.String() }) }, ({ user, ip, body }) => {
     const a = need({ user, ip }, body.space, 'write')
     const dir = resolveIn(a.root, normRel(body.path))
     if (!isDir(dir)) throw notFound('files.folder-not-found')
@@ -188,9 +188,9 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     indexTouched(target)
     audit({ user: user?.username ?? 'guest', ip, action: 'create', target: storagePath(target) })
     return { ok: true }
-  }, { body: t.Object({ space: t.String(), path: t.String(), name: t.String() }) })
+  })
 
-  .get('/content', async ({ user, ip, query }) => {
+  .get('/content', { query: spaceQ }, async ({ user, ip, query }) => {
     const a = need({ user, ip: '' }, query.space, 'read', 'download')
     const abs = resolveIn(a.root, normRel(query.path))
     const st = existsSync(abs) ? statSync(abs) : null
@@ -199,9 +199,9 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     recordRecent(user, query.space, normRel(query.path))
     if (isForeignSpace(a.space)) audit({ user: user!.username, ip, action: 'view', target: storagePath(abs), ...viewDetail(a) })
     return { content: await Bun.file(abs).text(), mtime: Math.round(st.mtimeMs) }
-  }, { query: spaceQ })
+  })
 
-  .put('/content', async ({ user, ip, body }) => {
+  .put('/content', { body: t.Object({ space: t.String(), path: t.String(), content: t.String(), expectedMtime: t.Optional(t.Number()) }) }, async ({ user, ip, body }) => {
     const a = need({ user, ip }, body.space, 'write')
     // the count is awaited first: from the check of the version to the write there is no await
     const q = quotaUserOf(a, user)
@@ -238,10 +238,10 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     recordRecent(user, body.space, rel)
     // the next save sends this one back
     return { ok: true, mtime: Math.round(statSync(abs).mtimeMs) }
-  }, { body: t.Object({ space: t.String(), path: t.String(), content: t.String(), expectedMtime: t.Optional(t.Number()) }) })
+  })
 
   // ───────────── rename / copy / move / delete ─────────────
-  .post('/rename', async ({ user, ip, body }) => {
+  .post('/rename', { body: t.Object({ space: t.String(), path: t.String(), name: t.String() }) }, async ({ user, ip, body }) => {
     const a = need({ user, ip }, body.space, 'write')
     const rel = normRel(body.path)
     if (rel === '/') throw bad('files.rename-root')
@@ -260,16 +260,16 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     indexTouched(from); indexTouched(to)
     audit({ user: user?.username ?? 'guest', ip, action: 'rename', target: storagePath(from), detail: name })
     return { ok: true }
-  }, { body: t.Object({ space: t.String(), path: t.String(), name: t.String() }) })
-
-  .post('/copy', ({ user, ip, body, request }) => transfer('copy', user, ip, body, langOf(request)), {
-    body: t.Object({ space: t.String(), items: itemList, dest: t.String(), destSpace: t.Optional(t.String()) }),
-  })
-  .post('/move', ({ user, ip, body, request }) => transfer('move', user, ip, body, langOf(request)), {
-    body: t.Object({ space: t.String(), items: itemList, dest: t.String(), destSpace: t.Optional(t.String()) }),
   })
 
-  .post('/delete', async ({ user, ip, body, request }) => {
+  .post('/copy', {
+    body: t.Object({ space: t.String(), items: itemList, dest: t.String(), destSpace: t.Optional(t.String()) }),
+  }, ({ user, ip, body, request }) => transfer('copy', user, ip, body, langOf(request)))
+  .post('/move', {
+    body: t.Object({ space: t.String(), items: itemList, dest: t.String(), destSpace: t.Optional(t.String()) }),
+  }, ({ user, ip, body, request }) => transfer('move', user, ip, body, langOf(request)))
+
+  .post('/delete', { body: t.Object({ space: t.String(), items: itemList, withTrash: t.Optional(t.Boolean()) }) }, async ({ user, ip, body, request }) => {
     const a = need({ user, ip }, body.space, 'write')
     const failed: { path: string; error: string }[] = []
     // the trash entry of each deleted item, so the page can offer "undo" (POST /api/me/trash/:id/restore); sent only on request, so older callers get the answer they always got
@@ -292,10 +292,10 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     // a cached storage scan may list what just left; the next scan must not be refused as "recent"
     if (done) { markStaleFor(a, user); forgetInsight() }
     return body.withTrash ? { done, failed, trashed } : { done, failed }
-  }, { body: t.Object({ space: t.String(), items: itemList, withTrash: t.Optional(t.Boolean()) }) })
+  })
 
   // ───────────── zip / unzip ─────────────
-  .post('/zip', async ({ user, ip, body }) => {
+  .post('/zip', { body: t.Object({ space: t.String(), path: t.String(), items: itemList, name: t.Optional(t.String()) }) }, async ({ user, ip, body }) => {
     const a = need({ user, ip }, body.space, 'zip', 'write')
     const q = quotaUserOf(a, user)
     await ready(q)
@@ -323,9 +323,9 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     indexTouched(target)
     audit({ user: user?.username ?? 'guest', ip, action: 'zip', target: storagePath(target), detail: `${names.length} รายการ` })
     return { ok: true, name: basename(target) }
-  }, { body: t.Object({ space: t.String(), path: t.String(), items: itemList, name: t.Optional(t.String()) }) })
+  })
 
-  .post('/unzip', async ({ user, ip, body }) => {
+  .post('/unzip', { body: t.Object({ space: t.String(), path: t.String() }) }, async ({ user, ip, body }) => {
     const a = need({ user, ip }, body.space, 'zip', 'write')
     const q = quotaUserOf(a, user)
     await ready(q)
@@ -361,10 +361,10 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     } finally {
       release()
     }
-  }, { body: t.Object({ space: t.String(), path: t.String() }) })
+  })
 
   // ───────────── download ─────────────
-  .get('/download', ({ user, ip, query, request }) => {
+  .get('/download', { query: t.Object({ space: t.String(), path: t.String(), inline: t.Optional(t.String()) }) }, ({ user, ip, query, request }) => {
     const a = need({ user, ip }, query.space, 'download')
     const rel = normRel(query.path)
     const abs = resolveIn(a.root, rel)
@@ -376,9 +376,9 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
       recordRecent(user, query.space, rel)
     }
     return fileResponse(abs, basename(abs), request, query.inline === '1')
-  }, { query: t.Object({ space: t.String(), path: t.String(), inline: t.Optional(t.String()) }) })
+  })
 
-  .post('/batch', async ({ user, ip, body }) => {
+  .post('/batch', { body: t.Object({ space: t.String(), path: t.String(), items: itemList }) }, async ({ user, ip, body }) => {
     const a = need({ user, ip }, body.space, 'download', 'batchdownload')
     const dirRel = normRel(body.path)
     const dir = resolveIn(a.root, dirRel)
@@ -389,7 +389,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     for (const [k, v] of batches) if (v.expires < now) batches.delete(k)
     batches.set(token, { owner: user?.username ?? 'guest', space: body.space, root: a.root, dir: dirRel, names, expires: now + 5 * 60_000 })
     return { token }
-  }, { body: t.Object({ space: t.String(), path: t.String(), items: itemList }) })
+  })
 
   .get('/batch/:token', ({ user, ip, params }) => {
     const b = batches.get(params.token)

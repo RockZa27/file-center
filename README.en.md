@@ -10,7 +10,7 @@
 
 File Center is a self-hosted web app for storing and sharing files.
 Your data stays on your own machine and no separate database is needed.
-It is a full rewrite on **ElysiaJS + Bun** (backend) and **Vue 3 + Naive UI** (frontend),
+It is a full rewrite on **ElysiaJS 2 beta + Bun** (backend) and **Vue 3 + Naive UI** (frontend),
 designed to work and look much like the File Center built on FileGator, but it uses none of the old code or data.
 
 ## Contents

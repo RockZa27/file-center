@@ -1,4 +1,4 @@
-import { Elysia } from 'elysia'
+import { Elysia, NotFound, ParseError, ValidationError } from 'elysia'
 import { accessFor, canManage, getSession, isStaff, reloadIfChangedByCli, type Access, type Session, type User, findUser } from './auth'
 import { config } from './config'
 import { mustSetup2fa } from './policy'
@@ -79,8 +79,7 @@ export function errorPage(status: number, lang: Lang, code: MessageCode, params:
 
 /** Per-request context: who is calling, their session, and uniform JSON errors (a small page for download links). */
 export const context = new Elysia({ name: 'context' })
-  .error({ HTTP_ERROR: HttpError })
-  .onError({ as: 'global' }, ({ error, code, set, request }) => {
+  .onError({ as: 'global' }, ({ error, set, request }) => {
     // the text in the visitor's language; the code and params let the page tell cases apart without reading it
     const answer = (status: number, c: MessageCode, params: Params = {}) => {
       if (isDownloadNavigation(request)) return errorPage(status, langOf(request), c, params)
@@ -94,13 +93,18 @@ export const context = new Elysia({ name: 'context' })
       if (!(error instanceof HttpError)) log.warn('fs-error', { method: request.method, path: safePath(request.url), error: (error as Error).message.slice(0, 300) })
       return answer(known.status, known.code, known.params)
     }
-    if (code === 'VALIDATION') {
+    if (error instanceof ValidationError) {
       // a list longer than its schema allows (maxItems) is a request for too many items, not a malformed one
-      const tooMany = (error as any).all?.find((e: any) => e?.schema?.maxItems !== undefined)
-      return tooMany ? answer(400, 'files.bad-count', { max: tooMany.schema.maxItems }) : answer(422, 'request.invalid')
+      const tooMany = error.all.find(e => {
+        const schema = e.schemaPath?.replace(/^#\//, '').split('/').reduce(
+          (value: any, key: string) => value?.[key.replace(/~1/g, '/').replace(/~0/g, '~')], error.schema,
+        )
+        return schema?.maxItems !== undefined && e.params?.limit === schema.maxItems
+      })
+      return tooMany ? answer(400, 'files.bad-count', { max: tooMany.params.limit }) : answer(422, 'request.invalid')
     }
-    if (code === 'NOT_FOUND') return answer(404, 'request.no-route')
-    if (code === 'PARSE') return answer(400, 'request.unreadable')
+    if (error instanceof NotFound) return answer(404, 'request.no-route')
+    if (error instanceof ParseError) return answer(400, 'request.unreadable')
     log.error('request-failed', { method: request.method, path: safePath(request.url), error })
     return answer(500, 'request.internal')
   })

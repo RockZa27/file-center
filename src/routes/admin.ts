@@ -91,7 +91,13 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     }
   })
 
-  .post('/admin/users', async ({ user, ip, body }) => {
+  .post('/admin/users', {
+    body: t.Object({
+      username: t.String(), name: t.String(), password: t.String(), role: roleT,
+      homedir: t.Optional(t.String()), permissions: permsT, publicPermissions: permsT,
+      quotaBytes: t.Optional(t.Number()),
+    }),
+  }, async ({ user, ip, body }) => {
     const admin = requireStaff({ user, ip })
     // a manager makes plain users only, always in /users/<name>, with public rights no wider than their own
     if (!isAdmin(admin) && body.role !== 'user') throw forbidden('admin.role-not-allowed')
@@ -126,15 +132,15 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     saveUsers()
     audit({ user: admin.username, ip, action: 'user-create', target: username })
     return { ok: true }
-  }, {
-    body: t.Object({
-      username: t.String(), name: t.String(), password: t.String(), role: roleT,
-      homedir: t.Optional(t.String()), permissions: permsT, publicPermissions: permsT,
-      quotaBytes: t.Optional(t.Number()),
-    }),
   })
 
-  .put('/admin/users/:username', async ({ user, ip, params, body }) => {
+  .put('/admin/users/:username', {
+    body: t.Object({
+      name: t.Optional(t.String()), password: t.Optional(t.String()), confirmPassword: t.Optional(t.String({ maxLength: 1000 })), role: t.Optional(roleT),
+      homedir: t.Optional(t.String()), permissions: t.Optional(permsT), publicPermissions: t.Optional(permsT),
+      quotaBytes: t.Optional(t.Number()),
+    }),
+  }, async ({ user, ip, params, body }) => {
     const admin = requireStaff({ user, ip })
     const target = manageable(admin, params.username)
     if (!isAdmin(admin) && body.role !== undefined && body.role !== 'user') throw forbidden('admin.role-not-allowed')
@@ -182,12 +188,6 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     saveUsers()
     audit({ user: admin.username, ip, action: reset ? 'user-password-reset' : 'user-update', target: target.username })
     return { ok: true }
-  }, {
-    body: t.Object({
-      name: t.Optional(t.String()), password: t.Optional(t.String()), confirmPassword: t.Optional(t.String({ maxLength: 1000 })), role: t.Optional(roleT),
-      homedir: t.Optional(t.String()), permissions: t.Optional(permsT), publicPermissions: t.Optional(permsT),
-      quotaBytes: t.Optional(t.Number()),
-    }),
   })
 
   .delete('/admin/users/:username', ({ user, ip, params }) => {
@@ -222,7 +222,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
   })
 
   // for a user who lost the phone and the backup codes; the admin proves it is them with their own password
-  .post('/admin/users/:username/2fa/reset', async ({ user, ip, params, body }) => {
+  .post('/admin/users/:username/2fa/reset', { body: t.Object({ password: t.String({ maxLength: 1000 }) }) }, async ({ user, ip, params, body }) => {
     const admin = requireStaff({ user, ip })
     const target = manageable(admin, params.username)
     await confirmPassword(admin, ip, body.password, '2fa-reset-denied')
@@ -234,16 +234,16 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     const appPasswords = removeAppPasswordsOf(target.username)
     audit({ user: admin.username, ip, action: '2fa-reset', target: target.username, detail: `${appPasswords} app password` })
     return { ok: true, appPasswords }
-  }, { body: t.Object({ password: t.String({ maxLength: 1000 }) }) })
+  })
 
   // folder tree for the "home folder" picker
-  .get('/admin/folders', async ({ user, ip, query }) => {
+  .get('/admin/folders', { query: t.Object({ path: t.Optional(t.String()) }) }, async ({ user, ip, query }) => {
     requireAdmin({ user, ip })
     const rel = normRel(query.path)
     const abs = resolveIn(config.storageDir, rel)
     if (!isDir(abs)) throw notFound()
     return { path: rel, entries: (await listDirAsync(abs, rel)).filter(e => e.type === 'dir') }
-  }, { query: t.Object({ path: t.Optional(t.String()) }) })
+  })
 
   // ───────────── dashboard ─────────────
   .get('/admin/status', ({ user, ip, request }) => {
@@ -307,7 +307,12 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
   })
 
   // a manager sees what they and the users they manage did
-  .get('/admin/activity', ({ user, ip, query }) => {
+  .get('/admin/activity', {
+    query: t.Object({
+      user: t.Optional(t.String()), action: t.Optional(t.String()), q: t.Optional(t.String()),
+      page: t.Optional(t.String()), pageSize: t.Optional(t.String()),
+    }),
+  }, ({ user, ip, query }) => {
     const actor = requireStaff({ user, ip })
     const names = isAdmin(actor) ? null : new Set([actor.username, ...allUsers().filter(u => canManage(actor, u)).map(u => u.username)])
     return queryAudit({
@@ -318,11 +323,6 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
       page: Math.max(1, Number(query.page) || 1),
       pageSize: Math.min(100, Math.max(5, Number(query.pageSize) || 25)),
     })
-  }, {
-    query: t.Object({
-      user: t.Optional(t.String()), action: t.Optional(t.String()), q: t.Optional(t.String()),
-      page: t.Optional(t.String()), pageSize: t.Optional(t.String()),
-    }),
   })
 
   // ───────────── trash ─────────────
@@ -331,19 +331,19 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     return { items: listTrash(), retentionDays: policy.trashRetentionDays() }
   })
 
-  .post('/admin/trash/restore', async ({ user, ip, body }) => {
+  .post('/admin/trash/restore', { body: t.Object({ id: t.String() }) }, async ({ user, ip, body }) => {
     const admin = requireAdmin({ user, ip })
     const r = await restore(body.id)
     audit({ user: admin.username, ip, action: 'restore', target: r.restoredTo })
     return { ok: true, restoredTo: r.restoredTo }
-  }, { body: t.Object({ id: t.String() }) })
+  })
 
-  .post('/admin/trash/purge', ({ user, ip, body }) => {
+  .post('/admin/trash/purge', { body: t.Object({ id: t.Optional(t.String()) }) }, ({ user, ip, body }) => {
     const admin = requireAdmin({ user, ip })
     const n = purge(body.id)
     audit({ user: admin.username, ip, action: 'purge', detail: `${n} รายการ` })
     return { ok: true, removed: n }
-  }, { body: t.Object({ id: t.Optional(t.String()) }) })
+  })
 
   // ───────────── settings ─────────────
   .get('/admin/settings', ({ user, ip }) => {
@@ -353,7 +353,17 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
 
   // A key left out stays; inside share/security/files/mail/alerts a key set to null goes back to the env value.
   // Security, mail and alert settings, and guest rights that let visitors change things, ask for the admin's password.
-  .put('/admin/settings', async ({ user, ip, body }) => {
+  .put('/admin/settings', {
+    body: t.Object({
+      appName: t.Optional(t.String()), primaryColor: t.Optional(t.String()),
+      welcomeTitle: t.Optional(t.String()), welcomeText: t.Optional(t.String()),
+      publicEmptyText: t.Optional(t.String()), publicEnabled: t.Optional(t.Boolean()),
+      guestPermissions: t.Optional(permsT),
+      share: t.Optional(t.Any()), security: t.Optional(t.Any()), files: t.Optional(t.Any()),
+      mail: t.Optional(t.Any()), alerts: t.Optional(t.Any()), auditForward: t.Optional(t.Any()), antivirus: t.Optional(t.Any()),
+      password: t.Optional(t.String({ maxLength: 1000 })),
+    }),
+  }, async ({ user, ip, body }) => {
     const admin = requireAdmin({ user, ip })
     const patch: Record<string, unknown> = {}
     const text = (key: keyof typeof body, max: number, min = 0) => {
@@ -386,19 +396,9 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     const security = changed.filter(k => k.startsWith('security.') || k.startsWith('mail.') || k.startsWith('alerts.') || k.startsWith('auditForward.') || k.startsWith('antivirus.'))
     if (security.length) alert('settings-security', 'admin.alert-security-changed', { user: admin.username, keys: security.join(', ') })
     return settingsView()
-  }, {
-    body: t.Object({
-      appName: t.Optional(t.String()), primaryColor: t.Optional(t.String()),
-      welcomeTitle: t.Optional(t.String()), welcomeText: t.Optional(t.String()),
-      publicEmptyText: t.Optional(t.String()), publicEnabled: t.Optional(t.Boolean()),
-      guestPermissions: t.Optional(permsT),
-      share: t.Optional(t.Any()), security: t.Optional(t.Any()), files: t.Optional(t.Any()),
-      mail: t.Optional(t.Any()), alerts: t.Optional(t.Any()), auditForward: t.Optional(t.Any()), antivirus: t.Optional(t.Any()),
-      password: t.Optional(t.String({ maxLength: 1000 })),
-    }),
   })
 
-  .put('/admin/logo', async ({ user, ip, request }) => {
+  .put('/admin/logo', { parse: 'none' }, async ({ user, ip, request }) => {
     const admin = requireAdmin({ user, ip })
     const type = (request.headers.get('content-type') ?? '').split(';')[0].trim()
     const ext = ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/svg+xml': 'svg' } as Record<string, string>)[type]
@@ -411,7 +411,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     settings.update({ logo: `${ext}:${Date.now()}` })
     audit({ user: admin.username, ip, action: 'logo-update' })
     return settingsView()
-  }, { parse: 'none' })
+  })
 
   .delete('/admin/logo', ({ user, ip }) => {
     const admin = requireAdmin({ user, ip })

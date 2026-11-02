@@ -42,18 +42,18 @@ export const notifyRoutes = new Elysia({ prefix: '/api' })
   .use(context)
 
   // ───────────── the bell ─────────────
-  .get('/me/notifications', ({ user, ip, query, request }) => {
+  .get('/me/notifications', { query: t.Object({ unreadOnly: t.Optional(t.String()) }) }, ({ user, ip, query, request }) => {
     const u = requireUser({ user, ip })
     const lang = langOf(request)
     const { items, unread } = listNotifications(u.username, query.unreadOnly === 'true' || query.unreadOnly === '1')
     return { items: items.map(n => render(n, lang)), unread }
-  }, { query: t.Object({ unreadOnly: t.Optional(t.String()) }) })
+  })
 
   // no ids = all of them
-  .post('/me/notifications/read', ({ user, ip, body }) => {
+  .post('/me/notifications/read', { body: t.Optional(t.Object({ ids: t.Optional(t.Array(t.String({ maxLength: 64 }), { maxItems: 200 })) })) }, ({ user, ip, body }) => {
     const u = requireUser({ user, ip })
     return { ok: true, unread: markRead(u.username, body?.ids) }
-  }, { body: t.Optional(t.Object({ ids: t.Optional(t.Array(t.String({ maxLength: 64 }), { maxItems: 200 })) })) })
+  })
 
   .delete('/me/notifications/:id', ({ user, ip, params }) => {
     const u = requireUser({ user, ip })
@@ -64,19 +64,19 @@ export const notifyRoutes = new Elysia({ prefix: '/api' })
   // ───────────── settings ─────────────
   .get('/me/notify-prefs', ({ user, ip }) => prefsOf(requireUser({ user, ip })))
 
-  .put('/me/notify-prefs', ({ user, ip, body, request }) => {
+  .put('/me/notify-prefs', { body: t.Object({ lang: t.Optional(t.Union([t.Literal('th'), t.Literal('en')])), events: t.Optional(t.Record(t.String(), channels)) }) }, ({ user, ip, body, request }) => {
     const u = requireUser({ user, ip })
     rememberLang(u.username, langOf(request))
     setPrefs(u, body)
     return prefsOf(u)
-  }, { body: t.Object({ lang: t.Optional(t.Union([t.Literal('th'), t.Literal('en')])), events: t.Optional(t.Record(t.String(), channels)) }) })
+  })
 
   // ───────────── e-mail ─────────────
-  .put('/me/email', ({ user, ip, body, request }) => {
+  .put('/me/email', { body: t.Object({ address: t.String({ maxLength: 320 }) }) }, ({ user, ip, body, request }) => {
     const u = requireUser({ user, ip })
     rememberLang(u.username, langOf(request))
     return requestEmailVerification(u, body.address)
-  }, { body: t.Object({ address: t.String({ maxLength: 320 }) }) })
+  })
 
   .delete('/me/email', ({ user, ip }) => {
     removeEmail(requireUser({ user, ip }).username)
@@ -84,7 +84,7 @@ export const notifyRoutes = new Elysia({ prefix: '/api' })
   })
 
   // the link in the verification mail: the token is the proof, so it needs no session (the mail may be opened on a phone)
-  .get('/me/email/verify', ({ query, request }) => {
+  .get('/me/email/verify', { query: t.Object({ token: t.Optional(t.String({ maxLength: 200 })) }) }, ({ query, request }) => {
     // the page's own fetch (it sends x-lang) gets JSON; a click in the mail program is a navigation and lands on the app
     const wantsJson = request.headers.has('x-lang') || (request.headers.get('accept') ?? '').includes('application/json')
     try {
@@ -95,7 +95,7 @@ export const notifyRoutes = new Elysia({ prefix: '/api' })
       if (wantsJson || !(e instanceof HttpError)) throw e
       return new Response(null, { status: 302, headers: { location: '/?emailVerified=0', 'cache-control': 'no-store' } })
     }
-  }, { query: t.Object({ token: t.Optional(t.String({ maxLength: 200 })) }) })
+  })
 
   // ───────────── LINE ─────────────
   .post('/me/line/link', ({ user, ip, request }) => {
@@ -111,7 +111,7 @@ export const notifyRoutes = new Elysia({ prefix: '/api' })
   })
 
   // LINE calls this; the signature of the raw body (X-Line-Signature, HMAC-SHA256 with the channel secret) is the only way in
-  .post('/line/webhook', async ({ request }) => {
+  .post('/line/webhook', { parse: 'none' }, async ({ request }) => {
     const raw = new Uint8Array(await request.arrayBuffer())
     if (raw.length > LINE_BODY_MAX) throw new HttpError(413, 'request.too-big')
     if (!validSignature(raw, request.headers.get('x-line-signature'))) throw new HttpError(401, 'notify.bad-signature')
@@ -119,4 +119,4 @@ export const notifyRoutes = new Elysia({ prefix: '/api' })
     try { events = JSON.parse(new TextDecoder().decode(raw))?.events ?? [] } catch { /* a signed body that is no JSON: nothing to do */ }
     if (Array.isArray(events)) for (const ev of events.slice(0, 50)) lineEvent(ev)
     return { ok: true }
-  }, { parse: 'none' })
+  })

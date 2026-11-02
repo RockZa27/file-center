@@ -27,14 +27,7 @@ export const backupRoutes = new Elysia({ prefix: '/api/admin' })
   })
 
   // compression, schedule (server local time), copies to keep, files included. A key left out stays; null = back to the default
-  .put('/backups/settings', async ({ user, ip, body }) => {
-    const admin = requireAdmin({ user, ip })
-    // the copies get as big as the whole storage: turning that on asks for the password
-    if (turnsOnFiles(body)) await confirmPassword(admin, ip, body.password ?? '', 'backup-settings-denied')
-    const changes = saveBackupSettings(body)
-    audit({ user: admin.username, ip, action: 'backup-settings', detail: changes.join(', ') })
-    return backupSettings()
-  }, {
+  .put('/backups/settings', {
     body: t.Object({
       compression: t.Optional(t.Union([t.String(), t.Null()])),
       schedule: t.Optional(t.Union([t.Any(), t.Null()])),
@@ -42,6 +35,13 @@ export const backupRoutes = new Elysia({ prefix: '/api/admin' })
       includeFiles: t.Optional(t.Union([t.Boolean(), t.Null()])),
       password: t.Optional(t.String({ maxLength: 1000 })),
     }),
+  }, async ({ user, ip, body }) => {
+    const admin = requireAdmin({ user, ip })
+    // the copies get as big as the whole storage: turning that on asks for the password
+    if (turnsOnFiles(body)) await confirmPassword(admin, ip, body.password ?? '', 'backup-settings-denied')
+    const changes = saveBackupSettings(body)
+    audit({ user: admin.username, ip, action: 'backup-settings', detail: changes.join(', ') })
+    return backupSettings()
   })
 
   .post('/backups', async ({ user, ip }) => {
@@ -70,7 +70,7 @@ export const backupRoutes = new Elysia({ prefix: '/api/admin' })
   })
 
   // puts back users, passwords, settings and the logo of a backup, then restarts so the app reads them
-  .post('/backups/restore', async ({ user, ip, body, request }) => {
+  .post('/backups/restore', { body: t.Object({ name: t.String({ maxLength: 200 }), password: t.String({ maxLength: 1000 }) }) }, async ({ user, ip, body, request }) => {
     const admin = requireAdmin({ user, ip })
     if (!supervised()) {
       throw new HttpError(409, 'not-supervised')
@@ -91,4 +91,4 @@ export const backupRoutes = new Elysia({ prefix: '/api/admin' })
         })()
       : null
     return { ok: true, restarting: true, safety: safety.name, twoFactorLost, warning }
-  }, { body: t.Object({ name: t.String({ maxLength: 200 }), password: t.String({ maxLength: 1000 }) }) })
+  })

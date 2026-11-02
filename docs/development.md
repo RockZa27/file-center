@@ -2,7 +2,7 @@
 
 [← กลับหน้าแรก](../README.md) · [ติดตั้ง](install.md) · [ตั้งค่าระบบ](configuration.md) · [ความปลอดภัย](security.md)
 
-สำหรับคนที่แก้โค้ด File Center: backend เป็น **ElysiaJS + Bun** (`src/`) frontend เป็น **Vue 3 + Naive UI** (`web/src`) ถ้าต้องการแค่ติดตั้งหรือใช้งาน ดู [ติดตั้ง](install.md) และ [คู่มือผู้ดูแล](admin-guide.md)
+สำหรับคนที่แก้โค้ด File Center: backend เป็น **ElysiaJS 2 beta + Bun** (`src/`) frontend เป็น **Vue 3 + Naive UI** (`web/src`) ถ้าต้องการแค่ติดตั้งหรือใช้งาน ดู [ติดตั้ง](install.md) และ [คู่มือผู้ดูแล](admin-guide.md)
 
 ## สารบัญ
 

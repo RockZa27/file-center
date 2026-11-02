@@ -67,7 +67,11 @@ function csvStream(rows: Iterator<AuditEntry>, match: (r: AuditEntry) => boolean
 export const logRoutes = new Elysia({ prefix: '/api/admin' })
   .use(context)
 
-  .get('/logs', ({ user, ip, query }) => {
+  .get('/logs', {
+    query: t.Object({
+      level: t.Optional(t.String()), q: t.Optional(t.String()), page: t.Optional(t.String()), pageSize: t.Optional(t.String()),
+    }),
+  }, ({ user, ip, query }) => {
     requireAdmin({ user, ip })
     const level = query.level || undefined
     if (level && !LOG_LEVELS.includes(level as LogLevel)) throw bad('logs.bad-level')
@@ -77,10 +81,6 @@ export const logRoutes = new Elysia({ prefix: '/api/admin' })
       page: Math.max(1, Number(query.page) || 1),
       pageSize: Math.min(200, Math.max(5, Number(query.pageSize) || 50)),
     })
-  }, {
-    query: t.Object({
-      level: t.Optional(t.String()), q: t.Optional(t.String()), page: t.Optional(t.String()), pageSize: t.Optional(t.String()),
-    }),
   })
 
   .get('/logs/download', ({ user, ip }) => {
@@ -93,7 +93,11 @@ export const logRoutes = new Elysia({ prefix: '/api/admin' })
   })
 
   // the same filters as the activity page
-  .get('/activity/export', ({ user, ip, query }) => {
+  .get('/activity/export', {
+    query: t.Object({
+      format: t.Optional(t.String()), user: t.Optional(t.String()), action: t.Optional(t.String()), q: t.Optional(t.String()),
+    }),
+  }, ({ user, ip, query }) => {
     const admin = requireAdmin({ user, ip })
     if ((query.format ?? 'csv') !== 'csv') throw bad('logs.csv-only')
     const filter = { user: query.user || undefined, action: query.action || undefined, q: query.q || undefined }
@@ -103,8 +107,4 @@ export const logRoutes = new Elysia({ prefix: '/api/admin' })
     return new Response(csvStream(auditEntries(), auditMatcher(filter)), {
       headers: { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="${name}"`, 'Cache-Control': 'no-store' },
     })
-  }, {
-    query: t.Object({
-      format: t.Optional(t.String()), user: t.Optional(t.String()), action: t.Optional(t.String()), q: t.Optional(t.String()),
-    }),
   })

@@ -19,7 +19,7 @@ export const appPasswordRoutes = new Elysia({ prefix: '/api/me/app-passwords' })
     return { items: appPasswordsOf(u.username).map(publicAppPassword), max: APP_PASSWORDS_PER_USER, enabled: policy.webdav() }
   })
 
-  .post('/', async ({ user, ip, body }) => {
+  .post('/', { body: t.Object({ name: t.String({ maxLength: 200 }), scope: t.String({ maxLength: 20 }), password: t.String({ maxLength: 1000 }) }) }, async ({ user, ip, body }) => {
     const u = requireUser({ user, ip })
     const name = body.name.trim()
     if (!name || name.length > 60) throw bad('auth.app-password-bad-name')
@@ -29,7 +29,7 @@ export const appPasswordRoutes = new Elysia({ prefix: '/api/me/app-passwords' })
     const { item, secret } = await createAppPassword(u, name, body.scope)
     audit({ user: u.username, ip, action: 'app-password-create', target: item.name, detail: item.scope })
     return { ...publicAppPassword(item), secret }
-  }, { body: t.Object({ name: t.String({ maxLength: 200 }), scope: t.String({ maxLength: 20 }), password: t.String({ maxLength: 1000 }) }) })
+  })
 
   .delete('/:id', ({ user, ip, params }) => {
     const u = requireUser({ user, ip })

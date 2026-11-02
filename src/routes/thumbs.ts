@@ -46,7 +46,7 @@ export const thumbRoutes = new Elysia({ prefix: '/api' })
     return thumbStatus()
   })
 
-  .get('/thumb', ({ user, ip, query, request, set }) => {
+  .get('/thumb', { query: t.Object({ space: t.String(), path: t.String(), size: sizeQ }) }, ({ user, ip, query, request, set }) => {
     // 1024 px is nearly the file itself: it needs the right to download, 256 px only the right to read
     const a = Number(query.size) === 1024 ? need({ user, ip }, query.space, 'read', 'download') : need({ user, ip }, query.space, 'read')
     const abs = resolveIn(a.root, normRel(query.path))
@@ -55,12 +55,12 @@ export const thumbRoutes = new Elysia({ prefix: '/api' })
       auditOnce(`browse|${user.username}|${a.space}|${storagePath(abs)}`, { user: user.username, ip, action: 'browse', target: storagePath(abs), detail: a.space })
     }
     return thumbResponse(abs, query.size, request, set)
-  }, { query: t.Object({ space: t.String(), path: t.String(), size: sizeQ }) })
+  })
 
   // a folder link: the same checks as its download (a used-up or expired link is 404, and every link here is a download
   // link, so 1024 is fine). 256 px is a preview and counts nothing; 1024 px is nearly the file itself, so on a link with a
   // download limit it takes one download, counted once the picture is sent (a repeat the browser already holds, 304, is free)
-  .get('/s/:token/thumb', async ({ params, query, request, set }) => {
+  .get('/s/:token/thumb', { query: t.Object({ path: t.Optional(t.String()), size: sizeQ }) }, async ({ params, query, request, set }) => {
     const { share, abs } = shareFile(params.token, query.path, request)
     if (Number(query.size) !== 1024 || share.maxDownloads === null) return thumbResponse(abs, query.size, request, set)
     const slot = startDownload(share)
@@ -72,4 +72,4 @@ export const thumbRoutes = new Elysia({ prefix: '/api' })
       slot.release()
       throw err
     }
-  }, { query: t.Object({ path: t.Optional(t.String()), size: sizeQ }) })
+  })

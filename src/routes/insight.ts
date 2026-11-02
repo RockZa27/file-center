@@ -44,13 +44,13 @@ export const insightRoutes = new Elysia({ prefix: '/api/insight' })
   .use(context)
 
   // what is known: { state: 'none' | 'running' | 'done', result? }
-  .get('/', ({ user, ip, query }) => {
+  .get('/', { query: t.Object({ scope: t.Optional(t.String({ maxLength: 100 })) }) }, ({ user, ip, query }) => {
     const u = requireUser({ user, ip })
     return view(resolve(u, query.scope ?? 'me'))
-  }, { query: t.Object({ scope: t.Optional(t.String({ maxLength: 100 })) }) })
+  })
 
   // start a scan in the background (one at a time on the server; a folder scanned a moment ago is not scanned again)
-  .post('/scan', ({ user, ip, body, set }) => {
+  .post('/scan', { body: t.Object({ scope: t.Optional(t.String({ maxLength: 100 })) }) }, ({ user, ip, body, set }) => {
     const u = requireUser({ user, ip })
     const tg = resolve(u, body.scope ?? 'me')
     const outcome = startInsight(tg.key, tg.root)
@@ -60,4 +60,4 @@ export const insightRoutes = new Elysia({ prefix: '/api/insight' })
       set.status = 202
     }
     return { ...view(tg), outcome }
-  }, { body: t.Object({ scope: t.Optional(t.String({ maxLength: 100 })) }) })
+  })

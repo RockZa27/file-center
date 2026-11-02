@@ -1,6 +1,6 @@
 {
   "name": "file-center",
-  "version": "1.15.0",
+  "version": "2.0.0-beta.1",
   "private": true,
   "type": "module",
   "scripts": {
@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "@zip.js/zip.js": "^2.24.0",
-    "elysia": "^1.4.30",
+    "elysia": "2.0.0-beta.32",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {

@@ -75,7 +75,7 @@ export const grantRoutes = new Elysia({ prefix: '/api' })
   .use(context)
 
   // ───────────── pick a person ─────────────
-  .get('/users/lookup', ({ user, ip, query }) => {
+  .get('/users/lookup', { query: t.Object({ q: t.String({ maxLength: 100 }) }) }, ({ user, ip, query }) => {
     const u = requireUser({ user, ip })
     if (u.role !== 'admin' && !u.permissions.includes('share')) throw forbidden()
     const wait = lookupAllowed(u.username)
@@ -90,10 +90,10 @@ export const grantRoutes = new Elysia({ prefix: '/api' })
       .slice(0, LOOKUP_MAX)
       .map(x => ({ username: x.username, name: x.name }))
     return { users }
-  }, { query: t.Object({ q: t.String({ maxLength: 100 }) }) })
+  })
 
   // ───────────── give ─────────────
-  .post('/grants', ({ user, ip, body }) => {
+  .post('/grants', { body: t.Object({ space: t.String(), path: t.String(), to: t.Optional(t.String()), toGroup: t.Optional(t.String()), perms: permsT }) }, ({ user, ip, body }) => {
     const a = need({ user, ip }, body.space, 'share')
     // a folder of the caller's own home only: not a staff view, not a folder somebody shared with them
     if (a.space !== 'home') throw forbidden()
@@ -129,7 +129,7 @@ export const grantRoutes = new Elysia({ prefix: '/api' })
     audit({ user: owner.username, ip, action: created ? 'grant-create' : 'grant-update', target: path, detail: `${group ? `กลุ่ม ${group.name}` : toName}, ${grant.perms}` })
     if (created) onGrantCreated(grant)
     return { ok: true, created, grant: given(grant) }
-  }, { body: t.Object({ space: t.String(), path: t.String(), to: t.Optional(t.String()), toGroup: t.Optional(t.String()), perms: permsT }) })
+  })
 
   // ───────────── lists ─────────────
   .get('/grants/mine', ({ user, ip }) => {
@@ -157,13 +157,13 @@ export const grantRoutes = new Elysia({ prefix: '/api' })
   })
 
   // ───────────── change / end ─────────────
-  .patch('/grants/:id', ({ user, ip, params, body }) => {
+  .patch('/grants/:id', { body: t.Object({ perms: permsT }) }, ({ user, ip, params, body }) => {
     const u = requireUser({ user, ip })
     const g = ownGrant(u, params.id)
     if (g.perms !== body.perms) setGrantPerms(g, body.perms)
     audit({ user: u.username, ip, action: 'grant-update', target: g.path, detail: `${g.toGroup ? `กลุ่ม ${findGroup(g.toGroup)?.name ?? g.toGroup}` : g.to}, ${g.perms}` })
     return { ok: true, grant: given(g) }
-  }, { body: t.Object({ perms: permsT }) })
+  })
 
   // the owner takes it back; the recipient leaves
   .delete('/grants/:id', ({ user, ip, params }) => {

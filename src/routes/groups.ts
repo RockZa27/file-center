@@ -82,7 +82,7 @@ export const groupRoutes = new Elysia({ prefix: '/api' })
   })
 
   // for the share dialog: the groups the caller may share a folder with (their own; an admin: all), with the right to share
-  .get('/groups/lookup', ({ user, ip, query }) => {
+  .get('/groups/lookup', { query: t.Object({ q: t.Optional(t.String({ maxLength: 100 })) }) }, ({ user, ip, query }) => {
     const u = requireUser({ user, ip })
     if (!isAdmin(u) && !u.permissions.includes('share')) throw forbidden()
     const q = (query.q ?? '').trim().toLowerCase()
@@ -92,7 +92,7 @@ export const groupRoutes = new Elysia({ prefix: '/api' })
       .slice(0, 20)
       .map(g => ({ id: g.id, name: g.name }))
     return { groups }
-  }, { query: t.Object({ q: t.Optional(t.String({ maxLength: 100 })) }) })
+  })
 
   // ───────────── staff ─────────────
   .get('/admin/groups', async ({ user, ip }) => {
@@ -102,16 +102,16 @@ export const groupRoutes = new Elysia({ prefix: '/api' })
     return { items: items.sort((a, b) => a.name.localeCompare(b.name)) }
   })
 
-  .post('/admin/groups', async ({ user, ip, body }) => {
+  .post('/admin/groups', { body: t.Object({ name: t.String(), quotaBytes: t.Optional(t.Number()) }) }, async ({ user, ip, body }) => {
     const admin = requireAdmin({ user, ip })
     const name = cleanName(body.name)
     const quotaBytes = body.quotaBytes === undefined ? 0 : cleanQuota(body.quotaBytes)
     const g = createGroup(name, quotaBytes, admin.username)
     audit({ user: admin.username, ip, action: 'group-create', target: g.name, detail: g.id })
     return { ok: true, group: await adminView(g) }
-  }, { body: t.Object({ name: t.String(), quotaBytes: t.Optional(t.Number()) }) })
+  })
 
-  .patch('/admin/groups/:id', async ({ user, ip, params, body }) => {
+  .patch('/admin/groups/:id', { body: t.Object({ name: t.Optional(t.String()), quotaBytes: t.Optional(t.Number()) }) }, async ({ user, ip, params, body }) => {
     const admin = requireAdmin({ user, ip })
     const g = findGroup(params.id)
     if (!g) throw notFound('groups.not-found')
@@ -127,10 +127,10 @@ export const groupRoutes = new Elysia({ prefix: '/api' })
     const detail = [name !== undefined && name !== before ? `ชื่อเดิม ${before}` : '', quotaBytes !== undefined ? `quota ${quotaBytes}` : ''].filter(Boolean).join(', ')
     audit({ user: admin.username, ip, action: 'group-update', target: g.name, detail: detail || g.id })
     return { ok: true, group: await adminView(g) }
-  }, { body: t.Object({ name: t.Optional(t.String()), quotaBytes: t.Optional(t.Number()) }) })
+  })
 
   // the folder goes to the admin trash (not purged); members lose access at once; the password is asked again
-  .delete('/admin/groups/:id', async ({ user, ip, params, body }) => {
+  .delete('/admin/groups/:id', { body: t.Object({ password: t.String({ maxLength: 1000 }) }) }, async ({ user, ip, params, body }) => {
     const admin = requireAdmin({ user, ip })
     const g = findGroup(params.id)
     if (!g) throw notFound('groups.not-found')
@@ -146,10 +146,10 @@ export const groupRoutes = new Elysia({ prefix: '/api' })
     if (existsSync(abs)) await moveToTrash(abs, admin.username)
     audit({ user: admin.username, ip, action: 'group-delete', target: g.name, detail: g.id })
     return { ok: true }
-  }, { body: t.Object({ password: t.String({ maxLength: 1000 }) }) })
+  })
 
   // add a member or change their rights
-  .put('/admin/groups/:id/members', ({ user, ip, params, body }) => {
+  .put('/admin/groups/:id/members', { body: t.Object({ username: t.String(), perms: permsT }) }, ({ user, ip, params, body }) => {
     const actor = requireStaff({ user, ip })
     const g = staffGroup(actor, params.id)
     const target = findUser(body.username.trim())
@@ -159,7 +159,7 @@ export const groupRoutes = new Elysia({ prefix: '/api' })
     audit({ user: actor.username, ip, action: 'group-member-add', target: g.name, detail: `${member.username}, ${member.perms}${added ? '' : ' (เปลี่ยนสิทธิ์)'}` })
     if (added) notify(member.username, 'group-added', { name: g.name, perms: member.perms }, `/groups/${g.id}`)
     return { ok: true, added, member }
-  }, { body: t.Object({ username: t.String(), perms: permsT }) })
+  })
 
   .delete('/admin/groups/:id/members/:username', ({ user, ip, params }) => {
     const actor = requireStaff({ user, ip })

@@ -382,7 +382,8 @@ describe('new version notice', () => {
     await alerts.checkForNewVersion()
     expect((await received(2))[1].body.params).toEqual({ version: '9.2.0' })
     // nothing newer any more: the warning goes
-    publish(config.version)
+    // latest.json is the stable channel, so its manifest must stay stable even when this app is a beta.
+    publish('0.0.0')
     await alerts.checkForNewVersion()
     expect((await statusWarnings()).some(w => w.code === 'update.available')).toBe(false)
     // only admins see it

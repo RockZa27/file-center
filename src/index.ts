@@ -256,10 +256,10 @@ export const app = new Elysia({ serve: { idleTimeout: 255, maxRequestBodySize: s
   })
   .use(context)
   // JSON answers of the routes in compress.ts (and only those) go out as br or gzip when the browser accepts it
-  .onAfterHandle({ as: 'global' }, async ({ request, response, set }) => {
+  .onAfterHandle({ as: 'global' }, async ({ request, responseValue, set }) => {
     if (!compressibleRoute(request.method, new URL(request.url).pathname) || (set.status && set.status !== 200)) return
     set.headers.vary = withVary(set.headers.vary)
-    return (await compressedJson(request, response, set.headers)) ?? undefined
+    return (await compressedJson(request, responseValue, set.headers)) ?? undefined
   })
   .onAfterResponse({ as: 'global' }, ({ request, set, responseValue, ip, user }) => {
     const start = requestStart.get(request)

@@ -74,7 +74,7 @@ const incoming = () => {
   try { return readdirSync(join(paths.app, 'incoming')).filter(n => n.startsWith('fetch-')) } catch { return [] }
 }
 const staged = () => { try { return readdirSync(join(paths.app, 'staging')) } catch { return [] } }
-const saved = { limits: {} as typeof source.SOURCE_LIMITS, maxSize: 0, key: '', allowUnsigned: false }
+const saved = { limits: {} as typeof source.SOURCE_LIMITS, maxSize: 0, key: '', allowUnsigned: false, version: '' }
 
 beforeAll(async () => {
   ;({ app } = await import('../src/index'))
@@ -85,6 +85,9 @@ beforeAll(async () => {
   saved.maxSize = config.updateMaxSize
   saved.key = config.updatePublicKey
   saved.allowUnsigned = config.updateAllowUnsigned
+  saved.version = config.version
+  // These cases exercise latest.json (stable); beta manifests are covered in update-beta.test.ts.
+  config.version = '1.0.0'
   server = Bun.serve({
     port: 0, hostname: '127.0.0.1',
     fetch: req => {
@@ -100,6 +103,7 @@ beforeAll(async () => {
 })
 
 afterAll(() => {
+  config.version = saved.version
   delete process.env.FC_SUPERVISED
   config.updateSource = ''
   server.stop(true)

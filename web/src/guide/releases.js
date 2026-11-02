@@ -6,6 +6,19 @@ import { compareVersions, forRole } from './util'
  */
 export const releases = [
   {
+    version: '2.0.0-beta.1',
+    items: [
+      {
+        id: '200-beta', icon: 'system', roles: ['admin'],
+        title: { th: 'File Center 2.0 รุ่นเบตา', en: 'File Center 2.0 beta' },
+        text: {
+          th: 'ย้าย backend ไปใช้ Elysia 2 รุ่นเบตา พร้อมปรับการตรวจข้อมูลและการจัดการข้อผิดพลาด รุ่นนี้สำหรับทดสอบก่อนออกรุ่นใช้งานทั่วไป',
+          en: 'The backend now uses Elysia 2 beta, with updated request validation and error handling. This is a test release ahead of general availability.',
+        },
+      },
+    ],
+  },
+  {
     version: '1.15.0',
     items: [
       {

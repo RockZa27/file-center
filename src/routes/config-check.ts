@@ -22,7 +22,7 @@ export const configRoutes = new Elysia({ prefix: '/admin' })
   })
 
   // a test message with the e-mail settings in force: to the given address, else the admin's confirmed one
-  .post('/mail/test', async ({ user, ip, body, request }) => {
+  .post('/mail/test', { body: t.Object({ to: t.Optional(t.String({ maxLength: 320 })) }) }, async ({ user, ip, body, request }) => {
     const admin = requireAdmin({ user, ip })
     const lang = langOf(request)
     const wait = (lastTest.get(admin.username) ?? 0) + MAIL_TEST_EVERY_MS - Date.now()
@@ -41,4 +41,4 @@ export const configRoutes = new Elysia({ prefix: '/admin' })
     }
     audit({ user: admin.username, ip, action: 'mail-test', detail: 'ok' })
     return { ok: true }
-  }, { body: t.Object({ to: t.Optional(t.String({ maxLength: 320 })) }) })
+  })

@@ -9,8 +9,8 @@ export const guideRoutes = new Elysia({ prefix: '/api' })
   .get('/me/guide', ({ user, ip }) => guideOf(requireUser({ user, ip })))
 
   // the shape is checked in guide.ts (so a bad value answers with a catalog message, not a schema error)
-  .put('/me/guide', ({ user, ip, body }) => {
+  .put('/me/guide', { body: t.Object({ seenVersion: t.Optional(t.Any()), toursDone: t.Optional(t.Any()) }) }, ({ user, ip, body }) => {
     const u = requireUser({ user, ip })
     setGuide(u.username, body)
     return guideOf(u)
-  }, { body: t.Object({ seenVersion: t.Optional(t.Any()), toursDone: t.Optional(t.Any()) }) })
+  })
