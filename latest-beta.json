@@ -1,11 +1,11 @@
 {
-  "version": "1.9.0-beta.1",
-  "file": "file-center-1.9.0-beta.1.zip",
-  "sha256": "0dd3fa12dbd22e7ab4d858e0f307da08a743164549c6ca2dfff1e73431b82b2d",
-  "size": 1822253,
-  "builtAt": "2026-10-14T02:29:47.059Z",
-  "commit": "18011e2",
-  "notes": "เวอร์ชันทดลอง: File Center 1.8.0 บน Elysia 2.0.0-beta.30 (framework รุ่นทดลอง) ความเร็วใกล้เคียง 1.8.0 ใช้เพื่อทดสอบเท่านั้น",
+  "version": "2.0.0-beta.1",
+  "file": "file-center-2.0.0-beta.1.zip",
+  "sha256": "a07ebb8f69ed580de5f355be9d23808bca14e8c69200f7774bfbffebfe92abb1",
+  "size": 2064883,
+  "builtAt": "2026-11-02T16:57:37.288Z",
+  "commit": "faf9262",
+  "notes": "File Center 2.0 beta: Elysia 2.0.0-beta.32. Signing key rotated; set UPDATE_PUBLIC_KEY=MCowBQYDK2VwAyEAsDWMBmcAJ0XKZlPSXFg9ZORYJc1BlQ/EWUI5snwW7oE= and restart before installing.",
   "signed": true,
   "channel": "beta"
 }
