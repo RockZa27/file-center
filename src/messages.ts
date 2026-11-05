@@ -57,6 +57,7 @@ export const MESSAGES = {
   'auth.app-password-limit': { th: 'สร้างรหัสผ่านแอปได้ไม่เกิน {max} รายการ กรุณาลบอันที่ไม่ใช้ก่อน', en: 'You can have at most {max} app passwords. Delete one you no longer use first.' },
   'auth.app-password-bad-name': { th: 'ชื่อรหัสผ่านแอปต้องมี 1-60 ตัวอักษร', en: 'The app password name must be 1 to 60 characters long.' },
   'auth.app-password-bad-scope': { th: 'สิทธิ์ของรหัสผ่านแอปต้องเป็น read หรือ readwrite', en: 'The scope of an app password must be "read" or "readwrite".' },
+  'auth.app-password-bad-days': { th: 'อายุของรหัสผ่านแอปต้องเป็น 30, 90, 180 หรือ 365 วัน (หรือไม่หมดอายุ)', en: 'The lifetime of an app password must be 30, 90, 180 or 365 days (or none).' },
   'auth.app-password-not-found': { th: 'ไม่พบรหัสผ่านแอปที่ระบุ', en: 'The app password was not found.' },
   'auth.dav-read-only': { th: 'รหัสผ่านแอปนี้อ่านได้อย่างเดียว แก้ไขไฟล์ไม่ได้', en: 'This app password is read-only; it cannot change files.' },
 

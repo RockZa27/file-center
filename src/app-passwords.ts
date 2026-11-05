@@ -10,7 +10,8 @@
  *
  * A successful check is remembered for a minute (keyed by a SHA-256 of user and secret), so a client that sends
  * thousands of requests does not pay for argon2 each time. A cached answer is still checked against the record, so
- * deleting an app password (or the account, or changing its password) works at once, not after the minute.
+ * deleting an app password (or the account, or changing its password) works at once, not after the minute. The same
+ * goes for an expiry: the time is compared on every request, cached or not. An expired record stays in the list.
  */
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
@@ -32,6 +33,8 @@ export type AppPassword = {
   createdAt: string
   lastUsedAt: string | null
   lastIp: string | null
+  /** ISO time after which it no longer signs in; null = never. Records saved before this field have none: never. */
+  expiresAt?: string | null
 }
 
 export const APP_PASSWORDS_PER_USER = 20
@@ -49,6 +52,7 @@ const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
 /** what the list shows: never the hash */
 export const publicAppPassword = (p: AppPassword) => ({
   id: p.id, name: p.name, scope: p.scope, hint: `fc-${p.hint}`, createdAt: p.createdAt, lastUsedAt: p.lastUsedAt, lastIp: p.lastIp,
+  expiresAt: p.expiresAt ?? null,
 })
 
 export const appPasswordsOf = (username: string) => store.value.items.filter(p => same(p.username, username))
@@ -66,7 +70,7 @@ function randomBase62(n: number): string {
 }
 
 /** make one for `user`; the secret is in the answer once and nowhere else */
-export async function createAppPassword(user: User, name: string, scope: AppScope): Promise<{ item: AppPassword; secret: string }> {
+export async function createAppPassword(user: User, name: string, scope: AppScope, days = 0): Promise<{ item: AppPassword; secret: string }> {
   const random = randomBase62(32)
   const secret = `fc-${random}`
   const hash = await Bun.password.hash(secret, HASH_OPTIONS)
@@ -75,6 +79,7 @@ export async function createAppPassword(user: User, name: string, scope: AppScop
   const item: AppPassword = {
     id: randomUUID(), username: user.username, name, hash, hint: random.slice(0, 8), scope,
     createdAt: new Date().toISOString(), lastUsedAt: null, lastIp: null,
+    expiresAt: days > 0 ? new Date(Date.now() + days * 86_400_000).toISOString() : null,
   }
   store.update(d => { d.items.push(item) })
   return { item, secret }
@@ -123,7 +128,11 @@ function forgetCached(test: (c: { id: string; username: string }) => boolean) {
 const DUMMY_HASH = await Bun.password.hash('not-a-real-app-password', HASH_OPTIONS)
 
 /** a record that may still be used by this account: made after the account (a new account of the same name gets none) */
-const usable = (p: AppPassword, user: User) => same(p.username, user.username) && Date.parse(p.createdAt) >= Date.parse(user.createdAt)
+const usable = (p: AppPassword, user: User) =>
+  same(p.username, user.username) && Date.parse(p.createdAt) >= Date.parse(user.createdAt) && !expired(p)
+
+/** past its lifetime; no field (an old record) or null never expires; a date that can not be read counts as expired */
+const expired = (p: AppPassword) => !!p.expiresAt && !(Date.now() < Date.parse(p.expiresAt))
 
 /** the account and the record a username and secret open, or null. Takes about as long whether or not the user exists. */
 export async function verifyAppPassword(username: string, secret: string): Promise<{ user: User; item: AppPassword } | null> {
