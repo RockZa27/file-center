@@ -7,7 +7,7 @@ import { envWarnings } from './config-warnings'
 import { UPLOAD_CEILING } from './policy'
 import { audit } from './audit'
 import { bootstrapAdmin, findUser, pruneLoginAttempts, purgeExpiredSessions } from './auth'
-import { backupDue, backupRunning, runBackup } from './backup'
+import { backupDue, backupRunning, runBackup, sweepRestoreTempsIdle } from './backup'
 import { backupKeyState } from './backup-crypt'
 import { compressedJson, compressibleRoute, withVary } from './compress'
 import { config, ensureDirs, invalidUmask } from './config'
@@ -100,6 +100,7 @@ function housekeeping() {
     void pruneThumbs().catch(err => log.error('thumbs-prune-failed', err))
     pruneLoginAttempts()
     trimQuarantine()
+    sweepRestoreTempsIdle()
     if (trash || uploads || versions) log.info('housekeeping', { trash, staleUploads: uploads, versions })
     // links about to expire, homes near their quota: told in the background, once each
     void checkNotifications()

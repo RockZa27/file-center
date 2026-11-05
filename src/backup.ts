@@ -406,6 +406,35 @@ export function turnsOnFiles(body: { includeFiles?: unknown }): boolean {
 let busy = false
 export const backupRunning = () => busy
 
+/**
+ * A decrypted restore leaves a plaintext zip (.restore-<hex>.zip.tmp) beside the encrypted backups while it runs; if the
+ * process dies meanwhile it stays, in the very folder admins copy off the machine. Swept at start, hourly, and before each
+ * backup. Never the running restore's own temp, and only ones that have not been written to for a few minutes.
+ */
+const RESTORE_TEMP_RE = /^\.restore-[0-9a-f]+\.zip\.tmp$/
+const RESTORE_TEMP_AGE_MS = 5 * 60 * 1000
+let activeUnsealed: string | null = null
+export function sweepRestoreTemps(): number {
+  let removed = 0
+  try {
+    for (const n of readdirSync(config.backupDir)) {
+      if (!RESTORE_TEMP_RE.test(n)) continue
+      const abs = join(config.backupDir, n)
+      if (abs === activeUnsealed) continue
+      try {
+        if (Date.now() - statSync(abs).mtimeMs < RESTORE_TEMP_AGE_MS) continue
+        rmSync(abs, { force: true })
+        removed++
+      } catch { /* gone already or not ours to remove: the next sweep tries again */ }
+    }
+  } catch { /* no backup folder yet */ }
+  return removed
+}
+/** for the hourly housekeeping: does nothing while a backup or restore is running */
+export function sweepRestoreTempsIdle(): number {
+  return busy ? 0 : sweepRestoreTemps()
+}
+
 async function exclusive<T>(fn: () => Promise<T>): Promise<T> {
   if (busy) throw conflict('backup.busy')
   busy = true
@@ -515,6 +544,7 @@ async function writeBackup(protect?: string): Promise<BackupItem> {
     tightenDir(config.backupDir)
     // left over from a backup that was cut off (crash, power loss)
     for (const n of readdirSync(config.backupDir)) if (n.endsWith('.partial')) rmSync(join(config.backupDir, n), { force: true })
+    sweepRestoreTemps()
     // what the zip reads is the files on disk: changes still waiting in a store go in first
     await JsonStore.flushAll()
     const prefs = effectiveBackup()
@@ -675,8 +705,9 @@ export function restoreBackup(name: string): Promise<{ safety: BackupItem; twoFa
     // an encrypted backup is opened to a temporary zip beside the backups (never in tmp/: that may be on a small disk),
     // before anything is changed, so a wrong key or a damaged file costs nothing; it is always removed again
     const unsealed = name.endsWith('.enc') ? join(config.backupDir, `.restore-${randomBytes(6).toString('hex')}.zip.tmp`) : null
+    activeUnsealed = unsealed
     try {
-      for (const n of readdirSync(config.backupDir)) if (/^\.restore-[0-9a-f]+\.zip\.tmp$/.test(n)) rmSync(join(config.backupDir, n), { force: true })
+      for (const n of readdirSync(config.backupDir)) if (RESTORE_TEMP_RE.test(n)) rmSync(join(config.backupDir, n), { force: true })
       if (unsealed) {
         const keyState = backupKeyState()
         if (keyState.state !== 'on') throw bad('backup.key-missing')
@@ -690,6 +721,7 @@ export function restoreBackup(name: string): Promise<{ safety: BackupItem; twoFa
       }
       return await restoreFrom(name, unsealed ?? sealedAbs)
     } finally {
+      activeUnsealed = null
       if (unsealed) rmSync(unsealed, { force: true })
     }
   })
