@@ -56,6 +56,20 @@ describe('backups (API)', () => {
     await admin.login('admin', PASSWORD)
   })
 
+  test('a skipped file moved aside (.unreadable-/.broken-) stays out of a backup', async () => {
+    const names = ['sessions.json.unreadable-1700000000000', 'sessions.json.broken-1700000000000']
+    for (const n of names) writeFileSync(join(config.dataDir, n), '{"secret":1}')
+    try {
+      const made = await admin.json('POST', '/api/admin/backups')
+      expect(made.status).toBe(200)
+      const files = Object.keys(await zipOf(admin, made.data.name))
+      expect(files).toContain('users.json')
+      for (const n of names) expect(files).not.toContain(n)
+    } finally {
+      for (const n of names) rmSync(join(config.dataDir, n), { force: true })
+    }
+  })
+
   test('create, list and download a backup', async () => {
     writeFileSync(join(paths.logs, 'audit.log.1'), '{"rotated":true}\n')
     ;(await import('../src/secret-box')).seal('2fa secret') // makes secret.key

@@ -88,11 +88,14 @@ export class JsonStore<T> {
             throw new Error(message.trim())
           }
           // caches and per-user state (sessions, favourites...) may start empty and the app stays up, but credentials and
-          // settings may not: starting without them would lock everyone out or fall back to defaults. The file is left
-          // alone; the next save replaces it (temp file + rename in a folder the app owns).
+          // settings may not: starting without them would lock everyone out or fall back to defaults. The file is moved
+          // aside first (a rename needs write access to the folder, not to the file), because the next save would
+          // replace it and its data (sessions, notify state...) would be gone for good once the owner is fixed.
           let st = 'owner/mode ?'
           try { const s = statSync(file); st = `owner uid ${s.uid}, mode ${(s.mode & 0o777).toString(8).padStart(3, '0')}` } catch { /* gone */ }
-          log.warn('store-unreadable', { file, detail: st, appUid: uid, error: (err as Error).message })
+          let keptAs = `${file} (rename failed, left in place)`
+          try { const to = `${file}.unreadable-${Date.now()}`; renameSync(file, to); keptAs = to } catch { /* folder not writable: start empty, file stays */ }
+          log.warn('store-unreadable', { file, keptAs, detail: st, appUid: uid, error: (err as Error).message })
           this.data = fallback()
           return
         }

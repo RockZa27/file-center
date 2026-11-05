@@ -62,6 +62,8 @@ export type BackupStatus = {
 // past QUARANTINE_DAYS and grow by up to QUARANTINE_MAX_MB
 const SKIP = new Set(['tmp', 'trash', 'versions', 'thumbs', 'app', 'sessions.json', 'backup-status.json', 'stats-cache.json', 'cli-changed', 'secret.key', 'office-links.key', 'app-passwords.json', 'quarantine'])
 // search.db* (the search index and its WAL files) is rebuilt from the disk
+// a skipped file moved aside (sessions.json.unreadable-<ms> from an unreadable file, .broken-<ms> from a damaged one) stays out too
+const skipped = (n: string) => SKIP.has(n) || SKIP.has(n.replace(/\.(?:unreadable|broken)-\d+$/, ''))
 const SEARCH_DB = /^search\.db(?:-wal|-shm|-journal)?$/
 // of the logs only the current activity and system log go in: rotated ones, access.log and launcher.log stay out
 const LOGS_KEPT = new Set(['logs/', 'logs/audit.log', 'logs/system.log'])
@@ -381,7 +383,7 @@ async function exclusive<T>(fn: () => Promise<T>): Promise<T> {
 
 /** the data folder's part of a backup (everything but the storage) */
 function collectDataItems(): ZipItem[] {
-  const names = readdirSync(config.dataDir).filter(n => !SKIP.has(n) && !SEARCH_DB.test(n) && !n.endsWith('.tmp'))
+  const names = readdirSync(config.dataDir).filter(n => !skipped(n) && !SEARCH_DB.test(n) && !n.endsWith('.tmp'))
   // the storage may sit inside the data folder: its files only go in with includeFiles, under storage/
   return collectZipItems(config.dataDir, names)
     .filter(i => (!i.name.startsWith('logs/') || LOGS_KEPT.has(i.name)) && !within(config.storageDir, i.abs))

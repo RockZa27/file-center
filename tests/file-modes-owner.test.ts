@@ -95,7 +95,7 @@ function asOther(dir: string, script: string) {
 }
 
 describe('unreadable file in a reset store', () => {
-  test('starts with the fallback, warns, leaves the file and its mode alone', () => {
+  test('starts with the fallback, warns, keeps the file and its mode under .unreadable-<ts>', () => {
     const dir = mkdtempSync(join(tmpdir(), 'fc-reset-'))
     const f = join(dir, 'sessions.json')
     try {
@@ -109,11 +109,42 @@ try { const s = new JsonStore(${JSON.stringify(f)}, () => ({ fresh: true })); co
       expect(out.stderr.toString()).toContain('[store-unreadable]')
       expect(out.stderr.toString()).toContain('sessions.json')
       expect(readdirSync(dir).filter(n => n.includes('.broken-'))).toEqual([])
-      expect(statSync(f).mode & 0o777).toBe(0)
-      chmodSync(f, 0o600)
-      expect(readFileSync(f, 'utf8')).toBe('{"old":1}')
+      // the file is moved aside whole (same bytes, same mode), not copied or read
+      const kept = join(dir, readdirSync(dir).find(n => n.startsWith('sessions.json.unreadable-'))!)
+      expect(statSync(kept).mode & 0o777).toBe(0)
+      chmodSync(kept, 0o600)
+      expect(readFileSync(kept, 'utf8')).toBe('{"old":1}')
     } finally {
-      try { chmodSync(f, 0o600) } catch { /* gone */ }
+      for (const n of readdirSync(dir)) try { chmodSync(join(dir, n), 0o600) } catch { /* gone */ }
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  test('the unreadable file is kept as .unreadable-<ts>; the next save does not touch the kept copy', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'fc-keep-'))
+    const f = join(dir, 'sessions.json')
+    try {
+      chmodSync(dir, 0o777)
+      writeFileSync(f, '{"old":1}')
+      chmodSync(f, 0o000)
+      const script = `import {JsonStore} from ${JSON.stringify(join(root, 'src/store.ts'))}
+const s = new JsonStore(${JSON.stringify(f)}, () => ({ fresh: true }))
+console.log('DATA:' + JSON.stringify(s.value))
+s.save(); await s.idle(); console.log('SAVED')`
+      const out = asOther(dir, script)
+      const text = out.stdout.toString()
+      expect(text).toContain('DATA:{"fresh":true}')
+      expect(text).toContain('SAVED')
+      expect(out.stderr.toString()).toContain('keptAs')
+      const kept = readdirSync(dir).filter(n => n.startsWith('sessions.json.unreadable-'))
+      expect(kept.length).toBe(1)
+      const keptFile = join(dir, kept[0])
+      expect(statSync(keptFile).mode & 0o777).toBe(0)
+      chmodSync(keptFile, 0o600)
+      expect(readFileSync(keptFile, 'utf8')).toBe('{"old":1}')
+      expect(JSON.parse(readFileSync(f, 'utf8'))).toEqual({ fresh: true })
+    } finally {
+      for (const n of readdirSync(dir)) try { chmodSync(join(dir, n), 0o600) } catch { /* gone */ }
       rmSync(dir, { recursive: true, force: true })
     }
   })
