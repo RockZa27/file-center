@@ -68,10 +68,12 @@ afterEach(() => {
   setEnv2fa(undefined)
 })
 
-afterAll(() => {
+afterAll(async () => {
   if (savedEnv === undefined) delete process.env.REQUIRE_2FA; else process.env.REQUIRE_2FA = savedEnv
   config.require2fa = savedCfg
   settings.update({ security: savedSec })
+  // the extra admin would otherwise stay for the files that run after this one (other admin counts, alerts to every admin)
+  expect((await boss.json('DELETE', '/api/admin/users/sd-admin')).status).toBe(200)
 })
 
 describe('REQUIRE_2FA', () => {
