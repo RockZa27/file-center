@@ -203,7 +203,7 @@ export const api = {
   /** WebDAV app passwords of the signed-in user: { items: [{ id, name, scope, hint, createdAt, lastUsedAt, lastIp }], max, enabled } */
   appPasswords: () => get('/api/me/app-passwords'),
   /** -> the item plus `secret`, told this once only */
-  createAppPassword: (name, scope, password) => post('/api/me/app-passwords', { name, scope, password }),
+  createAppPassword: (name, scope, password, days) => post('/api/me/app-passwords', days === undefined ? { name, scope, password } : { name, scope, password, days }),
   deleteAppPassword: id => call('DELETE', `/api/me/app-passwords/${encodeURIComponent(id)}`),
 
   settings: () => get('/api/admin/settings'),
