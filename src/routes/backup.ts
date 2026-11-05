@@ -1,9 +1,8 @@
-import { rmSync } from 'node:fs'
 import { Elysia, t } from 'elysia'
 import { audit } from '../audit'
 import { confirmPassword } from '../auth'
 import {
-  backupPath, backupSettings, BACKUP_NAME_RE, estimateBackup, listBackupsDetailed, restoreBackup, runBackup, saveBackupSettings,
+  backupPath, backupSettings, BACKUP_NAME_RE, estimateBackup, listBackupsDetailed, removeBackup, restoreBackup, runBackup, saveBackupSettings,
   statusIn, turnsOnFiles,
 } from '../backup'
 import { context, requireAdmin } from '../context'
@@ -58,13 +57,15 @@ export const backupRoutes = new Elysia({ prefix: '/api/admin' })
     if (!request.headers.get('range')) audit({ user: admin.username, ip, action: 'backup-download', target: params.name })
     // the same answer as any file download: Range and validators, so a backup of gigabytes can be resumed after a break
     const res = fileResponse(abs, params.name, request, false)
+    if (params.name.endsWith('.enc')) res.headers.set('Content-Type', 'application/octet-stream')
     res.headers.set('Cache-Control', 'no-store')
     return res
   })
 
   .delete('/backups/:name', ({ user, ip, params }) => {
     const admin = requireAdmin({ user, ip })
-    rmSync(backupPath(params.name))
+    backupPath(params.name)
+    removeBackup(params.name)
     audit({ user: admin.username, ip, action: 'backup-delete', target: params.name })
     return { ok: true }
   })

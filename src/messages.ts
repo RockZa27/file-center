@@ -250,6 +250,7 @@ export const MESSAGES = {
     en: 'Virus "{signature}" found in a file sent by {user} (IP {ip}) via {via}. The file is held in quarantine and was not stored. See System → Settings → Virus scanning.',
   },
   'admin.config-antivirus-unreachable': { th: 'เปิดสแกนไวรัสไว้ แต่ติดต่อ ClamAV (clamd) ไม่ได้ ไฟล์ที่อัปโหลดจะถูกปฏิเสธหรือผ่านโดยไม่สแกนตามนโยบายที่ตั้งไว้ ตรวจที่อยู่/พอร์ต และว่า clamd ทำงานอยู่', en: 'Virus scanning is on but ClamAV (clamd) cannot be reached. Uploads are rejected or let through unscanned, as the policy says. Check the host and port and that clamd is running.' },
+  'admin.config-backup-key-invalid': { th: 'BACKUP_ENCRYPTION_KEY ไม่ถูกต้อง (ต้องเป็นข้อมูลสุ่ม 32 ไบต์แบบ base64url ยาว 43 ตัวอักษร สร้างด้วย bun src/cli.ts backup-key) ไฟล์สำรองใหม่จึงยังไม่เข้ารหัส', en: 'BACKUP_ENCRYPTION_KEY is not valid (it must be 32 random bytes as base64url, 43 characters; make one with bun src/cli.ts backup-key). New backups are not encrypted.' },
   'admin.alert-off': {
     th: 'ยังไม่ได้ตั้งการแจ้งเตือน หรือค่าไม่ถูกต้อง (ALERT_WEBHOOK_URL, ALERT_WEBHOOK_KIND, ALERT_TELEGRAM_CHAT_ID) ดูคำเตือนใน log ตอนเริ่มระบบ',
     en: 'Alerts are not set up, or a setting is wrong (ALERT_WEBHOOK_URL, ALERT_WEBHOOK_KIND, ALERT_TELEGRAM_CHAT_ID). See the warning in the log at startup.',
@@ -325,6 +326,9 @@ export const MESSAGES = {
   'backup.busy': { th: 'กำลังสำรองหรือกู้คืนข้อมูลอยู่ กรุณารอให้เสร็จก่อน', en: 'A backup or restore is running. Please wait for it to finish.' },
   'backup.too-big': { th: 'ไฟล์สำรองข้อมูลนี้ใหญ่ผิดปกติ ยกเลิกการกู้คืน', en: 'This backup file is unusually large. The restore was cancelled.' },
   'backup.unreadable': { th: 'อ่านไฟล์สำรองข้อมูลไม่ได้ (ไฟล์เสียหาย)', en: 'The backup file could not be read (it is damaged).' },
+  'backup.key-missing': { th: 'ไฟล์สำรองนี้เข้ารหัสไว้ แต่ยังไม่ได้ตั้ง BACKUP_ENCRYPTION_KEY ใน .env จึงกู้คืนไม่ได้ (ไม่มีอะไรถูกเปลี่ยน)', en: 'This backup is encrypted but BACKUP_ENCRYPTION_KEY is not set in .env, so it cannot be restored. Nothing was changed.' },
+  'backup.key-wrong': { th: 'BACKUP_ENCRYPTION_KEY ไม่ตรงกับกุญแจที่ใช้เข้ารหัสไฟล์สำรองนี้ จึงกู้คืนไม่ได้ (ไม่มีอะไรถูกเปลี่ยน)', en: 'BACKUP_ENCRYPTION_KEY is not the key this backup was encrypted with, so it cannot be restored. Nothing was changed.' },
+  'backup.damaged': { th: 'ไฟล์สำรองที่เข้ารหัสนี้เสียหาย ถูกแก้ไข หรือไม่ครบ จึงกู้คืนไม่ได้ (ไม่มีอะไรถูกเปลี่ยน)', en: 'This encrypted backup is damaged, was changed or is incomplete, so it cannot be restored. Nothing was changed.' },
   'backup.no-admin': { th: 'ไฟล์สำรองนี้ไม่มีข้อมูลผู้ใช้ที่ถูกต้อง หรือไม่มีผู้ดูแลระบบ จึงไม่กู้คืน', en: 'This backup has no valid users or no administrator, so it was not restored.' },
   'backup.bad-settings': { th: 'ไฟล์ตั้งค่าในไฟล์สำรองเสียหาย จึงไม่กู้คืน', en: 'The settings in this backup are damaged, so it was not restored.' },
   // the outcome of the last backup (backup-status.json)

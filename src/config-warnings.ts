@@ -8,6 +8,7 @@ import { config, proxyTrusted } from './config'
 import type { MessageCode } from './messages'
 import { antivirusUnreachable } from './antivirus'
 import { forwardFailing } from './audit-forward'
+import { backupKeyState } from './backup-crypt'
 import { auditForwardValues, unreadableSecrets } from './policy'
 
 export type ConfigWarning = { code: MessageCode; severity: 'warning' | 'critical' }
@@ -21,6 +22,8 @@ export function envWarnings(): ConfigWarning[] {
   // the client-IP headers are believed from every connection that reaches the port
   if (config.trustProxy !== 'false' && !config.trustedProxies.length) out.push({ code: 'admin.config-proxy-open', severity: 'warning' })
   out.push(...auditForwardWarnings())
+  // a bad key leaves backups unencrypted: the admin must see it, the app still runs
+  if (backupKeyState().state === 'invalid') out.push({ code: 'admin.config-backup-key-invalid', severity: 'warning' })
   if (antivirusUnreachable()) out.push({ code: 'admin.config-antivirus-unreachable', severity: 'warning' })
   return out
 }
