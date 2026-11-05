@@ -95,7 +95,7 @@ function asOther(dir: string, script: string) {
 }
 
 describe('unreadable file in a reset store', () => {
-  test('starts with the fallback, warns, keeps the file and its mode under .unreadable-<ts>', () => {
+  test('starts with the fallback, warns, leaves the file and its mode alone', () => {
     const dir = mkdtempSync(join(tmpdir(), 'fc-reset-'))
     const f = join(dir, 'sessions.json')
     try {
