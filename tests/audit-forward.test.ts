@@ -274,6 +274,23 @@ describe('webhook signature', () => {
     expect((await admin.json('GET', '/api/admin/settings')).data.auditForward.webhookSecretSet).toBe(false)
   })
 
+  test('the view tells where the secret comes from, so the page can offer a reset; after a reset the next POST is unsigned', async () => {
+    const view = async () => (await admin.json('GET', '/api/admin/settings')).data.auditForward
+    expect((await save({ webhookUrl: hookUrl(), webhookSecret: SECRET })).data.auditForward.webhookSecretSource).toBe('web')
+    expect((await view()).webhookSecretSource).toBe('web')
+    expect((await save({ webhookSecret: null })).status).toBe(200)
+    expect((await view()).webhookSecretSource).toBe('default')
+    hookGot.length = 0
+    audit({ user: 'bob', ip: '3.3.3.3', action: 'delete', target: '/g' })
+    await fwd.forwardIdle()
+    await wait(() => hookGot.length > 0)
+    expect(hookGot.length).toBeGreaterThan(0)
+    for (const g of hookGot) {
+      expect(g.headers.get('x-fc-signature')).toBeNull()
+      expect(g.headers.get('x-fc-timestamp')).toBeNull()
+    }
+  })
+
   test('a secret this server can not open: nothing is sent (not even unsigned), it is counted, and the warning lists it', async () => {
     const { settings } = await import('../src/settings')
     await use({ webhookUrl: hookUrl(), webhookSecret: SECRET })

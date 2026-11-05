@@ -268,6 +268,7 @@ export function policyView() {
       webhookUrl: { value: maskUrl(afv.webhookUrl), source: (af.webhookSealed !== undefined ? 'web' : 'default') as Source },
       /** the secret itself is never sent */
       webhookSecretSet: !!af.webhookSecretSealed,
+      webhookSecretSource: (af.webhookSecretSealed !== undefined ? 'web' : 'default') as Source,
     },
   }
 }

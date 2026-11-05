@@ -432,6 +432,7 @@ const sourceOf = p => {
   if (!srv.value || !p.includes('.')) return ''
   const [g, k] = p.split('.')
   if (p === 'mail.pass') return srv.value.mail.passSource
+  if (p === 'auditForward.webhookSecret') return srv.value.auditForward.webhookSecretSource
   return srv.value[g][k]?.source || ''
 }
 const same = (a, b) => (Array.isArray(a) ? [...a].sort().join() === [...b].sort().join() : a === b)
