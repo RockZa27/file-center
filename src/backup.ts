@@ -549,8 +549,10 @@ async function writeBackup(protect?: string): Promise<BackupItem> {
     await JsonStore.flushAll()
     const prefs = effectiveBackup()
     await makeRoom(prefs.includeFiles, protect, removed)
-    // names have one-second precision: a taken name moves on to the next free second instead of waiting for it
-    let at = Date.now()
+    // names have one-second precision: a taken name moves on to the next free second instead of waiting for it. The
+    // search starts at `attempt` (the createdAt in backup.json), not at the clock after the flush and pruning above,
+    // so the name and createdAt name the same second unless that second is taken
+    let at = Date.parse(attempt)
     const taken = (at: number) => ['.zip', '.zip.enc', '.zip.partial', '.zip.enc.partial'].some(e => existsSync(join(config.backupDir, nameFor(new Date(at)) + e)))
     while (taken(at)) at += 1000
     // with a valid key every new backup (the safety copy of a restore too) is sealed while it is streamed out
