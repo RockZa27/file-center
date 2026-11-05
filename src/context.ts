@@ -87,7 +87,7 @@ function sameToken(got: string, want: string): boolean {
 
 /** Per-request context: who is calling, their session, and uniform JSON errors (a small page for download links). */
 export const context = new Elysia({ name: 'context' })
-  .onError({ as: 'global' }, ({ error, set, request }) => {
+  .onError('global', ({ error, set, request }) => {
     // the text in the visitor's language; the code and params let the page tell cases apart without reading it
     const answer = (status: number, c: MessageCode, params: Params = {}) => {
       if (isDownloadNavigation(request)) return errorPage(status, langOf(request), c, params)
@@ -116,7 +116,7 @@ export const context = new Elysia({ name: 'context' })
     log.error('request-failed', { method: request.method, path: safePath(request.url), error })
     return answer(500, 'request.internal')
   })
-  .derive({ as: 'global' }, ({ cookie, request, server }) => {
+  .derive('global', ({ cookie, request, server }) => {
     reloadIfChangedByCli() // users or sessions changed by `bun src/cli.ts`
     const sid = cookie[SESSION_COOKIE]?.value as string | undefined
     const session: Session | null = getSession(sid)
@@ -124,7 +124,7 @@ export const context = new Elysia({ name: 'context' })
     const ip = clientIp(request, server?.requestIP(request)?.address ?? 'unknown')
     return { sid, session, user, ip }
   })
-  .onBeforeHandle({ as: 'global' }, ({ request, session }) => {
+  .onBeforeHandle('global', ({ request, session }) => {
     // CSRF: every state-changing call must carry the token issued with the session
     if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return
     const { pathname } = new URL(request.url)
@@ -133,7 +133,7 @@ export const context = new Elysia({ name: 'context' })
     const token = request.headers.get('x-csrf-token')
     if (!session || !token || !sameToken(token, session.csrf)) throw new HttpError(403, 'csrf')
   })
-  .onBeforeHandle({ as: 'global' }, ({ request, user }) => {
+  .onBeforeHandle('global', ({ request, user }) => {
     // an account with a handed-out password may only change it (or leave) before anything else
     if (!user?.mustChangePassword) return
     const { pathname } = new URL(request.url)
@@ -141,7 +141,7 @@ export const context = new Elysia({ name: 'context' })
       throw new HttpError(403, 'must-change-password')
     }
   })
-  .onBeforeHandle({ as: 'global' }, ({ request, user }) => {
+  .onBeforeHandle('global', ({ request, user }) => {
     if (!user || !mustSetup2fa(user)) return
     const { pathname } = new URL(request.url)
     if (pathname.startsWith('/api/') && !SETUP_2FA_ROUTES.has(pathname)) throw new HttpError(403, 'auth.2fa-required')
