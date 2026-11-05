@@ -61,51 +61,56 @@ describe('backups (API)', () => {
     ;(await import('../src/secret-box')).seal('2fa secret') // makes secret.key
     const tmpBad = join(tmpdir(), `fc-infected-${Date.now()}.bin`)
     writeFileSync(tmpBad, 'infected upload')
-    await (await import('../src/antivirus')).quarantine(tmpBad, { name: 'bad.bin', signature: 'Test-Virus', by: 'x', ip: '127.0.0.1' } as any)
-    expect(readdirSync(paths.quarantine).length).toBeGreaterThan(0)
-    if (!existsSync(paths.officeKey)) writeFileSync(paths.officeKey, 'k'.repeat(43), { mode: 0o600 }) // what office.ts makes on first use
-    if (!existsSync(paths.appPasswords)) writeFileSync(paths.appPasswords, JSON.stringify({ items: [] })) // what the first app password makes
-    const made = await admin.json('POST', '/api/admin/backups')
-    expect(made.status).toBe(200)
-    expect(made.data.name).toMatch(NAME_RE)
-    expect(made.data.size).toBeGreaterThan(0)
+    const av = await import('../src/antivirus')
+    const quarantined = await av.quarantine(tmpBad, { name: 'bad.bin', signature: 'Test-Virus', by: 'x', ip: '127.0.0.1' } as any)
+    try {
+      expect(readdirSync(paths.quarantine).length).toBeGreaterThan(0)
+      if (!existsSync(paths.officeKey)) writeFileSync(paths.officeKey, 'k'.repeat(43), { mode: 0o600 }) // what office.ts makes on first use
+      if (!existsSync(paths.appPasswords)) writeFileSync(paths.appPasswords, JSON.stringify({ items: [] })) // what the first app password makes
+      const made = await admin.json('POST', '/api/admin/backups')
+      expect(made.status).toBe(200)
+      expect(made.data.name).toMatch(NAME_RE)
+      expect(made.data.size).toBeGreaterThan(0)
 
-    const list = await admin.json('GET', '/api/admin/backups')
-    expect(list.status).toBe(200)
-    expect(list.data.items[0]).toEqual(made.data)
-    expect(list.data.status).toMatchObject({ status: 'ok', file: made.data.name, size: made.data.size })
-    expect(Date.parse(list.data.status.lastSuccess)).toBeGreaterThan(Date.now() - 60_000)
-    expect(list.data.settings).toMatchObject({ dir: config.backupDir, keep: config.backupKeep, includesFiles: false, sameDisk: true })
-    // the dashboard reads the same file
-    expect(JSON.parse(readFileSync(paths.backupStatus, 'utf8'))).toMatchObject({ status: 'ok', file: made.data.name })
+      const list = await admin.json('GET', '/api/admin/backups')
+      expect(list.status).toBe(200)
+      expect(list.data.items[0]).toEqual(made.data)
+      expect(list.data.status).toMatchObject({ status: 'ok', file: made.data.name, size: made.data.size })
+      expect(Date.parse(list.data.status.lastSuccess)).toBeGreaterThan(Date.now() - 60_000)
+      expect(list.data.settings).toMatchObject({ dir: config.backupDir, keep: config.backupKeep, includesFiles: false, sameDisk: true })
+      // the dashboard reads the same file
+      expect(JSON.parse(readFileSync(paths.backupStatus, 'utf8'))).toMatchObject({ status: 'ok', file: made.data.name })
 
-    const res = await admin.raw('GET', `/api/admin/backups/${made.data.name}/download`)
-    expect(res.status).toBe(200)
-    expect(res.headers.get('content-type')).toBe('application/zip')
-    expect(res.headers.get('content-disposition')).toContain(made.data.name)
-    expect(res.headers.get('accept-ranges')).toBe('bytes')
-    expect(res.headers.get('cache-control')).toBe('no-store')
-    const whole = new Uint8Array(await res.arrayBuffer())
-    // a download that broke off resumes with the rest only
-    const rest = await admin.raw('GET', `/api/admin/backups/${made.data.name}/download`, undefined, { range: 'bytes=100-', 'if-range': res.headers.get('etag')! })
-    expect(rest.status).toBe(206)
-    expect(Buffer.from(await rest.arrayBuffer()).equals(Buffer.from(whole.subarray(100)))).toBe(true)
-    const files = Object.keys(unzipSync(whole))
-    expect(files).toEqual(expect.arrayContaining(['users.json', 'settings.json', 'backup.json', 'logs/audit.log']))
-    expect(files).not.toContain('sessions.json')
-    expect(files).not.toContain('secret.key')
-    expect(files).not.toContain('office-links.key')
-    expect(files).not.toContain('app-passwords.json')
-    // a file in the virus quarantine (infected on purpose) never goes into a backup
-    expect(files.filter(f => f.startsWith('quarantine'))).toEqual([])
-    expect(files).not.toContain('logs/audit.log.1')
-    expect(files.filter(f => /^(tmp|trash|app|storage)\//.test(f))).toEqual([])
-    const meta = JSON.parse(new TextDecoder().decode((await zipOf(admin, made.data.name))['backup.json']))
-    expect(meta).toMatchObject({ version: config.version, includesFiles: false })
-    expect(Date.parse(meta.createdAt)).toBeGreaterThan(0)
+      const res = await admin.raw('GET', `/api/admin/backups/${made.data.name}/download`)
+      expect(res.status).toBe(200)
+      expect(res.headers.get('content-type')).toBe('application/zip')
+      expect(res.headers.get('content-disposition')).toContain(made.data.name)
+      expect(res.headers.get('accept-ranges')).toBe('bytes')
+      expect(res.headers.get('cache-control')).toBe('no-store')
+      const whole = new Uint8Array(await res.arrayBuffer())
+      // a download that broke off resumes with the rest only
+      const rest = await admin.raw('GET', `/api/admin/backups/${made.data.name}/download`, undefined, { range: 'bytes=100-', 'if-range': res.headers.get('etag')! })
+      expect(rest.status).toBe(206)
+      expect(Buffer.from(await rest.arrayBuffer()).equals(Buffer.from(whole.subarray(100)))).toBe(true)
+      const files = Object.keys(unzipSync(whole))
+      expect(files).toEqual(expect.arrayContaining(['users.json', 'settings.json', 'backup.json', 'logs/audit.log']))
+      expect(files).not.toContain('sessions.json')
+      expect(files).not.toContain('secret.key')
+      expect(files).not.toContain('office-links.key')
+      expect(files).not.toContain('app-passwords.json')
+      // a file in the virus quarantine (infected on purpose) never goes into a backup
+      expect(files.filter(f => f.startsWith('quarantine'))).toEqual([])
+      expect(files).not.toContain('logs/audit.log.1')
+      expect(files.filter(f => /^(tmp|trash|app|storage)\//.test(f))).toEqual([])
+      const meta = JSON.parse(new TextDecoder().decode((await zipOf(admin, made.data.name))['backup.json']))
+      expect(meta).toMatchObject({ version: config.version, includesFiles: false })
+      expect(Date.parse(meta.createdAt)).toBeGreaterThan(0)
 
-    const act = await admin.json('GET', '/api/admin/activity?action=backup-create')
-    expect(act.data.items[0].target).toBe(made.data.name)
+      const act = await admin.json('GET', '/api/admin/activity?action=backup-create')
+      expect(act.data.items[0].target).toBe(made.data.name)
+    } finally {
+      av.deleteQuarantined(quarantined.id) // leave the shared DATA_DIR as found
+    }
   })
 
   test('one backup at a time', async () => {
