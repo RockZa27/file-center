@@ -11,7 +11,8 @@
  * A successful check is remembered for a minute (keyed by a SHA-256 of user and secret), so a client that sends
  * thousands of requests does not pay for argon2 each time. A cached answer is still checked against the record, so
  * deleting an app password (or the account, or changing its password) works at once, not after the minute. The same
- * goes for an expiry: the time is compared on every request, cached or not. An expired record stays in the list.
+ * goes for an expiry: the time is compared on every request, cached or not. An expired record stays in the list;
+ * its right secret is remembered the same way (as an expired answer), so a device that keeps retrying costs no argon2.
  */
 import { createHash, randomBytes, randomUUID } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
@@ -127,30 +128,40 @@ function forgetCached(test: (c: { id: string; username: string }) => boolean) {
 
 const DUMMY_HASH = await Bun.password.hash('not-a-real-app-password', HASH_OPTIONS)
 
-/** a record that may still be used by this account: made after the account (a new account of the same name gets none) */
-const usable = (p: AppPassword, user: User) =>
-  same(p.username, user.username) && Date.parse(p.createdAt) >= Date.parse(user.createdAt) && !expired(p)
+/** a record of this account: made after the account (a new account of the same name gets none) */
+const ownedBy = (p: AppPassword, user: User) =>
+  same(p.username, user.username) && Date.parse(p.createdAt) >= Date.parse(user.createdAt)
+
+/** a record that may still be used by this account: ownedBy and not expired */
+const usable = (p: AppPassword, user: User) => ownedBy(p, user) && !expired(p)
 
 /** past its lifetime; no field (an old record) or null never expires; a date that can not be read counts as expired */
 const expired = (p: AppPassword) => !!p.expiresAt && !(Date.now() < Date.parse(p.expiresAt))
 
-/** the account and the record a username and secret open, or null. Takes about as long whether or not the user exists. */
-export async function verifyAppPassword(username: string, secret: string): Promise<{ user: User; item: AppPassword } | null> {
+export type AppPasswordCheck = { user: User; item: AppPassword; expired?: false } | { user: User; item: AppPassword; expired: true }
+
+/**
+ * Three answers: valid ({ user, item }), the right secret of a record that has expired ({ expired: true } with the
+ * item: the caller must not count it as a wrong password), or null. Takes about as long whether or not the user exists.
+ * The cache holds both kinds of right secret; whether it is expired is compared on every request, cached or not.
+ */
+export async function verifyAppPassword(username: string, secret: string): Promise<AppPasswordCheck | null> {
   const user = findUser(username)
   if (!APP_SECRET_RE.test(secret)) return null
   const key = sha256(`${username.toLowerCase()}\0${secret}`)
   const now = Date.now()
+  const verdict = (item: AppPassword, u: User): AppPasswordCheck => usable(item, u) ? { user: u, item } : { user: u, item, expired: true }
   const hit = cache.get(key)
   if (hit && hit.until > now) {
     const item = byId(hit.id)
-    if (item && user && usable(item, user)) return { user, item }
+    if (item && user && ownedBy(item, user)) return verdict(item, user)
     cache.delete(key)
   }
   let pending = inflight.get(key)
   if (!pending) {
     pending = (async () => {
       const hint = secret.slice(3, 11)
-      const item = user ? appPasswordsOf(user.username).find(p => p.hint === hint && usable(p, user)) : undefined
+      const item = user ? appPasswordsOf(user.username).find(p => p.hint === hint && ownedBy(p, user)) : undefined
       const ok = await Bun.password.verify(secret, item?.hash ?? DUMMY_HASH).catch(() => false)
       return item && ok ? item : null
     })().finally(() => inflight.delete(key))
@@ -163,7 +174,7 @@ export async function verifyAppPassword(username: string, secret: string): Promi
   if (cache.size >= CACHE_MAX) for (const [k, c] of cache) if (c.until <= now) cache.delete(k)
   if (cache.size >= CACHE_MAX) cache.clear()
   if (appPasswordCache.ttlMs > 0) cache.set(key, { id: item.id, username: item.username, until: Date.now() + appPasswordCache.ttlMs })
-  return { user, item }
+  return verdict(item, user)
 }
 
 /** at most one write a minute per app password: a client sends many requests a second */

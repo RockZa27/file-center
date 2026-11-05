@@ -32,7 +32,7 @@ export const appPasswordRoutes = new Elysia({ prefix: '/api/me/app-passwords' })
     if (appPasswordsOf(u.username).length >= APP_PASSWORDS_PER_USER) throw bad('auth.app-password-limit', { max: APP_PASSWORDS_PER_USER })
     await confirmPassword(u, ip, body.password, 'app-password-denied')
     const { item, secret } = await createAppPassword(u, name, body.scope, days)
-    audit({ user: u.username, ip, action: 'app-password-create', target: item.name, detail: `${item.scope}, ${days ? `${days} วัน` : 'never'}` })
+    audit({ user: u.username, ip, action: 'app-password-create', target: item.name, detail: `${item.scope}, ${days ? `${days} วัน` : 'ไม่หมดอายุ'}` })
     return { ...publicAppPassword(item), secret }
   })
 

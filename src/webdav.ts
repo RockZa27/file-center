@@ -149,6 +149,11 @@ async function authenticate(request: Request, ip: string): Promise<Ctx | Respons
     auditOnce(`dav-login-failed|${userKey}`, { user: username, ip, action: 'login-failed', detail: 'WebDAV' })
     return challenge('auth.bad-credentials')
   }
+  // a right secret of an expired record: a device that keeps retrying must not lock the user or the whole address
+  if (found.expired) {
+    auditOnce(`dav-expired|${userKey}|${found.item.id}`, { user: found.user.username, ip, action: 'login-failed', detail: `WebDAV: รหัสผ่านแอป ${found.item.name} หมดอายุ` })
+    return challenge('auth.app-password-expired')
+  }
   clearFailures(userKey)
   // an account that must change its password first may do nothing else, WebDAV included
   if (found.user.mustChangePassword) return reply(request, 403, 'must-change-password')
