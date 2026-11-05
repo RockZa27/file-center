@@ -29,25 +29,43 @@ export function parseUmask(v: string | undefined): { mask: number; invalid: bool
   if (t === '') return { mask: DEFAULT_UMASK, invalid: false }
   return /^[0-7]{3}$/.test(t) ? { mask: parseInt(t, 8), invalid: false } : { mask: DEFAULT_UMASK, invalid: true }
 }
+/**
+ * The umask this process runs with: FC_UMASK, but only when it owns the data. A process of another account (root running
+ * the CLI with `docker compose exec`) keeps its own umask, so what it writes stays readable by the owner of DATA_DIR.
+ * dataOwnerUid null = DATA_DIR does not exist yet (this process makes it), processUid null = no uid (Windows).
+ */
+export function effectiveUmask(o: { setting: number; processUid: number | null; dataOwnerUid: number | null; current: number }): number {
+  if (o.processUid === null || o.dataOwnerUid === null || o.processUid === o.dataOwnerUid) return o.setting
+  return o.current
+}
 const umaskSetting = parseUmask(process.env.FC_UMASK)
+const dataDir = resolve(env('DATA_DIR', join(root, 'data')))
+const umaskNow = (() => { try { return process.umask() } catch { return DEFAULT_UMASK } })()
+let ownsData = true
+const umaskApplied = (() => {
+  let dataOwnerUid: number | null = null
+  try { dataOwnerUid = statSync(dataDir).uid } catch { /* not there yet: this process makes it */ }
+  const processUid = typeof process.getuid === 'function' ? process.getuid() : null
+  ownsData = processUid === null || dataOwnerUid === null || processUid === dataOwnerUid
+  return effectiveUmask({ setting: umaskSetting.mask, processUid, dataOwnerUid, current: umaskNow })
+})()
 /** the bad FC_UMASK value (index.ts warns once at start), '' when it was fine */
 export const invalidUmask = umaskSetting.invalid ? process.env.FC_UMASK!.trim() : ''
 // before any folder or file is made, so that every file the app (and the vips / ffmpeg / app processes it starts) writes gets it
-try { process.umask(umaskSetting.mask) } catch { /* Windows */ }
-export const umask = umaskSetting.mask
+try { process.umask(umaskApplied) } catch { /* Windows */ }
+export const umask = umaskApplied
 
 /**
  * Existing installs: a top-level folder made with the old 022 is made as private as the umask says. Not recursive and
  * never fatal (a mount the app does not own, Windows).
  */
 export function tightenDir(p: string) {
+  if (!ownsData) return // not the owner of DATA_DIR: leave the modes alone
   try {
     const mode = statSync(p).mode & 0o777
     if (mode & umaskSetting.mask) chmodSync(p, mode & ~umaskSetting.mask)
   } catch { /* EPERM etc.: keep going */ }
 }
-
-const dataDir = resolve(env('DATA_DIR', join(root, 'data')))
 
 export const config = {
   /** a web update runs with FC_VERSION set to the version in its manifest; otherwise the version of package.json */

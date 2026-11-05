@@ -347,8 +347,9 @@
 2. **รีเซ็ต 2FA ที่เครื่อง server** ก่อนออกจากระบบ/หลังรีสตาร์ต ไม่ต้องใช้ session ของ admin
    ```bash
    bun src/cli.ts reset-2fa <ชื่อผู้ใช้>
-   docker compose exec file-center bun src/cli.ts reset-2fa admin     # แบบ Docker
+   docker compose exec -u bun file-center bun src/cli.ts reset-2fa admin     # แบบ Docker (แนะนำ -u bun)
    ```
+   (แนะนำ `-u bun` เพื่อให้ไฟล์ที่ CLI เขียนยังเป็นของบัญชีที่รันแอป; ไม่ใส่ก็ใช้ได้)
    แล้วให้แต่ละคนเปิด 2FA ใหม่เองหลังเข้าสู่ระบบ ถ้าไม่มีกุญแจนี้ รหัส 2FA ของทุกคนใช้ไม่ได้ ต้องรีเซ็ตทีละคน
 
 ### อัปเดตระบบ
@@ -593,9 +594,11 @@ WebDAV เปิดอยู่ตามค่าเริ่มต้น (`WEBD
 แบบ Docker (รันในคอนเทนเนอร์ที่ทำงานอยู่)
 
 ```bash
-docker compose exec file-center bun src/cli.ts reset-2fa admin
-docker compose exec file-center bun src/cli.ts sessions-revoke alice
+docker compose exec -u bun file-center bun src/cli.ts reset-2fa admin
+docker compose exec -u bun file-center bun src/cli.ts sessions-revoke alice
 ```
+
+แนะนำ `-u bun` เพื่อให้ไฟล์ที่ CLI เขียนยังเป็นของบัญชีที่รันแอป (ถ้าไม่ใส่ก็ยังใช้ได้ ระบบคงสิทธิ์ไฟล์เดิมไว้ให้อ่านได้)
 
 - ไม่ใส่ชื่อผู้ใช้ หรือใส่คำสั่งอื่น จะแสดงวิธีใช้ (`Usage: bun src/cli.ts reset-2fa <user> | sessions-revoke <user>`) และจบด้วยรหัส 1 เช่นเดียวกับกรณีไม่พบผู้ใช้ (`No such user: <ชื่อ>`)
 - เขียนประวัติการใช้งาน (ผู้ใช้ `cli`: `2fa-reset`, `sessions-revoke`)

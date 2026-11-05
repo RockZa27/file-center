@@ -1,4 +1,4 @@
-import { closeSync, copyFileSync, existsSync, fsyncSync, openSync, readdirSync, readFileSync, renameSync, writeSync } from 'node:fs'
+import { closeSync, copyFileSync, existsSync, fsyncSync, openSync, statSync, readdirSync, readFileSync, renameSync, writeSync } from 'node:fs'
 import { basename, dirname } from 'node:path'
 import { log } from './logger'
 
@@ -12,6 +12,17 @@ function writeDurableSync(file: string, text: string) {
   } finally {
     closeSync(fd)
   }
+}
+
+/** the message for a file the running account may not read (another owner, mode too tight): not damaged, so it is never copied, renamed or reset */
+export function unreadableMessage(file: string, err: Error, appUid: number | null): string {
+  let st = ''
+  try { const s = statSync(file); st = `owner uid ${s.uid}, mode ${(s.mode & 0o777).toString(8).padStart(3, '0')}` } catch { st = 'owner/mode ?' }
+  const me = appUid === null ? '?' : String(appUid)
+  return `\n[store] อ่านไฟล์ข้อมูล ${file} ไม่ได้ (ไม่มีสิทธิ์: ${err.message}; ไฟล์: ${st}; บัญชีที่รันแอป: uid ${me}) ไฟล์ไม่ได้เสียหาย แต่เป็นของบัญชีอื่นหรืออ่านไม่ได้ด้วยบัญชีนี้ ระบบหยุดโดยไม่แตะต้องไฟล์\n` +
+    `  วิธีแก้: ให้บัญชีที่รันแอปเป็นเจ้าของ เช่น Docker: chown -R 1000:1000 data/ หรือรัน CLI ด้วยบัญชีของแอป: docker compose exec -u bun file-center bun src/cli.ts ... แล้วเริ่มระบบใหม่\n` +
+    `[store] Cannot read ${file} (permission denied: ${err.message}; file: ${st}; the app runs as uid ${me}). The file is not damaged: it belongs to another account or is not readable by the account running the app. The app stops and does not touch the file.\n` +
+    `  To fix: make the app's account the owner, e.g. in Docker: chown -R 1000:1000 data/ , or run the CLI as the app's user: docker compose exec -u bun file-center bun src/cli.ts ... then start the app again.\n`
 }
 
 /**
@@ -67,6 +78,13 @@ export class JsonStore<T> {
       try {
         this.data = JSON.parse(readFileSync(file, 'utf8')) as T
       } catch (err) {
+        const code = (err as NodeJS.ErrnoException).code
+        if (code === 'EACCES' || code === 'EPERM') {
+          // a permission problem is not a broken file: no copy, no rename, no reset, in both modes
+          const message = unreadableMessage(file, err as Error, typeof process.getuid === 'function' ? process.getuid() : null)
+          console.error(message)
+          throw new Error(message.trim())
+        }
         if (options.onCorrupt === 'fail') {
           // the file stays where it is (nothing is written over it); one copy is kept next to it for whoever repairs it
           let kept = file
