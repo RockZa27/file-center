@@ -59,6 +59,10 @@ describe('backups (API)', () => {
   test('create, list and download a backup', async () => {
     writeFileSync(join(paths.logs, 'audit.log.1'), '{"rotated":true}\n')
     ;(await import('../src/secret-box')).seal('2fa secret') // makes secret.key
+    const tmpBad = join(tmpdir(), `fc-infected-${Date.now()}.bin`)
+    writeFileSync(tmpBad, 'infected upload')
+    await (await import('../src/antivirus')).quarantine(tmpBad, { name: 'bad.bin', signature: 'Test-Virus', by: 'x', ip: '127.0.0.1' } as any)
+    expect(readdirSync(paths.quarantine).length).toBeGreaterThan(0)
     if (!existsSync(paths.officeKey)) writeFileSync(paths.officeKey, 'k'.repeat(43), { mode: 0o600 }) // what office.ts makes on first use
     if (!existsSync(paths.appPasswords)) writeFileSync(paths.appPasswords, JSON.stringify({ items: [] })) // what the first app password makes
     const made = await admin.json('POST', '/api/admin/backups')
@@ -92,6 +96,8 @@ describe('backups (API)', () => {
     expect(files).not.toContain('secret.key')
     expect(files).not.toContain('office-links.key')
     expect(files).not.toContain('app-passwords.json')
+    // a file in the virus quarantine (infected on purpose) never goes into a backup
+    expect(files.filter(f => f.startsWith('quarantine'))).toEqual([])
     expect(files).not.toContain('logs/audit.log.1')
     expect(files.filter(f => /^(tmp|trash|app|storage)\//.test(f))).toEqual([])
     const meta = JSON.parse(new TextDecoder().decode((await zipOf(admin, made.data.name))['backup.json']))
@@ -422,6 +428,9 @@ describe('restore (end to end)', () => {
       'users.json': enc.encode(JSON.stringify({ ...users, users: [...users.users, dave] })),
       'settings.json': enc.encode(JSON.stringify({ appName: extra })),
       'backup.json': enc.encode(JSON.stringify({ version: '1.9.1', createdAt: new Date().toISOString(), includesFiles: false })),
+      // an old backup still holds the quarantine: a restore ignores it
+      ['quarantine/' + 'a'.repeat(24) + '.bin']: enc.encode('infected'),
+      ['quarantine/' + 'a'.repeat(24) + '.json']: enc.encode('{}'),
     })
     // fflate level 6 = what 1.9.1 wrote with (it used level 1; both are plain deflate), level 9 = the new default
     const old = 'file-center-backup-20000101-000000.zip'
@@ -436,6 +445,7 @@ describe('restore (end to end)', () => {
       await until(async () => { const h = await health(); return h && h.boot !== before ? h : null }, 30_000, 'restart')
       expect((await api('GET', '/api/admin/settings')).data.appName).toBe(appName)
       expect((await api('GET', '/api/admin/users')).data.users.map((u: any) => u.username)).toContain('dave')
+      expect(existsSync(join(e2e.data, 'quarantine', 'a'.repeat(24) + '.bin'))).toBe(false)
     }
   }, 90_000)
 })

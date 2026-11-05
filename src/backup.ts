@@ -5,7 +5,7 @@
  *   users.json  settings.json  groups.json  grants.json (and the other small data files)  branding/  logs/audit.log  logs/system.log  backup.json  [storage/ when files are included]
  *
  * Not in it: tmp/, trash/ and versions/ (temporary), app/ (installed updates), sessions.json (logins), rotated logs,
- * access.log and launcher.log, the backup folder itself, search.db (the search index, rebuilt from the disk), secret.key, office-links.key and app-passwords.json (credentials, kept out on purpose). Restoring puts back users.json, settings.json and branding/ only, never storage/ (groups.json is in the zip but is not restored: a group is its folder in storage/ plus its list of members, and the two must stay together).
+ * access.log and launcher.log, quarantine/ (infected files), the backup folder itself, search.db (the search index, rebuilt from the disk), secret.key, office-links.key and app-passwords.json (credentials, kept out on purpose). Restoring puts back users.json, settings.json and branding/ only, never storage/ (groups.json is in the zip but is not restored: a group is its folder in storage/ plus its list of members, and the two must stay together).
  */
 import {
   closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync,
@@ -57,8 +57,10 @@ export type BackupStatus = {
 // app-passwords.json holds the WebDAV credentials (argon2 hashes): on purpose not in a backup, so a copy of one can not
 // be turned into a way in; after a restore users make new app passwords;
 // office-links.key signs short-lived ONLYOFFICE links: a restored server simply makes a new one;
-// thumbs is a cache made again on demand
-const SKIP = new Set(['tmp', 'trash', 'versions', 'thumbs', 'app', 'sessions.json', 'backup-status.json', 'stats-cache.json', 'cli-changed', 'secret.key', 'office-links.key', 'app-passwords.json'])
+// thumbs is a cache made again on demand;
+// quarantine holds the infected uploads themselves: a backup would hand live malware to whoever downloads it, keep files
+// past QUARANTINE_DAYS and grow by up to QUARANTINE_MAX_MB
+const SKIP = new Set(['tmp', 'trash', 'versions', 'thumbs', 'app', 'sessions.json', 'backup-status.json', 'stats-cache.json', 'cli-changed', 'secret.key', 'office-links.key', 'app-passwords.json', 'quarantine'])
 // search.db* (the search index and its WAL files) is rebuilt from the disk
 const SEARCH_DB = /^search\.db(?:-wal|-shm|-journal)?$/
 // of the logs only the current activity and system log go in: rotated ones, access.log and launcher.log stay out
