@@ -1,7 +1,7 @@
 import { timingSafeEqual } from 'node:crypto'
 import { Elysia, NotFound, ParseError, ValidationError } from 'elysia'
 import { accessFor, canManage, getSession, isStaff, reloadIfChangedByCli, type Access, type Session, type User, findUser } from './auth'
-import { config } from './config'
+import { config, proxyTrusted } from './config'
 import { mustSetup2fa } from './policy'
 import { forbidden, fromFsError, HttpError } from './fsx'
 import { log, safePath } from './logger'
@@ -14,6 +14,7 @@ const PASSWORD_CHANGE_ROUTES = new Set(['/api/session', '/api/password', '/api/l
 const SETUP_2FA_ROUTES = new Set([...PASSWORD_CHANGE_ROUTES, '/api/2fa/setup', '/api/2fa/enable', '/api/me/guide'])
 
 export function clientIp(request: Request, socketIp: string): string {
+  if (!proxyTrusted(socketIp)) return socketIp
   if (config.trustProxy === 'cloudflare') return request.headers.get('cf-connecting-ip')?.trim() || socketIp
   if (config.trustProxy === 'true') return request.headers.get('x-forwarded-for')?.split(',').at(-1)?.trim() || socketIp
   return socketIp

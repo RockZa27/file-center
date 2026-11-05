@@ -1,9 +1,79 @@
 import { chmodSync, mkdirSync, statSync } from 'node:fs'
+import { isIPv4, isIPv6 } from 'node:net'
 import { dirname, join, resolve } from 'node:path'
 import pkg from '../package.json'
 
 const root = resolve(import.meta.dir, '..')
 const env = (k: string, d: string) => process.env[k] ?? d
+
+// ───────────── TRUSTED_PROXIES: which sockets may tell us the client's address ─────────────
+
+/** an address as a number: IPv4 is 32 bits, IPv6 128; an IPv4-mapped IPv6 (::ffff:a.b.c.d) is read as the IPv4 it carries */
+function ipValue(text: string): { v6: boolean; n: bigint } | null {
+  let t = text.trim()
+  if (t.startsWith('[') && t.endsWith(']')) t = t.slice(1, -1)
+  t = t.replace(/%.*$/, '') // zone id (fe80::1%eth0)
+  if (isIPv4(t)) return { v6: false, n: t.split('.').reduce((a, o) => (a << 8n) | BigInt(o), 0n) }
+  if (!isIPv6(t)) return null
+  let tail = 0n
+  const dotted = /(\d+\.\d+\.\d+\.\d+)$/.exec(t)
+  if (dotted) { // ::ffff:1.2.3.4 -> two hex groups
+    const v4 = ipValue(dotted[1])
+    if (!v4) return null
+    tail = v4.n
+    t = t.slice(0, dotted.index) + '0:0'
+  }
+  const [head, rest] = t.split('::')
+  const a = head ? head.split(':') : []
+  const b = rest ? rest.split(':') : []
+  const groups = rest === undefined ? a : [...a, ...Array(8 - a.length - b.length).fill('0'), ...b]
+  if (groups.length !== 8) return null
+  let n = groups.reduce((acc, g) => (acc << 16n) | BigInt(parseInt(g, 16)), 0n)
+  if (dotted) n = (n & ~0xffffffffn) | tail
+  if (n >> 32n === 0xffffn) return { v6: false, n: n & 0xffffffffn }
+  return { v6: true, n }
+}
+
+export type IpRule = { v6: boolean; n: bigint; bits: number }
+
+/** "1.2.3.4", "10.0.0.0/8", "::1" or "fd00::/8" -> a rule, or null when it is not one. A mapped IPv6 (::ffff:10.0.0.0/104) is the IPv4 range */
+export function parseIpRule(entry: string): IpRule | null {
+  const [addr, len, extra] = entry.trim().split('/')
+  if (extra !== undefined) return null
+  const ip = ipValue(addr)
+  if (!ip) return null
+  const max = ip.v6 ? 128 : 32
+  if (len === undefined) return { ...ip, bits: max }
+  if (!/^\d{1,3}$/.test(len)) return null
+  let bits = Number(len)
+  if (!ip.v6 && addr.includes(':')) { // the 96 bits of the mapping prefix are not part of the IPv4 length
+    if (bits < 96) return null
+    bits -= 96
+  }
+  return bits > max ? null : { ...ip, bits }
+}
+
+/** the rules of a comma-separated list, and the entries that are not an address or range (to be warned about) */
+export function parseIpList(raw: string): { rules: IpRule[]; invalid: string[] } {
+  const rules: IpRule[] = []
+  const invalid: string[] = []
+  for (const part of raw.split(',').map(s => s.trim()).filter(Boolean)) {
+    const rule = parseIpRule(part)
+    if (rule) rules.push(rule)
+    else invalid.push(part)
+  }
+  return { rules, invalid }
+}
+
+export function ipInRules(ip: string, rules: IpRule[]): boolean {
+  const v = ipValue(ip)
+  if (!v) return false
+  return rules.some(r => {
+    if (r.v6 !== v.v6) return false
+    const shift = BigInt((r.v6 ? 128 : 32) - r.bits)
+    return (v.n >> shift) === (r.n >> shift)
+  })
+}
 
 /** where File Center publishes its signed releases (the `updates` branch, see scripts/release.ts) */
 export const OFFICIAL_UPDATE_SOURCE = 'https://raw.githubusercontent.com/RockZa27/file-center/updates'
@@ -135,6 +205,13 @@ export const config = {
    * "true" = the last X-Forwarded-For entry, the one written by your own reverse proxy (earlier entries come from the client)
    */
   trustProxy: env('TRUST_PROXY', 'false') as 'false' | 'true' | 'cloudflare',
+  /**
+   * who may send those headers: a comma-separated list of IPs and CIDR ranges (127.0.0.1,::1,172.16.0.0/12). Empty = every
+   * connection is believed (the old behaviour). The headers of a connection that is not in the list are ignored.
+   * `trustedProxiesInvalid` holds the entries that were not an address or range (one warning at start)
+   */
+  trustedProxies: parseIpList(env('TRUSTED_PROXIES', '')).rules,
+  trustedProxiesInvalid: parseIpList(env('TRUSTED_PROXIES', '')).invalid,
   /** first-run admin password; random one is printed to the console when empty */
   adminPassword: env('ADMIN_PASSWORD', ''),
   /** "off" turns WebDAV (/dav, webdav.ts) off: it then answers 404 */
@@ -301,3 +378,12 @@ export function ensureDirs() {
 
 // stores are created while modules load, so the folders must exist before that
 ensureDirs()
+
+/**
+ * may the headers that name the client (CF-Connecting-IP, X-Forwarded-For/-Host/-Proto) be believed from this socket address?
+ * Only when TRUST_PROXY is set and, if TRUSTED_PROXIES is given, the socket is one of those addresses
+ */
+export function proxyTrusted(socketIp: string): boolean {
+  if (config.trustProxy === 'false') return false
+  return config.trustedProxies.length === 0 || ipInRules(socketIp, config.trustedProxies)
+}

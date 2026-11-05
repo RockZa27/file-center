@@ -15,10 +15,10 @@ export const configRoutes = new Elysia({ prefix: '/admin' })
   .use(context)
 
   // risky or odd .env values, for the settings page
-  .get('/config-warnings', ({ user, ip, request }) => {
+  .get('/config-warnings', ({ user, ip, request, server }) => {
     requireAdmin({ user, ip })
     const lang = langOf(request)
-    return { items: configWarnings(request).map(w => ({ ...w, message: text(lang, w.code) })) }
+    return { items: configWarnings(request, server?.requestIP(request)?.address ?? 'unknown').map(w => ({ ...w, message: text(lang, w.code) })) }
   })
 
   // a test message with the e-mail settings in force: to the given address, else the admin's confirmed one
