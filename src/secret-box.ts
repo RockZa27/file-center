@@ -1,6 +1,7 @@
 import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
 import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { paths } from './config'
+import { unreadableMessage } from './store'
 
 // AES-256-GCM for small secrets kept in users.json (the 2FA secret). Sealed form: base64url(iv | tag | ciphertext).
 let keyCache: Buffer | null = null
@@ -10,7 +11,18 @@ function key(): Buffer {
   if (keyCache) return keyCache
   const file = paths.secretKey
   if (existsSync(file)) {
-    const k = Buffer.from(readFileSync(file, 'utf8').trim(), 'base64url')
+    let text: string
+    try { text = readFileSync(file, 'utf8') } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code
+      // not readable is not missing: a new key would make every sealed value unreadable
+      if (code === 'EACCES' || code === 'EPERM') {
+        const message = unreadableMessage(file, err as Error, typeof process.getuid === 'function' ? process.getuid() : null)
+        console.error(message)
+        throw new Error(message.trim())
+      }
+      throw err
+    }
+    const k = Buffer.from(text.trim(), 'base64url')
     // a damaged key is not replaced: a new one would silently make every sealed value unreadable
     if (k.length !== 32) throw new Error('secret.key is damaged')
     return (keyCache = k)

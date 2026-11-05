@@ -3,7 +3,7 @@
  * the account cannot read is reported as a permission problem, never as "damaged" (no .broken- copy, no reset).
  */
 import { describe, expect, test } from 'bun:test'
-import { chmodSync, chownSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
+import { chmodSync, chownSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { effectiveUmask } from '../src/config'
@@ -35,7 +35,7 @@ describe('config in a subprocess', () => {
       mkdirSync(data)
       if (isRoot) chownSync(data, 65534, 65534) // not owned by this (root) process
       const script = `import ${JSON.stringify(join(root, 'src/config.ts'))}; console.log(process.umask())`
-      const out = run(['sh', '-c', `umask 022; exec bun -e '${script}'`], { DATA_DIR: data, FC_UMASK: '' })
+      const out = run(['sh', '-c', `umask 022; exec bun -e '${script}'`], { DATA_DIR: data, STORAGE_DIR: join(dir, 'storage'), BACKUP_DIR: join(dir, 'backups'), FC_UMASK: '' })
       // root: DATA_DIR belongs to someone else, the started umask stays; otherwise the process owns it: 077
       expect(out.stdout.toString().trim()).toBe(String(isRoot ? 0o022 : 0o077))
     } finally { rmSync(dir, { recursive: true, force: true }) }
@@ -58,7 +58,8 @@ describe('unreadable data file', () => {
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
 
-  test.each(['fail', 'reset'])('JsonStore onCorrupt %s: permission message, file untouched, no .broken- copy', mode => {
+  test('JsonStore onCorrupt fail: permission message, file untouched, no .broken- copy', () => {
+    const mode = 'fail'
     const dir = mkdtempSync(join(tmpdir(), 'fc-ro-'))
     const f = join(dir, 'users.json')
     try {
@@ -78,6 +79,69 @@ try { new JsonStore(${JSON.stringify(f)}, () => [], { onCorrupt: ${JSON.stringif
       expect(text).not.toContain('file is damaged')
       expect(readdirSync(dir).filter(n => n.includes('.broken-'))).toEqual([])
       expect(existsSync(f)).toBe(true)
+    } finally {
+      try { chmodSync(f, 0o600) } catch { /* gone */ }
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
+/** a script run as an account that cannot read `f` (root reads a 0000 file, so setpriv to an unprivileged uid) */
+function asOther(dir: string, script: string) {
+  const cmd = isRoot
+    ? ['setpriv', '--reuid=65534', '--regid=65534', '--clear-groups', 'bun', '-e', script]
+    : ['bun', '-e', script]
+  return run(cmd, { DATA_DIR: join(dir, 'data'), STORAGE_DIR: join(dir, 'storage'), BACKUP_DIR: join(dir, 'backups') })
+}
+
+describe('unreadable file in a reset store', () => {
+  test('starts with the fallback, warns, leaves the file and its mode alone', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'fc-reset-'))
+    const f = join(dir, 'sessions.json')
+    try {
+      chmodSync(dir, 0o777)
+      writeFileSync(f, '{"old":1}')
+      chmodSync(f, 0o000)
+      const script = `import {JsonStore} from ${JSON.stringify(join(root, 'src/store.ts'))}
+try { const s = new JsonStore(${JSON.stringify(f)}, () => ({ fresh: true })); console.log('DATA:' + JSON.stringify(s.value)) } catch (e) { console.log('ERR:' + e.message) }`
+      const out = asOther(dir, script)
+      expect(out.stdout.toString()).toContain('DATA:{"fresh":true}')
+      expect(out.stderr.toString()).toContain('[store-unreadable]')
+      expect(out.stderr.toString()).toContain('sessions.json')
+      expect(readdirSync(dir).filter(n => n.includes('.broken-'))).toEqual([])
+      expect(statSync(f).mode & 0o777).toBe(0)
+      chmodSync(f, 0o600)
+      expect(readFileSync(f, 'utf8')).toBe('{"old":1}')
+    } finally {
+      try { chmodSync(f, 0o600) } catch { /* gone */ }
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+})
+
+describe('unreadable secret.key', () => {
+  test('permission message, key file unchanged, no new key written', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'fc-key-'))
+    const data = join(dir, 'data')
+    const f = join(data, 'secret.key')
+    try {
+      chmodSync(dir, 0o777)
+      mkdirSync(data)
+      chmodSync(data, 0o777)
+      writeFileSync(f, 'b'.repeat(43))
+      chmodSync(f, 0o000)
+      const script = `import {seal} from ${JSON.stringify(join(root, 'src/secret-box.ts'))}
+try { seal('x'); console.log('NOERROR') } catch (e) { console.log('ERR:' + e.message) }`
+      const out = asOther(dir, script)
+      const text = out.stdout.toString()
+      expect(text).toContain('ERR:')
+      expect(text).toContain('permission denied')
+      expect(text).toContain('chown -R 1000:1000')
+      expect(text).not.toContain('NOERROR')
+      expect(statSync(f).mode & 0o777).toBe(0)
+      expect(readdirSync(data).filter(n => n.includes('secret'))).toEqual(['secret.key'])
+      chmodSync(f, 0o600)
+      expect(readFileSync(f, 'utf8')).toBe('b'.repeat(43))
     } finally {
       try { chmodSync(f, 0o600) } catch { /* gone */ }
       rmSync(dir, { recursive: true, force: true })

@@ -80,10 +80,21 @@ export class JsonStore<T> {
       } catch (err) {
         const code = (err as NodeJS.ErrnoException).code
         if (code === 'EACCES' || code === 'EPERM') {
-          // a permission problem is not a broken file: no copy, no rename, no reset, in both modes
-          const message = unreadableMessage(file, err as Error, typeof process.getuid === 'function' ? process.getuid() : null)
-          console.error(message)
-          throw new Error(message.trim())
+          // a permission problem is not a broken file: no copy, no rename, no reset
+          const uid = typeof process.getuid === 'function' ? process.getuid() : null
+          if (options.onCorrupt === 'fail') {
+            const message = unreadableMessage(file, err as Error, uid)
+            console.error(message)
+            throw new Error(message.trim())
+          }
+          // caches and per-user state (sessions, favourites...) may start empty and the app stays up, but credentials and
+          // settings may not: starting without them would lock everyone out or fall back to defaults. The file is left
+          // alone; the next save replaces it (temp file + rename in a folder the app owns).
+          let st = 'owner/mode ?'
+          try { const s = statSync(file); st = `owner uid ${s.uid}, mode ${(s.mode & 0o777).toString(8).padStart(3, '0')}` } catch { /* gone */ }
+          log.warn('store-unreadable', { file, detail: st, appUid: uid, error: (err as Error).message })
+          this.data = fallback()
+          return
         }
         if (options.onCorrupt === 'fail') {
           // the file stays where it is (nothing is written over it); one copy is kept next to it for whoever repairs it
