@@ -67,6 +67,7 @@ You need Docker and Docker Compose v2.
    ```
 2. Open `.env` and edit what you need.
    - If you use it only on this machine or your LAN, delete or comment out the line `COMPOSE_PROFILES=tunnel` (the example turns on the Cloudflare Tunnel).
+   - Without the tunnel also set `TRUST_PROXY=false` and remove the `TRUSTED_PROXIES` line; behind your own nginx/Caddy on the same machine, set `TRUST_PROXY=true` with `TRUSTED_PROXIES=127.0.0.1,::1`.
    - To choose the admin password yourself, set `ADMIN_PASSWORD=...`.
 3. Build and start:
    ```bash

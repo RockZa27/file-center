@@ -65,6 +65,7 @@ File Center คือระบบฝากและแจกจ่ายไฟ�
    ```
 2. เปิด `.env` แล้วแก้ตามต้องการ
    - ถ้าใช้แค่ในเครื่องหรือวง LAN ให้ลบหรือคอมเมนต์บรรทัด `COMPOSE_PROFILES=tunnel` (ตัวอย่างเปิด Cloudflare Tunnel ไว้)
+   - ถ้าไม่ใช้ tunnel ให้ตั้ง `TRUST_PROXY=false` และลบบรรทัด `TRUSTED_PROXIES` ด้วย หรือถ้าอยู่หลัง nginx/Caddy ของคุณเองบนเครื่องเดียวกัน ให้ตั้ง `TRUST_PROXY=true` กับ `TRUSTED_PROXIES=127.0.0.1,::1`
    - อยากตั้งรหัสผ่าน admin เอง ใส่ `ADMIN_PASSWORD=...`
 3. สร้างและเริ่มระบบ
    ```bash
