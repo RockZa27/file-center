@@ -208,6 +208,9 @@ const ANON_MAX = 5000
 const sidKey = (sid: string) => createHash('sha256').update(sid).digest('hex')
 const ttlOf = (s: Session) => (s.username ? policy.sessionTtlMs() : ANON_TTL_MS)
 
+/** past the absolute lifetime; a signed-in session without a numeric `created` (hand-edited file) counts as past it */
+const tooOld = (s: Session, now: number) => !!s.username && !(now - s.created <= policy.sessionMaxMs())
+
 export function createSession(username: string | null, meta: { ip?: string; ua?: string } = {}): { sid: string; session: Session } {
   const sid = randomBytes(32).toString('base64url')
   const session: Session = {
@@ -231,7 +234,7 @@ export function getSession(sid: string | undefined): Session | null {
   const key = sidKey(sid)
   const s = sessionStore.value[key] ?? anonymous.get(key)
   if (!s) return null
-  if (Date.now() - s.seen > ttlOf(s)) {
+  if (Date.now() - s.seen > ttlOf(s) || tooOld(s, Date.now())) {
     destroySession(sid)
     return null
   }
@@ -303,7 +306,7 @@ export function reloadIfChangedByCli() {
 export function purgeExpiredSessions() {
   const now = Date.now()
   sessionStore.update(d => {
-    for (const [k, s] of Object.entries(d)) if (now - s.seen > policy.sessionTtlMs()) delete d[k]
+    for (const [k, s] of Object.entries(d)) if (now - s.seen > policy.sessionTtlMs() || tooOld(s, now)) delete d[k]
   })
   for (const [k, s] of anonymous) if (now - s.seen > ANON_TTL_MS) anonymous.delete(k)
 }

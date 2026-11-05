@@ -97,6 +97,8 @@ export const config = {
   /** uploads are refused when they would leave less free disk space than this */
   minFreeSpace: num('MIN_FREE_SPACE', 2 * 1024 ** 3), // 2 GB
   sessionTtlMs: num('SESSION_TTL_HOURS', 24 * 7) * 3600_000,
+  /** a signed-in session ends this long after sign-in however often it is used (never below the idle TTL); positive whole hours */
+  sessionMaxMs: (Number.isInteger(Number(process.env.SESSION_MAX_HOURS)) && Number(process.env.SESSION_MAX_HOURS) > 0 ? Number(process.env.SESSION_MAX_HOURS) : 24 * 30) * 3600_000,
   trashRetentionDays: num('TRASH_RETENTION_DAYS', 30),
   /** old contents of a file kept on every save (0 = off) and for how many days (0 = until pushed out by the count) */
   versionsKeep: Math.max(0, Math.floor(num('VERSIONS_KEEP', 10))),

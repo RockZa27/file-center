@@ -65,6 +65,8 @@ export const sessionTtlMs = () => {
   const h = grp('security').sessionTtlHours
   return h !== undefined ? h * 3600_000 : config.sessionTtlMs
 }
+/** how long a signed-in session may live at all, used or not: SESSION_MAX_HOURS, never less than the idle TTL set on the settings page */
+export const sessionMaxMs = () => Math.max(config.sessionMaxMs, sessionTtlMs())
 export const loginMaxAttempts = () => grp('security').loginMaxAttempts ?? config.loginMaxAttempts
 export const loginLockoutMs = () => {
   const s = grp('security').loginLockoutSeconds
