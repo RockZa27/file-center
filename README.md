@@ -76,7 +76,7 @@ File Center คือระบบฝากและแจกจ่ายไฟ�
    ```bash
    docker compose logs file-center
    ```
-5. เปิด `http://localhost:3000` เข้าสู่ระบบด้วย `admin` ระบบบังคับให้เปลี่ยนรหัสผ่านทันที และเมื่อตั้ง `REQUIRE_2FA` ไว้ จะให้ตั้ง 2FA ต่อ (เตรียมแอป authenticator ไว้ในมือ)
+5. เปิด `http://localhost:3000` เข้าสู่ระบบด้วย `admin` ถ้าปล่อย `ADMIN_PASSWORD` ว่าง (ใช้รหัสที่สุ่มใน log) ระบบบังคับให้เปลี่ยนรหัสผ่านทันที และเมื่อตั้ง `REQUIRE_2FA` ไว้ จะให้ตั้ง 2FA ต่อ (เตรียมแอป authenticator ไว้ในมือ)
 
 ข้อมูลทั้งหมดอยู่ข้างไฟล์ `docker-compose.yml`:
 

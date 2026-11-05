@@ -78,7 +78,7 @@ You need Docker and Docker Compose v2.
    ```bash
    docker compose logs file-center
    ```
-5. Open `http://localhost:3000` and sign in as `admin`. You are asked to change the password right away, and when `REQUIRE_2FA` is set, to set up 2FA next (have an authenticator app ready).
+5. Open `http://localhost:3000` and sign in as `admin`. If you left `ADMIN_PASSWORD` empty (the random password from the log), you are asked to change it right away; when `REQUIRE_2FA` is set, you are asked to set up 2FA next (have an authenticator app ready).
 
 All data lives next to `docker-compose.yml`:
 
