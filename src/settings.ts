@@ -1,4 +1,4 @@
-import { paths } from './config'
+import { config, paths } from './config'
 import { type Lang, type MessageCode, text } from './messages'
 import { JsonStore } from './store'
 
@@ -85,7 +85,8 @@ const defaults = (): Settings => ({
   welcomeTitle: '',
   welcomeText: '',
   publicEmptyText: '',
-  publicEnabled: true,
+  // PUBLIC_PAGE=off only matters for a fresh install: an existing settings.json keeps its own value (defaults fill missing keys only)
+  publicEnabled: !config.publicPageOff,
   guestPermissions: ['read', 'download', 'batchdownload'],
   logo: null,
   backup: {},

@@ -249,6 +249,7 @@
 | `admin.config-insecure-cookie` | warning | เข้าใช้ผ่าน HTTPS (หรือ `PUBLIC_URL` เป็น `https://`) แต่ `SECURE_COOKIE` ไม่เป็น `true` ตั้ง `SECURE_COOKIE=true` |
 | `admin.config-proxy-open` | warning | ตั้ง `TRUST_PROXY` ไว้ แต่ `TRUSTED_PROXIES` ว่าง ระบบเชื่อ IP ที่หัวของคำขอบอกจากทุกคนที่เข้าถึงพอร์ตของแอปได้ ตั้ง `TRUSTED_PROXIES` เป็น IP ของ proxy (ดู docs/configuration.md) |
 | `admin.config-proxy-no-headers` | warning | ตั้ง `TRUST_PROXY` ไว้ แต่คำขอที่ตรวจไม่มีหัวจาก proxy (`CF-Connecting-IP` สำหรับ `cloudflare`, `X-Forwarded-For` สำหรับ `true`) IP ในการล็อกและประวัติจึงผิด หรือ proxy ไม่ได้อยู่หน้าระบบ ตรวจว่า proxy ส่งหัวนี้ หรือตั้ง `TRUST_PROXY=false` ถ้าไม่มี proxy ระวัง: เปิด `TRUST_PROXY` โดยไม่มี proxy ทำให้ผู้ใช้ปลอม IP ได้ |
+| `admin.config-no-2fa` | warning | admin ยังเข้าสู่ระบบด้วยรหัสผ่านอย่างเดียว (ข้อกำหนด 2FA เป็น `none`) หายไปเมื่อบังคับ 2FA ระดับ admin ขึ้นไป |
 | `admin.config-admin-password-env` | warning | `ADMIN_PASSWORD` ยังอยู่ใน `.env` ทั้งที่มีบัญชี admin แล้ว (ไม่มีผลแล้ว แต่รหัสผ่านค้างในไฟล์) ลบบรรทัดนี้ |
 | `admin.config-audit-syslog-plain` | warning | ตั้งส่งประวัติการใช้งานไป syslog บนเครื่องอื่น ซึ่ง UDP/TCP ไม่เข้ารหัส ชื่อผู้ใช้และ IP อ่านได้ระหว่างทาง ใช้เครือข่ายภายในที่เชื่อถือได้หรือ VPN (หรือส่งเข้า collector ในเครื่องแล้วต่อด้วยช่องทางเข้ารหัส) |
 | `admin.config-audit-forward-failing` | warning | ส่งต่อประวัติการใช้งานไม่สำเร็จในช่วง 10 นาทีล่าสุด ตรวจที่อยู่ พอร์ต ไฟร์วอลล์ของปลายทาง และดู `audit-forward-failed` ใน log ของระบบ |

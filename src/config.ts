@@ -169,6 +169,12 @@ export const config = {
   sessionTtlMs: num('SESSION_TTL_HOURS', 24 * 7) * 3600_000,
   /** a signed-in session ends this long after sign-in however often it is used (never below the idle TTL); positive whole hours */
   sessionMaxMs: (Number.isInteger(Number(process.env.SESSION_MAX_HOURS)) && Number(process.env.SESSION_MAX_HOURS) > 0 ? Number(process.env.SESSION_MAX_HOURS) : 24 * 30) * 3600_000,
+  /** who must set up 2FA while the settings page has no value (the web setting wins); an invalid value is 'none' (`require2faInvalid` holds it, one warning at start) */
+  require2fa: (['none', 'admin', 'staff', 'all'].includes(process.env.REQUIRE_2FA?.trim().toLowerCase() ?? 'none') ? (process.env.REQUIRE_2FA?.trim().toLowerCase() || 'none') : 'none') as 'none' | 'admin' | 'staff' | 'all',
+  require2faInvalid: ['', 'none', 'admin', 'staff', 'all'].includes(process.env.REQUIRE_2FA?.trim().toLowerCase() ?? '') ? '' : process.env.REQUIRE_2FA!.trim(),
+  /** PUBLIC_PAGE=off: a FRESH install starts with the public page closed (only the first settings.json is made from it); invalid = on */
+  publicPageOff: process.env.PUBLIC_PAGE?.trim().toLowerCase() === 'off',
+  publicPageInvalid: ['', 'on', 'off'].includes(process.env.PUBLIC_PAGE?.trim().toLowerCase() ?? '') ? '' : process.env.PUBLIC_PAGE!.trim(),
   trashRetentionDays: num('TRASH_RETENTION_DAYS', 30),
   /** old contents of a file kept on every save (0 = off) and for how many days (0 = until pushed out by the count) */
   versionsKeep: Math.max(0, Math.floor(num('VERSIONS_KEEP', 10))),

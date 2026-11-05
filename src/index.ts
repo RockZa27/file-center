@@ -72,6 +72,8 @@ await bootstrapAdmin()
 const keyError = signingKey().error
 if (keyError) log.error('update-key-invalid', `UPDATE_PUBLIC_KEY ไม่ถูกต้อง: ${keyError} ระบบจะไม่รับแพ็กเกจอัปเดตใด ๆ จนกว่าจะแก้ค่านี้`)
 if (invalidUmask) log.warn('umask-invalid', `FC_UMASK ${invalidUmask} ไม่ถูกต้อง (ต้องเป็นเลขฐานแปด 3 หลัก เช่น 077) จึงใช้ค่าเริ่มต้น 077`)
+if (config.require2faInvalid) log.warn('require-2fa-invalid', `REQUIRE_2FA ${config.require2faInvalid} ไม่ถูกต้อง (ใช้ none, admin, staff หรือ all) จึงใช้ none คือไม่บังคับ 2FA`)
+if (config.publicPageInvalid) log.warn('public-page-invalid', `PUBLIC_PAGE ${config.publicPageInvalid} ไม่ถูกต้อง (ใช้ on หรือ off) จึงใช้ on คือเปิดหน้าสาธารณะ`)
 if (config.trustedProxiesInvalid.length) log.warn('trusted-proxies-invalid', `TRUSTED_PROXIES มีค่าที่ไม่ใช่ IP หรือช่วง IP (CIDR) จึงข้ามไป: ${config.trustedProxiesInvalid.join(', ')}`)
 if (backupKeyState().state === 'invalid') log.warn('backup-key-invalid', 'BACKUP_ENCRYPTION_KEY ไม่ถูกต้อง (ต้องเป็นข้อมูลสุ่ม 32 ไบต์แบบ base64url ยาว 43 ตัวอักษร สร้างด้วย bun src/cli.ts backup-key) จึงยังไม่เข้ารหัสไฟล์สำรองใหม่')
 if (config.updateAllowUnsigned) log.warn('update-allow-unsigned', 'UPDATE_ALLOW_UNSIGNED=true: ระบบรับแพ็กเกจอัปเดตที่ไม่เซ็น (เสี่ยง: ผู้ที่ได้ session และรหัสผ่านของ admin จะติดตั้งโค้ดของตัวเองได้)')

@@ -76,7 +76,7 @@ export const loginLockoutMs = () => {
   const s = grp('security').loginLockoutSeconds
   return s !== undefined ? s * 1000 : config.loginLockoutMs
 }
-export const require2fa = (): Require2fa => grp('security').require2fa ?? 'none'
+export const require2fa = (): Require2fa => grp('security').require2fa ?? config.require2fa
 
 /** does the setting ask this role for a second factor? */
 export function roleNeeds2fa(role: string): boolean {
@@ -223,7 +223,7 @@ export function policyView() {
       choices: SHARE_DAY_CHOICES,
     },
     security: {
-      require2fa: eff<Require2fa>(se.require2fa, 'none', null),
+      require2fa: eff<Require2fa>(se.require2fa, config.require2fa, 'REQUIRE_2FA'),
       sessionTtlHours: eff(se.sessionTtlHours, config.sessionTtlMs / 3600_000, 'SESSION_TTL_HOURS'),
       loginMaxAttempts: eff(se.loginMaxAttempts, config.loginMaxAttempts, 'LOGIN_MAX_ATTEMPTS'),
       loginLockoutSeconds: eff(se.loginLockoutSeconds, config.loginLockoutMs / 1000, 'LOGIN_LOCKOUT_SECONDS'),

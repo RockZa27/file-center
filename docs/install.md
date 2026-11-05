@@ -34,6 +34,7 @@
    - ถ้าใช้แค่ในเครื่องหรือวง LAN ให้ **ลบหรือคอมเมนต์** บรรทัด `COMPOSE_PROFILES=tunnel` (ตัวอย่างเปิด Cloudflare Tunnel ไว้)
    - ถ้าไม่ใช้ tunnel ให้ตั้ง `TRUST_PROXY=false` และลบบรรทัด `TRUSTED_PROXIES` ด้วย หรือถ้าอยู่หลัง nginx/Caddy ของคุณเองบนเครื่องเดียวกัน ให้ตั้ง `TRUST_PROXY=true` กับ `TRUSTED_PROXIES=127.0.0.1,::1`
    - อยากกำหนดรหัสผ่าน admin เอง ใส่ `ADMIN_PASSWORD=...` ก่อนเริ่มครั้งแรก
+   - `.env.example` ตั้ง `REQUIRE_2FA=staff` และ `PUBLIC_PAGE=off` ไว้ให้ ครั้งแรกที่ `admin` เข้าสู่ระบบจะถูกให้เปลี่ยนรหัสผ่านแล้วตั้ง 2FA ต่อ เตรียมแอป authenticator ไว้ด้วย
 4. สร้างและเริ่มระบบ
    ```bash
    docker compose up -d --build

@@ -9,7 +9,7 @@ import type { MessageCode } from './messages'
 import { antivirusUnreachable } from './antivirus'
 import { forwardFailing } from './audit-forward'
 import { backupKeyState } from './backup-crypt'
-import { auditForwardValues, unreadableSecrets } from './policy'
+import { auditForwardValues, roleNeeds2fa, unreadableSecrets } from './policy'
 
 export type ConfigWarning = { code: MessageCode; severity: 'warning' | 'critical' }
 
@@ -48,5 +48,7 @@ export function configWarnings(request: Request, socketIp = 'unknown'): ConfigWa
   // the initial password is the one made at the first start: the account still has to change it
   if (allUsers().some(u => u.role === 'admin' && u.mustChangePassword)) out.push({ code: 'admin.config-admin-initial-password', severity: 'critical' })
   if (unreadableSecrets().length) out.push({ code: 'admin.config-secret-unreadable', severity: 'warning' })
+  // admins sign in with a password alone (the requirement is none); it follows the settings page, so it needs no restart
+  if (!roleNeeds2fa('admin')) out.push({ code: 'admin.config-no-2fa', severity: 'warning' })
   return out
 }
