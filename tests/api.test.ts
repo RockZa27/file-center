@@ -271,7 +271,7 @@ describe('users & permissions', () => {
   test('closing public access hides the folder from visitors', async () => {
     await admin.json('PUT', '/api/admin/settings', { publicEnabled: false })
     expect((await guest.json('GET', '/api/list?space=public&path=/')).status).toBe(401)
-    await admin.json('PUT', '/api/admin/settings', { publicEnabled: true })
+    await admin.json('PUT', '/api/admin/settings', { publicEnabled: true, password: 'test-admin-pass' })
   })
   test('cannot delete the last admin or yourself', async () => {
     expect((await admin.json('DELETE', '/api/admin/users/admin')).status).toBe(400)
@@ -639,7 +639,7 @@ describe('full system: permission matrix', () => {
     expect(await run(v, 'public')).toEqual(expected(['read'], 401))
     await admin.json('PUT', '/api/admin/settings', { publicEnabled: false })
     expect(await run(v, 'public')).toEqual(expected([], 401))
-    await admin.json('PUT', '/api/admin/settings', { publicEnabled: true, guestPermissions: ['read', 'download', 'batchdownload'] })
+    await admin.json('PUT', '/api/admin/settings', { publicEnabled: true, guestPermissions: ['read', 'download', 'batchdownload'], password: 'test-admin-pass' })
   })
   test('admins may do everything, unknown spaces are refused', async () => {
     writeFileSync(storageAbs('matrix.txt'), 'matrix')
@@ -1318,7 +1318,7 @@ describe('full system: sessions & links', () => {
     try {
       expect((await guest.raw('GET', `/api/batch/${v}`)).status).toBe(401)
     } finally {
-      await admin.json('PUT', '/api/admin/settings', { publicEnabled: true })
+      await admin.json('PUT', '/api/admin/settings', { publicEnabled: true, password: 'test-admin-pass' })
     }
   })
   test('the logo still loads while a password change is pending', async () => {

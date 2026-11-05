@@ -386,14 +386,16 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     // visitors gaining the right to change things (not read/download) is as sensitive as a security setting
     const had = settings.get().guestPermissions
     const widens = Array.isArray(patch.guestPermissions) && (patch.guestPermissions as Perm[]).some(p => ['write', 'upload', 'zip'].includes(p) && !had.includes(p))
+    // so is switching the public page on
+    const opens = patch.publicEnabled === true && !settings.get().publicEnabled
     const sensitive = STEP_UP_GROUPS.some(g => (body as Record<string, unknown>)[g] !== undefined)
-    if (widens || sensitive) await confirmPassword(admin, ip, body.password ?? '', 'settings-denied')
+    if (widens || opens || sensitive) await confirmPassword(admin, ip, body.password ?? '', 'settings-denied')
     const changed = savePolicy(body as Record<string, unknown>)
     settings.update(patch)
     // the names of what changed, never a value (a password or a webhook URL is among them)
     audit({ user: admin.username, ip, action: 'settings-update', detail: [...Object.keys(patch), ...changed].join(', ') })
-    // mail and alerts decide where messages go: a changed webhook or SMTP server is worth a message to the admins
-    const security = changed.filter(k => k.startsWith('security.') || k.startsWith('mail.') || k.startsWith('alerts.') || k.startsWith('auditForward.') || k.startsWith('antivirus.'))
+    // mail and alerts decide where messages go, share rules how data leaves: a change in them is worth a message to the admins
+    const security = changed.filter(k => k.startsWith('security.') || k.startsWith('mail.') || k.startsWith('alerts.') || k.startsWith('auditForward.') || k.startsWith('antivirus.') || k.startsWith('share.'))
     if (security.length) alert('settings-security', 'admin.alert-security-changed', { user: admin.username, keys: security.join(', ') })
     return settingsView()
   })

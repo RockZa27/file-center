@@ -357,7 +357,7 @@ describe('settings: shares', () => {
   test('requirePassword: a link without a password is refused on the server', async () => {
     const c = await userWith('sp-share1', ['read', 'download', 'share'])
     const name = await file('sp-share1')
-    expect((await put({ share: { requirePassword: true } })).status).toBe(200)
+    expect((await put(withPw({ share: { requirePassword: true } }))).status).toBe(200)
     expect((await c.json('GET', '/api/session')).data.config.shareRequirePassword).toBe(true)
     const no = await c.json('POST', '/api/shares', { space: 'home', path: `/${name}`, days: 7 })
     expect([no.status, no.data.code]).toEqual([400, 'share.must-have-password'])
@@ -365,7 +365,7 @@ describe('settings: shares', () => {
     expect(empty.status).toBe(400)
     const ok = await c.json('POST', '/api/shares', { space: 'home', path: `/${name}`, days: 7, password: 'a-good-pass' })
     expect(ok.status).toBe(200)
-    await put({ share: { requirePassword: null } })
+    await put(withPw({ share: { requirePassword: null } }))
     expect((await c.json('POST', '/api/shares', { space: 'home', path: `/${name}`, days: 7 })).status).toBe(200)
   })
 
@@ -373,7 +373,7 @@ describe('settings: shares', () => {
     const c = await userWith('sp-share2', ['read', 'download', 'share'])
     const name = await file('sp-share2')
     expect((await c.json('GET', '/api/session')).data.config.shareDays).toEqual([1, 3, 7, 14, 30])
-    expect((await put({ share: { maxDays: 7, defaultDays: 3 } })).status).toBe(200)
+    expect((await put(withPw({ share: { maxDays: 7, defaultDays: 3 } }))).status).toBe(200)
     const cfg = (await c.json('GET', '/api/session')).data.config
     expect([cfg.shareDays, cfg.shareDefaultDays, cfg.shareAllowNever]).toEqual([[1, 3, 7], 3, false])
     for (const days of [14, 30, 90, 2, 0, -1]) {
@@ -384,9 +384,9 @@ describe('settings: shares', () => {
     expect(ok.status).toBe(200)
     expect(ok.data.share.neverExpires).toBe(false)
     // a longer choice than maxDays can not be the default
-    expect((await put({ share: { defaultDays: 14 } })).status).toBe(400)
+    expect((await put(withPw({ share: { defaultDays: 14 } }))).status).toBe(400)
     // the longer choices come back with a bigger maxDays
-    await put({ share: { maxDays: 90 } })
+    await put(withPw({ share: { maxDays: 90 } }))
     expect((await c.json('GET', '/api/session')).data.config.shareDays).toEqual([1, 3, 7, 14, 30, 90])
     expect((await c.json('POST', '/api/shares', { space: 'home', path: `/${name}`, days: 90 })).status).toBe(200)
   })
@@ -395,7 +395,7 @@ describe('settings: shares', () => {
     const c = await userWith('sp-share3', ['read', 'download', 'share'])
     const name = await file('sp-share3')
     expect((await c.json('POST', '/api/shares', { space: 'home', path: `/${name}`, days: 0 })).data.code).toBe('share.bad-days')
-    expect((await put({ share: { allowNever: true } })).status).toBe(200)
+    expect((await put(withPw({ share: { allowNever: true } }))).status).toBe(200)
     expect((await c.json('GET', '/api/session')).data.config.shareAllowNever).toBe(true)
     const r = await c.json('POST', '/api/shares', { space: 'home', path: `/${name}`, days: 0 })
     expect(r.status).toBe(200)
@@ -616,5 +616,37 @@ describe('config warnings', () => {
     expect(codes).toContain('update.allow-unsigned')
     expect(codes).toContain('admin.config-insecure-cookie')
     expect(codes).not.toContain('admin.config-proxy-no-headers')
+  })
+})
+
+// A stolen session must not loosen the share-link rules or open the public page without the admin's password.
+describe('step-up for share-link rules and the public page', () => {
+  const refused = (r: any) => [r.status, r.data.code]
+  const open = async (on: boolean) => { settings.update({ publicEnabled: on }) }
+
+  test('every share key asks for the password; with the right one it is saved', async () => {
+    for (const share of [{ allowNever: true }, { requirePassword: false }, { maxDays: 90 }, { viewOnly: 'allow' }, { forceWatermark: false }]) {
+      auth.clearFailures('step-up|unknown|admin') // ten misses in a row would lock the step-up
+      expect(refused(await put({ share }))).toEqual([403, 'auth.wrong-password'])
+      expect(refused(await put({ share, password: 'not-the-password' }))).toEqual([403, 'auth.wrong-password'])
+    }
+    expect(settings.get().share?.allowNever).toBeUndefined()
+    const ok = await put(withPw({ share: { allowNever: true, maxDays: 90 } }))
+    expect(ok.status).toBe(200)
+    expect(ok.data.share.allowNever).toEqual({ value: true, source: 'web' })
+    expect(settings.get().share?.maxDays).toBe(90)
+  })
+
+  test('switching the public page on asks for the password, switching it off does not', async () => {
+    await open(false)
+    expect(refused(await put({ publicEnabled: true }))).toEqual([403, 'auth.wrong-password'])
+    expect(settings.get().publicEnabled).toBe(false)
+    expect((await put(withPw({ publicEnabled: true }))).status).toBe(200)
+    expect(settings.get().publicEnabled).toBe(true)
+    expect((await put({ publicEnabled: false })).status).toBe(200)
+    expect(settings.get().publicEnabled).toBe(false)
+    // already on and sent as on again: nothing widens
+    await open(true)
+    expect((await put({ publicEnabled: true })).status).toBe(200)
   })
 })

@@ -355,8 +355,8 @@ const SPEC: Record<string, Record<string, [string, Parse]>> = {
 
 export const POLICY_GROUPS = Object.keys(SPEC)
 
-/** the groups of a request body that need the admin's password: anything that changes sign-in rules or where mail and alerts go */
-export const STEP_UP_GROUPS = ['security', 'mail', 'alerts', 'auditForward', 'antivirus']
+/** the groups of a request body that need the admin's password: anything that changes sign-in rules, where mail and alerts go, or how data may leave through share links */
+export const STEP_UP_GROUPS = ['security', 'mail', 'alerts', 'auditForward', 'antivirus', 'share']
 
 /**
  * Check every given key and save them together (nothing is saved when one is wrong). A key given as `null` goes back
