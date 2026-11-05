@@ -4,6 +4,8 @@
  * Destination over a real connection from 127.0.0.1 (app.handle() has no socket, its address is 'unknown').
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { rmSync } from 'node:fs'
+import { join } from 'node:path'
 import './in-process-env'
 import { ipInRules, parseIpList, parseIpRule } from '../src/config'
 
@@ -111,6 +113,7 @@ describe('TRUSTED_PROXIES over a real connection', () => {
   let config: typeof import('../src/config').config
   let base = ''
   let adminSecret = ''
+  let adminPasswordId = ''
   const set = (mode: 'false' | 'true', list: string) => {
     config.trustProxy = mode
     config.trustedProxies = parseIpList(list).rules
@@ -150,11 +153,21 @@ describe('TRUSTED_PROXIES over a real connection', () => {
       body: JSON.stringify({ name: 'tp', scope: 'readwrite', password: process.env.ADMIN_PASSWORD }),
     })
     expect(made.status).toBe(200)
-    adminSecret = ((await made.json()) as any).secret
+    const madeBody = (await made.json()) as any
+    adminSecret = madeBody.secret
+    adminPasswordId = madeBody.id
   })
   afterAll(async () => {
     set('false', '')
     await app.stop()
+    // every test file shares this app and DATA_DIR: leave the admin without the app password and files made here, and
+    // the address 127.0.0.1 without the failed sign-ins counted here (other files sign in from it over a real socket)
+    const { removeAppPassword } = await import('../src/app-passwords')
+    const { clearFailures } = await import('../src/auth')
+    if (adminPasswordId) removeAppPassword('admin', adminPasswordId)
+    for (const name of ['tp-a.txt', 'tp-b.txt']) rmSync(join(config.storageDir, name), { force: true })
+    clearFailures('login-address|127.0.0.1')
+    for (const user of ['tp-ghost1', 'tp-ghost2', 'tp-ghost3']) clearFailures(`login-account|${user}`)
   })
 
   test('from a socket outside the list a changing X-Forwarded-For does not dodge the login lockout', async () => {
