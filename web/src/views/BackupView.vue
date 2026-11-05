@@ -114,6 +114,14 @@
             <div class="hint muted">{{ t('backupSet.includeFilesHint') }}</div>
           </div>
 
+          <div class="field" data-testid="encryption-line">
+            <div class="label">
+              <span class="strong">{{ t('backupSet.encryption') }}</span>
+              <n-tag :type="settings.encryption ? 'success' : 'default'" size="small" round :bordered="false">{{ settings.encryption ? t('backupSet.encryptionOn') : t('backupSet.encryptionOff') }}</n-tag>
+            </div>
+            <div class="hint muted">{{ settings.encryption ? t('backupSet.encryptionOnHint') : t('backupSet.encryptionOffHint') }}</div>
+          </div>
+
           <div class="foot-actions">
             <n-button type="primary" :loading="savingSettings" data-testid="save-settings" @click="saveSettings">{{ t('common.save') }}</n-button>
           </div>
@@ -124,7 +132,7 @@
           <n-empty v-if="!items.length" :description="t('backup.none')" class="empty" />
           <div v-for="b in items" :key="b.name" class="item">
             <div class="info">
-              <div class="strong">{{ formatDate(b.createdAt) }}</div>
+              <div class="strong">{{ formatDate(b.createdAt) }} <n-tag v-if="b.encrypted" size="small" round :bordered="false" type="success" data-testid="encrypted-tag">{{ t('backup.encrypted') }}</n-tag></div>
               <div class="muted small"><span class="mono name">{{ b.name }}</span> · {{ formatBytes(b.size) }}</div>
               <div v-if="b.parts" class="parts small muted" data-testid="parts">
                 <span v-for="k in ['data', 'logs', 'storage']" v-show="b.parts[k]" :key="k" class="part">
