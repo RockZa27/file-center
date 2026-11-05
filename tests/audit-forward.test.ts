@@ -291,6 +291,31 @@ describe('webhook signature', () => {
     }
   })
 
+  test('a secret sealed under another key is warned about once, not for every audit entry (and not at all while no URL is set)', async () => {
+    const { settings } = await import('../src/settings')
+    const { paths } = await import('../src/config')
+    const lines = () => readFileSync(paths.systemLog, 'utf8').split('\n').filter(l => l.includes('settings-secret-unreadable')).length
+    const burst = async () => {
+      for (let i = 0; i < 25; i++) audit({ user: 'bob', ip: '3.3.3.3', action: 'login', target: `/n${i}` })
+      await fwd.forwardIdle()
+      await Bun.sleep(50)
+    }
+    await use({ webhookUrl: hookUrl(), webhookSecret: SECRET })
+    const sealed = settings.get().auditForward!.webhookSecretSealed!
+    settings.update({ auditForward: { ...settings.get().auditForward, webhookSecretSealed: `${sealed.slice(0, -4)}BBBB` } })
+    const before = lines()
+    await burst()
+    expect(lines() - before).toBeLessThanOrEqual(1)
+    // still nothing goes out while the saved secret can not be opened
+    expect(hookGot.length).toBe(0)
+    expect(fwd.forwardStats().lastError).toBe('webhook: secret unreadable')
+    // no URL: the secret is not even opened
+    settings.update({ auditForward: { ...settings.get().auditForward, webhookUrl: undefined, webhookSealed: undefined, webhookSecretSealed: `${sealed.slice(0, -4)}CCCC` } })
+    const mid = lines()
+    await burst()
+    expect(lines()).toBe(mid)
+  })
+
   test('a secret this server can not open: nothing is sent (not even unsigned), it is counted, and the warning lists it', async () => {
     const { settings } = await import('../src/settings')
     await use({ webhookUrl: hookUrl(), webhookSecret: SECRET })

@@ -32,12 +32,16 @@ const envSet = (name: string | null) => !!name && process.env[name] !== undefine
 const grp = <G extends 'share' | 'security' | 'files' | 'mail' | 'alerts' | 'auditForward' | 'antivirus'>(g: G): NonNullable<Settings[G]> => (settings.get()[g] ?? {}) as NonNullable<Settings[G]>
 
 /** a sealed secret opened; `null` when this server can not open it (the key is another one), which turns the feature off */
+const warnedUnreadable = new Set<string>()
 function unseal(sealed: string | undefined, what: string): string | null {
   if (sealed === undefined) return null
   if (sealed === '') return ''
   try {
     return open(sealed)
   } catch {
+    // this runs on every audit entry and request: warn once per process for a given stored value, not per call
+    if (warnedUnreadable.has(sealed)) return null
+    warnedUnreadable.add(sealed)
     log.warn('settings-secret-unreadable', `${what} ใน settings.json เปิดไม่ได้ (secret.key ไม่ตรงกัน) จึงไม่ใช้ค่านี้ ให้ตั้งใหม่ที่หน้าตั้งค่า`)
     return null
   }
@@ -138,7 +142,8 @@ export type AuditForwardValues = { syslogHost: string; syslogPort: number; syslo
 export function auditForwardValues(): AuditForwardValues {
   const a = grp('auditForward')
   const url = unseal(a.webhookSealed, 'URL ส่งต่อบันทึกกิจกรรม')
-  const secret = unseal(a.webhookSecretSealed, 'รหัสลับเซ็นชื่อ webhook ส่งต่อบันทึกกิจกรรม')
+  // no URL = nothing is signed or sent, so the secret is not opened (and not warned about) on every audit entry
+  const secret = url ? unseal(a.webhookSecretSealed, 'รหัสลับเซ็นชื่อ webhook ส่งต่อบันทึกกิจกรรม') : null
   return {
     syslogHost: a.syslogHost ?? '',
     syslogPort: a.syslogPort ?? 514,
@@ -146,7 +151,7 @@ export function auditForwardValues(): AuditForwardValues {
     syslogFacility: a.syslogFacility ?? 13,
     webhookUrl: url ?? '',
     webhookSecret: secret ?? '',
-    webhookSecretBroken: a.webhookSecretSealed !== undefined && secret === null,
+    webhookSecretBroken: !!url && a.webhookSecretSealed !== undefined && secret === null,
   }
 }
 
