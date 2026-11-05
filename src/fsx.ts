@@ -1,4 +1,4 @@
-import { closeSync, existsSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, realpathSync, renameSync, rmSync, statfsSync, statSync, writeSync } from 'node:fs'
+import { closeSync, existsSync, fchmodSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, realpathSync, renameSync, rmSync, statfsSync, statSync, writeSync } from 'node:fs'
 import { constants as FS, type Stats } from 'node:fs'
 import { copyFile, link, lstat, mkdir, readdir, readlink, rename, rm, rmdir, symlink, unlink } from 'node:fs/promises'
 import { randomBytes } from 'node:crypto'
@@ -370,6 +370,7 @@ export function writeFileAtomic(abs: string, content: string | Uint8Array) {
   const mode = statSync(target).mode & 0o7777
   const tmp = join(dirname(target), `.fc-save-${randomBytes(6).toString('hex')}`)
   const fd = openSync(tmp, 'wx', mode)
+  try { fchmodSync(fd, mode) } catch { /* a disk without modes */ } // openSync's mode is cut by the umask; the old mode is kept exactly
   try {
     const bytes = typeof content === 'string' ? Buffer.from(content) : content
     for (let at = 0; at < bytes.length;) at += writeSync(fd, bytes, at)
