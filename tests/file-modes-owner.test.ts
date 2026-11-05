@@ -115,7 +115,8 @@ try { const s = new JsonStore(${JSON.stringify(f)}, () => ({ fresh: true })); co
       chmodSync(kept, 0o600)
       expect(readFileSync(kept, 'utf8')).toBe('{"old":1}')
     } finally {
-      for (const n of readdirSync(dir)) try { chmodSync(join(dir, n), 0o600) } catch { /* gone */ }
+      // folders the subprocess made need x to be removed by a non-root user (root ignores modes)
+      for (const n of readdirSync(dir)) try { const p = join(dir, n); chmodSync(p, statSync(p).isDirectory() ? 0o700 : 0o600) } catch { /* gone */ }
       rmSync(dir, { recursive: true, force: true })
     }
   })
@@ -144,7 +145,8 @@ s.save(); await s.idle(); console.log('SAVED')`
       expect(readFileSync(keptFile, 'utf8')).toBe('{"old":1}')
       expect(JSON.parse(readFileSync(f, 'utf8'))).toEqual({ fresh: true })
     } finally {
-      for (const n of readdirSync(dir)) try { chmodSync(join(dir, n), 0o600) } catch { /* gone */ }
+      // folders the subprocess made need x to be removed by a non-root user (root ignores modes)
+      for (const n of readdirSync(dir)) try { const p = join(dir, n); chmodSync(p, statSync(p).isDirectory() ? 0o700 : 0o600) } catch { /* gone */ }
       rmSync(dir, { recursive: true, force: true })
     }
   })
