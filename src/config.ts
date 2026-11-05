@@ -1,4 +1,4 @@
-import { mkdirSync } from 'node:fs'
+import { chmodSync, mkdirSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import pkg from '../package.json'
 
@@ -20,6 +20,31 @@ function backupHour(v: string): number | null {
   if (v.trim().toLowerCase() === 'off') return null
   const h = Number(v)
   return Number.isInteger(h) && h >= 0 && h <= 23 && v.trim() !== '' ? h : 3
+}
+
+/** FC_UMASK: 3 octal digits; anything else gives the default 077 (files private to the app's account) */
+export const DEFAULT_UMASK = 0o077
+export function parseUmask(v: string | undefined): { mask: number; invalid: boolean } {
+  const t = (v ?? '').trim()
+  if (t === '') return { mask: DEFAULT_UMASK, invalid: false }
+  return /^[0-7]{3}$/.test(t) ? { mask: parseInt(t, 8), invalid: false } : { mask: DEFAULT_UMASK, invalid: true }
+}
+const umaskSetting = parseUmask(process.env.FC_UMASK)
+/** the bad FC_UMASK value (index.ts warns once at start), '' when it was fine */
+export const invalidUmask = umaskSetting.invalid ? process.env.FC_UMASK!.trim() : ''
+// before any folder or file is made, so that every file the app (and the vips / ffmpeg / app processes it starts) writes gets it
+try { process.umask(umaskSetting.mask) } catch { /* Windows */ }
+export const umask = umaskSetting.mask
+
+/**
+ * Existing installs: a top-level folder made with the old 022 is made as private as the umask says. Not recursive and
+ * never fatal (a mount the app does not own, Windows).
+ */
+export function tightenDir(p: string) {
+  try {
+    const mode = statSync(p).mode & 0o777
+    if (mode & umaskSetting.mask) chmodSync(p, mode & ~umaskSetting.mask)
+  } catch { /* EPERM etc.: keep going */ }
 }
 
 const dataDir = resolve(env('DATA_DIR', join(root, 'data')))
@@ -251,6 +276,7 @@ export function ensureDirs() {
   for (const p of [config.storageDir, config.dataDir, paths.logs, paths.trash, paths.tmp, paths.quarantine, paths.branding, paths.app, paths.publicDir]) {
     mkdirSync(p, { recursive: true })
   }
+  tightenDir(config.dataDir)
 }
 
 // stores are created while modules load, so the folders must exist before that

@@ -16,7 +16,7 @@ import { BlobReader, TextWriter, ZipReader } from '@zip.js/zip.js'
 import { dropRecordsOnDisk, planRestore } from './account-records'
 import { audit } from './audit'
 import { alert } from './alerts'
-import { config, paths } from './config'
+import { config, paths, tightenDir } from './config'
 import { bad, cleanName, conflict, ensureSpace, freeSpace, fromFsError, HttpError, notFound, within } from './fsx'
 import { restartSoon } from './lifecycle'
 import { log } from './logger'
@@ -429,6 +429,7 @@ export async function estimateBackup(includeFiles = effectiveBackup().includeFil
   if (includeFiles) parts.storage = await backupDeps.storageSize()
   const estimate = parts.data + parts.logs + parts.storage
   mkdirSync(config.backupDir, { recursive: true })
+  tightenDir(config.backupDir)
   const free = backupDeps.free(config.backupDir)
   const needed = Math.ceil(estimate * backupLimits.safety) + backupLimits.margin
   return { estimate, free, needed, ok: free === null || free >= needed, parts }
@@ -478,6 +479,7 @@ async function writeBackup(protect?: string): Promise<BackupItem> {
   const removed: string[] = []
   try {
     mkdirSync(config.backupDir, { recursive: true })
+    tightenDir(config.backupDir)
     // left over from a backup that was cut off (crash, power loss)
     for (const n of readdirSync(config.backupDir)) if (n.endsWith('.partial')) rmSync(join(config.backupDir, n), { force: true })
     // what the zip reads is the files on disk: changes still waiting in a store go in first
