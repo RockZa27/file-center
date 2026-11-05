@@ -223,7 +223,8 @@ export function policyView() {
       choices: SHARE_DAY_CHOICES,
     },
     security: {
-      require2fa: eff<Require2fa>(se.require2fa, config.require2fa, 'REQUIRE_2FA'),
+      // a REQUIRE_2FA typo falls back to 'none': the page then says default, not ".env" (the start log names the bad value)
+      require2fa: eff<Require2fa>(se.require2fa, config.require2fa, config.require2faInvalid ? null : 'REQUIRE_2FA'),
       sessionTtlHours: eff(se.sessionTtlHours, config.sessionTtlMs / 3600_000, 'SESSION_TTL_HOURS'),
       loginMaxAttempts: eff(se.loginMaxAttempts, config.loginMaxAttempts, 'LOGIN_MAX_ATTEMPTS'),
       loginLockoutSeconds: eff(se.loginLockoutSeconds, config.loginLockoutMs / 1000, 'LOGIN_LOCKOUT_SECONDS'),

@@ -104,7 +104,10 @@ describe('REQUIRE_2FA', () => {
     expect(r.require2fa).toBe('none')
     expect(r.log.filter((l: string) => l.includes('require-2fa-invalid')).length).toBe(1)
     expect(r.log.join('\n')).toContain('REQUIRE_2FA everyone ไม่ถูกต้อง')
-    expect((await probe({ REQUIRE_2FA: 'admin' })).require2fa).toBe('admin')
+    // the settings page must not say the 'none' it falls back to comes from .env
+    expect(r.view2fa).toEqual({ value: 'none', source: 'default' })
+    const ok = await probe({ REQUIRE_2FA: ' Admin ' })
+    expect([ok.require2fa, ok.view2fa]).toEqual(['admin', { value: 'admin', source: 'env' }])
     expect((await probe({})).log.filter((l: string) => l.includes('require-2fa-invalid')).length).toBe(0)
   })
 })
@@ -168,7 +171,8 @@ async function probe(env: Record<string, string>, stored?: Record<string, unknow
       const { config } = await import(${JSON.stringify(join(repo, 'src/config'))})
       const { settings } = await import(${JSON.stringify(join(repo, 'src/settings'))})
       const r = await app.handle(new Request('http://localhost/api/list?space=public'))
-      o(JSON.stringify({ require2fa: config.require2fa, publicEnabled: settings.get().publicEnabled, visitorList: r.status, log: lines.join('\\n').split('\\n').filter(Boolean) }) + '\\n')
+      const { policyView } = await import(${JSON.stringify(join(repo, 'src/policy'))})
+      o(JSON.stringify({ require2fa: config.require2fa, view2fa: policyView().security.require2fa, publicEnabled: settings.get().publicEnabled, visitorList: r.status, log: lines.join('\\n').split('\\n').filter(Boolean) }) + '\\n')
       process.exit(0)
     `)
     const proc = Bun.spawn([process.execPath, script], {
