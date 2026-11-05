@@ -9,6 +9,7 @@
  * still waiting. The webhook URL follows the same rule as the alert webhook (https, or http to this machine only,
  * no redirects) and is checked again at send time; the syslog line carries the same fields as the log file.
  */
+import { createHmac } from 'node:crypto'
 import { createSocket, type Socket } from 'node:dgram'
 import { hostname } from 'node:os'
 import { connect, type Socket as TcpSocket } from 'node:net'
@@ -90,7 +91,9 @@ export function flush(): Promise<void> {
         const v = auditForwardValues()
         await Promise.all([
           v.syslogHost ? sendSyslog(v, batch).catch(e => failure('syslog', reasonOf(e))) : null,
-          v.webhookUrl ? sendWebhook(v.webhookUrl, batch).catch(e => failure('webhook', reasonOf(e))) : null,
+          // a saved secret that can not be opened must not turn into unsigned batches the receiver would take as genuine
+          v.webhookUrl && v.webhookSecretBroken ? Promise.reject(new ForwardError('secret unreadable')).catch(e => failure('webhook', reasonOf(e)))
+            : v.webhookUrl ? sendWebhook(v.webhookUrl, batch, v.webhookSecret).catch(e => failure('webhook', reasonOf(e))) : null,
         ])
       }
     } finally { flushing = null }
@@ -160,17 +163,24 @@ async function sendSyslog(v: ReturnType<typeof auditForwardValues>, batch: Audit
 
 // ───────────── webhook ─────────────
 
-async function sendWebhook(url: string, batch: AuditEntry[]): Promise<void> {
+/** `X-FC-Signature` value: sha256= and the hex HMAC of "<timestamp>.<body>" */
+export const signWebhook = (secret: string, timestamp: string, body: string) => 'sha256=' + createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex')
+
+async function sendWebhook(url: string, batch: AuditEntry[], secret = ''): Promise<void> {
   if (!isSafeWebhookUrl(url)) throw new ForwardError('unsafe url')
   const abort = new AbortController()
   const timer = setTimeout(() => abort.abort(), FORWARD_TIMING.timeoutMs)
   try {
     const entries = batch.map(e => ({ ts: e.ts, user: e.user, ip: e.ip, action: e.action, target: e.target, detail: e.detail === undefined ? undefined : scrub(e.detail) }))
-    const res = await fetch(url, {
-      method: 'POST', redirect: 'error', signal: abort.signal,
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ event: 'audit', source: 'file-center', host: HOST, version: config.version, entries }),
-    })
+    // serialised once: the signature covers exactly the string that is sent
+    const body = JSON.stringify({ event: 'audit', source: 'file-center', host: HOST, version: config.version, entries })
+    const headers: Record<string, string> = { 'content-type': 'application/json' }
+    if (secret) {
+      const ts = String(Math.floor(Date.now() / 1000))
+      headers['x-fc-timestamp'] = ts
+      headers['x-fc-signature'] = signWebhook(secret, ts, body)
+    }
+    const res = await fetch(url, { method: 'POST', redirect: 'error', signal: abort.signal, headers, body })
     void res.body?.cancel().catch(() => {})
     if (!res.ok) throw new ForwardError(`HTTP ${res.status}`)
     success()

@@ -252,7 +252,7 @@
 | `admin.config-admin-password-env` | warning | `ADMIN_PASSWORD` ยังอยู่ใน `.env` ทั้งที่มีบัญชี admin แล้ว (ไม่มีผลแล้ว แต่รหัสผ่านค้างในไฟล์) ลบบรรทัดนี้ |
 | `admin.config-audit-syslog-plain` | warning | ตั้งส่งประวัติการใช้งานไป syslog บนเครื่องอื่น ซึ่ง UDP/TCP ไม่เข้ารหัส ชื่อผู้ใช้และ IP อ่านได้ระหว่างทาง ใช้เครือข่ายภายในที่เชื่อถือได้หรือ VPN (หรือส่งเข้า collector ในเครื่องแล้วต่อด้วยช่องทางเข้ารหัส) |
 | `admin.config-audit-forward-failing` | warning | ส่งต่อประวัติการใช้งานไม่สำเร็จในช่วง 10 นาทีล่าสุด ตรวจที่อยู่ พอร์ต ไฟร์วอลล์ของปลายทาง และดู `audit-forward-failed` ใน log ของระบบ |
-| `admin.config-secret-unreadable` | warning | รหัสผ่าน SMTP หรือ URL webhook ที่บันทึกในเว็บเปิดไม่ได้ เพราะ `secret.key` ต่างจากที่ใช้เข้ารหัส (เช่นกู้คืนบนเครื่องใหม่) วาง `secret.key` เดิมคืนใน `DATA_DIR` หรือกรอกค่าสองอย่างนี้ใหม่ในหน้าตั้งค่า ระหว่างนั้นอีเมลหรือ webhook ถูกปิด |
+| `admin.config-secret-unreadable` | warning | รหัสผ่าน SMTP URL webhook หรือรหัสลับเซ็นชื่อ webhook ส่งต่อประวัติ ที่บันทึกในเว็บเปิดไม่ได้ เพราะ `secret.key` ต่างจากที่ใช้เข้ารหัส (เช่นกู้คืนบนเครื่องใหม่) วาง `secret.key` เดิมคืนใน `DATA_DIR` หรือกรอกค่าสองอย่างนี้ใหม่ในหน้าตั้งค่า ระหว่างนั้นอีเมลหรือ webhook ถูกปิด |
 
 ### สำรองและกู้คืนข้อมูล
 
@@ -507,6 +507,20 @@
 
 - syslog เป็น RFC 5424 หนึ่งบรรทัดต่อรายการ: `<PRI>1 เวลา โฮสต์ file-center pid ACTION [fc@32473 user="…" ip="…" target="…"] รายละเอียด` ค่าใน structured data escape `"` `\` `]` และตัดอักขระควบคุมออก กันชื่อผู้ใช้หรือชื่อไฟล์ปลอมบรรทัดเพิ่ม ทาง TCP ใช้ octet-counting ตาม RFC 6587 (`ความยาว<เว้นวรรค>ข้อความ`)
 - webhook รับ `POST` JSON `{ event: "audit", source: "file-center", host, version, entries: [{ ts, user, ip, action, target, detail }] }` ชุดละไม่เกิน 50 รายการ ข้อความผ่านการตัดความลับแบบเดียวกับ log (ลิงก์แชร์ โทเคน)
+
+**เซ็นชื่อ webhook (ไม่บังคับ)** ตั้ง "รหัสลับเซ็นชื่อ webhook" (16–200 ตัวอักษร เก็บเข้ารหัสด้วย `secret.key` ไม่แสดงกลับ) แล้วทุกคำขอจะมีหัว `X-FC-Timestamp` (เวลา unix วินาที) และ `X-FC-Signature: sha256=<hex>` ซึ่งเป็น HMAC-SHA256 ของข้อความ `<timestamp>.<body ดิบที่รับมา>` ด้วยรหัสลับนั้น ผู้รับต้องคำนวณซ้ำจาก body ดิบ (ก่อน parse JSON) เทียบแบบ constant-time และปฏิเสธเมื่อ timestamp เก่ากว่าประมาณ 5 นาที เพื่อกันคนที่รู้ URL ยัดรายการปลอมหรือส่งชุดเก่าซ้ำ ตัวอย่าง Node:
+
+```js
+import { createHmac, timingSafeEqual } from 'node:crypto'
+function verify(secret, headers, rawBody) {
+  const ts = headers['x-fc-timestamp'], sig = Buffer.from(headers['x-fc-signature'] ?? '')
+  if (!ts || Math.abs(Date.now() / 1000 - Number(ts)) > 300) return false
+  const want = Buffer.from('sha256=' + createHmac('sha256', secret).update(`${ts}.${rawBody}`).digest('hex'))
+  return sig.length === want.length && timingSafeEqual(sig, want)
+}
+```
+
+ถ้าไม่ตั้งรหัสลับ จะไม่มีหัวเหล่านี้ (เหมือนเดิม) ถ้ารหัสลับที่บันทึกไว้เปิดไม่ได้ (เช่น กู้ `settings.json` มาบนเครื่องที่ `secret.key` ต่างกัน) ระบบจะ **ไม่ส่ง webhook** แทนที่จะส่งชุดที่ไม่เซ็นชื่อ นับเป็นการส่งไม่สำเร็จ และมีคำเตือน `admin.config-secret-unreadable` ให้ตั้งรหัสลับใหม่ที่หน้าตั้งค่า
 
 **ความปลอดภัยและข้อจำกัด**
 

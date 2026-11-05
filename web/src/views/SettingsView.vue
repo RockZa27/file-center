@@ -238,6 +238,9 @@
                   <div v-if="srv.auditForward.webhookUrl.value" class="muted help-s mono wrapany">{{ t('settings.alerts.current') }} {{ srv.auditForward.webhookUrl.value }}</div>
                 </template>
               </setting-row>
+              <setting-row v-bind="rowProps('auditForward.webhookSecret')" :label="t('settings.auditForward.webhookSecret')" :help="t('settings.auditForward.webhookSecretHelp')" @reset="reset('auditForward.webhookSecret')" @undo="undo('auditForward.webhookSecret')">
+                <n-input v-model:value="f['auditForward.webhookSecret']" type="password" show-password-on="click" :disabled="resets.includes('auditForward.webhookSecret')" :placeholder="srv.auditForward.webhookSecretSet ? t('settings.mail.passSet') : ''" class="ctl" :input-props="{ autocomplete: 'new-password', name: 'audit-hook-secret' }" />
+              </setting-row>
             </section>
           </template>
 
@@ -353,13 +356,13 @@ const GROUPED = {
   files: ['uploadMaxSize', 'defaultQuotaBytes', 'thumbnails', 'webdav', ...FILE_NUMBERS],
   mail: ['host', 'port', 'secure', 'user', 'pass', 'from'],
   alerts: ['webhookUrl', 'kind', 'telegramChatId', 'lang'],
-  auditForward: ['syslogHost', 'syslogPort', 'syslogProto', 'syslogFacility', 'webhookUrl'],
+  auditForward: ['syslogHost', 'syslogPort', 'syslogProto', 'syslogFacility', 'webhookUrl', 'webhookSecret'],
   antivirus: ['enabled', 'host', 'port', 'timeoutSeconds', 'maxScanMb', 'onErrorLinks', 'onErrorUsers'],
 }
 const CAT_OF = { appName: 'general', primaryColor: 'general', guestPermissions: 'public', welcomeTitle: 'public', welcomeText: 'public', publicEmptyText: 'public', publicEnabled: 'public', share: 'share', security: 'security', files: 'files', mail: 'mail', alerts: 'mail', auditForward: 'mail', antivirus: 'antivirus' }
 const catOfPath = p => CAT_OF[p.includes('.') ? p.split('.')[0] : p]
 // never shown back: a blank box means "keep what is there"
-const WRITE_ONLY = ['mail.pass', 'alerts.webhookUrl', 'auditForward.webhookUrl']
+const WRITE_ONLY = ['mail.pass', 'alerts.webhookUrl', 'auditForward.webhookUrl', 'auditForward.webhookSecret']
 const ALL_PATHS = [...FLAT, 'guestPermissions', ...Object.entries(GROUPED).flatMap(([g, ks]) => ks.map(k => `${g}.${k}`))]
 
 const { t } = useI18n()

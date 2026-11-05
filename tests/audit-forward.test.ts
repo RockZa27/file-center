@@ -6,6 +6,8 @@
  */
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import { createSocket, type Socket } from 'node:dgram'
+import { createHmac, timingSafeEqual } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import { createServer, type Server } from 'node:net'
 import './in-process-env'
 
@@ -39,7 +41,7 @@ const save = (auditForward: Record<string, unknown>, password: string | null = p
   admin.json('PUT', '/api/admin/settings', { auditForward, ...(password ? { password } : {}) })
 /** save the destination, then forget the settings-update entry that this very save forwarded */
 const use = async (cfg: Record<string, unknown>) => { const r = await save(cfg); await fwd.forwardIdle(); await Bun.sleep(30); fwd.resetForwarding(); udpGot.length = 0; tcpGot.length = 0; hookGot.length = 0; return r }
-const clear = () => save({ syslogHost: null, syslogPort: null, syslogProto: null, syslogFacility: null, webhookUrl: null })
+const clear = () => save({ syslogHost: null, syslogPort: null, syslogProto: null, syslogFacility: null, webhookUrl: null, webhookSecret: null })
 const wait = async (cond: () => boolean, ms = 3000) => { const end = Date.now() + ms; while (!cond() && Date.now() < end) await Bun.sleep(10) }
 
 // ── receivers
@@ -69,7 +71,8 @@ beforeAll(async () => {
     async fetch(req) {
       const url = new URL(req.url)
       if (url.pathname === '/redirect') return new Response(null, { status: 302, headers: { location: hookUrl('/h') } })
-      hookGot.push({ path: url.pathname, body: await req.json().catch(() => null) })
+      const raw = await req.text()
+      hookGot.push({ path: url.pathname, raw, headers: req.headers, body: (() => { try { return JSON.parse(raw) } catch { return null } })() })
       return hookAnswer()
     },
   })
@@ -207,6 +210,84 @@ describe('webhook', () => {
     await fwd.forwardIdle()
     expect(hookGot).toHaveLength(0)
     expect(udpGot).toHaveLength(0)
+  })
+})
+
+describe('webhook signature', () => {
+  const SECRET = 'hmac-s3cret-for-the-siem-ZZ9'
+  /** what a receiver does: recompute over the raw body, constant-time compare, reject an old timestamp */
+  const verifies = (g: any, secret: string) => {
+    const ts = g.headers.get('x-fc-timestamp') as string
+    const sig = Buffer.from(g.headers.get('x-fc-signature') ?? '')
+    const want = Buffer.from('sha256=' + createHmac('sha256', secret).update(`${ts}.${g.raw}`).digest('hex'))
+    return /^\d+$/.test(ts) && Math.abs(Date.now() / 1000 - Number(ts)) < 300 && sig.length === want.length && timingSafeEqual(sig, want)
+  }
+
+  test('with a secret every batch carries X-FC-Timestamp and an X-FC-Signature that verifies against the raw body', async () => {
+    expect((await save({ webhookUrl: hookUrl(), webhookSecret: SECRET })).status).toBe(200)
+    audit({ user: 'bob', ip: '3.3.3.3', action: 'delete', target: '/g' })
+    await fwd.forwardIdle()
+    await wait(() => hookGot.some(g => g.raw.includes('"delete"')))
+    const g = hookGot.find(x => x.raw.includes('"delete"'))
+    expect(g.headers.get('x-fc-signature')).toMatch(/^sha256=[0-9a-f]{64}$/)
+    expect(verifies(g, SECRET)).toBe(true)
+    expect(verifies(g, SECRET + 'x')).toBe(false)
+    expect(verifies({ ...g, raw: g.raw.replace('delete', 'forged') }, SECRET)).toBe(false)
+  })
+
+  test('without a secret there are no signature headers', async () => {
+    expect((await save({ webhookUrl: hookUrl() })).status).toBe(200)
+    audit({ user: 'bob', ip: '3.3.3.3', action: 'delete', target: '/g' })
+    await fwd.forwardIdle()
+    await wait(() => hookGot.length > 0)
+    expect(hookGot.length).toBeGreaterThan(0)
+    for (const g of hookGot) {
+      expect(g.headers.get('x-fc-signature')).toBeNull()
+      expect(g.headers.get('x-fc-timestamp')).toBeNull()
+    }
+  })
+
+  test('the secret is never shown, stored in clear text or logged; a short or odd one is refused', async () => {
+    for (const bad of ['short', 'a'.repeat(15), 'a'.repeat(201), 'tab\there-is-long-enough', 'é'.repeat(20), 5, true]) {
+      const r = await save({ webhookSecret: bad })
+      expect(r.status).toBe(400)
+      expect(r.data.code).toBe('admin.bad-setting')
+    }
+    const ok = await save({ webhookUrl: hookUrl(), webhookSecret: SECRET })
+    expect(ok.status).toBe(200)
+    expect(ok.data.auditForward.webhookSecretSet).toBe(true)
+    expect(JSON.stringify(ok.data)).not.toContain(SECRET)
+    expect(JSON.stringify((await admin.json('GET', '/api/admin/settings')).data)).not.toContain(SECRET)
+    audit({ user: 'bob', ip: '3.3.3.3', action: 'delete', target: '/g' })
+    await fwd.forwardIdle()
+    const { paths } = await import('../src/config')
+    await (await import('../src/settings')).settings.idle()
+    const raw = readFileSync(paths.settings, 'utf8')
+    expect(raw).not.toContain(SECRET)
+    expect(JSON.parse(raw).auditForward.webhookSecretSealed).toBeTruthy()
+    const all = [readFileSync(paths.audit, 'utf8'), readFileSync(paths.systemLog, 'utf8'), JSON.stringify((await admin.json('GET', '/api/admin/activity?pageSize=100')).data), JSON.stringify((await admin.json('GET', '/api/admin/logs')).data)]
+    for (const t of all) expect(t).not.toContain(SECRET)
+    expect(all[2]).toContain('auditForward.webhookSecret')
+    expect(JSON.stringify(hookGot.map(g => g.raw))).not.toContain(SECRET)
+    // resetting removes it: unsigned again
+    expect((await save({ webhookSecret: null })).status).toBe(200)
+    expect((await admin.json('GET', '/api/admin/settings')).data.auditForward.webhookSecretSet).toBe(false)
+  })
+
+  test('a secret this server can not open: nothing is sent (not even unsigned), it is counted, and the warning lists it', async () => {
+    const { settings } = await import('../src/settings')
+    await use({ webhookUrl: hookUrl(), webhookSecret: SECRET })
+    const sealed = settings.get().auditForward!.webhookSecretSealed!
+    settings.update({ auditForward: { ...settings.get().auditForward, webhookSecretSealed: `${sealed.slice(0, -4)}AAAA` } })
+    audit({ user: 'bob', ip: '3.3.3.3', action: 'delete', target: '/g' })
+    await fwd.forwardIdle()
+    await Bun.sleep(50)
+    expect(hookGot.length).toBe(0)
+    expect(fwd.forwardStats().failed).toBeGreaterThan(0)
+    expect(fwd.forwardStats().lastError).toBe('webhook: secret unreadable')
+    const w = (await admin.json('GET', '/api/admin/config-warnings')).data.items.map((i: any) => i.code)
+    expect(w).toContain('admin.config-secret-unreadable')
+    expect(w).toContain('admin.config-audit-forward-failing')
   })
 })
 

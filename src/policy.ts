@@ -131,17 +131,22 @@ export const alertLang = () => grp('alerts').lang ?? config.alertLang
 
 // ───────────── audit forwarding ─────────────
 
-export type AuditForwardValues = { syslogHost: string; syslogPort: number; syslogProto: 'udp' | 'tcp'; syslogFacility: number; webhookUrl: string }
+export type AuditForwardValues = { syslogHost: string; syslogPort: number; syslogProto: 'udp' | 'tcp'; syslogFacility: number; webhookUrl: string
+  /** signing secret for the webhook ('' = unsigned); `webhookSecretBroken` = one is saved but secret.key can not open it, so nothing may be sent */
+  webhookSecret: string; webhookSecretBroken: boolean }
 /** web settings only (no env fallback): off until an admin sets a destination */
 export function auditForwardValues(): AuditForwardValues {
   const a = grp('auditForward')
   const url = unseal(a.webhookSealed, 'URL ส่งต่อบันทึกกิจกรรม')
+  const secret = unseal(a.webhookSecretSealed, 'รหัสลับเซ็นชื่อ webhook ส่งต่อบันทึกกิจกรรม')
   return {
     syslogHost: a.syslogHost ?? '',
     syslogPort: a.syslogPort ?? 514,
     syslogProto: a.syslogProto ?? 'udp',
     syslogFacility: a.syslogFacility ?? 13,
     webhookUrl: url ?? '',
+    webhookSecret: secret ?? '',
+    webhookSecretBroken: a.webhookSecretSealed !== undefined && secret === null,
   }
 }
 
@@ -174,6 +179,7 @@ export function unreadableSecrets(): string[] {
   probe(grp('mail').passSealed, 'mail.pass')
   probe(grp('alerts').webhookSealed, 'alerts.webhookUrl')
   probe(grp('auditForward').webhookSealed, 'auditForward.webhookUrl')
+  probe(grp('auditForward').webhookSecretSealed, 'auditForward.webhookSecret')
   return out
 }
 
@@ -260,6 +266,8 @@ export function policyView() {
       syslogProto: eff<'udp' | 'tcp'>(af.syslogProto, afv.syslogProto, null),
       syslogFacility: eff(af.syslogFacility, afv.syslogFacility, null),
       webhookUrl: { value: maskUrl(afv.webhookUrl), source: (af.webhookSealed !== undefined ? 'web' : 'default') as Source },
+      /** the secret itself is never sent */
+      webhookSecretSet: !!af.webhookSecretSealed,
     },
   }
 }
@@ -350,6 +358,8 @@ const SPEC: Record<string, Record<string, [string, Parse]>> = {
     syslogProto: ['syslogProto', oneOf('udp', 'tcp')],
     syslogFacility: ['syslogFacility', int(0, 23)],
     webhookUrl: ['webhookSealed', (v, k) => { const s = webhook(v, k) as string; return s ? seal(s) : '' }],
+    // signs every webhook batch (X-FC-Signature); empty = unsigned
+    webhookSecret: ['webhookSecretSealed', (v, k) => { if (typeof v !== 'string' || (v !== '' && !/^[\x20-\x7e]{16,200}$/.test(v))) throw fail(k); return v ? seal(v) : '' }],
   },
 }
 
