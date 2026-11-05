@@ -27,8 +27,8 @@ export const appPasswordRoutes = new Elysia({ prefix: '/api/me/app-passwords' })
     if (!name || name.length > 60) throw bad('auth.app-password-bad-name')
     if (body.scope !== 'read' && body.scope !== 'readwrite') throw bad('auth.app-password-bad-scope')
     // how long it lives: one of the offered lifetimes, or 0 / none = until it is deleted
-    const days = body.days ?? 0
-    if (!LIFETIMES.includes(days)) throw bad('auth.app-password-bad-days')
+    const days: unknown = body.days ?? 0
+    if (typeof days !== 'number' || !LIFETIMES.includes(days)) throw bad('auth.app-password-bad-days')
     if (appPasswordsOf(u.username).length >= APP_PASSWORDS_PER_USER) throw bad('auth.app-password-limit', { max: APP_PASSWORDS_PER_USER })
     await confirmPassword(u, ip, body.password, 'app-password-denied')
     const { item, secret } = await createAppPassword(u, name, body.scope, days)
