@@ -62,8 +62,12 @@ export type BackupStatus = {
 // past QUARANTINE_DAYS and grow by up to QUARANTINE_MAX_MB
 const SKIP = new Set(['tmp', 'trash', 'versions', 'thumbs', 'app', 'sessions.json', 'backup-status.json', 'stats-cache.json', 'cli-changed', 'secret.key', 'office-links.key', 'app-passwords.json', 'quarantine'])
 // search.db* (the search index and its WAL files) is rebuilt from the disk
-// a skipped file moved aside (sessions.json.unreadable-<ms> from an unreadable file, .broken-<ms> from a damaged one) stays out too
-const skipped = (n: string) => SKIP.has(n) || SKIP.has(n.replace(/\.(?:unreadable|broken)-\d+$/, ''))
+// a skipped file moved aside (sessions.json.broken-<ms> from a damaged one) stays out too. A .broken- copy of anything else is
+// readable and holds data an admin may want back, so it goes in. Any <name>.unreadable-<ms> stays out whatever its name: the
+// app could not read that file (the move keeps its owner and mode), so the zip would fail on it and every backup with it;
+// it is kept only for the operator to recover by hand
+const UNREADABLE_COPY = /\.unreadable-\d+$/
+const skipped = (n: string) => SKIP.has(n) || UNREADABLE_COPY.test(n) || SKIP.has(n.replace(/\.broken-\d+$/, ''))
 const SEARCH_DB = /^search\.db(?:-wal|-shm|-journal)?$/
 // of the logs only the current activity and system log go in: rotated ones, access.log and launcher.log stay out
 const LOGS_KEPT = new Set(['logs/', 'logs/audit.log', 'logs/system.log'])

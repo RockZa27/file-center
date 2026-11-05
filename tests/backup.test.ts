@@ -70,6 +70,24 @@ describe('backups (API)', () => {
     }
   })
 
+  test('an .unreadable- copy of any data file stays out of a backup, a .broken- copy of a kept one goes in', async () => {
+    // root reads mode 000 files, so the zip would not fail here: assert on the entries instead
+    const gone = 'notifications.json.unreadable-1700000000000'
+    const kept = 'users.json.broken-1700000000000'
+    writeFileSync(join(config.dataDir, gone), '{"items":[]}', { mode: 0o000 })
+    writeFileSync(join(config.dataDir, kept), '{"users":[]}')
+    try {
+      const made = await admin.json('POST', '/api/admin/backups')
+      expect(made.status).toBe(200)
+      const files = Object.keys(await zipOf(admin, made.data.name))
+      expect(files).not.toContain(gone)
+      expect(files).toContain(kept)
+    } finally {
+      rmSync(join(config.dataDir, gone), { force: true })
+      rmSync(join(config.dataDir, kept), { force: true })
+    }
+  })
+
   test('create, list and download a backup', async () => {
     writeFileSync(join(paths.logs, 'audit.log.1'), '{"rotated":true}\n')
     ;(await import('../src/secret-box')).seal('2fa secret') // makes secret.key
