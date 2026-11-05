@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto'
 import { Elysia, NotFound, ParseError, ValidationError } from 'elysia'
 import { accessFor, canManage, getSession, isStaff, reloadIfChangedByCli, type Access, type Session, type User, findUser } from './auth'
 import { config } from './config'
@@ -77,6 +78,13 @@ export function errorPage(status: number, lang: Lang, code: MessageCode, params:
   return new Response(html, { status, headers: { ...ERROR_PAGE_HEADERS, 'X-Error-Code': code } })
 }
 
+// constant-time compare, so the time of a refusal tells nothing about how much of the token matched
+function sameToken(got: string, want: string): boolean {
+  const a = Buffer.from(got)
+  const b = Buffer.from(want)
+  return a.length === b.length && timingSafeEqual(a, b)
+}
+
 /** Per-request context: who is calling, their session, and uniform JSON errors (a small page for download links). */
 export const context = new Elysia({ name: 'context' })
   .onError({ as: 'global' }, ({ error, set, request }) => {
@@ -123,7 +131,7 @@ export const context = new Elysia({ name: 'context' })
     if (request.method === 'POST' && CSRF_EXEMPT.test(pathname)) return
     if (VISITOR_UPLOAD.test(pathname)) return
     const token = request.headers.get('x-csrf-token')
-    if (!session || !token || token !== session.csrf) throw new HttpError(403, 'csrf')
+    if (!session || !token || !sameToken(token, session.csrf)) throw new HttpError(403, 'csrf')
   })
   .onBeforeHandle({ as: 'global' }, ({ request, user }) => {
     // an account with a handed-out password may only change it (or leave) before anything else
