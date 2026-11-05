@@ -64,4 +64,13 @@ describe('backup folder litter', () => {
     expect(existsSync(join(dir, old))).toBe(true)
     await running
   })
+
+  test('the sidecar sweep removes an orphan of ours and leaves other *.zip.enc.json alone', async () => {
+    writeFileSync(join(dir, 'notes.zip.enc.json'), '{}')
+    writeFileSync(join(dir, 'file-center-backup-20200101-000000.zip.enc.json'), '{}')
+    await backup.runBackup()
+    const left = readdirSync(dir)
+    expect(left).toContain('notes.zip.enc.json')
+    expect(left).not.toContain('file-center-backup-20200101-000000.zip.enc.json')
+  })
 })

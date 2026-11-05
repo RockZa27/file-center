@@ -597,7 +597,7 @@ async function writeBackup(protect?: string): Promise<BackupItem> {
     }
     // a sidecar whose backup is gone (deleted by hand) is only litter
     const left = new Set(readdirSync(config.backupDir))
-    for (const n of left) if (n.endsWith('.zip.enc.json') && !left.has(n.slice(0, -5))) rmSync(join(config.backupDir, n), { force: true })
+    for (const n of left) if (n.endsWith('.zip.enc.json') && BACKUP_NAME_RE.test(n.slice(0, -5)) && !left.has(n.slice(0, -5))) rmSync(join(config.backupDir, n), { force: true })
     const size = statSync(target).size
     writeStatus({ status: 'ok', lastSuccess: attempt, lastAttempt: attempt, code: 'backup.done', params: {}, file: name, size })
     return { name, size, createdAt: attempt, parts: JSON.parse(JSON.stringify(parts)), encrypted: keyState.state === 'on' }
