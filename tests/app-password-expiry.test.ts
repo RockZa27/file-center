@@ -2,7 +2,7 @@
  * Optional lifetime of an app password (src/app-passwords.ts, src/routes/app-passwords.ts): an expired one does not sign
  * in to WebDAV, not even from the one-minute cache, and an old record without the field goes on working. Users: "ax-".
  */
-import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 import './in-process-env'
@@ -159,6 +159,8 @@ describe('expired app password and the WebDAV lockout', () => {
     const auth = require('../src/auth') as typeof import('../src/auth')
     for (const ip of ips) { auth.clearFailures(`dav-address|${ip}`); for (const u of names) auth.clearFailures(`dav|${ip}|${u}`) }
   }
+  // also when an expectation fails: leaked counters would turn later tests into unrelated 429s
+  afterEach(wipeFailures)
 
   test('many requests with an expired secret are all 401 and lock neither the user nor the address', async () => {
     const a = await expiredPair('ax-lock')
@@ -207,7 +209,6 @@ describe('expired app password and the WebDAV lockout', () => {
     expect(await code('ax-del', a.old.data.secret)).toBe('401 auth.app-password-expired') // cached
     pw.removeAppPassword('ax-del', a.old.data.id)
     expect(await code('ax-del', a.old.data.secret)).toBe('401 auth.bad-credentials')
-    wipeFailures()
   })
 
   test('an expired secret writes one audit line a minute, not one per request', async () => {
@@ -215,8 +216,7 @@ describe('expired app password and the WebDAV lockout', () => {
     for (let i = 0; i < 10; i++) await code('ax-audit2', a.old.data.secret)
     const lines = Array.from(auditMod.auditEntries()).filter(e => e.user === 'ax-audit2' && e.action === 'login-failed' && e.detail?.includes('หมดอายุ'))
     expect(lines.length).toBe(1)
-    expect(lines[0].detail).toContain('n')
+    expect(lines[0].detail).toBe('WebDAV: รหัสผ่านแอป n หมดอายุ')
     expect(JSON.stringify(lines)).not.toContain(a.old.data.secret)
-    wipeFailures()
   })
 })
