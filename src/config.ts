@@ -314,7 +314,9 @@ export const config = {
   clamavTimeoutSeconds: num('CLAMAV_TIMEOUT_SECONDS', 60),
   clamavMaxScanMb: num('CLAMAV_MAX_SCAN_MB', 25),
   clamavOnErrorLinks: (env('CLAMAV_ON_ERROR_LINKS', 'reject').trim().toLowerCase() === 'allow' ? 'allow' : 'reject') as 'allow' | 'reject',
-  clamavOnErrorUsers: (env('CLAMAV_ON_ERROR_USERS', 'allow').trim().toLowerCase() === 'reject' ? 'reject' : 'allow') as 'allow' | 'reject',
+  clamavOnErrorUsers: (env('CLAMAV_ON_ERROR_USERS', 'reject').trim().toLowerCase() === 'allow' ? 'allow' : 'reject') as 'allow' | 'reject',
+  /** a file over CLAMAV_MAX_SCAN_MB is not a scanner failure: this decides it for every sender */
+  clamavOnTooBig: (env('CLAMAV_ON_TOO_BIG', 'allow').trim().toLowerCase() === 'reject' ? 'reject' : 'allow') as 'allow' | 'reject',
   /** quarantined files are deleted after this many days, and the oldest go first when they take more than the cap */
   quarantineDays: Math.max(1, Math.floor(num('QUARANTINE_DAYS', 30))),
   quarantineMaxBytes: Math.max(0, num('QUARANTINE_MAX_MB', 2048)) * 1024 ** 2,

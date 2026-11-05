@@ -109,7 +109,7 @@ function failure(request: Request, err: unknown): Response {
   const known = fromFsError(err)
   if (known) {
     if (!(err instanceof HttpError)) log.warn('fs-error', { method: request.method, path: safePath(request.url), error: (err as Error).message.slice(0, 300) })
-    return reply(request, known.status, known.code, known.params, known.status === 401 ? { 'WWW-Authenticate': CHALLENGE } : {})
+    return reply(request, known.status, known.code, known.params, known.status === 401 ? { 'WWW-Authenticate': CHALLENGE } : known.status === 503 ? { 'Retry-After': '3' } : {})
   }
   log.error('request-failed', { method: request.method, path: safePath(request.url), error: err })
   return reply(request, 500, 'request.internal')

@@ -264,6 +264,9 @@
               <setting-row v-bind="rowProps('antivirus.maxScanMb')" :label="t('settings.antivirus.maxScanMb')" :help="t('settings.antivirus.maxScanMbHelp')" @reset="reset('antivirus.maxScanMb')" @undo="undo('antivirus.maxScanMb')">
                 <n-input-number v-model:value="f['antivirus.maxScanMb']" :min="1" :max="4096" :precision="0" :show-button="false" :disabled="resets.includes('antivirus.maxScanMb')" class="ctl"><template #suffix>MB</template></n-input-number>
               </setting-row>
+              <setting-row v-bind="rowProps('antivirus.onTooBig')" :label="t('settings.antivirus.onTooBig')" :help="t('settings.antivirus.onTooBigHelp')" @reset="reset('antivirus.onTooBig')" @undo="undo('antivirus.onTooBig')">
+                <n-select v-model:value="f['antivirus.onTooBig']" :options="onErrorOptions" :disabled="resets.includes('antivirus.onTooBig')" class="ctl" />
+              </setting-row>
               <setting-row v-bind="rowProps('antivirus.onErrorLinks')" :label="t('settings.antivirus.onErrorLinks')" :help="t('settings.antivirus.onErrorLinksHelp')" @reset="reset('antivirus.onErrorLinks')" @undo="undo('antivirus.onErrorLinks')">
                 <n-select v-model:value="f['antivirus.onErrorLinks']" :options="onErrorOptions" :disabled="resets.includes('antivirus.onErrorLinks')" class="ctl" />
               </setting-row>
@@ -357,7 +360,7 @@ const GROUPED = {
   mail: ['host', 'port', 'secure', 'user', 'pass', 'from'],
   alerts: ['webhookUrl', 'kind', 'telegramChatId', 'lang'],
   auditForward: ['syslogHost', 'syslogPort', 'syslogProto', 'syslogFacility', 'webhookUrl', 'webhookSecret'],
-  antivirus: ['enabled', 'host', 'port', 'timeoutSeconds', 'maxScanMb', 'onErrorLinks', 'onErrorUsers'],
+  antivirus: ['enabled', 'host', 'port', 'timeoutSeconds', 'maxScanMb', 'onTooBig', 'onErrorLinks', 'onErrorUsers'],
 }
 const CAT_OF = { appName: 'general', primaryColor: 'general', guestPermissions: 'public', welcomeTitle: 'public', welcomeText: 'public', publicEmptyText: 'public', publicEnabled: 'public', share: 'share', security: 'security', files: 'files', mail: 'mail', alerts: 'mail', auditForward: 'mail', antivirus: 'antivirus' }
 const catOfPath = p => CAT_OF[p.includes('.') ? p.split('.')[0] : p]

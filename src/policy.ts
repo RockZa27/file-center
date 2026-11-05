@@ -159,7 +159,7 @@ export function auditForwardValues(): AuditForwardValues {
 
 export type AntivirusValues = {
   enabled: boolean; host: string; port: number; timeoutMs: number; maxScanBytes: number
-  onErrorLinks: 'allow' | 'reject'; onErrorUsers: 'allow' | 'reject'
+  onErrorLinks: 'allow' | 'reject'; onErrorUsers: 'allow' | 'reject'; onTooBig: 'allow' | 'reject'
 }
 export function antivirusValues(): AntivirusValues {
   const a = grp('antivirus')
@@ -171,6 +171,7 @@ export function antivirusValues(): AntivirusValues {
     maxScanBytes: Math.floor((a.maxScanMb ?? config.clamavMaxScanMb) * 1024 ** 2),
     onErrorLinks: a.onErrorLinks ?? config.clamavOnErrorLinks,
     onErrorUsers: a.onErrorUsers ?? config.clamavOnErrorUsers,
+    onTooBig: a.onTooBig ?? config.clamavOnTooBig,
   }
 }
 
@@ -265,6 +266,7 @@ export function policyView() {
       maxScanMb: eff(av2.maxScanMb, config.clamavMaxScanMb, 'CLAMAV_MAX_SCAN_MB'),
       onErrorLinks: eff(av2.onErrorLinks, config.clamavOnErrorLinks, 'CLAMAV_ON_ERROR_LINKS'),
       onErrorUsers: eff(av2.onErrorUsers, config.clamavOnErrorUsers, 'CLAMAV_ON_ERROR_USERS'),
+      onTooBig: eff(av2.onTooBig, config.clamavOnTooBig, 'CLAMAV_ON_TOO_BIG'),
     },
     auditForward: {
       syslogHost: eff(af.syslogHost, afv.syslogHost, null),
@@ -325,6 +327,7 @@ const SPEC: Record<string, Record<string, [string, Parse]>> = {
     maxScanMb: ['maxScanMb', int(1, 4096)],
     onErrorLinks: ['onErrorLinks', oneOf('allow', 'reject')],
     onErrorUsers: ['onErrorUsers', oneOf('allow', 'reject')],
+    onTooBig: ['onTooBig', oneOf('allow', 'reject')],
   },
   security: {
     require2fa: ['require2fa', oneOf('none', 'admin', 'staff', 'all')],

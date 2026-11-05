@@ -8,8 +8,9 @@
  * storage, an infected one goes to the quarantine folder (paths.quarantine, under the system data, in no route's reach
  * except the admin's list) and never to the storage.
  *
- * A scan that could not be done (clamd unreachable, a timeout, an ERROR answer, a file over the scan size) is decided by
- * the policy for who sent the file: `reject` for upload links and visitors by default, `allow` for signed-in users.
+ * Two separate decisions when a file is not scanned. A file over the scan size is decided by `onTooBig` for every sender
+ * (default allow, with a `virus-scan-skipped` audit line). A scan that failed (clamd unreachable, a timeout, an ERROR
+ * answer) is decided by the policy for who sent the file: `reject` by default for upload links, visitors and signed-in users.
  * What clamd answers is never shown to the uploader; only the catalog message is. The signature name goes to the audit
  * trail and the admin alert.
  */
@@ -189,6 +190,7 @@ export function verdict(r: ScanResult, who: Audience): 'allow' | 'infected' | 'r
   if (r.status === 'infected') return 'infected'
   if (r.status !== 'error') return 'allow'
   const v = policy.antivirusValues()
+  if (r.reason === 'too-big') return v.onTooBig === 'reject' ? 'rejected' : 'allow'
   return (who === 'link' ? v.onErrorLinks : v.onErrorUsers) === 'reject' ? 'rejected' : 'allow'
 }
 
@@ -322,7 +324,15 @@ export async function gate(file: string, o: Origin): Promise<void> {
   if (!antivirusOn()) return
   const r = await scanFile(file)
   const v = verdict(r, o.who)
-  if (v === 'allow') return
+  if (v === 'allow') {
+    // an unscanned big file went in: leave a trace so the admin can see it
+    if (r.status === 'error' && r.reason === 'too-big') {
+      let size = 0
+      try { size = statSync(file).size } catch { /* gone */ }
+      audit({ user: o.by, ip: o.ip, action: 'virus-scan-skipped', target: storagePath(o.destDir), detail: `too-big: ${size} bytes > ${policy.antivirusValues().maxScanBytes} bytes: ${o.name.slice(0, 200)} (${o.via})` })
+    }
+    return
+  }
   if (v === 'infected' && r.status === 'infected') {
     let meta: QuarantineMeta | null = null
     try {

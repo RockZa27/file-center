@@ -130,6 +130,10 @@ async function upload(c: Client, name: string, data: Uint8Array | string, dir = 
 const scanOn = (extra: Record<string, unknown> = {}) =>
   settings.update({ antivirus: { enabled: true, host: '127.0.0.1', port, timeoutSeconds: 5, maxScanMb: 25, onErrorLinks: 'reject', onErrorUsers: 'allow', ...extra } as any })
 
+/** only what the scanner needs to be reached: every policy stays at its default */
+const scanDefaults = (extra: Record<string, unknown> = {}) =>
+  settings.update({ antivirus: { enabled: true, host: '127.0.0.1', port, timeoutSeconds: 5, ...extra } as any })
+
 const quarantined = () => (existsSync(paths.quarantine) ? readdirSync(paths.quarantine) : [])
 const clearQuarantine = () => { for (const m of av.listQuarantine()) av.deleteQuarantined(m.id) }
 const auditText = () => (existsSync(paths.audit) ? readFileSync(paths.audit, 'utf8') : '')
@@ -344,7 +348,8 @@ describe('chunked uploads', () => {
   })
 
   test('a file over the scan size follows the policy too (413 when refused)', async () => {
-    scanOn({ maxScanMb: 0.001, onErrorUsers: 'reject' })
+    // onErrorUsers no longer covers big files: onTooBig does (updated with the split of the two decisions)
+    scanOn({ maxScanMb: 0.001, onTooBig: 'reject' })
     expect(code(await upload(user, 'huge.bin', new Uint8Array(5000)))).toEqual({ status: 413, code: 'antivirus.too-big' })
     scanOn({ maxScanMb: 0.001 })
     expect((await upload(user, 'huge-ok.bin', new Uint8Array(5000))).status).toBe(200)
@@ -430,5 +435,93 @@ describe('the quarantine folder', () => {
     expect(av.trimQuarantine(Date.now() + (config.quarantineDays + 1) * 86_400_000)).toBe(2)
     expect(av.listQuarantine()).toHaveLength(0)
     expect(quarantined()).toEqual([])
+  })
+})
+
+describe('too big to scan is decided apart from a scanner failure', () => {
+  const skipped = () => auditText().split('\n').filter(l => l.includes('"action":"virus-scan-skipped"'))
+
+  test('with the defaults and clamd down, a signed-in user is refused (503) and nothing lands', async () => {
+    scanDefaults({ port: 1 })
+    expect(code(await upload(user, 'down-default.txt', 'hello'))).toEqual({ status: 503, code: 'antivirus.unavailable' })
+    expect(existsSync(home('av-user', 'down-default.txt'))).toBe(false)
+    expect(filesUnder(home('av-user')).some(p => p.includes('down-default'))).toBe(false)
+  })
+
+  test('onErrorUsers=allow brings back the pass-through while clamd is down', async () => {
+    scanDefaults({ port: 1, onErrorUsers: 'allow' })
+    expect((await upload(user, 'down-allow.txt', 'hello')).status).toBe(200)
+    expect(existsSync(home('av-user', 'down-allow.txt'))).toBe(true)
+  })
+
+  test('a user file over the limit with clamd up is allowed by default and leaves a virus-scan-skipped line', async () => {
+    scanDefaults({ maxScanMb: 0.001 })
+    const before = skipped().length
+    const scans = fake.scans
+    expect((await upload(user, 'big-default.bin', new Uint8Array(5000))).status).toBe(200)
+    expect(existsSync(home('av-user', 'big-default.bin'))).toBe(true)
+    expect(fake.scans).toBe(scans)
+    const lines = skipped()
+    expect(lines.length).toBe(before + 1)
+    expect(lines[lines.length - 1]).toContain('big-default.bin')
+    expect(lines[lines.length - 1]).toContain('5000')
+    expect(lines[lines.length - 1]).toContain(String(Math.floor(0.001 * 1024 ** 2)))
+  })
+
+  test('onTooBig=reject refuses it with 413 and nothing lands, even when onErrorUsers is allow', async () => {
+    scanDefaults({ maxScanMb: 0.001, onTooBig: 'reject', onErrorUsers: 'allow' })
+    const before = skipped().length
+    expect(code(await upload(user, 'big-reject.bin', new Uint8Array(5000)))).toEqual({ status: 413, code: 'antivirus.too-big' })
+    expect(existsSync(home('av-user', 'big-reject.bin'))).toBe(false)
+    expect(skipped().length).toBe(before)
+  })
+
+  test('an upload link follows onTooBig for big files and onErrorLinks for a scanner failure', async () => {
+    mkdirSync(home('av-user', 'inbox-big'), { recursive: true })
+    const made = await user.json('POST', '/api/shares', { space: 'home', path: '/inbox-big', days: 7, kind: 'upload' })
+    expect(made.status).toBe(200)
+    const token = made.data.token as string
+    const visitor = new Client()
+    const send = async (name: string, bytes: Uint8Array) => {
+      const a = await visitor.json('POST', `/api/s/${token}/upload`, { name, size: bytes.length })
+      if (a.status !== 200) return a
+      expect((await visitor.raw('PUT', `/api/s/${token}/upload/${a.data.id}/0`, bytes, { 'content-type': 'application/octet-stream' })).status).toBe(200)
+      return visitor.json('POST', `/api/s/${token}/upload/${a.data.id}/complete`)
+    }
+    scanDefaults({ maxScanMb: 0.001 })
+    expect((await send('big.bin', new Uint8Array(5000))).status).toBe(200)
+    expect(readdirSync(home('av-user', 'inbox-big'))).toEqual(['big.bin'])
+    scanDefaults({ maxScanMb: 0.001, onTooBig: 'reject' })
+    expect(code(await send('big2.bin', new Uint8Array(5000)))).toEqual({ status: 413, code: 'antivirus.too-big' })
+    scanDefaults({ port: 1 })
+    expect(code(await send('small.txt', new TextEncoder().encode('hi')))).toEqual({ status: 503, code: 'antivirus.unavailable' })
+    expect(readdirSync(home('av-user', 'inbox-big'))).toEqual(['big.bin'])
+  })
+
+  test('WebDAV: 503 with Retry-After while clamd is down', async () => {
+    const made = await user.json('POST', '/api/me/app-passwords', { name: 'dav2', scope: 'readwrite', password: PW })
+    expect(made.status).toBe(200)
+    const auth = `Basic ${Buffer.from(`av-user:${made.data.secret}`).toString('base64')}`
+    scanDefaults({ port: 1 })
+    const res = await (app.handle(new Request('http://localhost/dav/home/dav-down.txt', { method: 'PUT', headers: { authorization: auth }, body: 'hello' })) as Promise<Response>)
+    expect(res.status).toBe(503)
+    expect(res.headers.get('retry-after')).toBe('3')
+    expect(existsSync(home('av-user', 'dav-down.txt'))).toBe(false)
+  })
+
+  test('the settings view reports onTooBig with its source, and an invalid value is refused', async () => {
+    const view = async () => (await admin.json('GET', '/api/admin/settings')).data.antivirus.onTooBig
+    expect(await view()).toEqual({ value: 'allow', source: 'default' })
+    const pw = process.env.ADMIN_PASSWORD
+    const saved = await admin.json('PUT', '/api/admin/settings', { antivirus: { onTooBig: 'reject' }, password: pw })
+    expect(saved.status).toBe(200)
+    expect(saved.data.antivirus.onTooBig).toEqual({ value: 'reject', source: 'web' })
+    expect((await admin.json('PUT', '/api/admin/settings', { antivirus: { onTooBig: 'maybe' }, password: pw })).status).toBe(400)
+    expect((await view()).value).toBe('reject')
+    settings.update({ antivirus: undefined })
+    const had = process.env.CLAMAV_ON_TOO_BIG
+    process.env.CLAMAV_ON_TOO_BIG = 'reject'
+    try { expect((await view()).source).toBe('env') } finally { if (had === undefined) delete process.env.CLAMAV_ON_TOO_BIG; else process.env.CLAMAV_ON_TOO_BIG = had }
+    expect(config.clamavOnErrorUsers).toBe('reject')
   })
 })

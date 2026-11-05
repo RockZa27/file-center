@@ -34,7 +34,7 @@ export type SharePrefs = {
 /** virus scanning (antivirus.ts); a missing key falls back to the CLAMAV_* env value */
 export type AntivirusPrefs = {
   enabled?: boolean; host?: string; port?: number; timeoutSeconds?: number; maxScanMb?: number
-  onErrorLinks?: 'allow' | 'reject'; onErrorUsers?: 'allow' | 'reject'
+  onErrorLinks?: 'allow' | 'reject'; onErrorUsers?: 'allow' | 'reject'; onTooBig?: 'allow' | 'reject'
 }
 export type SecurityPrefs = { require2fa?: 'none' | 'admin' | 'staff' | 'all'; sessionTtlHours?: number; loginMaxAttempts?: number; loginLockoutSeconds?: number }
 export type FilesPrefs = {

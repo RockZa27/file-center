@@ -250,7 +250,7 @@ export const MESSAGES = {
     th: 'พบไวรัส "{signature}" ในไฟล์ที่ {user} (IP {ip}) ส่งมาทาง {via} ไฟล์ถูกกักไว้ที่โฟลเดอร์กักกัน ไม่ได้เข้าที่เก็บไฟล์ ดูที่ ระบบ → ตั้งค่า → สแกนไวรัส',
     en: 'Virus "{signature}" found in a file sent by {user} (IP {ip}) via {via}. The file is held in quarantine and was not stored. See System → Settings → Virus scanning.',
   },
-  'admin.config-antivirus-unreachable': { th: 'เปิดสแกนไวรัสไว้ แต่ติดต่อ ClamAV (clamd) ไม่ได้ ไฟล์ที่อัปโหลดจะถูกปฏิเสธหรือผ่านโดยไม่สแกนตามนโยบายที่ตั้งไว้ ตรวจที่อยู่/พอร์ต และว่า clamd ทำงานอยู่', en: 'Virus scanning is on but ClamAV (clamd) cannot be reached. Uploads are rejected or let through unscanned, as the policy says. Check the host and port and that clamd is running.' },
+  'admin.config-antivirus-unreachable': { th: 'เปิดสแกนไวรัสไว้ แต่ติดต่อ ClamAV (clamd) ไม่ได้ ไฟล์ที่อัปโหลดจะถูกปฏิเสธ (ผู้ใช้ที่เข้าสู่ระบบด้วย เว้นแต่ตั้งให้ผ่านโดยไม่สแกน) ตรวจที่อยู่/พอร์ต และว่า clamd ทำงานอยู่', en: 'Virus scanning is on but ClamAV (clamd) cannot be reached. Uploads are rejected, those of signed-in users too, unless the policy lets them through unscanned. Check the host and port and that clamd is running.' },
   'admin.config-backup-key-invalid': { th: 'BACKUP_ENCRYPTION_KEY ไม่ถูกต้อง (ต้องเป็นข้อมูลสุ่ม 32 ไบต์แบบ base64url ยาว 43 ตัวอักษร สร้างด้วย bun src/cli.ts backup-key) ไฟล์สำรองใหม่จึงยังไม่เข้ารหัส', en: 'BACKUP_ENCRYPTION_KEY is not valid (it must be 32 random bytes as base64url, 43 characters; make one with bun src/cli.ts backup-key). New backups are not encrypted.' },
   'admin.alert-off': {
     th: 'ยังไม่ได้ตั้งการแจ้งเตือน หรือค่าไม่ถูกต้อง (ALERT_WEBHOOK_URL, ALERT_WEBHOOK_KIND, ALERT_TELEGRAM_CHAT_ID) ดูคำเตือนใน log ตอนเริ่มระบบ',
