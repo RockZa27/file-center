@@ -1,5 +1,5 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
-import { mkdtempSync, readdirSync, readFileSync, statSync } from 'node:fs'
+import { mkdtempSync, readdirSync, readFileSync, rmSync, statSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 // sets STORAGE_DIR, DATA_DIR, ADMIN_PASSWORD (test-admin-pass)
@@ -102,11 +102,15 @@ describe('hook scope', () => {
 
   test('importing the app prints no deprecation warning', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'fc-scope-'))
-    const proc = Bun.spawn([process.execPath, '-e', `await import(${JSON.stringify(join(srcDir, 'index.ts'))}); process.exit(0)`], {
-      env: { ...process.env, DATA_DIR: join(dir, 'data'), STORAGE_DIR: join(dir, 'storage'), BACKUP_DIR: join(dir, 'backups'), ADMIN_PASSWORD: 'test-admin-pass' },
-      stdout: 'pipe', stderr: 'pipe',
-    })
-    const [out, err] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited])
-    expect(out + err).not.toContain('is deprecated')
+    try {
+      const proc = Bun.spawn([process.execPath, '-e', `await import(${JSON.stringify(join(srcDir, 'index.ts'))}); process.exit(0)`], {
+        env: { ...process.env, DATA_DIR: join(dir, 'data'), STORAGE_DIR: join(dir, 'storage'), BACKUP_DIR: join(dir, 'backups'), ADMIN_PASSWORD: 'test-admin-pass' },
+        stdout: 'pipe', stderr: 'pipe',
+      })
+      const [out, err] = await Promise.all([new Response(proc.stdout).text(), new Response(proc.stderr).text(), proc.exited])
+      expect(out + err).not.toContain('is deprecated')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

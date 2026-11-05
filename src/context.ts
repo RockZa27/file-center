@@ -79,7 +79,9 @@ export function errorPage(status: number, lang: Lang, code: MessageCode, params:
 }
 
 // constant-time compare, so the time of a refusal tells nothing about how much of the token matched
-function sameToken(got: string, want: string): boolean {
+function sameToken(got: unknown, want: unknown): boolean {
+  // a session without a string token (hand-edited sessions.json) is a refusal, not a crash
+  if (typeof got !== 'string' || typeof want !== 'string') return false
   const a = Buffer.from(got)
   const b = Buffer.from(want)
   return a.length === b.length && timingSafeEqual(a, b)

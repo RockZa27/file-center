@@ -36,6 +36,16 @@ describe('CSRF token compare', () => {
     expect((await post(cookie)).data?.code).toBe('csrf')
     expect((await post(cookie, csrf)).status).toBe(200)
   })
+  test('a session whose token is missing answers 403 csrf, not 500', async () => {
+    const s = await app.handle(new Request('http://localhost/api/session'))
+    const cookie = s.headers.get('set-cookie')!.split(';')[0]
+    const csrf = (await s.json()).csrf
+    // the visitor session lives in memory: take the token off it, as a hand-edited file would
+    const { getSession } = await import('../src/auth')
+    delete (getSession(cookie.split('=')[1]) as any).csrf
+    const r = await post(cookie, csrf)
+    expect(`${r.status} ${r.data?.code}`).toBe('403 csrf')
+  })
   test('the compare goes through timingSafeEqual', () => {
     const src = readFileSync(join(import.meta.dir, '../src/context.ts'), 'utf8')
     expect(src).toContain('timingSafeEqual')
