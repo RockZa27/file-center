@@ -110,12 +110,14 @@ export function recordedName(typed: string): string {
 // A secret.key that can not be read must not turn a failed sign-in into an error: the failure would not be counted
 // toward the lockouts, and an unknown name would answer differently from a known one. A key of this process then
 // (labels still group within the run; an unkeyed hash of what was typed would be open to guessing)
+// (kept once taken, so a broken key does not print its error again for every failed sign-in)
 let processLabelKey: Buffer | null = null
 function labelKey(): Buffer {
+  if (processLabelKey) return processLabelKey
   try {
     return subKey('login-name-label')
   } catch {
-    return (processLabelKey ??= randomBytes(32))
+    return (processLabelKey = randomBytes(32))
   }
 }
 

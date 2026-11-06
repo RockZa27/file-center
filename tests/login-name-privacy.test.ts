@@ -84,6 +84,7 @@ describe('failed sign-in: what is recorded for the typed name', () => {
   test('web: an unknown name that looks like a password is not in the audit log; the user is a label', async () => {
     expect((await fail(TYPED)).status).toBe(401)
     expect(auditText()).not.toContain(TYPED)
+    expect(auditText()).not.toContain(TYPED.toLowerCase())
     const e = newestFailure()!
     expect(e.user).toMatch(/^\?[0-9a-f]{8}$/)
     expect(e.user).toBe(auth.recordedName(TYPED))
@@ -124,14 +125,21 @@ describe('failed sign-in: what is recorded for the typed name', () => {
     await wait(() => got.some(g => g.path === '/alert'))
     const sent = got.filter(g => g.path === '/alert')
     expect(sent.length).toBeGreaterThan(0)
-    expect(sent[0].raw).toContain(auth.recordedName(TYPED))
+    // the label is told as what it is in the alert language (en here), not as a bare ?xxxxxxxx
+    expect(sent[0].raw).toContain(`a name that is no account (#${auth.recordedName(TYPED).slice(1)})`)
     for (const g of sent) expect(g.raw).not.toContain(TYPED)
+    for (const g of sent) expect(g.raw).not.toContain(TYPED.toLowerCase())
     const fresh = notify.listNotifications('admin').items.filter((n: any) => !before.has(n.id))
     expect(fresh.length).toBeGreaterThan(0)
     expect(JSON.stringify(fresh)).not.toContain(TYPED)
+    expect(JSON.stringify(fresh)).not.toContain(TYPED.toLowerCase())
+    // the bell keeps the label and tells it as what it is in the reader's language
     expect(JSON.stringify(fresh)).toContain(auth.recordedName(TYPED))
+    expect(notify.describe('en', 'system-alert', (fresh[0] as any).params)).toContain(`a name that is no account (#${auth.recordedName(TYPED).slice(1)})`)
+    expect(notify.describe('th', 'system-alert', (fresh[0] as any).params)).toContain(`ชื่อที่ไม่มีในระบบ (#${auth.recordedName(TYPED).slice(1)})`)
     for (const n of fresh) notify.removeNotification('admin', (n as any).id)
     expect(auditText()).not.toContain(TYPED)
+    expect(auditText()).not.toContain(TYPED.toLowerCase())
     config.alertWebhookUrl = saved.url
     config.alertWebhookKind = saved.kind
     alerts.resetAlerts()
@@ -159,6 +167,7 @@ describe('failed sign-in: what is recorded for the typed name', () => {
       expect(line).toBeDefined()
       expect(line!.raw).toContain(auth.recordedName(TYPED2))
       for (const g of got) expect(g.raw).not.toContain(TYPED2)
+      for (const g of got) expect(g.raw).not.toContain(TYPED2.toLowerCase())
     } finally {
       await set({ webhookUrl: null, webhookSecret: null })
       await fwd.forwardIdle()
@@ -180,14 +189,17 @@ describe('failed sign-in: what is recorded for the typed name', () => {
     await alerts.alertsIdle()
     await wait(() => got.some(g => g.path === '/alert'))
     expect(auditText()).not.toContain(TYPED)
+    expect(auditText()).not.toContain(TYPED.toLowerCase())
     const e = newestFailure()!
     expect(e.user).toBe(auth.recordedName(TYPED))
     expect(e.detail).toBe('WebDAV')
     const sent = got.filter(g => g.path === '/alert')
     expect(sent.length).toBeGreaterThan(0)
     for (const g of sent) expect(g.raw).not.toContain(TYPED)
+    for (const g of sent) expect(g.raw).not.toContain(TYPED.toLowerCase())
     const fresh = notify.listNotifications('admin').items.filter((n: any) => !before.has(n.id))
     expect(JSON.stringify(fresh)).not.toContain(TYPED)
+    expect(JSON.stringify(fresh)).not.toContain(TYPED.toLowerCase())
     for (const n of fresh) notify.removeNotification('admin', (n as any).id)
     config.alertWebhookUrl = saved.url
     config.alertWebhookKind = saved.kind
@@ -214,6 +226,7 @@ describe('failed sign-in: what is recorded for the typed name', () => {
       const e = newestFailure()!
       expect(e.user).toMatch(/^\?[0-9a-f]{8}$/)
       expect(auditText()).not.toContain(TYPED3)
+      expect(auditText()).not.toContain(TYPED3.toLowerCase())
       // counted toward the lockout like any failure: the tries end in 429
       let locked = false
       for (let i = 0; i < 20 && !locked; i++) locked = (await fail(TYPED3)).status === 429

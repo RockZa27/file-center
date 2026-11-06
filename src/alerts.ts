@@ -83,6 +83,8 @@ function render(code: MessageCode, params: Params): { message: string; params: P
   const p: Params = { ...params }
   // a reason that is itself a catalog message (backup failures) is told in ALERT_LANG too
   if (typeof p.reasonCode === 'string' && Object.hasOwn(MESSAGES, p.reasonCode)) p.reason = text(policy.alertLang(), p.reasonCode as MessageCode)
+  // a failed sign-in with a name that is no account carries its label ?xxxxxxxx (auth.ts recordedName), never the typed text
+  if (typeof p.user === 'string' && /^\?[0-9a-f]{8}$/.test(p.user)) p.user = text(policy.alertLang(), 'admin.alert-unknown-name', { id: p.user.slice(1) })
   const message = scrub(`[${settings.get().appName}] ${text(policy.alertLang(), code, p)}`).slice(0, 1500)
   return { message, params: clean(p) as Params }
 }

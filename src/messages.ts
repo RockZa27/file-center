@@ -229,6 +229,7 @@ export const MESSAGES = {
     th: 'ล็อกการเข้าสู่ระบบของ {user} จาก IP {ip} ชั่วคราว เพราะใส่รหัสผ่านผิดหลายครั้ง',
     en: 'Sign-in for {user} from IP {ip} is locked for a while after too many wrong passwords.',
   },
+  'admin.alert-unknown-name': { th: 'ชื่อที่ไม่มีในระบบ (#{id})', en: 'a name that is no account (#{id})' },
   'admin.alert-account-locked': {
     th: 'ล็อกการเข้าสู่ระบบของบัญชี {user} ชั่วคราว เพราะมีการใส่รหัสผ่านผิดหลายครั้งจากหลาย IP (ล่าสุดจาก {ip})',
     en: 'Sign-in for account {user} is locked for a while after too many wrong passwords from all addresses (latest from IP {ip}).',
