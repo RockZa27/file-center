@@ -195,6 +195,8 @@ describe('text editor (PUT /api/content)', () => {
     const f = mk('off.txt')
     expect((await put('off.txt', EICAR)).status).toBe(200)
     expect(read(f)).toBe(EICAR)
+    // other files look for EICAR left in the storage: take it out again
+    writeFileSync(f, 'gone')
     expect(quarantined().length).toBe(0)
     expect(editTmp()).toEqual([])
   })
