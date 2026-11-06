@@ -49,7 +49,7 @@ const made: string[] = []
 const dirs: string[] = []
 
 async function userWith(username: string) {
-  const r = await admin.json('POST', '/api/admin/users', { username, name: username, password: PW, role: 'user', permissions: ['read', 'write', 'download', 'upload', 'share'], publicPermissions: [] })
+  const r = await admin.json('POST', '/api/admin/users', { username, name: username, password: PW, role: 'user', permissions: ['read', 'write', 'download', 'upload', 'share'], publicPermissions: [], adoptHome: true })
   expect(r.status).toBe(200)
   if (!made.includes(username)) made.push(username)
   return new Client().login(username, PW)

@@ -84,7 +84,7 @@ describe('roles fixes: a manager can not take over a folder that exists', () => 
     expect((await mgr.json('POST', '/api/admin/users', mk('rf-below', 'user'))).status).toBe(409)
   })
   test('an admin keeps choosing deliberately, and a fresh name works for a manager', async () => {
-    expect((await admin.json('POST', '/api/admin/users', mk('rf-adm', 'user', { homedir: '/users/rf-team' }))).status).toBe(200)
+    expect((await admin.json('POST', '/api/admin/users', mk('rf-adm', 'user', { homedir: '/users/rf-team', adoptHome: true }))).status).toBe(200)
     expect((await mgr.json('POST', '/api/admin/users', mk('rf-fresh', 'user'))).status).toBe(200)
     expect((await row(admin, 'rf-fresh')).homedir).toBe('/users/rf-fresh')
   })
@@ -94,7 +94,7 @@ describe('roles fixes: canManage needs a folder of the target\'s alone', () => {
   test('two accounts with one home: neither is manageable', async () => {
     expect((await mgr.json('POST', '/api/admin/users', mk('rf-s1', 'user'))).status).toBe(200)
     expect((await row(mgr, 'rf-s1')).manageable).toBe(true)
-    expect((await admin.json('POST', '/api/admin/users', mk('rf-s2', 'user', { homedir: '/users/rf-s1' }))).status).toBe(200)
+    expect((await admin.json('POST', '/api/admin/users', mk('rf-s2', 'user', { homedir: '/users/rf-s1', adoptHome: true }))).status).toBe(200)
     expect((await row(mgr, 'rf-s1')).manageable).toBe(false)
     expect((await mgr.json('PUT', '/api/admin/users/rf-s1', { name: 'x' })).status).toBe(403)
     expect((await mgr.json('GET', '/api/list?space=user:rf-s1&path=/')).status).toBe(403)
@@ -102,7 +102,7 @@ describe('roles fixes: canManage needs a folder of the target\'s alone', () => {
   })
   test('one home inside another: the outer one is not manageable', async () => {
     expect((await mgr.json('POST', '/api/admin/users', mk('rf-o1', 'user'))).status).toBe(200)
-    expect((await admin.json('POST', '/api/admin/users', mk('rf-o2', 'user', { homedir: '/users/rf-o1/inner' }))).status).toBe(200)
+    expect((await admin.json('POST', '/api/admin/users', mk('rf-o2', 'user', { homedir: '/users/rf-o1/inner', adoptHome: true }))).status).toBe(200)
     expect((await row(mgr, 'rf-o1')).manageable).toBe(false)
     // and the inner one is not the manager's anyway
     expect((await row(mgr, 'rf-o2')).manageable).toBe(false)

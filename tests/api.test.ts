@@ -1235,12 +1235,15 @@ describe('full system: users', () => {
     expect((await update('lifecycle', { role: 'admin' })).status).toBe(200)
     expect((await c.json('GET', '/api/admin/users')).status).toBe(200)
     expect((await c.json('GET', '/api/list?space=home&path=/')).data.entries.map((e: any) => e.name)).toContain('users')
-    expect((await update('lifecycle', { role: 'user' })).status).toBe(200)
+    // the folder it gets back holds files (matrix.txt): the admin must say so
+    expect((await update('lifecycle', { role: 'user' })).status).toBe(409)
+    expect((await update('lifecycle', { role: 'user', adoptHome: true })).status).toBe(200)
     expect((await users()).find(u => u.username === 'lifecycle').homedir).toBe('/users/lifecycle')
     expect((await c.json('GET', '/api/admin/users')).status).toBe(403)
     await admin.json('POST', '/api/mkdir', { space: 'home', path: '/', name: 'elsewhere' })
     writeFileSync(storageAbs('elsewhere', 'moved-in.txt'), '')
-    expect((await update('lifecycle', { homedir: '/elsewhere' })).status).toBe(200)
+    expect((await update('lifecycle', { homedir: '/elsewhere' })).status).toBe(409)
+    expect((await update('lifecycle', { homedir: '/elsewhere', adoptHome: true })).status).toBe(200)
     expect((await c.json('GET', '/api/list?space=home&path=/')).data.entries.map((e: any) => e.name)).toEqual(['moved-in.txt'])
   })
   test('invalid changes are refused', async () => {
