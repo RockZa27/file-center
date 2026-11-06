@@ -187,6 +187,7 @@ export const MESSAGES = {
   'admin.home-of-other': { th: 'โฟลเดอร์ {home} เป็นของบัญชีอื่น อยู่ในหรืออยู่เหนือโฟลเดอร์ของบัญชีอื่น ให้บัญชีนี้ใช้ร่วมกันหรือไม่', en: 'The folder {home} belongs to another account, or is inside or above another account\'s folder. Share it with this account?' },
   'admin.public-perms-exceed': { th: 'ให้สิทธิ์ในโฟลเดอร์สาธารณะได้ไม่เกินสิทธิ์ที่คุณมีเอง', en: 'You can only grant public-folder rights that you hold yourself.' },
   'admin.last-admin': { th: 'ต้องมีผู้ดูแลระบบอย่างน้อยหนึ่งคน', en: 'There must be at least one administrator.' },
+  'admin.home-busy': { th: 'โฟลเดอร์ {home} กำลังถูกย้ายไปถังขยะ รอสักครู่แล้วลองอีกครั้ง', en: 'The folder {home} is being moved to the trash right now. Wait a moment and try again.' },
   'admin.delete-busy': { th: 'กำลังลบบัญชีนี้อยู่ รอสักครู่แล้วดูรายชื่ออีกครั้ง', en: 'This account is being deleted right now. Wait a moment and check the list again.' },
   'admin.delete-files-home': { th: 'ลบไฟล์พร้อมบัญชีไม่ได้ เพราะโฟลเดอร์ของผู้ใช้นี้ไม่ใช่ของบัญชีนี้เพียงบัญชีเดียว (เป็น / โฟลเดอร์สาธารณะ โฟลเดอร์กลุ่ม หรือซ้อนกับโฟลเดอร์ของบัญชีอื่น)', en: 'The files cannot be deleted with the account: this folder does not belong to this account alone (it is /, the public folder, a group folder, or overlaps another account\'s folder).' },
   'admin.orphan-home-owned': { th: 'โฟลเดอร์ {home} มีบัญชีเป็นเจ้าของแล้ว จึงย้ายไปถังขยะจากที่นี่ไม่ได้ โหลดรายการใหม่', en: 'The folder {home} belongs to an account now, so it cannot be trashed from here. Reload the list.' },

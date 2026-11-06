@@ -130,6 +130,29 @@ describe('folders with no account', () => {
     made.delete('oh-gone')
   })
 
+  test('a folder on its way to the trash is not given to an account meanwhile, and not trashed twice', async () => {
+    const { holdHomeForTrash } = await import('../src/routes/admin')
+    const release = holdHomeForTrash('/users/oh-gone')!
+    try {
+      const c = await admin.json('POST', '/api/admin/users', { username: 'oh-gone', name: 'oh-gone', password: PW, role: 'user', permissions: PERMS, publicPermissions: [], adoptHome: true })
+      expect([c.status, c.data.code]).toEqual([409, 'admin.home-busy'])
+      const t = await trash('oh-gone')
+      expect([t.status, t.data.code]).toEqual([409, 'admin.home-busy'])
+      expect(existsSync(storage('users', 'oh-gone', 'a.txt'))).toBe(true)
+    } finally {
+      release()
+    }
+  })
+
+  test('a folder whose name the trash route would refuse is not listed', async () => {
+    mkdirSync(storage('users', 'oh-bad:name'), { recursive: true })
+    try {
+      expect((await orphans()).some(o => o.name === 'oh-bad:name')).toBe(false)
+    } finally {
+      rmSync(storage('users', 'oh-bad:name'), { recursive: true, force: true })
+    }
+  })
+
   test('the trash move: one admin-only entry, audit line, gone from the list, restorable', async () => {
     const r = await trash('oh-gone')
     expect(r.status).toBe(200)

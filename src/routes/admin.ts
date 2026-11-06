@@ -66,6 +66,8 @@ const deleting = new Set<string>()
  * returns what was taken over, for the audit line (never file names), or '' when the folder is new.
  */
 function checkAdoptHome(home: string, except: string | undefined, adopt: boolean | undefined): string {
+  // a folder on its way to the trash (orphan-homes/trash awaits while it counts) is not given to an account meanwhile
+  if (trashingHomes.has(home.toLowerCase())) throw conflict('admin.home-busy', { home })
   let note = ''
   if (homeOverlapsOther(home, except)) {
     if (!adopt) throw conflict('admin.home-of-other', { home })
@@ -83,6 +85,15 @@ function checkAdoptHome(home: string, except: string | undefined, adopt: boolean
 }
 
 const HOME_COUNT_CAP = 1000
+/** /users/<name> folders (lower case) being moved to the trash right now; checkAdoptHome refuses them meanwhile */
+const trashingHomes = new Set<string>()
+/** claims a home for its move to the trash; null when it is being moved already. The returned function lets it go */
+export function holdHomeForTrash(home: string): (() => void) | null {
+  const key = home.toLowerCase()
+  if (trashingHomes.has(key)) return null
+  trashingHomes.add(key)
+  return () => { trashingHomes.delete(key) }
+}
 
 /** the real folders directly under /users that no live account's home overlaps, as the list shows them */
 function orphanHomes() {
@@ -95,6 +106,8 @@ function orphanHomes() {
     let st
     try { st = lstatSync(join(root, name)) } catch { continue }
     if (st.isSymbolicLink() || !st.isDirectory() || homeOverlapsOther(path)) continue
+    // only what the trash route accepts (one plain name, as it is): a folder it would refuse is not offered
+    try { if (validName(name) !== name) continue } catch { continue }
     out.push({ name, path, mtime: st.mtime.toISOString(), entries: countEntries(join(root, name), HOME_COUNT_CAP) })
   }
   return out
@@ -260,16 +273,24 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     // one path segment, exactly as given (validName trims, so " x" must not stand for "x")
     if (validName(body.name) !== body.name) throw bad('fs.bad-name')
     const home = defaultHome(body.name)
-    if (homeOverlapsOther(home)) throw conflict('admin.orphan-home-owned', { home })
-    const abs = resolveIn(config.storageDir, home)
-    let st: ReturnType<typeof lstatSync>
-    try { st = lstatSync(abs) } catch { throw notFound() }
-    if (st.isSymbolicLink() || !st.isDirectory()) throw bad('admin.orphan-home-bad')
-    // a link in the middle of the path would move some other folder
-    if (realpathSync(abs) !== join(realpathSync(config.storageDir), 'users', body.name)) throw bad('admin.orphan-home-bad')
-    const moved = await moveToTrash(abs, admin.username)
-    audit({ user: admin.username, ip, action: 'orphan-home-trashed', target: home, detail: `trash ${moved.id}, ${moved.size} bytes` })
-    return { ok: true, trashId: moved.id }
+    // held from the ownership check to the end of the move: moveToTrash awaits (it counts the tree), and an account
+    // must not take the folder (a create or home change with adoptHome) in between
+    const release = holdHomeForTrash(home)
+    if (!release) throw conflict('admin.home-busy', { home })
+    try {
+      if (homeOverlapsOther(home)) throw conflict('admin.orphan-home-owned', { home })
+      const abs = resolveIn(config.storageDir, home)
+      let st: ReturnType<typeof lstatSync>
+      try { st = lstatSync(abs) } catch { throw notFound() }
+      if (st.isSymbolicLink() || !st.isDirectory()) throw bad('admin.orphan-home-bad')
+      // a link in the middle of the path would move some other folder
+      if (realpathSync(abs) !== join(realpathSync(config.storageDir), 'users', body.name)) throw bad('admin.orphan-home-bad')
+      const moved = await moveToTrash(abs, admin.username)
+      audit({ user: admin.username, ip, action: 'orphan-home-trashed', target: home, detail: `trash ${moved.id}, ${moved.size} bytes` })
+      return { ok: true, trashId: moved.id }
+    } finally {
+      release()
+    }
   })
 
   // `deleteFiles` (admin only, password asked again) also sends the account's home folder to the system trash as one

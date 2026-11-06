@@ -19,7 +19,7 @@
       <div v-for="o in orphans" :key="o.name" class="orphan-row">
         <div class="orphan-info">
           <div class="mono wrap">{{ o.path }}</div>
-          <div class="muted">{{ t('users.orphanChanged') }}: {{ formatDate(o.mtime) }} · {{ o.entries >= 1000 ? '1000+' : o.entries }} {{ t('users.orphanEntries') }}</div>
+          <div class="muted">{{ t('users.orphanChanged') }}: {{ formatDate(o.mtime) }} · {{ t('users.orphanEntries') }}: {{ o.entries >= 1000 ? '1000+' : o.entries }}</div>
         </div>
         <n-button size="small" type="error" secondary @click="Object.assign(orphan, { item: o, password: '', show: true })">{{ t('users.orphanMove') }}</n-button>
       </div>
