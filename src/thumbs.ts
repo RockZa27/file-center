@@ -321,7 +321,7 @@ async function generate(p: Plan): Promise<string> {
 // ───────────── the cache ─────────────
 
 /** the cache is trimmed to `max` bytes (a tenth less, so it is not trimmed again an hour later), oldest use first; leftovers of killed runs go */
-export async function pruneThumbs(max = config.thumbCacheMax): Promise<{ removed: number; bytes: number }> {
+export async function pruneThumbs(max = config.thumbCacheMax, maxAgeMs = config.thumbCacheDays * 86_400_000): Promise<{ removed: number; bytes: number }> {
   if (!existsSync(paths.thumbs)) return { removed: 0, bytes: 0 }
   // work files of a run that was killed in the middle
   const tmp = join(paths.thumbs, 'tmp')
@@ -340,12 +340,29 @@ export async function pruneThumbs(max = config.thumbCacheMax): Promise<{ removed
       if (st?.isFile()) { files.push({ path: join(paths.thumbs, n), size: st.size, mtime: st.mtimeMs }); total += st.size }
     }))
   }
-  if (total <= max) return { removed: 0, bytes: 0 }
-  files.sort((a, b) => a.mtime - b.mtime)
-  const target = max * 0.9
   let removed = 0
   let bytes = 0
-  for (const f of files) {
+  // not used for THUMB_CACHE_DAYS (a hit touches the mtime): gone whatever the size, so a picture of a deleted file does
+  // not outlive it for good
+  let young = files
+  if (maxAgeMs > 0) {
+    const cutoff = Date.now() - maxAgeMs
+    young = []
+    for (const f of files) {
+      if (f.mtime >= cutoff) { young.push(f); continue }
+      await rm(f.path, { force: true })
+      total -= f.size
+      bytes += f.size
+      removed++
+    }
+  }
+  if (total <= max) {
+    if (removed) log.info('thumbs-pruned', { removed, bytes })
+    return { removed, bytes }
+  }
+  young.sort((a, b) => a.mtime - b.mtime)
+  const target = max * 0.9
+  for (const f of young) {
     if (total <= target) break
     await rm(f.path, { force: true })
     total -= f.size

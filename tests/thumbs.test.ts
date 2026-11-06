@@ -499,6 +499,28 @@ describe('the cache', () => {
     expect((await thumbs.pruneThumbs(10 ** 12)).removed).toBe(0)
   })
 
+  test('a thumbnail not used for THUMB_CACHE_DAYS goes, whatever the cache size', async () => {
+    mkdirSync(paths.thumbs, { recursive: true })
+    const mk = (name: string, ageDays: number) => {
+      const f = join(paths.thumbs, name)
+      writeFileSync(f, new Uint8Array(10))
+      const t = new Date(Date.now() - ageDays * 86_400_000)
+      utimesSync(f, t, t)
+    }
+    mk('age-old.webp', 40); mk('age-recent.webp', 2)
+    // far under the size cap: only the age decides
+    const r = await thumbs.pruneThumbs(10 ** 12, 30 * 86_400_000)
+    expect(r.removed).toBe(1)
+    expect(existsSync(join(paths.thumbs, 'age-old.webp'))).toBe(false)
+    expect(existsSync(join(paths.thumbs, 'age-recent.webp'))).toBe(true)
+    // 0 days: only the size cap, as before
+    mk('age-old2.webp', 400)
+    expect((await thumbs.pruneThumbs(10 ** 12, 0)).removed).toBe(0)
+    expect(existsSync(join(paths.thumbs, 'age-old2.webp'))).toBe(true)
+    rmSync(join(paths.thumbs, 'age-recent.webp'), { force: true })
+    rmSync(join(paths.thumbs, 'age-old2.webp'), { force: true })
+  })
+
   test('a backup does not carry the cache', async () => {
     mkdirSync(paths.thumbs, { recursive: true })
     writeFileSync(join(paths.thumbs, 'in-backup.webp'), 'x')
