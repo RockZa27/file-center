@@ -3,7 +3,7 @@
  * in-process on the app of api.test.ts. Every user here starts with "udf-"; everything is removed again at the end.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import './in-process-env'
 
@@ -185,5 +185,40 @@ describe('delete an account with its files', () => {
     expect(r.status).toBe(200)
     trashMade.add(r.data.trashId)
     expect((await admin.json('GET', '/api/grants/mine')).data.items.some((x: any) => x.path === '/users/udf-gr/shared')).toBe(false)
+  })
+})
+
+describe('delete an account with its files: races and links', () => {
+  test('two deletions of the same account at once: one goes through, the other is refused, no other account is touched', async () => {
+    await userWith('udf-race')
+    writeFileSync(storage('users', 'udf-race', 'r.txt'), 'r')
+    const others = (await admin.json('GET', '/api/admin/users')).data.users.map((u: any) => u.username).filter((n: string) => n !== 'udf-race').sort()
+    const [a, b] = await Promise.all([del('udf-race', { deleteFiles: true, password: adminPw }), del('udf-race', { deleteFiles: true, password: adminPw })])
+    expect([a.status, b.status].sort()).toEqual([200, 409])
+    const ok = a.status === 200 ? a : b
+    if (ok.data.trashId) trashMade.add(ok.data.trashId)
+    made.delete('udf-race')
+    const left = (await admin.json('GET', '/api/admin/users')).data.users.map((u: any) => u.username).sort()
+    expect(left).toEqual(others)
+    expect(existsSync(storage('users', 'udf-race'))).toBe(false)
+  })
+
+  test('a home whose path goes through a link is refused and nothing moves', async () => {
+    await userWith('udf-real')
+    writeFileSync(storage('users', 'udf-real', 'keep.txt'), 'keep')
+    // /udf-link -> /users, so /udf-link/udf-real names the other account's real folder without overlapping it as text
+    rmSync(storage('udf-link'), { force: true })
+    symlinkSync(storage('users'), storage('udf-link'))
+    try {
+      await userWith('udf-via', { homedir: '/udf-link/udf-real' })
+      const r = await del('udf-via', { deleteFiles: true, password: adminPw })
+      expect([r.status, r.data.code]).toEqual([400, 'admin.delete-files-home'])
+      expect(readFileSync(storage('users', 'udf-real', 'keep.txt'), 'utf8')).toBe('keep')
+      expect(await hasUser('udf-via')).toBe(true)
+    } finally {
+      await del('udf-via')
+      made.delete('udf-via')
+      rmSync(storage('udf-link'), { force: true })
+    }
   })
 })

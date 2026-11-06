@@ -185,6 +185,7 @@ export const MESSAGES = {
   'admin.home-exists': { th: 'โฟลเดอร์ /users/ชื่อนี้ มีอยู่แล้วหรือเป็นของบัญชีอื่น ให้ผู้ดูแลระบบสร้างบัญชีนี้ หรือเลือกชื่ออื่น', en: 'The folder /users/<name> already exists or belongs to another account. Ask an administrator to create this account, or choose another name.' },
   'admin.public-perms-exceed': { th: 'ให้สิทธิ์ในโฟลเดอร์สาธารณะได้ไม่เกินสิทธิ์ที่คุณมีเอง', en: 'You can only grant public-folder rights that you hold yourself.' },
   'admin.last-admin': { th: 'ต้องมีผู้ดูแลระบบอย่างน้อยหนึ่งคน', en: 'There must be at least one administrator.' },
+  'admin.delete-busy': { th: 'กำลังลบบัญชีนี้อยู่ รอสักครู่แล้วดูรายชื่ออีกครั้ง', en: 'This account is being deleted right now. Wait a moment and check the list again.' },
   'admin.delete-files-home': { th: 'ลบไฟล์พร้อมบัญชีไม่ได้ เพราะโฟลเดอร์ของผู้ใช้นี้ไม่ใช่ของบัญชีนี้เพียงบัญชีเดียว (เป็น / โฟลเดอร์สาธารณะ โฟลเดอร์กลุ่ม หรือซ้อนกับโฟลเดอร์ของบัญชีอื่น)', en: 'The files cannot be deleted with the account: this folder does not belong to this account alone (it is /, the public folder, a group folder, or overlaps another account\'s folder).' },
   'admin.delete-self': { th: 'ไม่สามารถลบบัญชีของตัวเองได้', en: 'You cannot delete your own account.' },
   'admin.text-length': { th: 'ข้อความสั้นหรือยาวเกินไป', en: 'A text is too short or too long.' },

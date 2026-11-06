@@ -1,4 +1,4 @@
-import { lstatSync, rmSync } from 'node:fs'
+import { lstatSync, realpathSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { Elysia, t } from 'elysia'
 import { alert } from '../alerts'
@@ -55,6 +55,9 @@ function checkPublicPerms(actor: User, wanted: Perm[], already: Perm[] = []) {
   const mine = new Set(actor.publicPermissions)
   if (wanted.some(p => !mine.has(p) && !already.includes(p))) throw forbidden('admin.public-perms-exceed')
 }
+
+/** accounts being deleted right now (lower case): a second DELETE for one of them waits its turn (409) */
+const deleting = new Set<string>()
 
 export const adminRoutes = new Elysia({ prefix: '/api' })
   .use(context)
@@ -193,7 +196,8 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
   })
 
   // `deleteFiles` (admin only, password asked again) also sends the account's home folder to the system trash as one
-  // entry; everything is checked before anything moves, and a failed move leaves the account as it was
+  // entry; everything is checked before anything moves, and a failed move leaves the account as it was. One deletion per
+  // account at a time: the handler awaits (password, move), and a second request for the same account must not run alongside
   .delete('/admin/users/:username', {
     body: t.Optional(t.Object({ deleteFiles: t.Optional(t.Boolean()), password: t.Optional(t.String({ maxLength: 1000 })) })),
   }, async ({ user, ip, params, body }) => {
@@ -201,47 +205,66 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     const target = manageable(admin, params.username)
     if (target.username === admin.username) throw bad('admin.delete-self')
     if (target.role === 'admin' && adminCount() <= 1) throw bad('admin.last-admin')
-    let moved: TrashMeta | null = null
-    if (body?.deleteFiles) {
-      if (!isAdmin(admin)) throw forbidden()
-      await confirmPassword(admin, ip, body.password ?? '', 'user-delete-denied')
-      const home = normRel(target.homedir)
-      const low = home.toLowerCase()
-      const inside = (root: string) => low === root || low.startsWith(`${root}/`)
-      // the root, the public folder, the group folders, /users itself, or a folder that is also (or holds, or is inside)
-      // another account's: not this account's alone, so not ours to erase
-      if (target.role === 'admin' || home === '/' || inside(`/${config.publicDirName.toLowerCase()}`) || inside('/groups')
-        || low === '/users' || homeOverlapsOther(home, target.username)) throw bad('admin.delete-files-home')
-      const abs = resolveIn(config.storageDir, home)
-      let st: ReturnType<typeof lstatSync> | null = null
-      try { st = lstatSync(abs) } catch { /* never made, or gone */ }
-      if (st && (st.isSymbolicLink() || !st.isDirectory())) throw bad('admin.delete-files-home')
-      // a home that does not exist is nothing to move: the account is deleted and the answer says no files were found
-      if (st) moved = await moveToTrash(abs, admin.username)
-      // links and grants someone else (an admin) made to something inside it: a new account of this name must not bring them back
-      for (const u of allUsers()) {
-        if (u === target) continue
-        const root = normRel(u.homedir).toLowerCase()
-        const hit = (p: string) => {
-          const x = normRel(`${root === '/' ? '' : root}/${p}`).toLowerCase()
-          return x === low || x.startsWith(`${low}/`)
+    const key = target.username.toLowerCase()
+    if (deleting.has(key)) throw conflict('admin.delete-busy')
+    deleting.add(key)
+    try {
+      let moved: TrashMeta | null = null
+      if (body?.deleteFiles) {
+        if (!isAdmin(admin)) throw forbidden()
+        await confirmPassword(admin, ip, body.password ?? '', 'user-delete-denied')
+        const home = normRel(target.homedir)
+        const low = home.toLowerCase()
+        const inside = (root: string) => low === root || low.startsWith(`${root}/`)
+        // the root, the public folder, the group folders, /users itself, or a folder that is also (or holds, or is inside)
+        // another account's: not this account's alone, so not ours to erase
+        if (target.role === 'admin' || home === '/' || inside(`/${config.publicDirName.toLowerCase()}`) || inside('/groups')
+          || low === '/users' || homeOverlapsOther(home, target.username)) throw bad('admin.delete-files-home')
+        const abs = resolveIn(config.storageDir, home)
+        let st: ReturnType<typeof lstatSync> | null = null
+        try { st = lstatSync(abs) } catch { /* never made, or gone */ }
+        if (st && (st.isSymbolicLink() || !st.isDirectory())) throw bad('admin.delete-files-home')
+        // a link in a middle part of the path would move some other folder (the string checks above only see the name)
+        if (st && realpathSync(abs) !== join(realpathSync(config.storageDir), home)) throw bad('admin.delete-files-home')
+        // links and grants someone else (an admin) made to something inside it: a new account of this name must not bring
+        // them back. Found before anything moves (a bad stored path throws here, not half way)
+        const strayGrants: ReturnType<typeof grantsOf> = []
+        const strayShares: ReturnType<typeof sharesOf> = []
+        for (const u of allUsers()) {
+          if (u === target) continue
+          const root = normRel(u.homedir).toLowerCase()
+          const hit = (p: string) => {
+            const x = normRel(`${root === '/' ? '' : root}/${p}`).toLowerCase()
+            return x === low || x.startsWith(`${low}/`)
+          }
+          for (const g of grantsOf(u.username)) if (hit(g.path)) strayGrants.push(g)
+          for (const s of sharesOf(u.username)) if (s.space === 'home' && hit(s.path)) strayShares.push(s)
         }
-        for (const g of grantsOf(u.username)) if (hit(g.path)) removeGrant(g)
-        for (const s of sharesOf(u.username)) if (s.space === 'home' && hit(s.path)) revokeShare(s)
+        // a home that does not exist is nothing to move: the account is deleted and the answer says no files were found
+        if (st) {
+          moved = await moveToTrash(abs, admin.username)
+          // in the trail at once: if a later step fails, the admin still finds where the files went
+          audit({ user: admin.username, ip, action: 'user-files-trashed', target: target.username, detail: `trash ${moved.id}, ${moved.size} bytes` })
+        }
+        for (const g of strayGrants) removeGrant(g)
+        for (const s of strayShares) revokeShare(s)
       }
-    }
-    // before the account leaves the list: old trash entries find their owner from the home
-    tombstoneTrashOf(target.username)
-    const list = allUsers()
-    list.splice(list.indexOf(target), 1)
-    saveUsers()
-    forgetAccount(target.username)
-    forget(target.username)
-    audit({
-      user: admin.username, ip, action: 'user-delete', target: target.username,
-      detail: moved ? `files to trash ${moved.id}, ${moved.size} bytes` : body?.deleteFiles ? 'no home folder found' : undefined,
-    })
-    return { ok: true, filesMoved: !!moved, ...(moved ? { trashId: moved.id } : {}) }
+      // the awaits above let other requests run: the account must still be the one in the list (never splice(-1))
+      const list = allUsers()
+      const at = list.indexOf(target)
+      if (at < 0) throw notFound()
+      // before the account leaves the list: old trash entries find their owner from the home
+      tombstoneTrashOf(target.username)
+      list.splice(at, 1)
+      saveUsers()
+      forgetAccount(target.username)
+      forget(target.username)
+      audit({
+        user: admin.username, ip, action: 'user-delete', target: target.username,
+        detail: moved ? `files to trash ${moved.id}, ${moved.size} bytes` : body?.deleteFiles ? 'no home folder found' : undefined,
+      })
+      return { ok: true, filesMoved: !!moved, ...(moved ? { trashId: moved.id } : {}) }
+    } finally { deleting.delete(key) }
   })
 
   // a user's signed-in devices, and ending them all (a lost phone, a stolen cookie)
