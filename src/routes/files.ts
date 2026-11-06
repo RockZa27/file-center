@@ -204,20 +204,19 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
 
   .put('/content', { body: t.Object({ space: t.String(), path: t.String(), content: t.String(), expectedMtime: t.Optional(t.Number()) }) }, async ({ user, ip, body }) => {
     const a = need({ user, ip }, body.space, 'write')
-    // the count is awaited first: from the check of the version to the write there is no await
     const q = quotaUserOf(a, user)
-    await ready(q)
     const rel = normRel(body.path)
     const abs = resolveIn(a.root, rel)
     // the earlier versions of the file count against the owner of the home it is in (not always the one saving)
     const owner = ownerOfPath(abs)
-    await ready(owner)
     const st0 = existsSync(abs) ? statSync(abs) : null
     if (!st0 || !st0.isFile()) throw notFound()
-    if (Buffer.byteLength(body.content) > MAX_TEXT) throw new HttpError(413, 'files.text-too-big')
+    const bytes = Buffer.byteLength(body.content)
+    if (bytes > MAX_TEXT) throw new HttpError(413, 'files.text-too-big')
     // scanned like an upload (a script or phishing page is text too); the scan comes before the check-and-write block below
     if (antivirusOn()) {
       mkdirSync(paths.tmp, { recursive: true, mode: 0o700 })
+      ensureSpace(paths.tmp, bytes)
       const tmp = join(paths.tmp, `edit-${Date.now()}-${randomBytes(6).toString('hex')}`)
       try {
         writeFileSync(tmp, body.content, { mode: 0o600 })
@@ -227,7 +226,10 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
         rmSync(tmp, { force: true })
       }
     }
-    // read again: the file may have changed during the scan, and from here to the write there is no await
+    // the counts are awaited last (after the scan, which may take a while): from here to the write there is no await
+    await ready(q)
+    await ready(owner)
+    // read again: the file may have changed during the scan
     const st = existsSync(abs) ? statSync(abs) : null
     if (!st || !st.isFile()) throw notFound()
     // the mtime GET /api/content gave: someone else saved since then, and writing now would silently undo their work
