@@ -84,9 +84,12 @@ for (const name of auditEnv().invalid) {
     : `${name} ไม่ถูกต้อง จึงไม่ใช้ค่านี้ (ใช้ค่าเริ่มต้นแทน) ดูรูปแบบที่ถูกต้องใน docs/configuration.md`)
 }
 if (config.publicPageInvalid) log.warn('public-page-invalid', `PUBLIC_PAGE ${config.publicPageInvalid} ไม่ถูกต้อง (ใช้ on หรือ off) จึงใช้ on คือเปิดหน้าสาธารณะ`)
-if (config.trustedProxiesInvalid.length) {
-  const none = config.trustedProxiesSet && !config.trustedProxies.length
-  log.warn('trusted-proxies-invalid', `TRUSTED_PROXIES มีค่าที่ไม่ใช่ IP หรือช่วง IP (CIDR) จึงข้ามไป: ${config.trustedProxiesInvalid.join(', ')}`
+// a value of only commas has no invalid entry to name but no valid one either: it is told too
+const proxyListEmpty = config.trustedProxiesSet && !config.trustedProxies.length
+if (config.trustedProxiesInvalid.length || proxyListEmpty) {
+  // what that means only matters while TRUST_PROXY is on (off: no header is believed anyway)
+  const none = proxyListEmpty && config.trustProxy !== 'false'
+  log.warn('trusted-proxies-invalid', `TRUSTED_PROXIES มีค่าที่ไม่ใช่ IP หรือช่วง IP (CIDR) จึงข้ามไป: ${config.trustedProxiesInvalid.join(', ') || '(ว่าง)'}`
     + (none ? ' · ไม่มีรายการที่ใช้ได้เลย ระบบจึงไม่สนใจหัวบอก IP ผู้ใช้ (CF-Connecting-IP / X-Forwarded-For) จากทุกการเชื่อมต่อ ผู้เข้าใช้ทุกคนจะแสดงเป็น IP ของ proxy และการล็อกต่อ IP จะนับรวมกันทั้งหมด แก้ค่า TRUSTED_PROXIES' : ''))
 }
 if (backupKeyState().state === 'invalid') log.warn('backup-key-invalid', 'BACKUP_ENCRYPTION_KEY ไม่ถูกต้อง (ต้องเป็นข้อมูลสุ่ม 32 ไบต์แบบ base64url ยาว 43 ตัวอักษร สร้างด้วย bun src/cli.ts backup-key) จึงยังไม่เข้ารหัสไฟล์สำรองใหม่')
