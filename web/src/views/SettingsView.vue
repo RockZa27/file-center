@@ -168,7 +168,7 @@
             <section class="surface block" data-tour="settings-mail">
               <h2>{{ t('settings.mail.title') }}</h2>
               <div class="muted lead">{{ t('settings.mail.lead') }}</div>
-              <n-alert v-if="anyLocked" type="info" :show-icon="false" class="lock-note">{{ t('settings.lockedNote') }}</n-alert>
+              <n-alert v-if="mailLocked" type="info" :show-icon="false" class="lock-note">{{ t('settings.lockedNoteMail') }}</n-alert>
               <setting-row v-bind="rowProps('mail.host')" :label="t('settings.mail.host')" :help="t('settings.mail.hostHelp')" @reset="reset('mail.host')" @undo="undo('mail.host')">
                 <n-input v-model:value="f['mail.host']" :disabled="off('mail.host')" placeholder="smtp.example.com" class="ctl" :input-props="{ autocomplete: 'off', autocapitalize: 'off', spellcheck: false }" />
               </setting-row>
@@ -250,7 +250,7 @@
             <section class="surface block" data-tour="settings-antivirus">
               <h2>{{ t('settings.antivirus.title') }}</h2>
               <div class="muted lead">{{ t('settings.antivirus.lead') }}</div>
-              <n-alert v-if="anyLocked" type="info" :show-icon="false" class="lock-note">{{ t('settings.lockedNote') }}</n-alert>
+              <n-alert v-if="avLocked" type="info" :show-icon="false" class="lock-note">{{ t('settings.lockedNoteAv') }}</n-alert>
               <setting-row v-bind="rowProps('antivirus.enabled')" :label="t('settings.antivirus.enabled')" :help="t('settings.antivirus.enabledHelp')" @reset="reset('antivirus.enabled')" @undo="undo('antivirus.enabled')">
                 <n-switch v-model:value="f['antivirus.enabled']" :disabled="off('antivirus.enabled')" />
               </setting-row>
@@ -451,7 +451,9 @@ const isLocked = p => {
   if (p === 'auditForward.webhookSecret') return !!srv.value.auditForward.webhookSecretLocked
   return !!srv.value[g][k]?.locked
 }
-const anyLocked = computed(() => ready.value && ALL_PATHS.some(isLocked))
+const lockedIn = prefix => computed(() => ready.value && ALL_PATHS.some(p => prefix.some(x => p.startsWith(x)) && isLocked(p)))
+const mailLocked = lockedIn(['mail.', 'alerts.', 'auditForward.'])
+const avLocked = lockedIn(['antivirus.'])
 const off = p => resets.value.includes(p) || isLocked(p)
 const same = (a, b) => (Array.isArray(a) ? [...a].sort().join() === [...b].sort().join() : a === b)
 function isChanged(p) {
@@ -560,6 +562,15 @@ async function send(password) {
       serverErrors.value = { [p]: e.params.min !== undefined ? t('settings.range', { min: e.params.min, max: e.params.max }) : t('settings.badValue') }
       if (p === 'share.defaultDays' && e.params.max) serverErrors.value[p] = t('settings.share.defaultTooLong', { n: e.params.max })
       cat.value = catOfPath(p)
+    } else if (e.code === 'admin.setting-locked') {
+      // the lock was switched on after this page loaded: reload so locked rows turn read-only, keep the edits that are still allowed
+      pwOpen.value = false
+      const kept = changedPaths.value.map(p => [p, f[p]])
+      try {
+        fill(await api.settings())
+        for (const [p, v] of kept) if (!isLocked(p)) f[p] = v
+      } catch { /* the message below still tells what happened */ }
+      fb.fail(e)
     } else if (e.code === 'admin.upload-over-ceiling') {
       pwOpen.value = false
       serverErrors.value = { 'files.uploadMaxSize': t('settings.files.overCeiling', { max: bytesText(e.params?.max ?? srv.value.files.uploadMaxSizeCeiling) }) }

@@ -4,7 +4,7 @@ import { Elysia } from 'elysia'
 import { alert, startAlerts } from './alerts'
 import { startAntivirusMonitor, trimQuarantine } from './antivirus'
 import { envWarnings } from './config-warnings'
-import { ignoredLockedKeys, UPLOAD_CEILING } from './policy'
+import { auditEnv, ignoredLockedKeys, UPLOAD_CEILING } from './policy'
 import { audit } from './audit'
 import { bootstrapAdmin, findUser, pruneLoginAttempts, purgeExpiredSessions } from './auth'
 import { backupDue, backupRunning, runBackup, sweepRestoreTempsIdle } from './backup'
@@ -75,7 +75,13 @@ if (invalidUmask) log.warn('umask-invalid', `FC_UMASK ${invalidUmask} ไม่�
 if (config.require2faInvalid) log.warn('require-2fa-invalid', `REQUIRE_2FA ${config.require2faInvalid} ไม่ถูกต้อง (ใช้ none, admin, staff หรือ all) จึงใช้ none คือไม่บังคับ 2FA`)
 {
   const ignored = ignoredLockedKeys()
-  if (ignored.length) log.warn('outbound-lock-ignored', `LOCK_OUTBOUND_SETTINGS เปิดอยู่ จึงไม่ใช้ค่าที่เคยตั้งในหน้าเว็บของ: ${ignored.join(', ')} (ค่ายังเก็บไว้ใน settings.json ใช้ค่าจาก .env แทน)`)
+  if (ignored.length) log.warn('outbound-lock-ignored', `LOCK_OUTBOUND_SETTINGS เปิดอยู่ จึงไม่ใช้ค่าที่เคยตั้งในหน้าเว็บของ: ${ignored.join(', ')} (ค่ายังเก็บไว้ใน settings.json ใช้ค่าจาก .env แทน${ignored.some(k => k.startsWith('auditForward.')) ? ' การส่งต่อบันทึกกิจกรรมใช้ AUDIT_SYSLOG_* และ AUDIT_WEBHOOK_URL / AUDIT_WEBHOOK_SECRET' : ''})`)
+}
+// one warning per bad AUDIT_* variable: its name only (a URL path or a secret is never echoed)
+for (const name of auditEnv().invalid) {
+  log.warn('audit-env-invalid', name === 'AUDIT_WEBHOOK_SECRET'
+    ? 'AUDIT_WEBHOOK_SECRET ไม่ถูกต้อง (ต้องเป็นอักขระ ASCII ที่พิมพ์ได้ยาว 16-200 ตัว) จึงไม่ส่ง webhook ส่งต่อบันทึกกิจกรรมเลย จนกว่าจะแก้ค่านี้ (ไม่ส่งแบบไม่เซ็นชื่อ)'
+    : `${name} ไม่ถูกต้อง จึงไม่ใช้ค่านี้ (ใช้ค่าเริ่มต้นแทน) ดูรูปแบบที่ถูกต้องใน docs/configuration.md`)
 }
 if (config.publicPageInvalid) log.warn('public-page-invalid', `PUBLIC_PAGE ${config.publicPageInvalid} ไม่ถูกต้อง (ใช้ on หรือ off) จึงใช้ on คือเปิดหน้าสาธารณะ`)
 if (config.trustedProxiesInvalid.length) log.warn('trusted-proxies-invalid', `TRUSTED_PROXIES มีค่าที่ไม่ใช่ IP หรือช่วง IP (CIDR) จึงข้ามไป: ${config.trustedProxiesInvalid.join(', ')}`)

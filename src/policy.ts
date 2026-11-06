@@ -174,20 +174,43 @@ export const alertLang = () => grp('alerts').lang ?? config.alertLang
 export type AuditForwardValues = { syslogHost: string; syslogPort: number; syslogProto: 'udp' | 'tcp'; syslogFacility: number; webhookUrl: string
   /** signing secret for the webhook ('' = unsigned); `webhookSecretBroken` = one is saved but secret.key can not open it, so nothing may be sent */
   webhookSecret: string; webhookSecretBroken: boolean }
-/** web settings only (no env fallback): off until an admin sets a destination */
+/** the AUDIT_* values of .env, checked: a bad one is left out (default) and its variable name is in `invalid` (never its value) */
+export function auditEnv() {
+  const invalid: string[] = []
+  const pick = <T>(name: string, raw: string, def: T, parse: (r: string) => T | undefined): { value: T; set: boolean } => {
+    if (!raw) return { value: def, set: false }
+    const v = parse(raw)
+    if (v === undefined) { invalid.push(name); return { value: def, set: false } }
+    return { value: v, set: true }
+  }
+  const num = (min: number, max: number) => (r: string) => (/^\d{1,5}$/.test(r) && +r >= min && +r <= max ? +r : undefined)
+  const host = pick('AUDIT_SYSLOG_HOST', config.auditSyslogHost, '', r => (r.length <= 253 && /^[A-Za-z0-9.:\[\]-]+$/.test(r) ? r : undefined))
+  const port = pick('AUDIT_SYSLOG_PORT', config.auditSyslogPort, 514, num(1, 65535))
+  const proto = pick<'udp' | 'tcp'>('AUDIT_SYSLOG_PROTO', config.auditSyslogProto, 'udp', r => (r === 'udp' || r === 'tcp' ? r : undefined))
+  const facility = pick('AUDIT_SYSLOG_FACILITY', config.auditSyslogFacility, 13, num(0, 23))
+  const url = pick('AUDIT_WEBHOOK_URL', config.auditWebhookUrl, '', r => (r.length <= 1000 && isSafeWebhookUrl(r) ? r : undefined))
+  const secret = pick('AUDIT_WEBHOOK_SECRET', config.auditWebhookSecret, '', r => (/^[\x20-\x7e]{16,200}$/.test(r) ? r : undefined))
+  return { host, port, proto, facility, url, secret, secretBad: invalid.includes('AUDIT_WEBHOOK_SECRET'), invalid }
+}
+
+/** the web setting where one is saved, else the .env value (while LOCK_OUTBOUND_SETTINGS is on only the .env value counts); off until a destination is set */
 export function auditForwardValues(): AuditForwardValues {
   const a = grp('auditForward')
-  const url = unseal(a.webhookSealed, 'URL ส่งต่อบันทึกกิจกรรม')
+  const e = auditEnv()
+  // a saved URL that can not be opened turns the web value off, it does not fall back to .env
+  const url = a.webhookSealed !== undefined ? unseal(a.webhookSealed, 'URL ส่งต่อบันทึกกิจกรรม') : e.url.value
   // no URL = nothing is signed or sent, so the secret is not opened (and not warned about) on every audit entry
-  const secret = url ? unseal(a.webhookSecretSealed, 'รหัสลับเซ็นชื่อ webhook ส่งต่อบันทึกกิจกรรม') : null
+  const webSecret = url && a.webhookSecretSealed !== undefined ? unseal(a.webhookSecretSealed, 'รหัสลับเซ็นชื่อ webhook ส่งต่อบันทึกกิจกรรม') : undefined
+  const webBroken = webSecret === null
   return {
-    syslogHost: a.syslogHost ?? '',
-    syslogPort: a.syslogPort ?? 514,
-    syslogProto: a.syslogProto ?? 'udp',
-    syslogFacility: a.syslogFacility ?? 13,
+    syslogHost: a.syslogHost ?? e.host.value,
+    syslogPort: a.syslogPort ?? e.port.value,
+    syslogProto: a.syslogProto ?? e.proto.value,
+    syslogFacility: a.syslogFacility ?? e.facility.value,
     webhookUrl: url ?? '',
-    webhookSecret: secret ?? '',
-    webhookSecretBroken: !!url && a.webhookSecretSealed !== undefined && secret === null,
+    webhookSecret: webSecret ?? (a.webhookSecretSealed === undefined ? e.secret.value : ''),
+    // a secret that can not be used (the saved one is sealed with another key, or AUDIT_WEBHOOK_SECRET is malformed) must never become unsigned sending
+    webhookSecretBroken: !!url && (webBroken || (a.webhookSecretSealed === undefined && e.secretBad)),
   }
 }
 
@@ -243,10 +266,14 @@ type Eff<T> = { value: T; source: Source }
 const eff = <T>(web: T | undefined, env: T, envName: string | null): Eff<T> =>
   web !== undefined ? { value: web, source: 'web' } : { value: env, source: envSet(envName) ? 'env' : 'default' }
 
+/** like eff(), for the AUDIT_* values that auditEnv() has already checked (`set`: a valid value is in .env) */
+const effEnv = <T>(web: T | undefined, value: T, set: boolean): Eff<T> => (web !== undefined ? { value: web, source: 'web' } : { value, source: set ? 'env' : 'default' })
+
 /** every runtime setting with the value in force and where it comes from; no secret in it */
 export function policyView() {
   const av2 = grp('antivirus'), sh = grp('share'), se = grp('security'), f = grp('files'), m = grp('mail'), a = grp('alerts'), af = grp('auditForward')
   const afv = auditForwardValues()
+  const ae = auditEnv()
   const quota = defaultQuotaBytes()
   const mv = mail()
   const av = alertValues()
@@ -307,14 +334,14 @@ export function policyView() {
       onTooBigUsers: eff(av2.onTooBigUsers, config.clamavOnTooBigUsers, 'CLAMAV_ON_TOO_BIG_USERS'),
     },
     auditForward: {
-      syslogHost: eff(af.syslogHost, afv.syslogHost, null),
-      syslogPort: eff(af.syslogPort, afv.syslogPort, null),
-      syslogProto: eff<'udp' | 'tcp'>(af.syslogProto, afv.syslogProto, null),
-      syslogFacility: eff(af.syslogFacility, afv.syslogFacility, null),
-      webhookUrl: { value: maskUrl(afv.webhookUrl), source: (af.webhookSealed !== undefined ? 'web' : 'default') as Source },
+      syslogHost: effEnv(af.syslogHost, afv.syslogHost, ae.host.set),
+      syslogPort: effEnv(af.syslogPort, afv.syslogPort, ae.port.set),
+      syslogProto: effEnv<'udp' | 'tcp'>(af.syslogProto, afv.syslogProto, ae.proto.set),
+      syslogFacility: effEnv(af.syslogFacility, afv.syslogFacility, ae.facility.set),
+      webhookUrl: { value: maskUrl(afv.webhookUrl), source: (af.webhookSealed !== undefined ? 'web' : ae.url.set ? 'env' : 'default') as Source },
       /** the secret itself is never sent */
-      webhookSecretSet: !!af.webhookSecretSealed,
-      webhookSecretSource: (af.webhookSecretSealed !== undefined ? 'web' : 'default') as Source,
+      webhookSecretSet: !!af.webhookSecretSealed || (!!config.auditWebhookSecret && af.webhookSecretSealed === undefined),
+      webhookSecretSource: (af.webhookSecretSealed !== undefined ? 'web' : config.auditWebhookSecret ? 'env' : 'default') as Source,
     },
   }
   // a locked key says so (the page shows it read-only); the write-only secrets have no entry of their own, so their flag sits next to passSet / webhookSecretSet

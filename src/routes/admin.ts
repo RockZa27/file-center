@@ -368,7 +368,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     // LOCK_OUTBOUND_SETTINGS: a body naming a locked key is refused whole, before the password is asked (no guess is counted) and before anything is saved
     const lockedKeys = lockedKeysIn(body as Record<string, unknown>)
     if (lockedKeys.length) {
-      audit({ user: admin.username, ip, action: 'settings-denied', detail: lockedKeys.join(', ') })
+      audit({ user: admin.username, ip, action: 'settings-locked', detail: lockedKeys.join(', ') })
       throw forbidden('admin.setting-locked', { key: lockedKeys.join(', ') })
     }
     const patch: Record<string, unknown> = {}

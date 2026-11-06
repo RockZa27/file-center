@@ -174,6 +174,17 @@ export const config = {
   require2faInvalid: ['', 'none', 'admin', 'staff', 'all'].includes(process.env.REQUIRE_2FA?.trim().toLowerCase() ?? '') ? '' : process.env.REQUIRE_2FA!.trim(),
   /** LOCK_OUTBOUND_SETTINGS=true: the settings that choose where data leaves the server (ClamAV, audit forwarding, alerts, SMTP) come from .env only; the web can not change them and stored web values are ignored (read at call time, see LOCKED_WHEN_OUTBOUND_LOCK in policy.ts) */
   lockOutbound: ['true', '1', 'yes'].includes(process.env.LOCK_OUTBOUND_SETTINGS?.trim().toLowerCase() ?? ''),
+  /**
+   * Audit forwarding (audit-forward.ts) from .env: the fallback of the web settings, and the only source while
+   * LOCK_OUTBOUND_SETTINGS is on. Kept as the text that was written; policy.ts checks it (a bad value is ignored and
+   * named in a start-up warning, a bad AUDIT_WEBHOOK_SECRET stops the webhook instead of sending unsigned).
+   */
+  auditSyslogHost: env('AUDIT_SYSLOG_HOST', '').trim(),
+  auditSyslogPort: env('AUDIT_SYSLOG_PORT', '').trim(),
+  auditSyslogProto: env('AUDIT_SYSLOG_PROTO', '').trim().toLowerCase(),
+  auditSyslogFacility: env('AUDIT_SYSLOG_FACILITY', '').trim(),
+  auditWebhookUrl: env('AUDIT_WEBHOOK_URL', '').trim(),
+  auditWebhookSecret: env('AUDIT_WEBHOOK_SECRET', ''),
   /** PUBLIC_PAGE=off: a FRESH install starts with the public page closed (only the first settings.json is made from it); invalid = on */
   publicPageOff: process.env.PUBLIC_PAGE?.trim().toLowerCase() === 'off',
   publicPageInvalid: ['', 'on', 'off'].includes(process.env.PUBLIC_PAGE?.trim().toLowerCase() ?? '') ? '' : process.env.PUBLIC_PAGE!.trim(),
