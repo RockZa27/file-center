@@ -4,7 +4,8 @@
  * an existing account, or a label ?xxxxxxxx (keyed hash, never a real user name). Web login and WebDAV. In-process.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { readFileSync, writeFileSync } from 'node:fs'
+import { readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import './in-process-env'
 
 let app: any
@@ -20,6 +21,9 @@ let audit: typeof import('../src/audit')
 const TYPED = 'Zq!Hunter2~Pw-Secret#'
 const TYPED2 = 'Qz!Other~Pw-Phrase#'
 const TYPED3 = 'Wx!Broken~Key-Pass#'
+// an account of this file only: a failed sign-in is written once a minute per name, so a shared name ('admin') could
+// already have been written by another file in the same minute
+const CASE_USER = 'lnp-case-user'
 const IP = 'unknown'
 
 const got: { path: string; raw: string }[] = []
@@ -48,7 +52,7 @@ const newestFailure = () => audit.auditEntries().find(e => e.action === 'login-f
 const bellIds = () => notify.listNotifications('admin').items.map((n: any) => n.id)
 
 function clearCounters() {
-  for (const n of [TYPED, TYPED2, TYPED3, 'admin', 'ADMIN']) {
+  for (const n of [TYPED, TYPED2, TYPED3, CASE_USER]) {
     for (const k of [`${IP}|${n.toLowerCase()}`, `login-account|${n.toLowerCase()}`, `dav|${IP}|${n.toLowerCase()}`]) auth.clearFailures(k)
   }
   auth.clearFailures(`login-address|${IP}`)
@@ -56,6 +60,19 @@ function clearCounters() {
 }
 
 const saved = { url: '', kind: '', lang: 'th' as 'th' | 'en' }
+
+// the admin's own requests, apart from the visitor's cookie above
+const adm = { cookie: '', csrf: '' }
+async function asAdmin(method: string, path: string, body?: any) {
+  const h: Record<string, string> = {}
+  if (adm.cookie) h.cookie = adm.cookie
+  if (adm.csrf) h['x-csrf-token'] = adm.csrf
+  if (body !== undefined) h['content-type'] = 'application/json'
+  const res: Response = await app.handle(new Request('http://localhost' + path, { method, headers: h, body: body === undefined ? undefined : JSON.stringify(body) }))
+  const set = res.headers.get('set-cookie')
+  if (set?.startsWith('fc_sid=')) adm.cookie = set.split(';')[0]
+  return { status: res.status, data: (await res.json().catch(() => null)) as any }
+}
 beforeAll(async () => {
   ;({ app } = await import('../src/index'))
   ;({ config, paths } = await import('../src/config'))
@@ -69,9 +86,18 @@ beforeAll(async () => {
   saved.lang = config.alertLang
   hook = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: async req => { got.push({ path: new URL(req.url).pathname, raw: await req.text() }); return new Response('ok') } })
   csrf = (await json('GET', '/api/session')).data.csrf
+  adm.csrf = (await asAdmin('GET', '/api/session')).data.csrf
+  const login = await asAdmin('POST', '/api/login', { username: 'admin', password: process.env.ADMIN_PASSWORD })
+  expect(login.status).toBe(200)
+  adm.csrf = login.data.csrf
+  const made = await asAdmin('POST', '/api/admin/users', { username: CASE_USER, name: CASE_USER, password: 'harbor-lamp-42', role: 'user', permissions: ['read'], publicPermissions: [] })
+  expect(made.status).toBe(200)
   clearCounters()
 })
 afterAll(async () => {
+  await asAdmin('DELETE', `/api/admin/users/${CASE_USER}`)
+  rmSync(join(process.env.STORAGE_DIR!, 'users', CASE_USER), { recursive: true, force: true })
+  await asAdmin('POST', '/api/logout')
   clearCounters()
   config.alertWebhookUrl = saved.url
   config.alertWebhookKind = saved.kind
@@ -108,8 +134,9 @@ describe('failed sign-in: what is recorded for the typed name', () => {
 
   test('an existing account typed in another case is recorded with its canonical name', async () => {
     expect(auth.recordedName('ADMIN')).toBe('admin')
-    expect((await fail('ADMIN')).status).toBe(401)
-    expect(newestFailure()!.user).toBe('admin')
+    expect(auth.recordedName(CASE_USER.toUpperCase())).toBe(CASE_USER)
+    expect((await fail(CASE_USER.toUpperCase())).status).toBe(401)
+    expect(newestFailure()!.user).toBe(CASE_USER)
     clearCounters()
   })
 
@@ -208,8 +235,8 @@ describe('failed sign-in: what is recorded for the typed name', () => {
   })
 
   test('WebDAV: an existing account typed in another case is recorded with its canonical name', async () => {
-    expect((await dav('ADMIN')).status).toBe(401)
-    expect(newestFailure()!.user).toBe('admin')
+    expect((await dav(CASE_USER.toUpperCase())).status).toBe(401)
+    expect(newestFailure()!.user).toBe(CASE_USER)
     clearCounters()
   })
 

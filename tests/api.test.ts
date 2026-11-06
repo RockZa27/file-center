@@ -316,7 +316,9 @@ describe('proxy & disk space', () => {
     } finally {
       config.trustProxy = 'false'
     }
-    const act = await admin.json('GET', '/api/admin/activity?action=login-failed&q=tunneled')
+    // no account has this name: the log holds its label (auth.ts recordedName), not the typed text
+    const { recordedName } = await import('../src/auth')
+    const act = await admin.json('GET', `/api/admin/activity?action=login-failed&user=${encodeURIComponent(recordedName('tunneled'))}`)
     expect(act.data.items[0].ip).toBe('203.0.113.5')
   })
   test('uploads are refused when the disk would run too low', async () => {
