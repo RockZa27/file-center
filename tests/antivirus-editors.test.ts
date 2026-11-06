@@ -89,7 +89,8 @@ let server: net.Server
 const port = () => (server.address() as net.AddressInfo).port
 const scanOn = (over: Record<string, unknown> = {}) =>
   settings.update({ antivirus: { enabled: true, host: '127.0.0.1', port: port(), timeoutSeconds: 5, maxScanMb: 25, onErrorLinks: 'reject', onErrorUsers: 'reject', ...over } as any })
-const scanOff = () => settings.update({ antivirus: { enabled: false } as any })
+// back to no stored antivirus group at all, as other files expect (a stored `enabled: false` would show as a web value)
+const scanOff = () => settings.update({ antivirus: undefined })
 
 let docServer: ReturnType<typeof Bun.serve>
 const savedFiles = new Map<string, Uint8Array>()
@@ -135,7 +136,9 @@ afterEach(() => {
   Object.assign(config, { officeUrl: '', officeInternalUrl: '', officeServerInternalUrl: '', officeJwtSecret: '' })
 })
 
-afterAll(() => {
+afterAll(async () => {
+  await admin.json('DELETE', '/api/admin/users/ave-ed')
+  rmSync(home('ave-ed'), { recursive: true, force: true })
   scanOff()
   for (const m of av.listQuarantine()) av.deleteQuarantined(m.id)
   Object.assign(config, { officeUrl: saved.url, officeInternalUrl: saved.internal, officeServerInternalUrl: saved.server, officeJwtSecret: saved.secret })
@@ -199,6 +202,29 @@ describe('text editor (PUT /api/content)', () => {
     writeFileSync(f, 'gone')
     expect(quarantined().length).toBe(0)
     expect(editTmp()).toEqual([])
+  })
+
+  test('a visitor editing the public folder is held to the link policy (clamd down: refused although users are allowed)', async () => {
+    const dead = net.createServer()
+    await new Promise<void>(r => dead.listen(0, '127.0.0.1', () => r()))
+    const deadPort = (dead.address() as net.AddressInfo).port
+    await new Promise<void>(r => dead.close(() => r()))
+    const prev = settings.get().guestPermissions
+    const f = join(paths.publicDir, 'ave-visitor.txt')
+    writeFileSync(f, 'old text')
+    try {
+      settings.update({ guestPermissions: ['read', 'write'] })
+      scanOn({ port: deadPort, onErrorUsers: 'allow', onErrorLinks: 'reject' })
+      const visitor = new Client()
+      visitor.csrf = (await visitor.json('GET', '/api/session')).data.csrf
+      const r = await visitor.json('PUT', '/api/content', { space: 'public', path: '/ave-visitor.txt', content: 'new text' })
+      expect([r.status, r.data?.code]).toEqual([503, 'antivirus.unavailable'])
+      expect(read(f)).toBe('old text')
+      expect(editTmp()).toEqual([])
+    } finally {
+      settings.update({ guestPermissions: prev })
+      rmSync(f, { force: true })
+    }
   })
 
   test('releasing an edit item lands beside the original, never over it', async () => {

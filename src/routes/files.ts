@@ -221,7 +221,8 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
       const tmp = join(paths.tmp, `edit-${Date.now()}-${randomBytes(6).toString('hex')}`)
       try {
         writeFileSync(tmp, body.content, { mode: 0o600 })
-        await gate(tmp, { who: 'user', via: 'edit', by: user?.username ?? 'guest', ip, name: basename(abs), destDir: dirname(abs) })
+        // a visitor who may edit the public folder is held to the stricter link policy, as visitors' uploads are
+        await gate(tmp, { who: user ? 'user' : 'link', via: 'edit', by: user?.username ?? 'guest', ip, name: basename(abs), destDir: dirname(abs) })
       } finally {
         rmSync(tmp, { force: true })
       }
