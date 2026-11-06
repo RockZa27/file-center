@@ -274,7 +274,7 @@ describe('grants: when they stop working', () => {
     expect((await a.rec.json('GET', '/api/grants/to-me')).data.items).toEqual([])
     expect(grantsMod.allGrants().some(g => g.id === a.id)).toBe(false)
     // the owner comes back under the same name with the same folder: the old grant is not back
-    await userWith(a.ou)
+    await userWith(a.ou, { adoptHome: true })
     expect((await list(a.rec, a.space)).status).toBe(403)
 
     const b = await pair('gone2', 'view')
@@ -325,7 +325,7 @@ describe('grants: when they stop working', () => {
     expect((await admin.json('PUT', `/api/admin/users/${a.ou}`, { homedir: '/gr-elsewhere/gr-home-o' })).status).toBe(200)
     expect((await list(a.rec, a.space)).status).toBe(403)
     // back to the old home it works again; the folder is still where it was
-    expect((await admin.json('PUT', `/api/admin/users/${a.ou}`, { homedir: '/users/gr-home-o' })).status).toBe(200)
+    expect((await admin.json('PUT', `/api/admin/users/${a.ou}`, { homedir: '/users/gr-home-o', adoptHome: true })).status).toBe(200)
     expect((await list(a.rec, a.space)).status).toBe(200)
   })
 })
