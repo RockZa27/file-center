@@ -213,12 +213,34 @@ describe('a chunk sent after complete started is refused', () => {
     const id = a.data.id as string
     for (const i of [0, 1]) expect((await user.raw('PUT', `/api/upload/${id}/${i}`, fill(67), OCTET)).status).toBe(200)
     const done = uploads.completeUpload(id, 'usr-race', who())
-    const late = await user.json('PUT', `/api/upload/${id}/0`, fill(68), OCTET)
-    expect(late.status).toBe(409)
-    expect(late.data.code).toBe('upload.completing')
+    // the same tick: completion has claimed the upload and nothing holds it open for long without a scan, so the
+    // chunk is sent here, not through a request that may only arrive after the file has landed
+    const late = uploads.saveChunk(id, 'usr-race', 0, fill(68).buffer as ArrayBuffer, who()).then(() => null, (err: unknown) => err)
+    expect(() => uploads.checkUpload(id, 'usr-race', who())).toThrow()
+    expect(await late).toMatchObject({ status: 409, code: 'upload.completing' })
     const r = await done
     created.push(r.path)
     expect(readFileSync(r.path).equals(cat(fill(67), fill(67)))).toBe(true)
+  })
+})
+
+describe('the refusal comes before the checks that drop an upload', () => {
+  test('a chunk from an uploader who lost the upload right meanwhile gets 409 and does not drop the file being completed', async () => {
+    scanOn()
+    const a = await user.json('POST', '/api/upload', { space: 'home', path: '/', name: 'race-right.bin', size: CHUNK() * 2 })
+    expect(a.status).toBe(200)
+    const id = a.data.id as string
+    for (const i of [0, 1]) expect((await user.raw('PUT', `/api/upload/${id}/${i}`, fill(72), OCTET)).status).toBe(200)
+    const done = user.json('POST', `/api/upload/${id}/complete`)
+    await fake.got.promise
+    // the same account without `upload` (as after an admin took the right away): its checks would drop the upload
+    const lost = { ...who(), permissions: who().permissions.filter(p => p !== 'upload') }
+    expect(() => uploads.checkUpload(id, 'usr-race', lost)).toThrow()
+    await expect(uploads.saveChunk(id, 'usr-race', 0, fill(73).buffer as ArrayBuffer, lost)).rejects.toMatchObject({ status: 409, code: 'upload.completing' })
+    fake.hold.open()
+    const r = await done
+    expect(r.status).toBe(200)
+    expect(landed('', 'race-right.bin').equals(cat(fill(72), fill(72)))).toBe(true)
   })
 })
 

@@ -89,10 +89,11 @@ function stillThere(id: string, meta: Meta) {
 /** throws unless `owner` has this upload and may still add to it; lets a route refuse before it reads the request body */
 export function checkUpload(id: string, owner: string, user?: User | null) {
   const meta = loadMeta(id, owner)
+  // once completion has started the file is checked, scanned and moved: no chunk may change it any more. Asked before
+  // the checks below, which drop an upload that may no longer be added to: one being completed is not theirs to drop
+  if (finishing.has(id)) throw conflict('upload.completing')
   stillAllowed(id, meta, user)
   stillThere(id, meta)
-  // once completion has started the file is checked, scanned and moved: no chunk may change it any more
-  if (finishing.has(id)) throw conflict('upload.completing')
 }
 
 // ───────────── visitors' daily allowance ─────────────
@@ -338,9 +339,9 @@ const writing = new Map<string, Set<Promise<void>>>()
 
 export async function saveChunk(id: string, owner: string, index: number, data: ArrayBuffer, user?: User | null) {
   const meta = loadMeta(id, owner)
+  if (finishing.has(id)) throw conflict('upload.completing')
   stillAllowed(id, meta, user)
   stillThere(id, meta)
-  if (finishing.has(id)) throw conflict('upload.completing')
   if (!Number.isInteger(index) || index < 0 || index >= meta.total) throw bad('upload.bad-chunk-index')
   const expected = index === meta.total - 1 ? meta.size - meta.chunkSize * (meta.total - 1) : meta.chunkSize
   if (data.byteLength !== expected) throw bad('upload.bad-chunk-size', { bytes: expected })
