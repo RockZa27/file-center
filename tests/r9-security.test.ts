@@ -201,8 +201,10 @@ describe('F3: login lockouts per account and per address', () => {
     const c = await new Client().session()
     for (let i = 0; i < 3; i++) await c.json('POST', '/api/login', { username: 'r9flood', password: 'x' })
     auth.clearFailures('login-address|unknown')
-    const act = await admin.json('GET', '/api/admin/activity?action=login-failed&q=r9flood&pageSize=100')
-    const mine = act.data.items.filter((e: any) => e.user === 'r9flood')
+    // no account has this name: the log holds its label, not the typed text
+    const label = auth.recordedName('r9flood')
+    const act = await admin.json('GET', `/api/admin/activity?action=login-failed&user=${encodeURIComponent(label)}&pageSize=100`)
+    const mine = act.data.items.filter((e: any) => e.user === label)
     expect(mine.length).toBe(1)
     expect(mine[0].detail).toContain('1')
   })
