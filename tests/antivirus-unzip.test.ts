@@ -162,6 +162,16 @@ describe('unzip with the antivirus on', () => {
     expect(readFileSync(home('ok', 'a.txt'), 'utf8')).toBe('one')
   })
 
+  test('a zip with no files extracts to an empty folder, as without the scan', async () => {
+    scanOn()
+    writeFileSync(home('empty.zip'), zipSync({}))
+    const r = await unzip('empty.zip')
+    expect(r.status).toBe(200)
+    expect(r.data).toMatchObject({ ok: true, folder: 'empty', files: 0 })
+    expect(readdirSync(home('empty'))).toEqual([])
+    expect(stagings()).toEqual([])
+  })
+
   test('clamd down: refused with onErrorUsers reject, extracted with allow', async () => {
     put('down.zip', { 'a.txt': 'one' })
     scanOn({ port: await deadPort(), onErrorUsers: 'reject' })

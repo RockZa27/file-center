@@ -365,13 +365,21 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     // with the antivirus on, the files come out into a private folder in tmp and reach the storage only when all are clean
     const stage = antivirusOn() ? join(paths.tmp, `unzip-${Date.now()}-${randomBytes(8).toString('hex')}`) : null
     let landed = dest
+    // the staging folder may be on another disk (DATA_DIR): what that disk can take bounds the extraction there too. Not
+    // the whole budget up front, which on a small DATA_DIR disk would refuse even a tiny zip
+    let tmpRoom = Infinity
+    // set once the destination folder is ours: only then may a failure remove it
+    let claimed = false
     try {
       let count: number
       if (stage) {
-        ensureSpace(paths.tmp, maxBytes)
+        const tmpFree = freeSpace(paths.tmp)
+        tmpRoom = tmpFree === null ? Infinity : Math.max(0, tmpFree - config.minFreeSpace)
         mkdirSync(stage, { recursive: true, mode: 0o700 })
         const out = join(stage, 'out')
-        count = await unzipTo(abs, out, { maxBytes, maxFiles: config.unzipMaxFiles })
+        // there even for a zip with no entries (the old path makes an empty folder too)
+        mkdirSync(out)
+        count = await unzipTo(abs, out, { maxBytes: Math.min(maxBytes, tmpRoom), maxFiles: config.unzipMaxFiles })
         // one file at a time while the unzip slot is still ours: a zip of many files takes longer to extract while scanning is on.
         // The first infected or refused file ends it all (gate() has quarantined the infected one); the folder goes in `finally`
         const who = user ? 'user' : 'link'
@@ -379,11 +387,14 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
           const name = `${basename(abs)}/${file.slice(out.length + 1)}`.replaceAll('\\', '/')
           await gate(file, { who, via: 'unzip', by: user?.username ?? 'guest', ip, name: name.slice(0, 255), destDir: dirname(abs) })
         }
-        // moved into place under a name nobody took meanwhile; nothing is overwritten
+        // the name is claimed first (mkdir fails on a taken one), then the clean tree is moved into it: nothing is
+        // overwritten, and a move that fails half way (another disk) leaves no partial folder behind
         for (let tries = 0; ; tries++) {
           landed = uniquePath(join(dirname(abs), folderName))
-          try { await moveTree(out, landed); break } catch (e: any) { if (e?.code !== 'EEXIST' || tries >= 5) throw e }
+          try { mkdirSync(landed); break } catch (e: any) { if (e?.code !== 'EEXIST' || tries >= 5) throw e }
         }
+        claimed = true
+        for (const entry of readdirSync(out)) await moveTree(join(out, entry), join(landed, entry))
       } else {
         mkdirSync(dest)
         count = await unzipTo(abs, dest, { maxBytes, maxFiles: config.unzipMaxFiles })
@@ -395,7 +406,10 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     } catch (err) {
       // a half-extracted folder is useless; keeping it in the trash would only hold the disk space for weeks
       if (!stage) rmSync(dest, { recursive: true, force: true })
+      else if (claimed) rmSync(landed, { recursive: true, force: true })
       hold.release()
+      // the staging disk was the smaller room: that disk is full, the zip is not too big
+      if (stage && tmpRoom < maxBytes && err instanceof HttpError && err.code === 'zip.too-big') throw new HttpError(507, 'disk-full')
       // too much for the quota is a full home, not a zip that is too big
       if (q && room < otherMax && err instanceof HttpError && err.code === 'zip.too-big') throw exceeded(q)
       throw err instanceof HttpError ? err : bad('zip.extract-failed')
