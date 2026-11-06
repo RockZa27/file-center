@@ -171,7 +171,7 @@ export const alertLang = () => grp('alerts').lang ?? config.alertLang
 
 // ───────────── audit forwarding ─────────────
 
-export type AuditForwardValues = { syslogHost: string; syslogPort: number; syslogProto: 'udp' | 'tcp'; syslogFacility: number; webhookUrl: string
+export type AuditForwardValues = { syslogHost: string; syslogPort: number; syslogProto: 'udp' | 'tcp' | 'tls'; syslogFacility: number; webhookUrl: string
   /** signing secret for the webhook ('' = unsigned); `webhookSecretBroken` = one is saved but secret.key can not open it, so nothing may be sent */
   webhookSecret: string; webhookSecretBroken: boolean }
 /** the AUDIT_* values of .env, checked: a bad one is left out (default) and its variable name is in `invalid` (never its value) */
@@ -193,7 +193,7 @@ function readAuditEnv() {
   const num = (min: number, max: number) => (r: string) => (/^\d{1,5}$/.test(r) && +r >= min && +r <= max ? +r : undefined)
   const host = pick('AUDIT_SYSLOG_HOST', config.auditSyslogHost, '', r => (r.length <= 253 && /^[A-Za-z0-9.:\[\]-]+$/.test(r) ? r : undefined))
   const port = pick('AUDIT_SYSLOG_PORT', config.auditSyslogPort, 514, num(1, 65535))
-  const proto = pick<'udp' | 'tcp'>('AUDIT_SYSLOG_PROTO', config.auditSyslogProto, 'udp', r => (r === 'udp' || r === 'tcp' ? r : undefined))
+  const proto = pick<'udp' | 'tcp' | 'tls'>('AUDIT_SYSLOG_PROTO', config.auditSyslogProto, 'udp', r => (r === 'udp' || r === 'tcp' || r === 'tls' ? r : undefined))
   const facility = pick('AUDIT_SYSLOG_FACILITY', config.auditSyslogFacility, 13, num(0, 23))
   const url = pick('AUDIT_WEBHOOK_URL', config.auditWebhookUrl, '', r => (r.length <= 1000 && isSafeWebhookUrl(r) ? r : undefined))
   const secret = pick('AUDIT_WEBHOOK_SECRET', config.auditWebhookSecret, '', r => (/^[\x20-\x7e]{16,200}$/.test(r) ? r : undefined))
@@ -345,7 +345,7 @@ export function policyView() {
     auditForward: {
       syslogHost: effEnv(af.syslogHost, afv.syslogHost, ae.host.set),
       syslogPort: effEnv(af.syslogPort, afv.syslogPort, ae.port.set),
-      syslogProto: effEnv<'udp' | 'tcp'>(af.syslogProto, afv.syslogProto, ae.proto.set),
+      syslogProto: effEnv<'udp' | 'tcp' | 'tls'>(af.syslogProto, afv.syslogProto, ae.proto.set),
       syslogFacility: effEnv(af.syslogFacility, afv.syslogFacility, ae.facility.set),
       webhookUrl: { value: maskUrl(afv.webhookUrl), source: (af.webhookSealed !== undefined ? 'web' : ae.url.set ? 'env' : 'default') as Source },
       /** the secret itself is never sent */
@@ -461,7 +461,7 @@ const SPEC: Record<string, Record<string, [string, Parse]>> = {
   auditForward: {
     syslogHost: ['syslogHost', (v, k) => { const s = str(253)(v, k) as string; if (s && !/^[A-Za-z0-9.:\[\]-]+$/.test(s)) throw fail(k); return s }],
     syslogPort: ['syslogPort', int(1, 65535)],
-    syslogProto: ['syslogProto', oneOf('udp', 'tcp')],
+    syslogProto: ['syslogProto', oneOf('udp', 'tcp', 'tls')],
     syslogFacility: ['syslogFacility', int(0, 23)],
     webhookUrl: ['webhookSealed', (v, k) => { const s = webhook(v, k) as string; return s ? seal(s) : '' }],
     // signs every webhook batch (X-FC-Signature); empty = unsigned

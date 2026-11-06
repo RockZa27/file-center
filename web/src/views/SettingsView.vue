@@ -398,7 +398,7 @@ const mailTestError = ref('')
 const catOptions = computed(() => CATS.map(c => ({ value: c.id, label: t(`settings.cat.${c.id}`) + (countOf(c.id) ? ` (${countOf(c.id)})` : '') })))
 const secureOptions = computed(() => ['starttls', 'tls', 'none'].map(v => ({ value: v, label: t(`settings.mail.secure_${v}`) })))
 const kindOptions = computed(() => ['discord', 'slack', 'telegram', 'json'].map(v => ({ value: v, label: t(`alerts.webhooks.${v}`) })))
-const protoOptions = [{ value: 'udp', label: 'UDP' }, { value: 'tcp', label: 'TCP' }]
+const protoOptions = computed(() => [{ value: 'udp', label: 'UDP' }, { value: 'tcp', label: 'TCP' }, { value: 'tls', label: t('settings.auditForward.protoTls') }])
 const viewOnlyOptions = computed(() => ['allow', 'force', 'forbid'].map(v => ({ value: v, label: t(`settings.share.viewOnly_${v}`) })))
 const onErrorOptions = computed(() => ['reject', 'allow'].map(v => ({ value: v, label: t(`settings.antivirus.${v}`) })))
 const langOptions = [{ value: 'th', label: 'ไทย' }, { value: 'en', label: 'English' }]

@@ -5,6 +5,7 @@ import { alert, startAlerts } from './alerts'
 import { startAntivirusMonitor, trimQuarantine } from './antivirus'
 import { envWarnings } from './config-warnings'
 import { auditEnv, ignoredLockedKeys, UPLOAD_CEILING } from './policy'
+import { syslogCa } from './audit-forward'
 import { audit } from './audit'
 import { bootstrapAdmin, findUser, pruneLoginAttempts, purgeExpiredSessions } from './auth'
 import { backupDue, backupRunning, runBackup, sweepRestoreTempsIdle } from './backup'
@@ -86,6 +87,8 @@ for (const name of auditEnv().invalid) {
     ? 'AUDIT_WEBHOOK_SECRET ไม่ถูกต้อง (ต้องเป็นอักขระ ASCII ที่พิมพ์ได้ยาว 16-200 ตัว) จึงไม่ส่ง webhook ส่งต่อบันทึกกิจกรรมเลย จนกว่าจะแก้ค่านี้ (ไม่ส่งแบบไม่เซ็นชื่อ)'
     : `${name} ไม่ถูกต้อง จึงไม่ใช้ค่านี้ (ใช้ค่าเริ่มต้นแทน) ดูรูปแบบที่ถูกต้องใน docs/configuration.md`)
 }
+// AUDIT_SYSLOG_CA is only read for syslog over TLS; a file that can not be used means the server's certificate will not verify
+if (syslogCa().state === 'invalid') log.warn('audit-syslog-ca-invalid', 'AUDIT_SYSLOG_CA อ่านไม่ได้หรือไม่ใช่ไฟล์ใบรับรอง PEM จึงใช้เฉพาะ CA ของระบบ (ถ้าเซิร์ฟเวอร์ syslog ใช้ CA ของตัวเอง การเชื่อมต่อ TLS จะไม่ผ่านการตรวจใบรับรอง)')
 if (config.publicPageInvalid) log.warn('public-page-invalid', `PUBLIC_PAGE ${config.publicPageInvalid} ไม่ถูกต้อง (ใช้ on หรือ off) จึงใช้ on คือเปิดหน้าสาธารณะ`)
 // a value of only commas has no invalid entry to name but no valid one either: it is told too
 const proxyListEmpty = config.trustedProxiesSet && !config.trustedProxies.length

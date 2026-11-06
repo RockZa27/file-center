@@ -489,8 +489,8 @@ const th = {
     },
     auditForward: {
       title: 'ส่งต่อประวัติการใช้งานไปยังระบบ log', lead: 'ทุกรายการในประวัติการใช้งานถูกส่งซ้ำไปที่ syslog (RFC 5424) และ/หรือ webhook เพื่อเก็บไว้ที่ระบบอื่น ส่งเบื้องหลัง ถ้าปลายทางล่มหรือช้า การใช้งานปกติไม่กระทบ แต่รายการช่วงนั้นอาจไม่ถึงปลายทาง ไฟล์ประวัติในเครื่องยังครบเหมือนเดิม',
-      syslogHost: 'เซิร์ฟเวอร์ syslog', syslogHostHelp: 'ชื่อเครื่องหรือ IP เว้นว่าง = ไม่ส่งไป syslog UDP/TCP ไม่เข้ารหัส ควรใช้ในเครือข่ายภายในหรือ VPN',
-      syslogPort: 'พอร์ต syslog', syslogProto: 'โปรโตคอล', syslogProtoHelp: 'UDP เร็วแต่ไม่รับประกันว่าถึง TCP ส่งแบบ octet-counted (RFC 6587)',
+      syslogHost: 'เซิร์ฟเวอร์ syslog', syslogHostHelp: 'ชื่อเครื่องหรือ IP เว้นว่าง = ไม่ส่งไป syslog UDP/TCP ไม่เข้ารหัส ควรใช้ในเครือข่ายภายในหรือ VPN หรือเลือก TLS',
+      syslogPort: 'พอร์ต syslog', syslogProto: 'โปรโตคอล', protoTls: 'TLS (เข้ารหัส)', syslogProtoHelp: 'UDP เร็วแต่ไม่รับประกันว่าถึง TCP ส่งแบบ octet-counted (RFC 6587) TLS เข้ารหัสและตรวจใบรับรองเสมอ ปกติใช้พอร์ต 6514 (ระบบไม่เปลี่ยนพอร์ตให้) ใบรับรองของเซิร์ฟเวอร์ต้องเชื่อถือได้ (CA ของระบบ หรือ AUDIT_SYSLOG_CA)',
       syslogFacility: 'Facility', syslogFacilityHelp: '0–23 ค่าตั้งต้น 13 (log audit)',
       webhookUrl: 'Webhook URL ของประวัติการใช้งาน', webhookUrlHelp: 'ต้องเป็น https:// (http:// ได้เฉพาะ 127.0.0.1 หรือ localhost) เว้นว่างไว้ = ใช้ค่าเดิม ระบบส่ง JSON เป็นชุดละไม่เกิน 50 รายการ และแสดงเฉพาะชื่อเครื่องของ URL เพราะอาจมีรหัสลับ',
       webhookSecret: 'รหัสลับเซ็นชื่อ webhook', webhookSecretHelp: 'ไม่บังคับ ยาว 16–200 ตัวอักษร ตั้งแล้วทุกคำขอจะมีหัว X-FC-Timestamp และ X-FC-Signature (HMAC-SHA256) ผู้รับต้องตรวจ X-FC-Signature เพื่อแยกชุดจริงจากชุดปลอมหรือชุดที่ส่งซ้ำ เว้นว่างไว้ = ใช้ค่าเดิม ระบบไม่แสดงค่าที่ตั้งไว้กลับมา กดรีเซ็ตเพื่อเลิกเซ็นชื่อ',
@@ -1123,8 +1123,8 @@ const en = {
     },
     auditForward: {
       title: 'Forward the activity log', lead: 'Every activity log entry is also sent to a syslog server (RFC 5424) and/or a webhook, to be kept elsewhere. It is sent in the background: a destination that is down or slow never affects normal use, but entries from that time may not arrive. The local log file stays complete.',
-      syslogHost: 'Syslog server', syslogHostHelp: 'Host name or IP. Empty = no syslog. UDP/TCP are not encrypted: use a trusted internal network or a VPN.',
-      syslogPort: 'Syslog port', syslogProto: 'Protocol', syslogProtoHelp: 'UDP is fast but delivery is not guaranteed. TCP uses octet-counted framing (RFC 6587).',
+      syslogHost: 'Syslog server', syslogHostHelp: 'Host name or IP. Empty = no syslog. UDP/TCP are not encrypted: use a trusted internal network or a VPN, or choose TLS.',
+      syslogPort: 'Syslog port', syslogProto: 'Protocol', protoTls: 'TLS (encrypted)', syslogProtoHelp: 'UDP is fast but delivery is not guaranteed. TCP uses octet-counted framing (RFC 6587). TLS is encrypted and always verifies the certificate; it usually uses port 6514 (the port is not changed for you) and the server certificate must be trusted (system CAs or AUDIT_SYSLOG_CA).',
       syslogFacility: 'Facility', syslogFacilityHelp: '0-23. Default 13 (log audit).',
       webhookUrl: 'Activity log webhook URL', webhookUrlHelp: 'Must be https:// (http:// only to 127.0.0.1 or localhost). Empty = keep the current one. JSON is sent in batches of up to 50 entries; only the host of the URL is shown, since it may hold a secret.',
       webhookSecret: 'Webhook signing secret', webhookSecretHelp: 'Optional, 16-200 characters. When set, every request carries X-FC-Timestamp and X-FC-Signature (HMAC-SHA256); the receiver must check X-FC-Signature to tell a real batch from a forged or replayed one. Empty = keep the current one. The saved secret is never shown again; reset to stop signing.',

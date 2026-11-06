@@ -34,7 +34,7 @@ export function envWarnings(): ConfigWarning[] {
 function auditForwardWarnings(): ConfigWarning[] {
   const out: ConfigWarning[] = []
   const v = auditForwardValues()
-  if (v.syslogHost && !/^(127\.0\.0\.1|localhost|\[?::1\]?)$/i.test(v.syslogHost)) out.push({ code: 'admin.config-audit-syslog-plain', severity: 'warning' })
+  if (v.syslogHost && v.syslogProto !== 'tls' && !/^(127\.0\.0\.1|localhost|\[?::1\]?)$/i.test(v.syslogHost)) out.push({ code: 'admin.config-audit-syslog-plain', severity: 'warning' })
   if ((v.syslogHost || v.webhookUrl) && forwardFailing()) out.push({ code: 'admin.config-audit-forward-failing', severity: 'warning' })
   return out
 }

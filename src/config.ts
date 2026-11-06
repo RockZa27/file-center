@@ -188,6 +188,8 @@ export const config = {
   auditSyslogHost: env('AUDIT_SYSLOG_HOST', '').trim(),
   auditSyslogPort: env('AUDIT_SYSLOG_PORT', '').trim(),
   auditSyslogProto: env('AUDIT_SYSLOG_PROTO', '').trim().toLowerCase(),
+  /** AUDIT_SYSLOG_CA: PEM file of a private CA for syslog over TLS (read by audit-forward.ts; the system CAs stay trusted) */
+  auditSyslogCa: env('AUDIT_SYSLOG_CA', '').trim(),
   auditSyslogFacility: env('AUDIT_SYSLOG_FACILITY', '').trim(),
   auditWebhookUrl: env('AUDIT_WEBHOOK_URL', '').trim(),
   auditWebhookSecret: env('AUDIT_WEBHOOK_SECRET', ''),
