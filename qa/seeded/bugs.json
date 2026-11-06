@@ -24,7 +24,7 @@
     "patches": [
       {
         "file": "src/context.ts",
-        "find": "token !== session.csrf",
+        "find": "!sameToken(token, session.csrf)",
         "replace": "false"
       }
     ]
@@ -189,8 +189,8 @@
     "patches": [
       {
         "file": "src/auth.ts",
-        "find": "if (Date.now() - s.seen > ttlOf(s)) {",
-        "replace": "if (Date.now() - s.created > ttlOf(s) * 1000) {"
+        "find": "if (Date.now() - s.seen > ttlOf(s) || tooOld(s, Date.now())) {",
+        "replace": "if (Date.now() - s.created > ttlOf(s) * 1000 || tooOld(s, Date.now())) {"
       }
     ],
     "difficulty": "subtle"
@@ -280,8 +280,8 @@
     "patches": [
       {
         "file": "src/backup.ts",
-        "find": "export const BACKUP_NAME_RE = /^file-center-backup-\\d{8}-\\d{6}\\.zip$/",
-        "replace": "export const BACKUP_NAME_RE = /^file-center-backup-.+\\.zip$/"
+        "find": "export const BACKUP_NAME_RE = /^file-center-backup-\\d{8}-\\d{6}\\.zip(?:\\.enc)?$/",
+        "replace": "export const BACKUP_NAME_RE = /^file-center-backup-.+\\.zip(?:\\.enc)?$/"
       }
     ]
   },
@@ -1782,8 +1782,8 @@
     "patches": [
       {
         "file": "src/routes/admin.ts",
-        "find": "if (widens || sensitive) await confirmPassword(",
-        "replace": "if (sensitive) await confirmPassword("
+        "find": "if (widens || opens || sensitive) await confirmPassword(",
+        "replace": "if (opens || sensitive) await confirmPassword("
       }
     ]
   },
@@ -1932,8 +1932,8 @@
     "patches": [
       {
         "file": "src/policy.ts",
-        "find": "['security', 'mail', 'alerts']",
-        "replace": "['security', 'mail']"
+        "find": "['security', 'mail', 'alerts', 'auditForward', 'antivirus', 'share']",
+        "replace": "['security', 'mail', 'auditForward', 'antivirus', 'share']"
       }
     ]
   },
