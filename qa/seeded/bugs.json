@@ -2117,8 +2117,8 @@
     "patches": [
       {
         "file": "src/uploads.ts",
-        "find": "  if (finishing.has(id)) throw conflict('upload.completing')\n",
-        "replace": ""
+        "find": "  const meta = loadMeta(id, owner)\n  if (finishing.has(id)) throw conflict('upload.completing')\n  untrack(id)\n",
+        "replace": "  const meta = loadMeta(id, owner)\n  untrack(id)\n"
       }
     ]
   },
@@ -2149,6 +2149,21 @@
         "file": "src/account-records.ts",
         "find": "  removeUserFromGroups(username)\n  dropUploadsOf(username)\n",
         "replace": "  removeUserFromGroups(username)\n"
+      }
+    ]
+  },
+  {
+    "id": "chunk-during-scan",
+    "difficulty": "hard",
+    "category": "integrity",
+    "severity": "medium",
+    "tests": "tests/upload-scan-race.test.ts",
+    "description": "a chunk is still written while the upload is being completed, so the file can change after the virus scan read it",
+    "patches": [
+      {
+        "file": "src/uploads.ts",
+        "find": "  const meta = loadMeta(id, owner)\n  if (finishing.has(id)) throw conflict('upload.completing')\n  stillAllowed(id, meta, user)\n  stillThere(id, meta)\n  if (!Number.isInteger(index)",
+        "replace": "  const meta = loadMeta(id, owner)\n  stillAllowed(id, meta, user)\n  stillThere(id, meta)\n  if (!Number.isInteger(index)"
       }
     ]
   }
