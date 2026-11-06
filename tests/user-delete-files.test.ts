@@ -210,7 +210,7 @@ describe('delete an account with its files: races and links', () => {
     rmSync(storage('udf-link'), { force: true })
     symlinkSync(storage('users'), storage('udf-link'))
     try {
-      await userWith('udf-via', { homedir: '/udf-link/udf-real' })
+      await userWith('udf-via', { homedir: '/udf-link/udf-real', adoptHome: true })
       const r = await del('udf-via', { deleteFiles: true, password: adminPw })
       expect([r.status, r.data.code]).toEqual([400, 'admin.delete-files-home'])
       expect(readFileSync(storage('users', 'udf-real', 'keep.txt'), 'utf8')).toBe('keep')
