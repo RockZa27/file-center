@@ -152,7 +152,8 @@ export const api = {
   users: () => get('/api/admin/users'),
   createUser: u => post('/api/admin/users', u),
   updateUser: (username, u) => call('PUT', `/api/admin/users/${encodeURIComponent(username)}`, u),
-  deleteUser: username => call('DELETE', `/api/admin/users/${encodeURIComponent(username)}`),
+  /** `opts`: { deleteFiles: true, password } also sends the home folder to the system trash (admin only) */
+  deleteUser: (username, opts) => call('DELETE', `/api/admin/users/${encodeURIComponent(username)}`, opts),
   userSessions: username => get(`/api/admin/users/${encodeURIComponent(username)}/sessions`),
   revokeUserSessions: username => post(`/api/admin/users/${encodeURIComponent(username)}/sessions/revoke`),
   resetTwoFactor: (username, password) => post(`/api/admin/users/${encodeURIComponent(username)}/2fa/reset`, { password }),

@@ -27,6 +27,20 @@
         </div>
       </template>
     </n-modal>
+    <n-modal v-model:show="del.show" preset="card" :title="t('users.delete')" style="width: min(480px, 94vw)">
+      <p class="reset-text">{{ t('users.deleteConfirm', { name: del.user?.name || '' }) }}</p>
+      <n-checkbox v-model:checked="del.files">{{ t('users.deleteFiles', { days: app.config.trashRetentionDays }) }}</n-checkbox>
+      <p class="reset-text muted mono">{{ t('users.deleteHome') }}: {{ del.user?.homedir }}</p>
+      <n-form-item v-if="del.files" :label="t('users.adminPassword')" :show-feedback="false">
+        <n-input :placeholder="t('users.adminPassword')" v-model:value="del.password" type="password" show-password-on="click" :input-props="{ autocomplete: 'current-password' }" @keyup.enter="doDelete" />
+      </n-form-item>
+      <template #footer>
+        <div class="reset-foot">
+          <n-button @click="del.show = false">{{ t('common.cancel') }}</n-button>
+          <n-button type="error" :loading="del.busy" :disabled="del.files && !del.password" @click="doDelete">{{ del.files ? t('users.deleteWithFiles') : t('common.delete') }}</n-button>
+        </div>
+      </template>
+    </n-modal>
   </div>
 </template>
 
@@ -36,7 +50,7 @@ import PageHeader from '../components/PageHeader.vue'
 import { computed, h, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRouter } from 'vue-router'
-import { NButton, NDataTable, NDropdown, NEmpty, NFormItem, NIcon, NInput, NModal, NTag } from 'naive-ui'
+import { NButton, NCheckbox, NDataTable, NDropdown, NEmpty, NFormItem, NIcon, NInput, NModal, NTag } from 'naive-ui'
 import { CreateOutline, EllipsisHorizontal, FolderOpenOutline, PersonAddOutline, TrashOutline } from '@vicons/ionicons5'
 import { api } from '../api'
 import UserDevicesModal from '../components/UserDevicesModal.vue'
@@ -89,8 +103,21 @@ const quotaText = u => (u.manageable === false ? '' : u.quotaBytes ? formatBytes
 const edit = u => { form.user = u; form.show = true }
 
 async function remove(u) {
+  // an admin may also send the folder to the trash with the account (password asked again); a manager only deletes the account
+  if (app.user?.role === 'admin') { Object.assign(del, { user: u, files: false, password: '', show: true }); return }
   if (!(await fb.confirm({ title: t('users.delete'), content: t('users.deleteConfirm', { name: u.name }), positive: t('common.delete'), danger: true }))) return
   try { await api.deleteUser(u.username); fb.ok(t('files.done')); await load() } catch (e) { fb.fail(e) }
+}
+const del = reactive({ show: false, user: null, files: false, password: '', busy: false })
+async function doDelete() {
+  if (del.busy || (del.files && !del.password)) return
+  del.busy = true
+  try {
+    await api.deleteUser(del.user.username, del.files ? { deleteFiles: true, password: del.password } : undefined)
+    fb.ok(t('files.done'))
+    del.show = false
+    await load()
+  } catch (e) { fb.fail(e); del.password = '' } finally { del.busy = false }
 }
 
 const who = u => h('div', { style: 'min-width:0' }, [h('div', { class: 'who' }, u.name), h('div', { class: 'muted mono wrap' }, u.username)])

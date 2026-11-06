@@ -1,4 +1,4 @@
-import { rmSync } from 'node:fs'
+import { lstatSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { Elysia, t } from 'elysia'
 import { alert } from '../alerts'
@@ -6,7 +6,7 @@ import { audit, queryAudit } from '../audit'
 import type { Perm } from '../settings'
 import {
   allUsers, canManage, checkPasswordStrength, cleanHomedir, cleanPerms, confirmPassword, defaultHome, destroyUserSessions,
-  dropLoginTickets, findUser, hashPassword, homeIsTaken, isAdmin, isReservedUsername, listUserSessions, publicUser, saveUsers, USERNAME_RE,
+  dropLoginTickets, findUser, hashPassword, homeIsTaken, homeOverlapsOther, isAdmin, isReservedUsername, listUserSessions, publicUser, saveUsers, USERNAME_RE,
 } from '../auth'
 import { staleAfterMs, statusIn } from '../backup'
 import { config, paths } from '../config'
@@ -22,7 +22,9 @@ import { lockedKeysIn, policyView, savePolicy, STEP_UP_GROUPS } from '../policy'
 import { forgetAccount } from '../account-records'
 import { DISK_CRITICAL_PERCENT, DISK_LOW_PERCENT, diskInfo, storageStats } from '../stats'
 import { removeAppPasswordsOf } from '../app-passwords'
-import { listTrash, purge, restore, tombstoneTrashOf, trashSummary } from '../trash'
+import { listTrash, moveToTrash, purge, restore, tombstoneTrashOf, trashSummary, type TrashMeta } from '../trash'
+import { grantsOf, removeGrant } from '../grants'
+import { revokeShare, sharesOf } from '../shares'
 import { isBeta } from '../release'
 import { availableVersion } from '../update-source'
 import { uploadsInProgress } from '../uploads'
@@ -190,19 +192,56 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     return { ok: true }
   })
 
-  .delete('/admin/users/:username', ({ user, ip, params }) => {
+  // `deleteFiles` (admin only, password asked again) also sends the account's home folder to the system trash as one
+  // entry; everything is checked before anything moves, and a failed move leaves the account as it was
+  .delete('/admin/users/:username', {
+    body: t.Optional(t.Object({ deleteFiles: t.Optional(t.Boolean()), password: t.Optional(t.String({ maxLength: 1000 })) })),
+  }, async ({ user, ip, params, body }) => {
     const admin = requireStaff({ user, ip })
     const target = manageable(admin, params.username)
     if (target.username === admin.username) throw bad('admin.delete-self')
     if (target.role === 'admin' && adminCount() <= 1) throw bad('admin.last-admin')
+    let moved: TrashMeta | null = null
+    if (body?.deleteFiles) {
+      if (!isAdmin(admin)) throw forbidden()
+      await confirmPassword(admin, ip, body.password ?? '', 'user-delete-denied')
+      const home = normRel(target.homedir)
+      const low = home.toLowerCase()
+      const inside = (root: string) => low === root || low.startsWith(`${root}/`)
+      // the root, the public folder, the group folders, /users itself, or a folder that is also (or holds, or is inside)
+      // another account's: not this account's alone, so not ours to erase
+      if (target.role === 'admin' || home === '/' || inside(`/${config.publicDirName.toLowerCase()}`) || inside('/groups')
+        || low === '/users' || homeOverlapsOther(home, target.username)) throw bad('admin.delete-files-home')
+      const abs = resolveIn(config.storageDir, home)
+      let st: ReturnType<typeof lstatSync> | null = null
+      try { st = lstatSync(abs) } catch { /* never made, or gone */ }
+      if (st && (st.isSymbolicLink() || !st.isDirectory())) throw bad('admin.delete-files-home')
+      // a home that does not exist is nothing to move: the account is deleted and the answer says no files were found
+      if (st) moved = await moveToTrash(abs, admin.username)
+      // links and grants someone else (an admin) made to something inside it: a new account of this name must not bring them back
+      for (const u of allUsers()) {
+        if (u === target) continue
+        const root = normRel(u.homedir).toLowerCase()
+        const hit = (p: string) => {
+          const x = normRel(`${root === '/' ? '' : root}/${p}`).toLowerCase()
+          return x === low || x.startsWith(`${low}/`)
+        }
+        for (const g of grantsOf(u.username)) if (hit(g.path)) removeGrant(g)
+        for (const s of sharesOf(u.username)) if (s.space === 'home' && hit(s.path)) revokeShare(s)
+      }
+    }
     // before the account leaves the list: old trash entries find their owner from the home
     tombstoneTrashOf(target.username)
     const list = allUsers()
     list.splice(list.indexOf(target), 1)
     saveUsers()
     forgetAccount(target.username)
-    audit({ user: admin.username, ip, action: 'user-delete', target: target.username })
-    return { ok: true }
+    forget(target.username)
+    audit({
+      user: admin.username, ip, action: 'user-delete', target: target.username,
+      detail: moved ? `files to trash ${moved.id}, ${moved.size} bytes` : body?.deleteFiles ? 'no home folder found' : undefined,
+    })
+    return { ok: true, filesMoved: !!moved, ...(moved ? { trashId: moved.id } : {}) }
   })
 
   // a user's signed-in devices, and ending them all (a lost phone, a stolen cookie)
