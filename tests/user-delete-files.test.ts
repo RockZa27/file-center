@@ -154,8 +154,8 @@ describe('delete an account with its files', () => {
     expect(await hasUser('udf-adm')).toBe(true)
 
     await userWith('udf-s1', { homedir: '/udf-shared' })
-    await userWith('udf-s2', { homedir: '/udf-shared' })
-    await userWith('udf-s3', { homedir: '/udf-shared/inner' })
+    await userWith('udf-s2', { homedir: '/udf-shared', adoptHome: true })
+    await userWith('udf-s3', { homedir: '/udf-shared/inner', adoptHome: true })
     writeFileSync(storage('udf-shared', 'x.txt'), 'x')
     for (const name of ['udf-s1', 'udf-s3']) {
       const o = await del(name, { deleteFiles: true, password: adminPw })
