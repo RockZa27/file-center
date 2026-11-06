@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { access } from 'node:fs/promises'
-import { existsSync, lstatSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
 import { Elysia, t } from 'elysia'
 import { audit, auditOnce } from '../audit'
@@ -386,6 +386,9 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
         for (const file of listFiles(out)) {
           const name = `${basename(abs)}/${file.slice(out.length + 1)}`.replaceAll('\\', '/')
           await gate(file, { who, via: 'unzip', by: user?.username ?? 'guest', ip, name: name.slice(0, 255), destDir: dirname(abs) })
+          // a staging folder that looks idle for UPLOAD_STALE_HOURS is swept from tmp (cleanStaleUploads): a long scan keeps it fresh
+          const now = new Date()
+          utimesSync(stage, now, now)
         }
         // the name is claimed first (mkdir fails on a taken one), then the clean tree is moved into it: nothing is
         // overwritten, and a move that fails half way (another disk) leaves no partial folder behind

@@ -6,7 +6,7 @@
  */
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import net from 'node:net'
-import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { zipSync } from 'fflate'
 import './in-process-env'
@@ -17,6 +17,17 @@ let settings: typeof import('../src/settings').settings
 let av: typeof import('../src/antivirus')
 
 const EICAR = 'X5O!P%@AP[4\\PZX54(P^)7CC)7}$' + 'EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*'
+
+/** scans that wait before answering, in order: each test that queues one releases it */
+const pauses: { reached: () => void; go: Promise<void> }[] = []
+function pauseNextScan() {
+  let reached!: () => void
+  let release!: () => void
+  const at = new Promise<void>(r => { reached = r })
+  const go = new Promise<void>(r => { release = r })
+  pauses.push({ reached, go })
+  return { reached: at, release }
+}
 
 function clamd(): Promise<net.Server> {
   const server = net.createServer(sock => {
@@ -39,7 +50,9 @@ function clamd(): Promise<net.Server> {
         const len = buf.readUInt32BE(0)
         if (len === 0) {
           const data = Buffer.concat(body)
-          sock.end(data.includes(Buffer.from(EICAR)) ? 'stream: Eicar-Test-Signature FOUND\0' : 'stream: OK\0')
+          const answer = () => sock.end(data.includes(Buffer.from(EICAR)) ? 'stream: Eicar-Test-Signature FOUND\0' : 'stream: OK\0')
+          const pause = pauses.shift()
+          if (pause) { pause.reached(); pause.go.then(answer) } else answer()
           return
         }
         if (buf.length < 4 + len) return
@@ -112,6 +125,7 @@ beforeAll(async () => {
 })
 
 afterEach(() => {
+  pauses.length = 0
   scanOff()
   for (const m of av.listQuarantine()) av.deleteQuarantined(m.id)
   if (existsSync(home())) for (const n of readdirSync(home())) rmSync(home(n), { recursive: true, force: true })
@@ -169,6 +183,39 @@ describe('unzip with the antivirus on', () => {
     expect(r.status).toBe(200)
     expect(r.data).toMatchObject({ ok: true, folder: 'empty', files: 0 })
     expect(readdirSync(home('empty'))).toEqual([])
+    expect(stagings()).toEqual([])
+  })
+
+  test('a long scan keeps its staging folder fresh: the stale sweep of tmp does not take it', async () => {
+    const { config } = await import('../src/config')
+    const { cleanStaleUploads } = await import('../src/uploads')
+    const keep = config.uploadStaleMs
+    scanOn()
+    put('long.zip', { 'a.txt': 'one', 'b.txt': 'two' })
+    const first = pauseNextScan()
+    const second = pauseNextScan()
+    const done = unzip('long.zip')
+    try {
+      await first.reached
+      // while the first file is scanned the folder is made to look two hours idle
+      const [stage] = stagings()
+      expect(stage).toBeDefined()
+      const old = new Date(Date.now() - 2 * 3600_000)
+      utimesSync(join(paths.tmp, stage), old, old)
+      first.release()
+      // the second file is being scanned: a sweep with a one-hour limit must leave the folder alone
+      await second.reached
+      config.uploadStaleMs = 3600_000
+      cleanStaleUploads()
+      expect(stagings()).toEqual([stage])
+    } finally {
+      config.uploadStaleMs = keep
+      first.release()
+      second.release()
+    }
+    const r = await done
+    expect(r.status).toBe(200)
+    expect(r.data).toMatchObject({ ok: true, folder: 'long', files: 2 })
     expect(stagings()).toEqual([])
   })
 
