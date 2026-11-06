@@ -159,6 +159,19 @@ describe('changing the home of an account', () => {
     expect((await put({ homedir: '/uha-upd', adoptHome: true })).status).toBe(200)
     expect(await home()).toBe('/uha-upd')
     expect(lastAudit('user-update', 'uha-d')?.detail).toContain('taken over')
+
+    // the same name in other letters is another folder on a case-sensitive disk: it is checked like any other
+    mkdirSync(storage('UHA-UPD'), { recursive: true })
+    writeFileSync(storage('UHA-UPD', 'theirs.txt'), 'x')
+    try {
+      if (!existsSync(storage('uha-UPD'))) {
+        const c = await put({ homedir: '/UHA-UPD' })
+        expect([c.status, c.data.code]).toEqual([409, 'admin.home-has-files'])
+        expect(await home()).toBe('/uha-upd')
+      }
+    } finally {
+      rmSync(storage('UHA-UPD'), { recursive: true, force: true })
+    }
   })
 })
 

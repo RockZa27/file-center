@@ -1,4 +1,4 @@
-import { lstatSync, readdirSync, realpathSync, rmSync } from 'node:fs'
+import { lstatSync, opendirSync, realpathSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { Elysia, t } from 'elysia'
 import { alert } from '../alerts'
@@ -71,14 +71,25 @@ function checkAdoptHome(home: string, except: string | undefined, adopt: boolean
     if (!adopt) throw conflict('admin.home-of-other', { home })
     note = 'home shared with another account'
   } else {
-    let files = 0
-    try { files = readdirSync(resolveIn(config.storageDir, home)).length } catch { /* not there yet, or not a folder */ }
-    if (files) {
+    // only "is anything there" matters: a folder of a million entries is not read to the end for a count
+    const n = countEntries(resolveIn(config.storageDir, home), HOME_COUNT_CAP)
+    if (n) {
+      const files = n >= HOME_COUNT_CAP ? `${HOME_COUNT_CAP}+` : n
       if (!adopt) throw conflict('admin.home-has-files', { home, files })
       note = `home taken over with ${files} existing entries`
     }
   }
   return note
+}
+
+const HOME_COUNT_CAP = 1000
+/** entries of a folder, read one at a time up to `cap`; 0 when it is not there or not a folder */
+function countEntries(abs: string, cap: number): number {
+  let dir
+  try { dir = opendirSync(abs) } catch { return 0 }
+  let n = 0
+  try { while (n < cap && dir.readSync()) n++ } finally { dir.closeSync() }
+  return n
 }
 
 export const adminRoutes = new Elysia({ prefix: '/api' })
@@ -187,7 +198,8 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
       if (homedir === '/') throw bad('admin.home-required')
     }
     // a new home (not the one the account has now) is checked like a new account's
-    const adopted = role !== 'admin' && isAdmin(admin) && homedir.toLowerCase() !== target.homedir.toLowerCase()
+    // compared exactly: on a case-sensitive disk /users/Alice is another folder than /users/alice
+    const adopted = role !== 'admin' && isAdmin(admin) && homedir !== target.homedir
       ? checkAdoptHome(homedir, target.username, body.adoptHome) : ''
     const homeAbs = resolveIn(config.storageDir, homedir)
     if (body.password) checkPasswordStrength(body.password, target.username)
