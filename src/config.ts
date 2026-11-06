@@ -172,6 +172,8 @@ export const config = {
   /** who must set up 2FA while the settings page has no value (the web setting wins); an invalid value is 'none' (`require2faInvalid` holds it, one warning at start) */
   require2fa: (['none', 'admin', 'staff', 'all'].includes(process.env.REQUIRE_2FA?.trim().toLowerCase() ?? 'none') ? (process.env.REQUIRE_2FA?.trim().toLowerCase() || 'none') : 'none') as 'none' | 'admin' | 'staff' | 'all',
   require2faInvalid: ['', 'none', 'admin', 'staff', 'all'].includes(process.env.REQUIRE_2FA?.trim().toLowerCase() ?? '') ? '' : process.env.REQUIRE_2FA!.trim(),
+  /** LOCK_OUTBOUND_SETTINGS=true: the settings that choose where data leaves the server (ClamAV, audit forwarding, alerts, SMTP) come from .env only; the web can not change them and stored web values are ignored (read at call time, see LOCKED_WHEN_OUTBOUND_LOCK in policy.ts) */
+  lockOutbound: ['true', '1', 'yes'].includes(process.env.LOCK_OUTBOUND_SETTINGS?.trim().toLowerCase() ?? ''),
   /** PUBLIC_PAGE=off: a FRESH install starts with the public page closed (only the first settings.json is made from it); invalid = on */
   publicPageOff: process.env.PUBLIC_PAGE?.trim().toLowerCase() === 'off',
   publicPageInvalid: ['', 'on', 'off'].includes(process.env.PUBLIC_PAGE?.trim().toLowerCase() ?? '') ? '' : process.env.PUBLIC_PAGE!.trim(),

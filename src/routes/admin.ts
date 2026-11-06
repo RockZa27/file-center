@@ -18,7 +18,7 @@ import { langOf, type MessageCode, type Params, text } from '../messages'
 import type { User } from '../auth'
 import { cleanQuota, forget, usage } from '../quota'
 import { logoExt, settings } from '../settings'
-import { policyView, savePolicy, STEP_UP_GROUPS } from '../policy'
+import { lockedKeysIn, policyView, savePolicy, STEP_UP_GROUPS } from '../policy'
 import { forgetAccount } from '../account-records'
 import { DISK_CRITICAL_PERCENT, DISK_LOW_PERCENT, diskInfo, storageStats } from '../stats'
 import { removeAppPasswordsOf } from '../app-passwords'
@@ -365,6 +365,12 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     }),
   }, async ({ user, ip, body }) => {
     const admin = requireAdmin({ user, ip })
+    // LOCK_OUTBOUND_SETTINGS: a body naming a locked key is refused whole, before the password is asked (no guess is counted) and before anything is saved
+    const lockedKeys = lockedKeysIn(body as Record<string, unknown>)
+    if (lockedKeys.length) {
+      audit({ user: admin.username, ip, action: 'settings-denied', detail: lockedKeys.join(', ') })
+      throw forbidden('admin.setting-locked', { key: lockedKeys.join(', ') })
+    }
     const patch: Record<string, unknown> = {}
     const text = (key: keyof typeof body, max: number, min = 0) => {
       const v = body[key]

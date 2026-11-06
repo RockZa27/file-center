@@ -197,6 +197,7 @@ export const MESSAGES = {
   'admin.default-password': { th: 'ยังมีบัญชีที่ใช้รหัสผ่านเริ่มต้น กรุณาเปลี่ยนรหัสผ่าน', en: 'Some accounts still use their initial password. Please change it.' },
   // alerts sent to ALERT_WEBHOOK_URL (alerts.ts), in ALERT_LANG
   'admin.bad-setting': { th: 'ค่าตั้งค่า {key} ไม่ถูกต้อง', en: 'The setting {key} is not valid.' },
+  'admin.setting-locked': { th: 'ตั้งค่า {key} ที่หน้าเว็บไม่ได้ ถูกล็อกไว้ใน .env (LOCK_OUTBOUND_SETTINGS) ให้แก้ที่ไฟล์ .env', en: 'The setting {key} cannot be changed on the web: it is locked in .env (LOCK_OUTBOUND_SETTINGS). Edit the .env file instead.' },
   'admin.upload-over-ceiling': { th: 'ขนาดอัปโหลดสูงสุดตั้งเกิน {max} ไบต์ (ค่า UPLOAD_MAX_SIZE ของเซิร์ฟเวอร์) ไม่ได้', en: 'The upload limit cannot be set above {max} bytes (the server UPLOAD_MAX_SIZE).' },
   'auth.2fa-required': { th: 'ผู้ดูแลระบบกำหนดให้บัญชีของคุณต้องเปิดใช้การยืนยันตัวตนสองขั้นตอน (2FA) ก่อนใช้งานต่อ', en: 'Your account must turn on two-factor authentication (2FA) before you can continue.' },
   'share.must-have-password': { th: 'ลิงก์แชร์ต้องตั้งรหัสผ่าน', en: 'A share link must have a password.' },

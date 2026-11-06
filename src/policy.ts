@@ -29,7 +29,41 @@ export const NEVER_EXPIRES_AT = '9999-12-31T23:59:59.000Z'
 const DEFAULT_SHARE_DAYS = 7
 
 const envSet = (name: string | null) => !!name && process.env[name] !== undefined && process.env[name] !== ''
-const grp = <G extends 'share' | 'security' | 'files' | 'mail' | 'alerts' | 'auditForward' | 'antivirus'>(g: G): NonNullable<Settings[G]> => (settings.get()[g] ?? {}) as NonNullable<Settings[G]>
+/**
+ * LOCK_OUTBOUND_SETTINGS=true: these keys decide where data leaves the server (uploads to ClamAV, the activity log, alert
+ * texts, e-mail). They come from .env only: a stored web value stays in settings.json but is ignored, and the web can not save them.
+ */
+export const LOCKED_WHEN_OUTBOUND_LOCK = [
+  'antivirus.host', 'antivirus.port',
+  'auditForward.syslogHost', 'auditForward.syslogPort', 'auditForward.syslogProto', 'auditForward.webhookUrl', 'auditForward.webhookSecret',
+  'alerts.webhookUrl', 'alerts.kind', 'alerts.telegramChatId',
+  'mail.host', 'mail.port', 'mail.secure', 'mail.user', 'mail.pass',
+]
+export const isLocked = (path: string) => config.lockOutbound && LOCKED_WHEN_OUTBOUND_LOCK.includes(path)
+/** the locked keys of a request body (group.key), whatever their value */
+export function lockedKeysIn(body: Record<string, unknown>): string[] {
+  if (!config.lockOutbound) return []
+  const out: string[] = []
+  for (const g of POLICY_GROUPS) {
+    const given = body[g]
+    if (given === null || typeof given !== 'object' || Array.isArray(given)) continue
+    for (const k of Object.keys(given)) if (isLocked(`${g}.${k}`)) out.push(`${g}.${k}`)
+  }
+  return out
+}
+/** where each locked key is stored in settings.json, per group */
+const lockedStore = (g: string): string[] => LOCKED_WHEN_OUTBOUND_LOCK.filter(p => p.startsWith(`${g}.`)).map(p => SPEC[g][p.slice(g.length + 1)][0])
+
+const grp = <G extends 'share' | 'security' | 'files' | 'mail' | 'alerts' | 'auditForward' | 'antivirus'>(g: G): NonNullable<Settings[G]> => {
+  const stored = (settings.get()[g] ?? {}) as NonNullable<Settings[G]>
+  if (!config.lockOutbound) return stored
+  // locked: the stored web values of the locked keys do not exist as far as every reader is concerned
+  const copy: Record<string, unknown> = { ...stored }
+  for (const k of lockedStore(g)) delete copy[k]
+  return copy as NonNullable<Settings[G]>
+}
+/** the raw stored group, for saving (savePolicy must keep what is stored, locked or not) */
+const storedGroup = (g: string) => (settings.get() as any)[g] ?? {}
 
 /** a sealed secret opened; `null` when this server can not open it (the key is another one), which turns the feature off */
 const warnedUnreadable = new Set<string>()
@@ -214,7 +248,7 @@ export function policyView() {
   const quota = defaultQuotaBytes()
   const mv = mail()
   const av = alertValues()
-  return {
+  const view = {
     share: {
       defaultDays: { value: shareDefaultDays(), source: (sh.defaultDays !== undefined ? 'web' : 'default') as Source },
       maxDays: eff(sh.maxDays, config.shareMaxDays, 'SHARE_MAX_DAYS'),
@@ -281,6 +315,26 @@ export function policyView() {
       webhookSecretSource: (af.webhookSecretSealed !== undefined ? 'web' : 'default') as Source,
     },
   }
+  // a locked key says so (the page shows it read-only); the write-only secrets have no entry of their own, so their flag sits next to passSet / webhookSecretSet
+  if (config.lockOutbound) {
+    for (const path of LOCKED_WHEN_OUTBOUND_LOCK) {
+      const [g, k] = path.split('.') as [keyof typeof view, string]
+      const grpView = view[g] as Record<string, any>
+      if (path === 'mail.pass') grpView.passLocked = true
+      else if (path === 'auditForward.webhookSecret') grpView.webhookSecretLocked = true
+      else grpView[k].locked = true
+    }
+  }
+  return view
+}
+
+/** names (never values) of the locked keys that still hold a web value in settings.json: ignored while the lock is on */
+export function ignoredLockedKeys(): string[] {
+  if (!config.lockOutbound) return []
+  return LOCKED_WHEN_OUTBOUND_LOCK.filter(p => {
+    const [g, k] = p.split('.')
+    return storedGroup(g)[SPEC[g][k][0]] !== undefined
+  })
 }
 
 // ───────────── saving ─────────────
@@ -392,7 +446,7 @@ export function savePolicy(body: Record<string, unknown>): string[] {
     const given = body[g]
     if (given === undefined) continue
     if (given === null || typeof given !== 'object' || Array.isArray(given)) throw fail(g)
-    const cur = { ...((settings.get() as any)[g] ?? {}) }
+    const cur = { ...storedGroup(g) }
     for (const [key, value] of Object.entries(given as Record<string, unknown>)) {
       const spec = SPEC[g][key]
       if (!spec) throw fail(`${g}.${key}`)
