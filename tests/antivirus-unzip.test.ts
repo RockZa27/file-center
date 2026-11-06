@@ -75,22 +75,6 @@ class Client {
 }
 
 const PW = 'harbor-lamp-42'
-const SECRET = randomBytes(24).toString('base64url')
-const INTERNAL = 'http://file-center.internal:3000'
-const admin = new Client()
-const home = (user: string, ...p: string[]) => join(process.env.STORAGE_DIR!, 'users', user, ...p)
-const quarantined = () => av.listQuarantine()
-const editTmp = () => (existsSync(paths.tmp) ? readdirSync(paths.tmp).filter(n => n.startsWith('edit-')) : [])
-const read = (f: string) => readFileSync(f, 'utf8')
-
-let server: net.Server
-const port = () => (server.address() as net.AddressInfo).port
-const scanOn = (over: Record<string, unknown> = {}) =>
-  settings.update({ antivirus: { enabled: true, host: '127.0.0.1', port: port(), timeoutSeconds: 5, maxScanMb: 25, onErrorLinks: 'reject', onErrorUsers: 'reject', ...over } as any })
-// back to no stored antivirus group at all, as other files expect (a stored `enabled: false` would show as a web value)
-const scanOff = () => settings.update({ antivirus: undefined })
-
-const PW = 'harbor-lamp-42'
 const admin = new Client()
 const home = (...p: string[]) => join(process.env.STORAGE_DIR!, 'users', 'avz-u', ...p)
 const stagings = () => (existsSync(paths.tmp) ? readdirSync(paths.tmp).filter(n => n.startsWith('unzip-')) : [])
