@@ -4,7 +4,7 @@
  * an existing account, or a label ?xxxxxxxx (keyed hash, never a real user name). Web login and WebDAV. In-process.
  */
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
-import { readFileSync } from 'node:fs'
+import { readFileSync, writeFileSync } from 'node:fs'
 import './in-process-env'
 
 let app: any
@@ -19,6 +19,7 @@ let audit: typeof import('../src/audit')
 // letters and symbols that no hex digit, timestamp or id holds
 const TYPED = 'Zq!Hunter2~Pw-Secret#'
 const TYPED2 = 'Qz!Other~Pw-Phrase#'
+const TYPED3 = 'Wx!Broken~Key-Pass#'
 const IP = 'unknown'
 
 const got: { path: string; raw: string }[] = []
@@ -47,14 +48,14 @@ const newestFailure = () => audit.auditEntries().find(e => e.action === 'login-f
 const bellIds = () => notify.listNotifications('admin').items.map((n: any) => n.id)
 
 function clearCounters() {
-  for (const n of [TYPED, TYPED2, 'admin', 'ADMIN']) {
+  for (const n of [TYPED, TYPED2, TYPED3, 'admin', 'ADMIN']) {
     for (const k of [`${IP}|${n.toLowerCase()}`, `login-account|${n.toLowerCase()}`, `dav|${IP}|${n.toLowerCase()}`]) auth.clearFailures(k)
   }
   auth.clearFailures(`login-address|${IP}`)
   auth.clearFailures(`dav-address|${IP}`)
 }
 
-const saved = { url: '', kind: '' }
+const saved = { url: '', kind: '', lang: 'th' as 'th' | 'en' }
 beforeAll(async () => {
   ;({ app } = await import('../src/index'))
   ;({ config, paths } = await import('../src/config'))
@@ -65,6 +66,7 @@ beforeAll(async () => {
   audit = await import('../src/audit')
   saved.url = config.alertWebhookUrl
   saved.kind = config.alertWebhookKind
+  saved.lang = config.alertLang
   hook = Bun.serve({ port: 0, hostname: '127.0.0.1', fetch: async req => { got.push({ path: new URL(req.url).pathname, raw: await req.text() }); return new Response('ok') } })
   csrf = (await json('GET', '/api/session')).data.csrf
   clearCounters()
@@ -73,6 +75,7 @@ afterAll(async () => {
   clearCounters()
   config.alertWebhookUrl = saved.url
   config.alertWebhookKind = saved.kind
+  config.alertLang = saved.lang
   alerts.resetAlerts()
   hook.stop(true)
 })
@@ -196,5 +199,32 @@ describe('failed sign-in: what is recorded for the typed name', () => {
     expect((await dav('ADMIN')).status).toBe(401)
     expect(newestFailure()!.user).toBe('admin')
     clearCounters()
+  })
+
+  test('a secret.key that can not be read: the failure is still a 401, counted, and recorded as a label', async () => {
+    const box = await import('../src/secret-box')
+    box.subKey('make-sure-the-key-exists')
+    const original = readFileSync(paths.secretKey, 'utf8')
+    const before = new Set(bellIds())
+    try {
+      writeFileSync(paths.secretKey, 'damaged')
+      box.forgetKey()
+      expect(() => box.subKey('login-name-label')).toThrow()
+      expect((await fail(TYPED3)).status).toBe(401)
+      const e = newestFailure()!
+      expect(e.user).toMatch(/^\?[0-9a-f]{8}$/)
+      expect(auditText()).not.toContain(TYPED3)
+      // counted toward the lockout like any failure: the tries end in 429
+      let locked = false
+      for (let i = 0; i < 20 && !locked; i++) locked = (await fail(TYPED3)).status === 429
+      expect(locked).toBe(true)
+    } finally {
+      writeFileSync(paths.secretKey, original, { mode: 0o600 })
+      box.forgetKey()
+      // the lockout told the admins: their bell is left as it was
+      for (const n of notify.listNotifications('admin').items.filter((n: any) => !before.has(n.id))) notify.removeNotification('admin', (n as any).id)
+      alerts.resetAlerts()
+      clearCounters()
+    }
   })
 })

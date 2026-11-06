@@ -104,7 +104,19 @@ export function recordedName(typed: string): string {
   if (!name) return '-'
   const user = findUser(name)
   if (user) return user.username
-  return '?' + createHmac('sha256', subKey('login-name-label')).update(name.toLowerCase()).digest('hex').slice(0, 8)
+  return '?' + createHmac('sha256', labelKey()).update(name.toLowerCase()).digest('hex').slice(0, 8)
+}
+
+// A secret.key that can not be read must not turn a failed sign-in into an error: the failure would not be counted
+// toward the lockouts, and an unknown name would answer differently from a known one. A key of this process then
+// (labels still group within the run; an unkeyed hash of what was typed would be open to guessing)
+let processLabelKey: Buffer | null = null
+function labelKey(): Buffer {
+  try {
+    return subKey('login-name-label')
+  } catch {
+    return (processLabelKey ??= randomBytes(32))
+  }
 }
 
 export const publicUser = (u: User) => ({
