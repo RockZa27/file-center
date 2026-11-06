@@ -497,7 +497,7 @@ const th = {
   quarantine: {
     title: 'ไฟล์ที่ถูกกักกัน', lead: 'ไฟล์ที่ ClamAV พบไวรัสอยู่ที่นี่ ไม่ได้อยู่ในที่เก็บไฟล์ และไม่มีหน้าไหนให้เปิดหรือดาวน์โหลด ระบบลบเองเมื่อครบกำหนดหรือพื้นที่กักกันเต็ม',
     empty: 'ยังไม่มีไฟล์ถูกกักกัน', name: 'ไฟล์', signature: 'ไวรัส', by: 'ผู้ส่ง', via: 'ช่องทาง', at: 'เวลา', size: 'ขนาด', dest: 'ปลายทางเดิม',
-    via_upload: 'อัปโหลด', via_link: 'ลิงก์รับไฟล์', via_webdav: 'WebDAV', via_office: 'แก้ไขใน ONLYOFFICE', via_edit: 'แก้ไขไฟล์ข้อความ',
+    via_upload: 'อัปโหลด', via_link: 'ลิงก์รับไฟล์', via_webdav: 'WebDAV', via_office: 'แก้ไขใน ONLYOFFICE', via_edit: 'แก้ไขไฟล์ข้อความ', via_unzip: 'แตกไฟล์ zip',
     release: 'ปล่อยไฟล์', releaseTitle: 'ปล่อยไฟล์นี้กลับที่เดิม?',
     releaseText: 'ใช้เมื่อแน่ใจว่าเป็นการแจ้งเตือนผิดพลาด ไฟล์จะถูกย้ายไปโฟลเดอร์ปลายทางเดิมโดยไม่สแกนซ้ำ และมีบันทึกในประวัติการใช้งาน',
     deleteTitle: 'ลบไฟล์นี้ถาวร?', deleteText: 'ลบไฟล์ที่ถูกกักกันนี้ถาวร กู้คืนไม่ได้', deleted: 'ลบแล้ว', released: 'ปล่อยไฟล์แล้ว ({name})',
@@ -1129,7 +1129,7 @@ const en = {
   quarantine: {
     title: 'Quarantined files', lead: 'Files in which ClamAV found a virus are held here. They are not in the storage and no page opens or downloads them. They are removed automatically when they get old or the quarantine is full.',
     empty: 'Nothing is quarantined', name: 'File', signature: 'Virus', by: 'Sent by', via: 'Via', at: 'When', size: 'Size', dest: 'Original folder',
-    via_upload: 'Upload', via_link: 'Upload link', via_webdav: 'WebDAV', via_office: 'Edited in ONLYOFFICE', via_edit: 'Text editor',
+    via_upload: 'Upload', via_link: 'Upload link', via_webdav: 'WebDAV', via_office: 'Edited in ONLYOFFICE', via_edit: 'Text editor', via_unzip: 'Unzipped',
     release: 'Release', releaseTitle: 'Release this file to where it was going?',
     releaseText: 'Use this only when you are sure it is a false alarm. The file is moved to its original folder without scanning again, and the activity log records it.',
     deleteTitle: 'Delete this file permanently?', deleteText: 'This permanently deletes the quarantined file. It cannot be restored.', deleted: 'Deleted', released: 'Released ({name})',

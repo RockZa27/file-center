@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto'
 import { access } from 'node:fs/promises'
-import { existsSync, lstatSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
 import { Elysia, t } from 'elysia'
 import { audit, auditOnce } from '../audit'
@@ -362,21 +362,45 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     const release = takeUnzipSlot()
     let hold
     try { hold = holdNow(q, maxBytes) } catch (err) { release(); throw err }
-    mkdirSync(dest)
+    // with the antivirus on, the files come out into a private folder in tmp and reach the storage only when all are clean
+    const stage = antivirusOn() ? join(paths.tmp, `unzip-${Date.now()}-${randomBytes(8).toString('hex')}`) : null
+    let landed = dest
     try {
-      const count = await unzipTo(abs, dest, { maxBytes, maxFiles: config.unzipMaxFiles })
-      hold.commit((await treeStats(dest)).size)
-      indexTouched(dest)
+      let count: number
+      if (stage) {
+        ensureSpace(paths.tmp, maxBytes)
+        mkdirSync(stage, { recursive: true, mode: 0o700 })
+        const out = join(stage, 'out')
+        count = await unzipTo(abs, out, { maxBytes, maxFiles: config.unzipMaxFiles })
+        // one file at a time while the unzip slot is still ours: a zip of many files takes longer to extract while scanning is on.
+        // The first infected or refused file ends it all (gate() has quarantined the infected one); the folder goes in `finally`
+        const who = user ? 'user' : 'link'
+        for (const file of listFiles(out)) {
+          const name = `${basename(abs)}/${file.slice(out.length + 1)}`.replaceAll('\\', '/')
+          await gate(file, { who, via: 'unzip', by: user?.username ?? 'guest', ip, name: name.slice(0, 255), destDir: dirname(abs) })
+        }
+        // moved into place under a name nobody took meanwhile; nothing is overwritten
+        for (let tries = 0; ; tries++) {
+          landed = uniquePath(join(dirname(abs), folderName))
+          try { await moveTree(out, landed); break } catch (e: any) { if (e?.code !== 'EEXIST' || tries >= 5) throw e }
+        }
+      } else {
+        mkdirSync(dest)
+        count = await unzipTo(abs, dest, { maxBytes, maxFiles: config.unzipMaxFiles })
+      }
+      hold.commit((await treeStats(landed)).size)
+      indexTouched(landed)
       audit({ user: user?.username ?? 'guest', ip, action: 'unzip', target: storagePath(abs), detail: `${count} ไฟล์` })
-      return { ok: true, folder: basename(dest), files: count }
+      return { ok: true, folder: basename(landed), files: count }
     } catch (err) {
       // a half-extracted folder is useless; keeping it in the trash would only hold the disk space for weeks
-      rmSync(dest, { recursive: true, force: true })
+      if (!stage) rmSync(dest, { recursive: true, force: true })
       hold.release()
       // too much for the quota is a full home, not a zip that is too big
       if (q && room < otherMax && err instanceof HttpError && err.code === 'zip.too-big') throw exceeded(q)
       throw err instanceof HttpError ? err : bad('zip.extract-failed')
     } finally {
+      if (stage) rmSync(stage, { recursive: true, force: true })
       release()
     }
   })
@@ -515,4 +539,15 @@ async function transfer(
     }
   }
   return { done, failed }
+}
+
+/** every regular file under a folder (links are never followed) */
+function listFiles(dir: string): string[] {
+  const out: string[] = []
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, e.name)
+    if (e.isDirectory()) out.push(...listFiles(p))
+    else if (e.isFile()) out.push(p)
+  }
+  return out
 }
