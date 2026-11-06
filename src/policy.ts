@@ -33,12 +33,14 @@ const envSet = (name: string | null) => !!name && process.env[name] !== undefine
  * LOCK_OUTBOUND_SETTINGS=true: these keys decide where data leaves the server (uploads to ClamAV, the activity log, alert
  * texts, e-mail). They come from .env only: a stored web value stays in settings.json but is ignored, and the web can not save them.
  */
-export const LOCKED_WHEN_OUTBOUND_LOCK = [
-  'antivirus.host', 'antivirus.port',
-  'auditForward.syslogHost', 'auditForward.syslogPort', 'auditForward.syslogProto', 'auditForward.webhookUrl', 'auditForward.webhookSecret',
-  'alerts.webhookUrl', 'alerts.kind', 'alerts.telegramChatId',
-  'mail.host', 'mail.port', 'mail.secure', 'mail.user', 'mail.pass',
-]
+const LOCKED_KEYS: Record<string, string[]> = {
+  antivirus: ['host', 'port'],
+  auditForward: ['syslogHost', 'syslogPort', 'syslogProto', 'webhookUrl', 'webhookSecret'],
+  alerts: ['webhookUrl', 'kind', 'telegramChatId'],
+  mail: ['host', 'port', 'secure', 'user', 'pass'],
+}
+/** the same as `group.key` paths */
+export const LOCKED_WHEN_OUTBOUND_LOCK: string[] = Object.entries(LOCKED_KEYS).flatMap(([g, ks]) => ks.map(k => `${g}.${k}`))
 export const isLocked = (path: string) => config.lockOutbound && LOCKED_WHEN_OUTBOUND_LOCK.includes(path)
 /** the locked keys of a request body (group.key), whatever their value */
 export function lockedKeysIn(body: Record<string, unknown>): string[] {
