@@ -182,10 +182,11 @@
 | `CLAMAV_HOST` | `127.0.0.1` (ใน compose: `clamav`) | ที่อยู่ของ clamd |
 | `CLAMAV_PORT` | `3310` | พอร์ต TCP ของ clamd (ไม่มีการยืนยันตัวตน ห้ามเปิดสู่อินเทอร์เน็ต) |
 | `CLAMAV_TIMEOUT_SECONDS` | `60` | เวลารอสูงสุดต่อไฟล์ (รวมการเชื่อมต่อ) หมดเวลา = สแกนไม่ได้ |
-| `CLAMAV_MAX_SCAN_MB` | `25` | ไฟล์ที่ใหญ่กว่านี้ไม่ส่งไปสแกน (ตัดสินด้วย `CLAMAV_ON_TOO_BIG`) ควรไม่เกิน `StreamMaxLength` ของ clamd |
-| `CLAMAV_ON_TOO_BIG` | `allow` | ไฟล์ใหญ่เกิน `CLAMAV_MAX_SCAN_MB` (ทุกผู้ส่ง): `allow` บันทึกโดยไม่สแกนและลงประวัติ `virus-scan-skipped` หรือ `reject` ปฏิเสธ (413) |
+| `CLAMAV_MAX_SCAN_MB` | `25` | ไฟล์ที่ใหญ่กว่านี้ไม่ส่งไปสแกน (ตัดสินด้วย `CLAMAV_ON_TOO_BIG_LINKS` / `CLAMAV_ON_TOO_BIG_USERS`) ควรไม่เกิน `StreamMaxLength` ของ clamd |
+| `CLAMAV_ON_TOO_BIG_LINKS` | `reject` | ไฟล์ใหญ่เกิน `CLAMAV_MAX_SCAN_MB` จากลิงก์ขอไฟล์/ผู้เยี่ยมชม: `reject` ปฏิเสธ (413) หรือ `allow` บันทึกโดยไม่สแกนและลงประวัติ `virus-scan-skipped` (เหมือนเดิม: ไฟล์ใหญ่จากคนนอกถูกปฏิเสธ) |
+| `CLAMAV_ON_TOO_BIG_USERS` | `allow` | ไฟล์ใหญ่เกิน `CLAMAV_MAX_SCAN_MB` จากผู้ใช้ที่เข้าสู่ระบบ (รวม WebDAV): `allow` บันทึกโดยไม่สแกนและลงประวัติ `virus-scan-skipped` หรือ `reject` ปฏิเสธ (413) |
 | `CLAMAV_ON_ERROR_LINKS` | `reject` | สแกนไม่ได้จริง (clamd ล่ม หมดเวลา ตอบ ERROR) แล้วไฟล์มาจากลิงก์ขอไฟล์/ผู้เยี่ยมชม: `reject` ปฏิเสธ หรือ `allow` ให้ผ่าน |
-| `CLAMAV_ON_ERROR_USERS` | `reject` | สแกนไม่ได้จริง แล้วไฟล์มาจากผู้ใช้ที่เข้าสู่ระบบ (รวม WebDAV): `reject` หรือ `allow` (ไม่รวมไฟล์ใหญ่ ดู `CLAMAV_ON_TOO_BIG`) **ค่าเริ่มต้นเปลี่ยนจาก `allow` เป็น `reject`** มีผลกับระบบที่เปิดสแกนและไม่เคยตั้งค่านี้: ระหว่าง clamd ล่ม ผู้ใช้อัปโหลดไม่ได้ (503) ตั้ง `allow` เพื่อคงพฤติกรรมเดิม |
+| `CLAMAV_ON_ERROR_USERS` | `reject` | สแกนไม่ได้จริง แล้วไฟล์มาจากผู้ใช้ที่เข้าสู่ระบบ (รวม WebDAV): `reject` หรือ `allow` (ไม่รวมไฟล์ใหญ่ ดู `CLAMAV_ON_TOO_BIG_USERS`) **ค่าเริ่มต้นเปลี่ยนจาก `allow` เป็น `reject`** มีผลกับระบบที่เปิดสแกนและไม่เคยตั้งค่านี้: ระหว่าง clamd ล่ม ผู้ใช้อัปโหลดไม่ได้ (503) ตั้ง `allow` เพื่อคงพฤติกรรมเดิม |
 | `QUARANTINE_DAYS` | `30` | ลบไฟล์ที่กักกันเมื่อเกินกี่วัน (ตั้งในเว็บไม่ได้) |
 | `QUARANTINE_MAX_MB` | `2048` | ขนาดรวมสูงสุดของโฟลเดอร์กักกัน เกินแล้วลบไฟล์เก่าสุดก่อน (0 = ไม่จำกัด) |
 | `CLAMAV_MEMORY_LIMIT` | `3g` | (compose) หน่วยความจำของ service `clamav` |

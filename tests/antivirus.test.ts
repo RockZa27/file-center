@@ -348,8 +348,8 @@ describe('chunked uploads', () => {
   })
 
   test('a file over the scan size follows the policy too (413 when refused)', async () => {
-    // onErrorUsers no longer covers big files: onTooBig does (updated with the split of the two decisions)
-    scanOn({ maxScanMb: 0.001, onTooBig: 'reject' })
+    // onErrorUsers no longer covers big files: onTooBigUsers does (updated with the split of the two decisions)
+    scanOn({ maxScanMb: 0.001, onTooBigUsers: 'reject' })
     expect(code(await upload(user, 'huge.bin', new Uint8Array(5000)))).toEqual({ status: 413, code: 'antivirus.too-big' })
     scanOn({ maxScanMb: 0.001 })
     expect((await upload(user, 'huge-ok.bin', new Uint8Array(5000))).status).toBe(200)
@@ -468,15 +468,15 @@ describe('too big to scan is decided apart from a scanner failure', () => {
     expect(lines[lines.length - 1]).toContain(String(Math.floor(0.001 * 1024 ** 2)))
   })
 
-  test('onTooBig=reject refuses it with 413 and nothing lands, even when onErrorUsers is allow', async () => {
-    scanDefaults({ maxScanMb: 0.001, onTooBig: 'reject', onErrorUsers: 'allow' })
+  test('onTooBigUsers=reject refuses it with 413 and nothing lands, even when onErrorUsers is allow', async () => {
+    scanDefaults({ maxScanMb: 0.001, onTooBigUsers: 'reject', onErrorUsers: 'allow' })
     const before = skipped().length
     expect(code(await upload(user, 'big-reject.bin', new Uint8Array(5000)))).toEqual({ status: 413, code: 'antivirus.too-big' })
     expect(existsSync(home('av-user', 'big-reject.bin'))).toBe(false)
     expect(skipped().length).toBe(before)
   })
 
-  test('an upload link follows onTooBig for big files and onErrorLinks for a scanner failure', async () => {
+  test('an upload link refuses a big file by default (onTooBigLinks), apart from onTooBigUsers and from a scanner failure', async () => {
     mkdirSync(home('av-user', 'inbox-big'), { recursive: true })
     const made = await user.json('POST', '/api/shares', { space: 'home', path: '/inbox-big', days: 7, kind: 'upload' })
     expect(made.status).toBe(200)
@@ -488,11 +488,15 @@ describe('too big to scan is decided apart from a scanner failure', () => {
       expect((await visitor.raw('PUT', `/api/s/${token}/upload/${a.data.id}/0`, bytes, { 'content-type': 'application/octet-stream' })).status).toBe(200)
       return visitor.json('POST', `/api/s/${token}/upload/${a.data.id}/complete`)
     }
+    // an outsider must not get past the scan by padding a file over the limit: refused by default, users' default aside
     scanDefaults({ maxScanMb: 0.001 })
+    expect(code(await send('big2.bin', new Uint8Array(5000)))).toEqual({ status: 413, code: 'antivirus.too-big' })
+    expect(readdirSync(home('av-user', 'inbox-big'))).toEqual([])
+    scanDefaults({ maxScanMb: 0.001, onTooBigLinks: 'allow', onTooBigUsers: 'reject' })
+    const before = skipped().length
     expect((await send('big.bin', new Uint8Array(5000))).status).toBe(200)
     expect(readdirSync(home('av-user', 'inbox-big'))).toEqual(['big.bin'])
-    scanDefaults({ maxScanMb: 0.001, onTooBig: 'reject' })
-    expect(code(await send('big2.bin', new Uint8Array(5000)))).toEqual({ status: 413, code: 'antivirus.too-big' })
+    expect(skipped().length).toBe(before + 1)
     scanDefaults({ port: 1 })
     expect(code(await send('small.txt', new TextEncoder().encode('hi')))).toEqual({ status: 503, code: 'antivirus.unavailable' })
     expect(readdirSync(home('av-user', 'inbox-big'))).toEqual(['big.bin'])
@@ -509,19 +513,24 @@ describe('too big to scan is decided apart from a scanner failure', () => {
     expect(existsSync(home('av-user', 'dav-down.txt'))).toBe(false)
   })
 
-  test('the settings view reports onTooBig with its source, and an invalid value is refused', async () => {
-    const view = async () => (await admin.json('GET', '/api/admin/settings')).data.antivirus.onTooBig
+  test('the settings view reports onTooBigLinks/onTooBigUsers with their source, and an invalid value is refused', async () => {
+    expect((await admin.json('GET', '/api/admin/settings')).data.antivirus.onTooBigLinks).toEqual({ value: 'reject', source: 'default' })
+    const view = async () => (await admin.json('GET', '/api/admin/settings')).data.antivirus.onTooBigUsers
     expect(await view()).toEqual({ value: 'allow', source: 'default' })
     const pw = process.env.ADMIN_PASSWORD
-    const saved = await admin.json('PUT', '/api/admin/settings', { antivirus: { onTooBig: 'reject' }, password: pw })
+    // loosening the outsiders' rule asks for the password like every antivirus key (the right one below clears the miss)
+    expect((await admin.json('PUT', '/api/admin/settings', { antivirus: { onTooBigLinks: 'allow' } })).status).toBe(403)
+    const saved = await admin.json('PUT', '/api/admin/settings', { antivirus: { onTooBigUsers: 'reject' }, password: pw })
     expect(saved.status).toBe(200)
-    expect(saved.data.antivirus.onTooBig).toEqual({ value: 'reject', source: 'web' })
-    expect((await admin.json('PUT', '/api/admin/settings', { antivirus: { onTooBig: 'maybe' }, password: pw })).status).toBe(400)
+    expect(saved.data.antivirus.onTooBigUsers).toEqual({ value: 'reject', source: 'web' })
+    expect((await admin.json('PUT', '/api/admin/settings', { antivirus: { onTooBigUsers: 'maybe' }, password: pw })).status).toBe(400)
+    expect((await admin.json('PUT', '/api/admin/settings', { antivirus: { onTooBigLinks: 'maybe' }, password: pw })).status).toBe(400)
     expect((await view()).value).toBe('reject')
     settings.update({ antivirus: undefined })
-    const had = process.env.CLAMAV_ON_TOO_BIG
-    process.env.CLAMAV_ON_TOO_BIG = 'reject'
-    try { expect((await view()).source).toBe('env') } finally { if (had === undefined) delete process.env.CLAMAV_ON_TOO_BIG; else process.env.CLAMAV_ON_TOO_BIG = had }
+    const had = process.env.CLAMAV_ON_TOO_BIG_USERS
+    process.env.CLAMAV_ON_TOO_BIG_USERS = 'reject'
+    try { expect((await view()).source).toBe('env') } finally { if (had === undefined) delete process.env.CLAMAV_ON_TOO_BIG_USERS; else process.env.CLAMAV_ON_TOO_BIG_USERS = had }
+    expect(config.clamavOnTooBigLinks).toBe('reject')
     expect(config.clamavOnErrorUsers).toBe('reject')
   })
 })

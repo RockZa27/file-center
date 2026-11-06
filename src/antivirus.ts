@@ -8,9 +8,10 @@
  * storage, an infected one goes to the quarantine folder (paths.quarantine, under the system data, in no route's reach
  * except the admin's list) and never to the storage.
  *
- * Two separate decisions when a file is not scanned. A file over the scan size is decided by `onTooBig` for every sender
- * (default allow, with a `virus-scan-skipped` audit line). A scan that failed (clamd unreachable, a timeout, an ERROR
- * answer) is decided by the policy for who sent the file: `reject` by default for upload links, visitors and signed-in users.
+ * Two separate decisions when a file is not scanned, each per sender. A file over the scan size: `onTooBigLinks` (default
+ * reject: an anonymous sender must not get past the scan by padding a file) and `onTooBigUsers` (default allow, with a
+ * `virus-scan-skipped` audit line). A scan that failed (clamd unreachable, a timeout, an ERROR answer): `onErrorLinks`
+ * and `onErrorUsers`, both `reject` by default.
  * What clamd answers is never shown to the uploader; only the catalog message is. The signature name goes to the audit
  * trail and the admin alert.
  */
@@ -190,7 +191,7 @@ export function verdict(r: ScanResult, who: Audience): 'allow' | 'infected' | 'r
   if (r.status === 'infected') return 'infected'
   if (r.status !== 'error') return 'allow'
   const v = policy.antivirusValues()
-  if (r.reason === 'too-big') return v.onTooBig === 'reject' ? 'rejected' : 'allow'
+  if (r.reason === 'too-big') return (who === 'link' ? v.onTooBigLinks : v.onTooBigUsers) === 'reject' ? 'rejected' : 'allow'
   return (who === 'link' ? v.onErrorLinks : v.onErrorUsers) === 'reject' ? 'rejected' : 'allow'
 }
 
