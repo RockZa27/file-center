@@ -28,7 +28,7 @@
       </template>
     </n-modal>
     <n-modal v-model:show="del.show" preset="card" :title="t('users.delete')" style="width: min(480px, 94vw)">
-      <p class="reset-text">{{ t('users.deleteConfirm', { name: del.user?.name || '' }) }}</p>
+      <p class="reset-text">{{ t('users.deleteConfirmAdmin', { name: del.user?.name || '' }) }}</p>
       <n-checkbox v-model:checked="del.files">{{ t('users.deleteFiles', { days: app.config.trashRetentionDays }) }}</n-checkbox>
       <p class="reset-text muted mono">{{ t('users.deleteHome') }}: {{ del.user?.homedir }}</p>
       <n-form-item v-if="del.files" :label="t('users.adminPassword')" :show-feedback="false">
