@@ -240,6 +240,8 @@ export function backupSettings() {
     includeFiles: eff.includeFiles,
     /** new backups are encrypted (BACKUP_ENCRYPTION_KEY is set and valid) */
     encryption: backupKeyState().state === 'on',
+    /** BACKUP_ENCRYPTION_KEY is set but not valid: no backup is made (writeBackup refuses) */
+    encryptionKeyInvalid: backupKeyState().state === 'invalid',
     /** the same as includeFiles (older pages) */
     includesFiles: eff.includeFiles,
     compression: eff.compression,
@@ -706,9 +708,13 @@ function lostTwoFactor(dir: string): string[] {
 /** `twoFactorLost`: users who can not use 2FA on this server after the restart (see lostTwoFactor) */
 export function restoreBackup(name: string, allowUnencrypted = false): Promise<{ safety: BackupItem; twoFactorLost: string[] }> {
   return exclusive(async () => {
-    // with a valid key an operator may assume only authenticated (GCM) files are restored: a plain zip needs an explicit yes
-    if (!name.endsWith('.enc') && !allowUnencrypted && backupKeyState().state === 'on') throw bad('backup.restore-unencrypted')
     const sealedAbs = backupPath(name)
+    // a key that is set but wrong stops every backup, the safety copy of a restore too: said here, before that copy is
+    // tried, so a refused restore does not read as a failed backup (status, alert)
+    const keyNow = backupKeyState().state
+    if (keyNow === 'invalid') throw bad('backup.key-invalid')
+    // with a valid key an operator may assume only authenticated (GCM) files are restored: a plain zip needs an explicit yes
+    if (!name.endsWith('.enc') && !allowUnencrypted && keyNow === 'on') throw bad('backup.restore-unencrypted')
     // an encrypted backup is opened to a temporary zip beside the backups (never in tmp/: that may be on a small disk),
     // before anything is changed, so a wrong key or a damaged file costs nothing; it is always removed again
     const unsealed = name.endsWith('.enc') ? join(config.backupDir, `.restore-${randomBytes(6).toString('hex')}.zip.tmp`) : null

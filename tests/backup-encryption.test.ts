@@ -392,6 +392,9 @@ describe('encrypted backups (API)', () => {
         const r = await admin.json('POST', '/api/admin/backups/restore', { name, password: PASSWORD, ...body })
         expect([r.status, r.data.code]).toEqual([400, 'backup.restore-unencrypted'])
       }
+      // a plain name that is not there is "not found", not "not encrypted"
+      const gone = await admin.json('POST', '/api/admin/backups/restore', { name: 'file-center-backup-20000109-000000.zip', password: PASSWORD })
+      expect([gone.status, gone.data.code]).toEqual([404, 'backup.not-found'])
     })
     expect(names()).toEqual(before)
     expect(readFileSync(paths.users, 'utf8')).toBe(users)
@@ -421,16 +424,24 @@ describe('encrypted backups (API)', () => {
       expect(hooks[0]).toMatchObject({ event: 'backup-failed', code: 'backup.key-invalid' })
       expect(hooks[0].message).toContain('BACKUP_ENCRYPTION_KEY')
       expect(JSON.stringify(hooks[0]).includes(KEY.slice(0, -1))).toBe(false)
-      const status = (await admin.json('GET', '/api/admin/backups')).data.status
+      const page = (await admin.json('GET', '/api/admin/backups')).data
+      const status = page.status
       expect(status).toMatchObject({ status: 'failed', code: 'backup.key-invalid' })
-      // the safety backup of a restore fails first: the restore is refused, nothing changes (the old copies are not pruned either)
+      // the backup page can tell the key is wrong (not merely off)
+      expect(page.settings).toMatchObject({ encryption: false, encryptionKeyInvalid: true })
+      // a restore is refused for the key itself, before its safety backup is tried: nothing changes (the old copies are
+      // not pruned either), and it is no failed backup: the status is not rewritten and no second alert goes out
       const keep = config.backupKeep
       config.backupKeep = 1
+      alerts.resetAlerts()
       await supervised(async () => {
         const r = await admin.json('POST', '/api/admin/backups/restore', { name: plain, password: PASSWORD, allowUnencrypted: true })
         expect([r.status, r.data.code]).toEqual([400, 'backup.key-invalid'])
       })
       config.backupKeep = keep
+      await alerts.alertsIdle()
+      expect(hooks.length).toBe(1)
+      expect((await admin.json('GET', '/api/admin/backups')).data.status.lastAttempt).toBe(status.lastAttempt)
       expect(names()).toEqual(before)
       expect(readFileSync(paths.users, 'utf8')).toBe(users)
     } finally {

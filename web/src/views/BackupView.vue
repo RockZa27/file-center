@@ -119,7 +119,7 @@
               <span class="strong">{{ t('backupSet.encryption') }}</span>
               <n-tag :type="settings.encryption ? 'success' : 'default'" size="small" round :bordered="false">{{ settings.encryption ? t('backupSet.encryptionOn') : t('backupSet.encryptionOff') }}</n-tag>
             </div>
-            <div class="hint muted">{{ settings.encryption ? t('backupSet.encryptionOnHint') : t('backupSet.encryptionOffHint') }}</div>
+            <div class="hint muted">{{ settings.encryption ? t('backupSet.encryptionOnHint') : settings.encryptionKeyInvalid ? t('backupSet.encryptionInvalidHint') : t('backupSet.encryptionOffHint') }}</div>
           </div>
 
           <div class="foot-actions">
@@ -212,7 +212,7 @@ import ListSkeleton from '../components/ListSkeleton.vue'
 import PageHeader from '../components/PageHeader.vue'
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
-import { NAlert, NButton, NEmpty, NForm, NFormItem, NIcon, NInput, NInputNumber, NModal, NRadio, NRadioButton, NRadioGroup, NSpin, NSwitch, NTag, NTimePicker } from 'naive-ui'
+import { NAlert, NButton, NCheckbox, NEmpty, NForm, NFormItem, NIcon, NInput, NInputNumber, NModal, NRadio, NRadioButton, NRadioGroup, NSpin, NSwitch, NTag, NTimePicker } from 'naive-ui'
 import { ArchiveOutline, ArrowUndoOutline, DownloadOutline, RefreshOutline, TrashOutline } from '@vicons/ionicons5'
 import { api } from '../api'
 import { useDownload, useFeedback } from '../composables'
