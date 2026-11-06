@@ -174,4 +174,25 @@ describe('fair use of the one scanner', () => {
       expect(ins.startInsight('ins-guard-key', dir)).toBe('recent')
     } finally { ins.INSIGHT_LIMITS.rescanMs = 0 }
   })
+
+  test('a scan that was running when everything was forgotten does not put its result back', async () => {
+    const dir = home('ins-eager')
+    expect(ins.startInsight('ins-late-key', dir)).toBe('started')
+    // an account deleted or made while it runs: its result may be the old account's
+    ins.forgetInsight()
+    await ins.insightIdle()
+    expect(ins.insightState('ins-late-key').state).toBe('none')
+  })
+
+  test('a new account of a deleted name does not inherit the cooldown', async () => {
+    const { forgetAccount } = await import('../src/account-records')
+    ins.INSIGHT_LIMITS.userCooldownMs = 60_000
+    try {
+      expect(ins.startInsight('ins-cool-key', home('ins-eager'), 'ins-reborn')).toBe('started')
+      await ins.insightIdle()
+      expect(ins.cooldownLeft('ins-reborn')).toBeGreaterThan(0)
+      forgetAccount('INS-REBORN')
+      expect(ins.cooldownLeft('ins-reborn')).toBe(0)
+    } finally { ins.INSIGHT_LIMITS.userCooldownMs = 0 }
+  })
 })

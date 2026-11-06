@@ -178,6 +178,8 @@ const lastStart = new Map<string, number>()
 /** when the last scan a (non-admin) user started finished */
 const userDone = new Map<string, number>()
 let running: { key: string; promise: Promise<void> } | null = null
+/** bumped when every result is forgotten: a scan that started before must not put its result back afterwards */
+let generation = 0
 
 const exists = (abs: string) => { try { lstatSync(abs); return true } catch { return false } }
 
@@ -230,7 +232,10 @@ export function startInsight(key: string, root: string, limitedUser?: string): S
   if (prev !== undefined && Date.now() - prev < INSIGHT_LIMITS.rescanMs) return 'recent'
   if (lastStart.size >= 1000) for (const [k, v] of lastStart) if (Date.now() - v >= INSIGHT_LIMITS.rescanMs) lastStart.delete(k)
   lastStart.set(key, Date.now())
+  const gen = generation
   const promise = scanFolder(root).then(result => {
+    // everything was forgotten while it ran (an account was deleted or made): its result may be the old account's
+    if (gen !== generation) return
     if (cache.size >= INSIGHT_LIMITS.cacheEntries) cache.delete(cache.keys().next().value!)
     cache.delete(key)
     cache.set(key, { at: Date.now(), root, result })
@@ -245,4 +250,6 @@ export function startInsight(key: string, root: string, limitedUser?: string): S
 /** wait for the running scan (tests) */
 export const insightIdle = async () => { await running?.promise }
 /** drop cached results (all, or one folder); the rescan guard and the user cooldown stay */
-export const forgetInsight = (key?: string) => { if (key) cache.delete(key); else cache.clear() }
+export const forgetInsight = (key?: string) => { if (key) cache.delete(key); else { cache.clear(); generation++ } }
+/** a deleted (or newly made) account does not carry the cooldown of an earlier account of that name */
+export const forgetInsightUser = (username: string) => { for (const k of userDone.keys()) if (k.toLowerCase() === username.toLowerCase()) userDone.delete(k) }
