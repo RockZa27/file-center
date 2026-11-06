@@ -566,10 +566,15 @@ async function send(password) {
       // the lock was switched on after this page loaded: reload so locked rows turn read-only, keep the edits that are still allowed
       pwOpen.value = false
       const kept = changedPaths.value.map(p => [p, f[p]])
+      const keptResets = [...resets.value]
+      const keptUnlimited = f.quotaUnlimited
       try {
         fill(await api.settings())
         for (const [p, v] of kept) if (!isLocked(p)) f[p] = v
-      } catch { /* the message below still tells what happened */ }
+        // fill() forgets the reset-to-default marks and the quota switch: they are edits too
+        resets.value = keptResets.filter(p => !isLocked(p))
+        f.quotaUnlimited = keptUnlimited
+      } catch { /* the message below still tells what happened; the page keeps its unsaved edits */ }
       fb.fail(e)
     } else if (e.code === 'admin.upload-over-ceiling') {
       pwOpen.value = false

@@ -175,7 +175,14 @@ export type AuditForwardValues = { syslogHost: string; syslogPort: number; syslo
   /** signing secret for the webhook ('' = unsigned); `webhookSecretBroken` = one is saved but secret.key can not open it, so nothing may be sent */
   webhookSecret: string; webhookSecretBroken: boolean }
 /** the AUDIT_* values of .env, checked: a bad one is left out (default) and its variable name is in `invalid` (never its value) */
+let auditEnvCache: { key: string; value: ReturnType<typeof readAuditEnv> } | null = null
 export function auditEnv() {
+  // read on every audit entry: parsed again only when the raw values change (tests change them on `config`)
+  const key = JSON.stringify([config.auditSyslogHost, config.auditSyslogPort, config.auditSyslogProto, config.auditSyslogFacility, config.auditWebhookUrl, config.auditWebhookSecret])
+  if (auditEnvCache?.key !== key) auditEnvCache = { key, value: readAuditEnv() }
+  return auditEnvCache.value
+}
+function readAuditEnv() {
   const invalid: string[] = []
   const pick = <T>(name: string, raw: string, def: T, parse: (r: string) => T | undefined): { value: T; set: boolean } => {
     if (!raw) return { value: def, set: false }
@@ -199,18 +206,20 @@ export function auditForwardValues(): AuditForwardValues {
   const e = auditEnv()
   // a saved URL that can not be opened turns the web value off, it does not fall back to .env
   const url = a.webhookSealed !== undefined ? unseal(a.webhookSealed, 'URL ส่งต่อบันทึกกิจกรรม') : e.url.value
+  // the secret goes with the URL it was made for: AUDIT_WEBHOOK_SECRET signs only for AUDIT_WEBHOOK_URL, never for a URL set on
+  // the web (an admin-chosen receiver must not collect batches signed with the operator's secret), and the web secret only for the web URL
+  const envUrl = a.webhookSealed === undefined && !!e.url.value
   // no URL = nothing is signed or sent, so the secret is not opened (and not warned about) on every audit entry
-  const webSecret = url && a.webhookSecretSealed !== undefined ? unseal(a.webhookSecretSealed, 'รหัสลับเซ็นชื่อ webhook ส่งต่อบันทึกกิจกรรม') : undefined
-  const webBroken = webSecret === null
+  const webSecret = !envUrl && url && a.webhookSecretSealed !== undefined ? unseal(a.webhookSecretSealed, 'รหัสลับเซ็นชื่อ webhook ส่งต่อบันทึกกิจกรรม') : undefined
   return {
     syslogHost: a.syslogHost ?? e.host.value,
     syslogPort: a.syslogPort ?? e.port.value,
     syslogProto: a.syslogProto ?? e.proto.value,
     syslogFacility: a.syslogFacility ?? e.facility.value,
     webhookUrl: url ?? '',
-    webhookSecret: webSecret ?? (a.webhookSecretSealed === undefined ? e.secret.value : ''),
+    webhookSecret: envUrl ? e.secret.value : (webSecret ?? ''),
     // a secret that can not be used (the saved one is sealed with another key, or AUDIT_WEBHOOK_SECRET is malformed) must never become unsigned sending
-    webhookSecretBroken: !!url && (webBroken || (a.webhookSecretSealed === undefined && e.secretBad)),
+    webhookSecretBroken: !!url && (envUrl ? e.secretBad : webSecret === null),
   }
 }
 
@@ -340,8 +349,9 @@ export function policyView() {
       syslogFacility: effEnv(af.syslogFacility, afv.syslogFacility, ae.facility.set),
       webhookUrl: { value: maskUrl(afv.webhookUrl), source: (af.webhookSealed !== undefined ? 'web' : ae.url.set ? 'env' : 'default') as Source },
       /** the secret itself is never sent */
-      webhookSecretSet: !!af.webhookSecretSealed || (!!config.auditWebhookSecret && af.webhookSecretSealed === undefined),
-      webhookSecretSource: (af.webhookSecretSealed !== undefined ? 'web' : config.auditWebhookSecret ? 'env' : 'default') as Source,
+      // the secret in use is the one that goes with the URL in use (see auditForwardValues)
+      webhookSecretSet: af.webhookSealed === undefined && ae.url.value ? ae.secret.set : !!af.webhookSecretSealed,
+      webhookSecretSource: (af.webhookSealed === undefined && ae.url.value ? (ae.secret.set ? 'env' : 'default') : af.webhookSecretSealed !== undefined ? 'web' : 'default') as Source,
     },
   }
   // a locked key says so (the page shows it read-only); the write-only secrets have no entry of their own, so their flag sits next to passSet / webhookSecretSet

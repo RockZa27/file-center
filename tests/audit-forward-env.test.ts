@@ -108,6 +108,27 @@ describe('audit forwarding from .env', () => {
     expect(JSON.parse(h.raw).entries[0].action).toBe('login')
   })
 
+  test('not locked: AUDIT_WEBHOOK_SECRET signs only for AUDIT_WEBHOOK_URL, never for a URL set on the web', async () => {
+    cfg.lockOutbound = false
+    cfg.auditWebhookUrl = hookUrl('/env')
+    cfg.auditWebhookSecret = ENV_SECRET
+    // an admin-chosen receiver with no web secret gets unsigned batches, as before .env values existed (not the operator's signature)
+    settingsMod.settings.update({ auditForward: { webhookSealed: secretBox.seal(hookUrl('/web')) } } as any)
+    await quiet()
+    audit({ user: 'tester', ip: '127.0.0.1', action: 'login' })
+    await wait(() => hookGot.length > 0)
+    expect(hookGot.map(h => [h.path, h.headers.get('x-fc-signature')])).toEqual([['/web', null]])
+    // the env receiver with a secret saved on the web (and no web URL) is still signed with the env secret
+    settingsMod.settings.update({ auditForward: { webhookSecretSealed: secretBox.seal(WEB_SECRET) } } as any)
+    await quiet()
+    audit({ user: 'tester', ip: '127.0.0.1', action: 'login' })
+    await wait(() => hookGot.length > 0)
+    const h = hookGot[0]
+    expect(h.path).toBe('/env')
+    expect(h.headers.get('x-fc-signature')).toBe('sha256=' + sign(ENV_SECRET, h.headers.get('x-fc-timestamp')!, h.raw))
+    expect(((policy.policyView().auditForward) as any).webhookSecretSource).toBe('env')
+  })
+
   test('locked: AUDIT_SYSLOG_HOST / PORT get the line over UDP and over TCP', async () => {
     cfg.lockOutbound = true
     cfg.auditSyslogHost = '127.0.0.1'
