@@ -12,6 +12,7 @@ import { destroyUserSessions } from './auth'
 import { removeAppPasswordsOf } from './app-passwords'
 import { removeUserState } from './favorites'
 import { forgetGuide } from './guide'
+import { forgetInsight } from './insight'
 import { removeGrantsOf } from './grants'
 import { removeUserFromGroups } from './groups'
 import { forgetNotifications } from './notify'
@@ -29,6 +30,8 @@ export function forgetAccount(username: string) {
   removeAppPasswordsOf(username)
   removeUserFromGroups(username)
   dropUploadsOf(username)
+  // a result of the old account's files must not answer for a new account (any home it may get): all of them go, they are cheap to rescan
+  forgetInsight()
 }
 
 /** the data files this touches (a test points them at its own folder) */

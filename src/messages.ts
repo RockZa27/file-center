@@ -102,6 +102,7 @@ export const MESSAGES = {
   'files.copy-into-self': { th: 'ไม่สามารถคัดลอกโฟลเดอร์เข้าไปในตัวมันเองได้', en: 'A folder cannot be copied into itself.' },
   'files.dest-name-taken': { th: 'มีชื่อเดียวกันอยู่ในปลายทางแล้ว', en: 'An item with the same name is already in the destination.' },
   'insight.busy': { th: 'กำลังวิเคราะห์พื้นที่ของที่อื่นอยู่ กรุณารอสักครู่แล้วลองใหม่', en: 'Another storage analysis is running. Please wait a moment and try again.' },
+  'insight.cooldown': { th: 'วิเคราะห์พื้นที่ได้อีกครั้งในอีก {seconds} วินาที กรุณารอสักครู่', en: 'You can analyse storage again in {seconds} seconds. Please wait a moment.' },
   'files.delete-failed': { th: 'ลบไม่สำเร็จ', en: 'Could not delete.' },
   'files.transfer-failed': { th: 'ทำรายการไม่สำเร็จ', en: 'Could not complete the action.' },
 
