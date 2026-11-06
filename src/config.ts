@@ -225,11 +225,13 @@ export const config = {
    */
   trustProxy: env('TRUST_PROXY', 'false') as 'false' | 'true' | 'cloudflare',
   /**
-   * who may send those headers: a comma-separated list of IPs and CIDR ranges (127.0.0.1,::1,172.16.0.0/12). Empty = every
+   * who may send those headers: a comma-separated list of IPs and CIDR ranges (127.0.0.1,::1,172.16.0.0/12). Not set = every
    * connection is believed (the old behaviour). The headers of a connection that is not in the list are ignored.
-   * `trustedProxiesInvalid` holds the entries that were not an address or range (one warning at start)
+   * `trustedProxiesSet` is true when the variable has a value at all: then a list with no valid entry trusts NO connection
+   * (a typo must close, not open). `trustedProxiesInvalid` holds the entries that were not an address or range (one warning at start)
    */
   trustedProxies: parseIpList(env('TRUSTED_PROXIES', '')).rules,
+  trustedProxiesSet: env('TRUSTED_PROXIES', '').trim() !== '',
   trustedProxiesInvalid: parseIpList(env('TRUSTED_PROXIES', '')).invalid,
   /** first-run admin password; random one is printed to the console when empty */
   adminPassword: env('ADMIN_PASSWORD', ''),
@@ -403,9 +405,9 @@ ensureDirs()
 
 /**
  * may the headers that name the client (CF-Connecting-IP, X-Forwarded-For/-Host/-Proto) be believed from this socket address?
- * Only when TRUST_PROXY is set and, if TRUSTED_PROXIES is given, the socket is one of those addresses
+ * Only when TRUST_PROXY is set and, if TRUSTED_PROXIES is set, the socket is one of those addresses (a set value with no valid entry trusts none)
  */
 export function proxyTrusted(socketIp: string): boolean {
   if (config.trustProxy === 'false') return false
-  return config.trustedProxies.length === 0 || ipInRules(socketIp, config.trustedProxies)
+  return !config.trustedProxiesSet || ipInRules(socketIp, config.trustedProxies)
 }

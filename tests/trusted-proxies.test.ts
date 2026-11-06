@@ -73,6 +73,7 @@ describe('TRUSTED_PROXIES: who is believed', () => {
   const set = (mode: 'false' | 'true' | 'cloudflare', list: string) => {
     config.trustProxy = mode
     config.trustedProxies = parseIpList(list).rules
+    config.trustedProxiesSet = list.trim() !== ''
   }
   beforeAll(async () => {
     ;({ config, proxyTrusted } = await import('../src/config'))
@@ -93,9 +94,23 @@ describe('TRUSTED_PROXIES: who is believed', () => {
   test('an empty list believes every socket, as before', () => {
     set('cloudflare', '')
     expect(clientIp(req(h), '192.168.1.50')).toBe('203.0.113.5')
-    set('true', ' , ,')
+    set('true', '')
     expect(clientIp(req(h), 'unknown')).toBe('198.51.100.7')
     expect(proxyTrusted('192.168.1.50')).toBe(true)
+  })
+  test('a value with no valid entry believes no socket (a typo closes, it does not open)', () => {
+    for (const bad of ['172.16.0.0/12x', '172.16.0.0/12;10.0.0.1', 'proxy.example.org', ' , ,']) {
+      set('cloudflare', bad)
+      expect(clientIp(req(h), '127.0.0.1')).toBe('127.0.0.1')
+      expect(clientIp(req(h), '192.168.1.50')).toBe('192.168.1.50')
+      expect(proxyTrusted('127.0.0.1')).toBe(false)
+      set('true', bad)
+      expect(clientIp(req(h), '192.168.1.50')).toBe('192.168.1.50')
+    }
+    // one valid entry among bad ones: the valid one still works
+    set('true', 'nope, 127.0.0.1')
+    expect(proxyTrusted('127.0.0.1')).toBe(true)
+    expect(proxyTrusted('192.168.1.50')).toBe(false)
   })
   test('without TRUST_PROXY nobody is believed, list or not', () => {
     set('false', '127.0.0.1')
@@ -117,6 +132,7 @@ describe('TRUSTED_PROXIES over a real connection', () => {
   const set = (mode: 'false' | 'true', list: string) => {
     config.trustProxy = mode
     config.trustedProxies = parseIpList(list).rules
+    config.trustedProxiesSet = list.trim() !== ''
   }
   const failLogin = async (username: string, xff: string) => {
     const s = await fetch(`${base}/api/session`)
@@ -167,7 +183,7 @@ describe('TRUSTED_PROXIES over a real connection', () => {
     if (adminPasswordId) removeAppPassword('admin', adminPasswordId)
     for (const name of ['tp-a.txt', 'tp-b.txt']) rmSync(join(config.storageDir, name), { force: true })
     clearFailures('login-address|127.0.0.1')
-    for (const user of ['tp-ghost1', 'tp-ghost2', 'tp-ghost3']) clearFailures(`login-account|${user}`)
+    for (const user of ['tp-ghost1', 'tp-ghost2', 'tp-ghost3', 'tp-ghost4']) clearFailures(`login-account|${user}`)
   })
 
   test('from a socket outside the list a changing X-Forwarded-For does not dodge the login lockout', async () => {
@@ -188,6 +204,12 @@ describe('TRUSTED_PROXIES over a real connection', () => {
     expect(await failLogin('tp-ghost3', '198.51.100.1')).toBe(429)
   })
 
+  test('a list with no valid entry does not let a forged X-Forwarded-For dodge the login lockout', async () => {
+    set('true', '10.0.0.0/8x')
+    for (let i = 0; i < 3; i++) expect(await failLogin('tp-ghost4', `198.51.100.${i}`)).toBe(401)
+    expect(await failLogin('tp-ghost4', '198.51.100.99')).toBe(429)
+  })
+
   test('the WebDAV Destination takes X-Forwarded-Host only from a trusted socket', async () => {
     set('false', '')
     expect((await fetch(`${base}/dav/home/tp-a.txt`, {
@@ -198,6 +220,8 @@ describe('TRUSTED_PROXIES over a real connection', () => {
     const refused = await move(to, 'files.example.org')
     expect(refused.status).toBe(502)
     expect(await refused.text()).toContain('เซิร์ฟเวอร์')
+    set('true', 'files.example.org') // no valid entry: X-Forwarded-Host is ignored too
+    expect((await move(to, 'files.example.org')).status).toBe(502)
     set('true', '127.0.0.1')
     expect((await move(to, 'files.example.org')).status).toBe(201)
   })
@@ -211,9 +235,11 @@ describe('TRUSTED_PROXIES: config warnings', () => {
     try {
       config.trustProxy = 'cloudflare'
       config.trustedProxies = []
+      config.trustedProxiesSet = false
       expect(has()).toBe(true)
       expect(envWarnings().find(w => w.code === 'admin.config-proxy-open')?.severity).toBe('warning')
       config.trustedProxies = parseIpList('172.16.0.0/12').rules
+      config.trustedProxiesSet = true
       expect(has()).toBe(false)
       config.trustProxy = 'false'
       config.trustedProxies = []
@@ -221,6 +247,44 @@ describe('TRUSTED_PROXIES: config warnings', () => {
     } finally {
       config.trustProxy = 'false'
       config.trustedProxies = []
+      config.trustedProxiesSet = false
+    }
+  })
+  test('a set value with no valid entry gives the critical list-invalid warning, not proxy-open', async () => {
+    const { config } = await import('../src/config')
+    const { envWarnings } = await import('../src/config-warnings')
+    const codes = () => envWarnings().map(w => w.code)
+    try {
+      config.trustProxy = 'true'
+      config.trustedProxies = parseIpList('172.16.0.0/12x').rules
+      config.trustedProxiesSet = true
+      expect(codes()).toContain('admin.config-proxy-list-invalid')
+      expect(codes()).not.toContain('admin.config-proxy-open')
+      expect(envWarnings().find(w => w.code === 'admin.config-proxy-list-invalid')?.severity).toBe('critical')
+      // some valid entries: neither warning
+      config.trustedProxies = parseIpList('bad, 127.0.0.1').rules
+      expect(codes()).not.toContain('admin.config-proxy-list-invalid')
+      expect(codes()).not.toContain('admin.config-proxy-open')
+      // not set: the old proxy-open warning only
+      config.trustedProxies = []
+      config.trustedProxiesSet = false
+      expect(codes()).toContain('admin.config-proxy-open')
+      expect(codes()).not.toContain('admin.config-proxy-list-invalid')
+      // without TRUST_PROXY neither
+      config.trustProxy = 'false'
+      config.trustedProxiesSet = true
+      expect(codes()).not.toContain('admin.config-proxy-list-invalid')
+    } finally {
+      config.trustProxy = 'false'
+      config.trustedProxies = []
+      config.trustedProxiesSet = false
+    }
+  })
+  test('both warning codes have Thai and English texts', async () => {
+    const { MESSAGES } = await import('../src/messages')
+    for (const c of ['admin.config-proxy-open', 'admin.config-proxy-list-invalid']) {
+      expect((MESSAGES as any)[c].th.length).toBeGreaterThan(10)
+      expect((MESSAGES as any)[c].en.length).toBeGreaterThan(10)
     }
   })
   test('X-Forwarded-Proto counts only from a trusted socket', async () => {
@@ -233,12 +297,14 @@ describe('TRUSTED_PROXIES: config warnings', () => {
       config.secureCookie = false
       config.trustProxy = 'true'
       config.trustedProxies = parseIpList('127.0.0.1').rules
+      config.trustedProxiesSet = true
       expect(insecure('127.0.0.1')).toBe(true)
       expect(insecure('192.168.1.9')).toBe(false)
     } finally {
       config.secureCookie = saved
       config.trustProxy = 'false'
       config.trustedProxies = []
+      config.trustedProxiesSet = false
     }
   })
 })

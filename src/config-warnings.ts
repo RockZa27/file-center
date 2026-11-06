@@ -20,7 +20,9 @@ export function envWarnings(): ConfigWarning[] {
   if (!config.secureCookie && /^https:/i.test(config.publicUrl)) out.push({ code: 'admin.config-insecure-cookie', severity: 'warning' })
   if (config.adminPassword && allUsers().some(u => u.role === 'admin')) out.push({ code: 'admin.config-admin-password-env', severity: 'warning' })
   // the client-IP headers are believed from every connection that reaches the port
-  if (config.trustProxy !== 'false' && !config.trustedProxies.length) out.push({ code: 'admin.config-proxy-open', severity: 'warning' })
+  if (config.trustProxy !== 'false' && !config.trustedProxiesSet) out.push({ code: 'admin.config-proxy-open', severity: 'warning' })
+  // set but no valid entry: no connection is believed, every visitor shows as the proxy's address (one shared lockout)
+  if (config.trustProxy !== 'false' && config.trustedProxiesSet && !config.trustedProxies.length) out.push({ code: 'admin.config-proxy-list-invalid', severity: 'critical' })
   out.push(...auditForwardWarnings())
   // a bad key leaves backups unencrypted: the admin must see it, the app still runs
   if (backupKeyState().state === 'invalid') out.push({ code: 'admin.config-backup-key-invalid', severity: 'warning' })
