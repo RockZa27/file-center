@@ -189,6 +189,8 @@ export const MESSAGES = {
   'admin.last-admin': { th: 'ต้องมีผู้ดูแลระบบอย่างน้อยหนึ่งคน', en: 'There must be at least one administrator.' },
   'admin.delete-busy': { th: 'กำลังลบบัญชีนี้อยู่ รอสักครู่แล้วดูรายชื่ออีกครั้ง', en: 'This account is being deleted right now. Wait a moment and check the list again.' },
   'admin.delete-files-home': { th: 'ลบไฟล์พร้อมบัญชีไม่ได้ เพราะโฟลเดอร์ของผู้ใช้นี้ไม่ใช่ของบัญชีนี้เพียงบัญชีเดียว (เป็น / โฟลเดอร์สาธารณะ โฟลเดอร์กลุ่ม หรือซ้อนกับโฟลเดอร์ของบัญชีอื่น)', en: 'The files cannot be deleted with the account: this folder does not belong to this account alone (it is /, the public folder, a group folder, or overlaps another account\'s folder).' },
+  'admin.orphan-home-owned': { th: 'โฟลเดอร์ {home} มีบัญชีเป็นเจ้าของแล้ว จึงย้ายไปถังขยะจากที่นี่ไม่ได้ โหลดรายการใหม่', en: 'The folder {home} belongs to an account now, so it cannot be trashed from here. Reload the list.' },
+  'admin.orphan-home-bad': { th: 'ย้ายไม่ได้ เพราะสิ่งนี้ไม่ใช่โฟลเดอร์จริงใน /users (เป็นลิงก์หรือไฟล์)', en: 'Not moved: this is not a real folder directly in /users (it is a link or a file).' },
   'admin.delete-self': { th: 'ไม่สามารถลบบัญชีของตัวเองได้', en: 'You cannot delete your own account.' },
   'admin.text-length': { th: 'ข้อความสั้นหรือยาวเกินไป', en: 'A text is too short or too long.' },
   'admin.bad-color': { th: 'รหัสสีต้องอยู่ในรูปแบบ #RRGGBB', en: 'The color must look like #RRGGBB.' },

@@ -331,6 +331,8 @@ describe('roles: what stays with the admin', () => {
       ['GET', '/api/admin/folders'],
       ['GET', '/api/admin/trash'],
       ['POST', '/api/admin/trash/purge', {}],
+      ['GET', '/api/admin/orphan-homes'],
+      ['POST', '/api/admin/orphan-homes/trash', { name: 'x', password: 'x' }],
       ['POST', '/api/admin/trash/restore', { id: 'x' }],
       ['GET', '/api/admin/backups'],
       ['POST', '/api/admin/backups'],

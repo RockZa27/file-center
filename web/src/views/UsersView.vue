@@ -13,6 +13,29 @@
         <template #empty><n-empty :description="t('ux.noUsers')" /></template>
       </n-data-table>
     </div>
+    <div v-if="orphans.length" class="surface orphans">
+      <h3 class="orphan-title">{{ t('users.orphanTitle') }}</h3>
+      <p class="muted">{{ t('users.orphanHint', { days: app.config.trashRetentionDays }) }}</p>
+      <div v-for="o in orphans" :key="o.name" class="orphan-row">
+        <div class="orphan-info">
+          <div class="mono wrap">{{ o.path }}</div>
+          <div class="muted">{{ t('users.orphanChanged') }}: {{ formatDate(o.mtime) }} · {{ o.entries >= 1000 ? '1000+' : o.entries }} {{ t('users.orphanEntries') }}</div>
+        </div>
+        <n-button size="small" type="error" secondary @click="Object.assign(orphan, { item: o, password: '', show: true })">{{ t('users.orphanMove') }}</n-button>
+      </div>
+    </div>
+    <n-modal v-model:show="orphan.show" preset="card" :title="t('users.orphanMove')" style="width: min(480px, 94vw)">
+      <p class="reset-text">{{ t('users.orphanConfirm', { path: orphan.item?.path || '', days: app.config.trashRetentionDays }) }}</p>
+      <n-form-item :label="t('users.adminPassword')" :show-feedback="false">
+        <n-input :placeholder="t('users.adminPassword')" v-model:value="orphan.password" type="password" show-password-on="click" :input-props="{ autocomplete: 'current-password' }" @keyup.enter="doOrphan" />
+      </n-form-item>
+      <template #footer>
+        <div class="reset-foot">
+          <n-button @click="orphan.show = false">{{ t('common.cancel') }}</n-button>
+          <n-button type="error" :loading="orphan.busy" :disabled="!orphan.password" @click="doOrphan">{{ t('users.orphanMove') }}</n-button>
+        </div>
+      </template>
+    </n-modal>
     <user-form-modal v-model:show="form.show" :user="form.user" @saved="load" />
     <user-devices-modal v-model:show="dev.show" :user="dev.user" @changed="load" />
     <n-modal v-model:show="reset.show" preset="card" :title="t('users.resetTitle')" style="width: min(440px, 94vw)">
@@ -72,6 +95,23 @@ async function load() {
   loading.value = true
   try { users.value = (await api.users()).users } catch (e) { fb.fail(e) } finally { loading.value = false }
 }
+// folders under /users with no account (admin only; a manager gets 403, so the card stays hidden)
+const orphans = ref([])
+const orphan = reactive({ show: false, item: null, password: '', busy: false })
+async function loadOrphans() {
+  if (app.user?.role !== 'admin') return
+  try { orphans.value = (await api.orphanHomes()).folders } catch { orphans.value = [] }
+}
+async function doOrphan() {
+  if (orphan.busy || !orphan.password) return
+  orphan.busy = true
+  try {
+    await api.trashOrphanHome(orphan.item.name, orphan.password)
+    fb.ok(t('files.done'))
+    orphan.show = false
+    await loadOrphans()
+  } catch (e) { fb.fail(e); orphan.password = '' } finally { orphan.busy = false }
+}
 const dev = reactive({ show: false, user: null })
 const reset = reactive({ show: false, user: null, password: '', busy: false })
 
@@ -117,6 +157,7 @@ async function doDelete() {
     fb.ok(t('files.done'))
     del.show = false
     await load()
+    loadOrphans()
   } catch (e) { fb.fail(e); del.password = '' } finally { del.busy = false }
 }
 
@@ -161,7 +202,7 @@ const columns = computed(() => (narrow.value
       { title: t('users.lastLogin'), key: 'lastLogin', width: 150, render: lastLogin },
       { title: '', key: 'a', width: 250, align: 'right', fixed: 'right', render: actions },
     ]))
-onMounted(load)
+onMounted(() => { load(); loadOrphans() })
 </script>
 
 <style scoped>
@@ -172,6 +213,10 @@ onMounted(load)
 :deep(.stacked-head) { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 8px; }
 :deep(.stacked-meta) { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
 .reset-text { margin: 0 0 14px; overflow-wrap: anywhere; }
+.orphans { margin-top: 16px; padding: 16px; }
+.orphan-title { margin: 0 0 4px; font-size: 16px; }
+.orphan-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-top: 1px solid var(--n-border-color, #0001); }
+.orphan-info { min-width: 0; }
 .reset-foot { display: flex; justify-content: flex-end; gap: 8px; }
 :deep(.tags) { display: flex; flex-wrap: wrap; gap: 6px; }
 </style>

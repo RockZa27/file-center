@@ -1,4 +1,4 @@
-import { lstatSync, opendirSync, realpathSync, rmSync } from 'node:fs'
+import { lstatSync, readdirSync, realpathSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { Elysia, t } from 'elysia'
 import { alert } from '../alerts'
@@ -12,7 +12,7 @@ import { staleAfterMs, statusIn } from '../backup'
 import { config, paths } from '../config'
 import * as policy from '../policy'
 import { context, manageable, requireAdmin, requireStaff } from '../context'
-import { bad, conflict, ensureDir, forbidden, HttpError, isDir, listDirAsync, normRel, notFound, resolveIn } from '../fsx'
+import { bad, conflict, countEntries, ensureDir, forbidden, HttpError, isDir, listDirAsync, normRel, notFound, resolveIn, validName } from '../fsx'
 import { errorsSince } from '../logger'
 import { langOf, type MessageCode, type Params, text } from '../messages'
 import type { User } from '../auth'
@@ -83,13 +83,21 @@ function checkAdoptHome(home: string, except: string | undefined, adopt: boolean
 }
 
 const HOME_COUNT_CAP = 1000
-/** entries of a folder, read one at a time up to `cap`; 0 when it is not there or not a folder */
-function countEntries(abs: string, cap: number): number {
-  let dir
-  try { dir = opendirSync(abs) } catch { return 0 }
-  let n = 0
-  try { while (n < cap && dir.readSync()) n++ } finally { dir.closeSync() }
-  return n
+
+/** the real folders directly under /users that no live account's home overlaps, as the list shows them */
+function orphanHomes() {
+  const root = join(config.storageDir, 'users')
+  let names: string[]
+  try { names = readdirSync(root) } catch { return [] }
+  const out: { name: string; path: string; mtime: string; entries: number }[] = []
+  for (const name of names.sort()) {
+    const path = defaultHome(name)
+    let st
+    try { st = lstatSync(join(root, name)) } catch { continue }
+    if (st.isSymbolicLink() || !st.isDirectory() || homeOverlapsOther(path)) continue
+    out.push({ name, path, mtime: st.mtime.toISOString(), entries: countEntries(join(root, name), HOME_COUNT_CAP) })
+  }
+  return out
 }
 
 export const adminRoutes = new Elysia({ prefix: '/api' })
@@ -232,6 +240,36 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     saveUsers()
     audit({ user: admin.username, ip, action: reset ? 'user-password-reset' : 'user-update', target: target.username, ...(adopted ? { detail: adopted } : {}) })
     return { ok: true }
+  })
+
+  // Folders under /users that no account owns (accounts deleted without their files, or before that option existed).
+  // Only real folders are listed (links and plain files are skipped: not ours to move); hidden names count. No total
+  // size: a tree walk per folder would make the page as slow as the biggest leftover; the capped count tells enough
+  .get('/admin/orphan-homes', ({ user, ip }) => {
+    requireAdmin({ user, ip })
+    return { folders: orphanHomes() }
+  })
+
+  // Sends one of them to the system trash as one entry (restorable until TRASH_RETENTION_DAYS). The password is asked
+  // first; then the folder is checked again, as an account may have been made for it since the list was shown
+  .post('/admin/orphan-homes/trash', {
+    body: t.Object({ name: t.String({ maxLength: 300 }), password: t.String({ maxLength: 1000 }) }),
+  }, async ({ user, ip, body }) => {
+    const admin = requireAdmin({ user, ip })
+    await confirmPassword(admin, ip, body.password, 'orphan-home-denied')
+    // one path segment, exactly as given (validName trims, so " x" must not stand for "x")
+    if (validName(body.name) !== body.name) throw bad('fs.bad-name')
+    const home = defaultHome(body.name)
+    if (homeOverlapsOther(home)) throw conflict('admin.orphan-home-owned', { home })
+    const abs = resolveIn(config.storageDir, home)
+    let st: ReturnType<typeof lstatSync>
+    try { st = lstatSync(abs) } catch { throw notFound() }
+    if (st.isSymbolicLink() || !st.isDirectory()) throw bad('admin.orphan-home-bad')
+    // a link in the middle of the path would move some other folder
+    if (realpathSync(abs) !== join(realpathSync(config.storageDir), 'users', body.name)) throw bad('admin.orphan-home-bad')
+    const moved = await moveToTrash(abs, admin.username)
+    audit({ user: admin.username, ip, action: 'orphan-home-trashed', target: home, detail: `trash ${moved.id}, ${moved.size} bytes` })
+    return { ok: true, trashId: moved.id }
   })
 
   // `deleteFiles` (admin only, password asked again) also sends the account's home folder to the system trash as one

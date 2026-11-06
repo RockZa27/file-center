@@ -1,4 +1,4 @@
-import { closeSync, existsSync, fchmodSync, fsyncSync, lstatSync, mkdirSync, openSync, readdirSync, realpathSync, renameSync, rmSync, statfsSync, statSync, writeSync } from 'node:fs'
+import { closeSync, existsSync, fchmodSync, fsyncSync, lstatSync, mkdirSync, openSync, opendirSync, readdirSync, realpathSync, renameSync, rmSync, statfsSync, statSync, writeSync } from 'node:fs'
 import { constants as FS, type Stats } from 'node:fs'
 import { copyFile, link, lstat, mkdir, readdir, readlink, rename, rm, rmdir, symlink, unlink } from 'node:fs/promises'
 import { randomBytes } from 'node:crypto'
@@ -473,3 +473,12 @@ export async function searchTree(abs: string, rel: string, needle: string, maxSe
 }
 
 export { within }
+
+/** entries of a folder, read one at a time up to `cap`; 0 when it is not there or not a folder */
+export function countEntries(abs: string, cap: number): number {
+  let dir
+  try { dir = opendirSync(abs) } catch { return 0 }
+  let n = 0
+  try { while (n < cap && dir.readSync()) n++ } finally { dir.closeSync() }
+  return n
+}
