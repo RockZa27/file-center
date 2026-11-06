@@ -15,6 +15,7 @@ import { context } from './context'
 import { HttpError, notFound, within } from './fsx'
 import { onStop, shutdown } from './lifecycle'
 import { accessLine, log } from './logger'
+import { runLogRetention } from './log-retention'
 import { adminRoutes } from './routes/admin'
 import { appPasswordRoutes } from './routes/app-passwords'
 import { archiveRoutes } from './routes/archive'
@@ -72,6 +73,8 @@ await bootstrapAdmin()
 const keyError = signingKey().error
 if (keyError) log.error('update-key-invalid', `UPDATE_PUBLIC_KEY ไม่ถูกต้อง: ${keyError} ระบบจะไม่รับแพ็กเกจอัปเดตใด ๆ จนกว่าจะแก้ค่านี้`)
 if (invalidUmask) log.warn('umask-invalid', `FC_UMASK ${invalidUmask} ไม่ถูกต้อง (ต้องเป็นเลขฐานแปด 3 หลัก เช่น 077) จึงใช้ค่าเริ่มต้น 077`)
+if (config.auditRetentionInvalid) log.warn('audit-retention-invalid', `AUDIT_RETENTION_DAYS ${config.auditRetentionInvalid} ไม่ถูกต้อง (ต้องเป็นจำนวนวันเต็มที่มากกว่า 0) จึงใช้ 0 คือไม่ลบประวัติการใช้งานตามอายุ`)
+if (config.logRetentionInvalid) log.warn('log-retention-invalid', `LOG_RETENTION_DAYS ${config.logRetentionInvalid} ไม่ถูกต้อง (ต้องเป็นจำนวนวันเต็มที่มากกว่า 0) จึงใช้ 0 คือไม่ลบบันทึกระบบตามอายุ`)
 if (config.require2faInvalid) log.warn('require-2fa-invalid', `REQUIRE_2FA ${config.require2faInvalid} ไม่ถูกต้อง (ใช้ none, admin, staff หรือ all) จึงใช้ none คือไม่บังคับ 2FA`)
 {
   const ignored = ignoredLockedKeys()
@@ -120,6 +123,7 @@ function housekeeping() {
     pruneLoginAttempts()
     trimQuarantine()
     sweepRestoreTempsIdle()
+    runLogRetention() // at most once a day; does nothing unless AUDIT_RETENTION_DAYS / LOG_RETENTION_DAYS is set
     if (trash || uploads || versions) log.info('housekeeping', { trash, staleUploads: uploads, versions })
     // links about to expire, homes near their quota: told in the background, once each
     void checkNotifications()

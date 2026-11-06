@@ -82,6 +82,12 @@ export function updateSourceOf(value: string | undefined): string {
   const v = value.trim()
   return v.toLowerCase() === 'off' ? '' : v
 }
+/** a retention in days: a positive whole number; empty or unset is 0 (off); anything else is 0 too and `invalid` holds the text for one start-up warning */
+export function parseRetentionDays(raw: string | undefined): { days: number; invalid: string } {
+  const t = (raw ?? '').trim()
+  if (!t) return { days: 0, invalid: '' }
+  return /^\d+$/.test(t) && Number.isSafeInteger(Number(t)) ? { days: Number(t), invalid: '' } : { days: 0, invalid: t }
+}
 const num = (k: string, d: number) => {
   const v = Number(process.env[k])
   return Number.isFinite(v) && process.env[k] !== undefined && process.env[k] !== '' ? v : d
@@ -203,6 +209,12 @@ export const config = {
   shareMaxDays: num('SHARE_MAX_DAYS', 30),
   auditMaxBytes: 10 * 1024 * 1024,
   auditMaxFiles: 10,
+  /** AUDIT_RETENTION_DAYS: entries of audit.log older than this are deleted by the daily sweep (log-retention.ts); 0 = off */
+  auditRetentionDays: parseRetentionDays(process.env.AUDIT_RETENTION_DAYS).days,
+  auditRetentionInvalid: parseRetentionDays(process.env.AUDIT_RETENTION_DAYS).invalid,
+  /** LOG_RETENTION_DAYS: the same for system.log, access.log and launcher.log; 0 = off */
+  logRetentionDays: parseRetentionDays(process.env.LOG_RETENTION_DAYS).days,
+  logRetentionInvalid: parseRetentionDays(process.env.LOG_RETENTION_DAYS).invalid,
   /** logs/system.log (and access.log) is rotated past this size; LOG_MAX_FILES counts the current file too */
   logMaxBytes: num('LOG_MAX_BYTES', 10 * 1024 ** 2), // 10 MB
   logMaxFiles: Math.max(2, Math.floor(num('LOG_MAX_FILES', 5))),
