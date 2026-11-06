@@ -135,11 +135,17 @@ async function save() {
     const body = { name: f.name.trim(), role: f.role, permissions: f.permissions, publicPermissions: f.publicPermissions }
     if (f.role === 'user' && app.isAdmin) body.homedir = f.homedir.trim() || undefined
     if (isEdit.value || f.role !== 'user' || !f.useDefault) body.quotaBytes = f.role === 'user' && f.limited ? joinQuota(f.quotaValue, f.quotaUnit) : 0
-    if (isEdit.value) {
-      if (f.password) { body.password = f.password; if (needsOwn.value) body.confirmPassword = f.confirmPassword }
-      await api.updateUser(props.user.username, body)
-    } else {
-      await api.createUser({ ...body, username: f.username.trim(), password: f.password })
+    if (isEdit.value && f.password) { body.password = f.password; if (needsOwn.value) body.confirmPassword = f.confirmPassword }
+    const send = extra => isEdit.value
+      ? api.updateUser(props.user.username, { ...body, ...extra })
+      : api.createUser({ ...body, ...extra, username: f.username.trim(), password: f.password })
+    try {
+      await send()
+    } catch (e) {
+      // a folder with files, or another account's: the server asks first; on "yes" the same request goes again with the flag
+      if (e?.status !== 409 || !['admin.home-has-files', 'admin.home-of-other'].includes(e.code)) throw e
+      if (!await fb.confirm({ title: t('users.adoptTitle'), content: e.message, positive: t('users.adoptYes'), danger: true })) return
+      await send({ adoptHome: true })
     }
     fb.ok(t('common.saved'))
     emit('saved')

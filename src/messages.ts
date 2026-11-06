@@ -183,6 +183,8 @@ export const MESSAGES = {
   'admin.not-manageable': { th: 'คุณไม่มีสิทธิ์จัดการผู้ใช้นี้', en: 'You are not allowed to manage this user.' },
   'admin.role-not-allowed': { th: 'คุณกำหนดบทบาทนี้ไม่ได้ (ผู้ดูแลสร้างและแก้ไขได้เฉพาะผู้ใช้ทั่วไป)', en: 'You cannot assign this role (a manager can only create and edit regular users).' },
   'admin.home-exists': { th: 'โฟลเดอร์ /users/ชื่อนี้ มีอยู่แล้วหรือเป็นของบัญชีอื่น ให้ผู้ดูแลระบบสร้างบัญชีนี้ หรือเลือกชื่ออื่น', en: 'The folder /users/<name> already exists or belongs to another account. Ask an administrator to create this account, or choose another name.' },
+  'admin.home-has-files': { th: 'โฟลเดอร์ {home} มีไฟล์อยู่แล้ว {files} รายการ (อาจเป็นของบัญชีที่ถูกลบไปก่อน) ให้บัญชีนี้ใช้โฟลเดอร์นี้ต่อหรือไม่', en: 'The folder {home} already holds {files} items (maybe from an account deleted earlier). Let this account use the folder as it is?' },
+  'admin.home-of-other': { th: 'โฟลเดอร์ {home} เป็นของบัญชีอื่น อยู่ในหรืออยู่เหนือโฟลเดอร์ของบัญชีอื่น ให้บัญชีนี้ใช้ร่วมกันหรือไม่', en: 'The folder {home} belongs to another account, or is inside or above another account\'s folder. Share it with this account?' },
   'admin.public-perms-exceed': { th: 'ให้สิทธิ์ในโฟลเดอร์สาธารณะได้ไม่เกินสิทธิ์ที่คุณมีเอง', en: 'You can only grant public-folder rights that you hold yourself.' },
   'admin.last-admin': { th: 'ต้องมีผู้ดูแลระบบอย่างน้อยหนึ่งคน', en: 'There must be at least one administrator.' },
   'admin.delete-busy': { th: 'กำลังลบบัญชีนี้อยู่ รอสักครู่แล้วดูรายชื่ออีกครั้ง', en: 'This account is being deleted right now. Wait a moment and check the list again.' },

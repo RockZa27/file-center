@@ -1,4 +1,4 @@
-import { lstatSync, realpathSync, rmSync } from 'node:fs'
+import { lstatSync, readdirSync, realpathSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { Elysia, t } from 'elysia'
 import { alert } from '../alerts'
@@ -59,6 +59,28 @@ function checkPublicPerms(actor: User, wanted: Perm[], already: Perm[] = []) {
 /** accounts being deleted right now (lower case): a second DELETE for one of them waits its turn (409) */
 const deleting = new Set<string>()
 
+/**
+ * An admin giving an account a folder must do it on purpose when the folder is not new: it is another account's home
+ * (or inside or above one: a shared folder), or it holds files already (maybe a deleted account's leftovers, which
+ * would pass to whoever gets the name next, with their version history and thumbnails). Throws 409 unless `adopt`;
+ * returns what was taken over, for the audit line (never file names), or '' when the folder is new.
+ */
+function checkAdoptHome(home: string, except: string | undefined, adopt: boolean | undefined): string {
+  let note = ''
+  if (homeOverlapsOther(home, except)) {
+    if (!adopt) throw conflict('admin.home-of-other', { home })
+    note = 'home shared with another account'
+  } else {
+    let files = 0
+    try { files = readdirSync(resolveIn(config.storageDir, home)).length } catch { /* not there yet, or not a folder */ }
+    if (files) {
+      if (!adopt) throw conflict('admin.home-has-files', { home, files })
+      note = `home taken over with ${files} existing entries`
+    }
+  }
+  return note
+}
+
 export const adminRoutes = new Elysia({ prefix: '/api' })
   .use(context)
   // /api/admin/alerts: mounted here so the app's route list in index.ts stays as it is
@@ -100,7 +122,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     body: t.Object({
       username: t.String(), name: t.String(), password: t.String(), role: roleT,
       homedir: t.Optional(t.String()), permissions: permsT, publicPermissions: permsT,
-      quotaBytes: t.Optional(t.Number()),
+      quotaBytes: t.Optional(t.Number()), adoptHome: t.Optional(t.Boolean()),
     }),
   }, async ({ user, ip, body }) => {
     const admin = requireStaff({ user, ip })
@@ -119,6 +141,8 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     checkPublicPerms(admin, publicPermissions)
     // a manager never takes over a folder that is there already (an admin's shared folder, a deleted user's leftovers)
     if (!isAdmin(admin) && homeIsTaken(username)) throw conflict('admin.home-exists')
+    // an admin must say so (adoptHome) to take a folder that holds files or is another account's; a manager can not
+    const adopted = isAdmin(admin) && body.role !== 'admin' ? checkAdoptHome(homedir, undefined, body.adoptHome) : ''
     ensureDir(resolveIn(config.storageDir, homedir))
     // a name used before (an account a backup restore dropped, not deleted here) starts clean: no old sign-ins,
     // share links, grants, group places or trash of that earlier account
@@ -135,7 +159,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
       createdAt: new Date().toISOString(),
     })
     saveUsers()
-    audit({ user: admin.username, ip, action: 'user-create', target: username })
+    audit({ user: admin.username, ip, action: 'user-create', target: username, ...(adopted ? { detail: adopted } : {}) })
     return { ok: true }
   })
 
@@ -143,7 +167,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     body: t.Object({
       name: t.Optional(t.String()), password: t.Optional(t.String()), confirmPassword: t.Optional(t.String({ maxLength: 1000 })), role: t.Optional(roleT),
       homedir: t.Optional(t.String()), permissions: t.Optional(permsT), publicPermissions: t.Optional(permsT),
-      quotaBytes: t.Optional(t.Number()),
+      quotaBytes: t.Optional(t.Number()), adoptHome: t.Optional(t.Boolean()),
     }),
   }, async ({ user, ip, params, body }) => {
     const admin = requireStaff({ user, ip })
@@ -162,6 +186,9 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
       homedir = cleanHomedir(body.homedir, target.username)
       if (homedir === '/') throw bad('admin.home-required')
     }
+    // a new home (not the one the account has now) is checked like a new account's
+    const adopted = role !== 'admin' && isAdmin(admin) && homedir.toLowerCase() !== target.homedir.toLowerCase()
+      ? checkAdoptHome(homedir, target.username, body.adoptHome) : ''
     const homeAbs = resolveIn(config.storageDir, homedir)
     if (body.password) checkPasswordStrength(body.password, target.username)
     const passwordHash = body.password ? await hashPassword(body.password) : null
@@ -191,7 +218,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
       removeAppPasswordsOf(target.username)
     }
     saveUsers()
-    audit({ user: admin.username, ip, action: reset ? 'user-password-reset' : 'user-update', target: target.username })
+    audit({ user: admin.username, ip, action: reset ? 'user-password-reset' : 'user-update', target: target.username, ...(adopted ? { detail: adopted } : {}) })
     return { ok: true }
   })
 
