@@ -89,22 +89,22 @@
             <section class="surface block">
               <h2>{{ t('settings.cat.share') }}</h2>
               <setting-row v-bind="rowProps('share.defaultDays')" :label="t('settings.share.defaultDays')" :help="t('settings.share.defaultDaysHelp')" @reset="reset('share.defaultDays')" @undo="undo('share.defaultDays')">
-                <n-select v-model:value="f['share.defaultDays']" :options="dayOptions(true)" :disabled="resets.includes('share.defaultDays')" class="ctl" />
+                <n-select v-model:value="f['share.defaultDays']" :options="dayOptions(true)" :disabled="off('share.defaultDays')" class="ctl" />
               </setting-row>
               <setting-row v-bind="rowProps('share.maxDays')" :label="t('settings.share.maxDays')" :help="t('settings.share.maxDaysHelp')" @reset="reset('share.maxDays')" @undo="undo('share.maxDays')">
-                <n-select v-model:value="f['share.maxDays']" :options="dayOptions(false)" :disabled="resets.includes('share.maxDays')" class="ctl" />
+                <n-select v-model:value="f['share.maxDays']" :options="dayOptions(false)" :disabled="off('share.maxDays')" class="ctl" />
               </setting-row>
               <setting-row v-bind="rowProps('share.allowNever')" :label="t('settings.share.allowNever')" :help="t('settings.share.allowNeverHelp')" @reset="reset('share.allowNever')" @undo="undo('share.allowNever')">
-                <n-switch v-model:value="f['share.allowNever']" :disabled="resets.includes('share.allowNever')" />
+                <n-switch v-model:value="f['share.allowNever']" :disabled="off('share.allowNever')" />
               </setting-row>
               <setting-row v-bind="rowProps('share.requirePassword')" :label="t('settings.share.requirePassword')" :help="t('settings.share.requirePasswordHelp')" @reset="reset('share.requirePassword')" @undo="undo('share.requirePassword')">
-                <n-switch v-model:value="f['share.requirePassword']" :disabled="resets.includes('share.requirePassword')" />
+                <n-switch v-model:value="f['share.requirePassword']" :disabled="off('share.requirePassword')" />
               </setting-row>
               <setting-row v-bind="rowProps('share.viewOnly')" :label="t('settings.share.viewOnly')" :help="t('settings.share.viewOnlyHelp')" @reset="reset('share.viewOnly')" @undo="undo('share.viewOnly')">
-                <n-select v-model:value="f['share.viewOnly']" :options="viewOnlyOptions" :disabled="resets.includes('share.viewOnly')" class="ctl" />
+                <n-select v-model:value="f['share.viewOnly']" :options="viewOnlyOptions" :disabled="off('share.viewOnly')" class="ctl" />
               </setting-row>
               <setting-row v-bind="rowProps('share.forceWatermark')" :label="t('settings.share.forceWatermark')" :help="t('settings.share.forceWatermarkHelp')" @reset="reset('share.forceWatermark')" @undo="undo('share.forceWatermark')">
-                <n-switch v-model:value="f['share.forceWatermark']" :disabled="resets.includes('share.forceWatermark')" />
+                <n-switch v-model:value="f['share.forceWatermark']" :disabled="off('share.forceWatermark')" />
               </setting-row>
             </section>
           </template>
@@ -115,7 +115,7 @@
             <section class="surface block">
               <h2>{{ t('settings.security.twoFactorTitle') }}</h2>
               <setting-row v-bind="rowProps('security.require2fa')" :label="t('settings.security.require2fa')" :help="t('settings.security.require2faHelp')" @reset="reset('security.require2fa')" @undo="undo('security.require2fa')">
-                <n-select v-model:value="f['security.require2fa']" :options="require2faOptions" :disabled="resets.includes('security.require2fa')" class="ctl" data-tour="settings-require2fa" />
+                <n-select v-model:value="f['security.require2fa']" :options="require2faOptions" :disabled="off('security.require2fa')" class="ctl" data-tour="settings-require2fa" />
                 <template #extra>
                   <n-alert v-if="warn2fa" type="warning" :show-icon="true" class="inline-warn">{{ t('settings.security.warn2fa') }}</n-alert>
                 </template>
@@ -124,7 +124,7 @@
             <section class="surface block">
               <h2>{{ t('settings.security.sessionTitle') }}</h2>
               <setting-row v-for="k in SECURITY_NUMBERS" :key="k" v-bind="rowProps(`security.${k}`)" :label="t(`settings.security.${k}`)" :help="t(`settings.security.${k}Help`, { min: RANGE[`security.${k}`][0], max: RANGE[`security.${k}`][1] })" @reset="reset(`security.${k}`)" @undo="undo(`security.${k}`)">
-                <n-input-number v-model:value="f[`security.${k}`]" :min="RANGE[`security.${k}`][0]" :max="RANGE[`security.${k}`][1]" :precision="0" :show-button="false" :disabled="resets.includes(`security.${k}`)" class="ctl num" :input-props="{ inputmode: 'numeric' }">
+                <n-input-number v-model:value="f[`security.${k}`]" :min="RANGE[`security.${k}`][0]" :max="RANGE[`security.${k}`][1]" :precision="0" :show-button="false" :disabled="off(`security.${k}`)" class="ctl num" :input-props="{ inputmode: 'numeric' }">
                   <template #suffix>{{ t(`settings.unit.${UNIT[k]}`) }}</template>
                 </n-input-number>
               </setting-row>
@@ -136,27 +136,27 @@
             <section class="surface block">
               <h2>{{ t('settings.files.uploadTitle') }}</h2>
               <setting-row v-bind="rowProps('files.uploadMaxSize')" :label="t('settings.files.uploadMaxSize')" :help="t('settings.files.uploadMaxSizeHelp', { max: formatBytes(srv.files.uploadMaxSizeCeiling) })" @reset="reset('files.uploadMaxSize')" @undo="undo('files.uploadMaxSize')">
-                <size-input v-model="f['files.uploadMaxSize']" :disabled="resets.includes('files.uploadMaxSize')" :label="t('settings.files.uploadMaxSize')" />
+                <size-input v-model="f['files.uploadMaxSize']" :disabled="off('files.uploadMaxSize')" :label="t('settings.files.uploadMaxSize')" />
               </setting-row>
               <setting-row v-bind="rowProps('files.defaultQuotaBytes')" :label="t('settings.files.defaultQuota')" :help="t('settings.files.defaultQuotaHelp')" @reset="reset('files.defaultQuotaBytes')" @undo="undo('files.defaultQuotaBytes')">
                 <div class="quota">
-                  <n-switch v-model:value="f.quotaUnlimited" :disabled="resets.includes('files.defaultQuotaBytes')">
+                  <n-switch v-model:value="f.quotaUnlimited" :disabled="off('files.defaultQuotaBytes')">
                     <template #checked>{{ t('users.noLimit') }}</template><template #unchecked>{{ t('users.limited') }}</template>
                   </n-switch>
-                  <size-input v-if="!f.quotaUnlimited" v-model="f['files.defaultQuotaBytes']" :disabled="resets.includes('files.defaultQuotaBytes')" :label="t('settings.files.defaultQuota')" />
+                  <size-input v-if="!f.quotaUnlimited" v-model="f['files.defaultQuotaBytes']" :disabled="off('files.defaultQuotaBytes')" :label="t('settings.files.defaultQuota')" />
                 </div>
               </setting-row>
               <setting-row v-bind="rowProps('files.thumbnails')" :label="t('settings.files.thumbnails')" :help="t('settings.files.thumbnailsHelp')" @reset="reset('files.thumbnails')" @undo="undo('files.thumbnails')">
-                <n-switch v-model:value="f['files.thumbnails']" :disabled="resets.includes('files.thumbnails')" />
+                <n-switch v-model:value="f['files.thumbnails']" :disabled="off('files.thumbnails')" />
               </setting-row>
               <setting-row v-bind="rowProps('files.webdav')" :label="t('settings.files.webdav')" :help="t('settings.files.webdavHelp')" @reset="reset('files.webdav')" @undo="undo('files.webdav')">
-                <n-switch v-model:value="f['files.webdav']" :disabled="resets.includes('files.webdav')" />
+                <n-switch v-model:value="f['files.webdav']" :disabled="off('files.webdav')" />
               </setting-row>
             </section>
             <section class="surface block">
               <h2>{{ t('settings.files.keepTitle') }}</h2>
               <setting-row v-for="k in FILE_NUMBERS" :key="k" v-bind="rowProps(`files.${k}`)" :label="t(`settings.files.${k}`)" :help="t(`settings.files.${k}Help`, { min: RANGE[`files.${k}`][0], max: RANGE[`files.${k}`][1] })" @reset="reset(`files.${k}`)" @undo="undo(`files.${k}`)">
-                <n-input-number v-model:value="f[`files.${k}`]" :min="RANGE[`files.${k}`][0]" :max="RANGE[`files.${k}`][1]" :precision="0" :show-button="false" :disabled="resets.includes(`files.${k}`)" class="ctl num" :input-props="{ inputmode: 'numeric' }">
+                <n-input-number v-model:value="f[`files.${k}`]" :min="RANGE[`files.${k}`][0]" :max="RANGE[`files.${k}`][1]" :precision="0" :show-button="false" :disabled="off(`files.${k}`)" class="ctl num" :input-props="{ inputmode: 'numeric' }">
                   <template #suffix>{{ t(`settings.unit.${UNIT[k]}`) }}</template>
                 </n-input-number>
               </setting-row>
@@ -168,23 +168,24 @@
             <section class="surface block" data-tour="settings-mail">
               <h2>{{ t('settings.mail.title') }}</h2>
               <div class="muted lead">{{ t('settings.mail.lead') }}</div>
+              <n-alert v-if="mailLocked" type="info" :show-icon="false" class="lock-note">{{ t('settings.lockedNoteMail') }}</n-alert>
               <setting-row v-bind="rowProps('mail.host')" :label="t('settings.mail.host')" :help="t('settings.mail.hostHelp')" @reset="reset('mail.host')" @undo="undo('mail.host')">
-                <n-input v-model:value="f['mail.host']" :disabled="resets.includes('mail.host')" placeholder="smtp.example.com" class="ctl" :input-props="{ autocomplete: 'off', autocapitalize: 'off', spellcheck: false }" />
+                <n-input v-model:value="f['mail.host']" :disabled="off('mail.host')" placeholder="smtp.example.com" class="ctl" :input-props="{ autocomplete: 'off', autocapitalize: 'off', spellcheck: false }" />
               </setting-row>
               <setting-row v-bind="rowProps('mail.port')" :label="t('settings.mail.port')" :help="t('settings.mail.portHelp')" @reset="reset('mail.port')" @undo="undo('mail.port')">
-                <n-input-number v-model:value="f['mail.port']" :min="1" :max="65535" :precision="0" :show-button="false" :disabled="resets.includes('mail.port')" class="ctl num" :input-props="{ inputmode: 'numeric' }" />
+                <n-input-number v-model:value="f['mail.port']" :min="1" :max="65535" :precision="0" :show-button="false" :disabled="off('mail.port')" class="ctl num" :input-props="{ inputmode: 'numeric' }" />
               </setting-row>
               <setting-row v-bind="rowProps('mail.secure')" :label="t('settings.mail.secure')" :help="t('settings.mail.secureHelp')" @reset="reset('mail.secure')" @undo="undo('mail.secure')">
-                <n-select v-model:value="f['mail.secure']" :options="secureOptions" :disabled="resets.includes('mail.secure')" class="ctl" />
+                <n-select v-model:value="f['mail.secure']" :options="secureOptions" :disabled="off('mail.secure')" class="ctl" />
               </setting-row>
               <setting-row v-bind="rowProps('mail.user')" :label="t('settings.mail.user')" :help="t('settings.mail.userHelp')" @reset="reset('mail.user')" @undo="undo('mail.user')">
-                <n-input v-model:value="f['mail.user']" :disabled="resets.includes('mail.user')" class="ctl" :input-props="{ autocomplete: 'off', autocapitalize: 'off', spellcheck: false }" />
+                <n-input v-model:value="f['mail.user']" :disabled="off('mail.user')" class="ctl" :input-props="{ autocomplete: 'off', autocapitalize: 'off', spellcheck: false }" />
               </setting-row>
               <setting-row v-bind="rowProps('mail.pass')" :label="t('settings.mail.pass')" :help="t('settings.mail.passHelp')" @reset="reset('mail.pass')" @undo="undo('mail.pass')">
-                <n-input v-model:value="f['mail.pass']" type="password" show-password-on="click" :disabled="resets.includes('mail.pass')" :placeholder="srv.mail.passSet ? t('settings.mail.passSet') : ''" class="ctl" :input-props="{ autocomplete: 'new-password', name: 'smtp-secret' }" />
+                <n-input v-model:value="f['mail.pass']" type="password" show-password-on="click" :disabled="off('mail.pass')" :placeholder="srv.mail.passSet ? t('settings.mail.passSet') : ''" class="ctl" :input-props="{ autocomplete: 'new-password', name: 'smtp-secret' }" />
               </setting-row>
               <setting-row v-bind="rowProps('mail.from')" :label="t('settings.mail.from')" :help="t('settings.mail.fromHelp')" @reset="reset('mail.from')" @undo="undo('mail.from')">
-                <n-input v-model:value="f['mail.from']" :disabled="resets.includes('mail.from')" placeholder="File Center <no-reply@example.com>" class="ctl wide" :input-props="{ autocomplete: 'off', spellcheck: false }" />
+                <n-input v-model:value="f['mail.from']" :disabled="off('mail.from')" placeholder="File Center <no-reply@example.com>" class="ctl wide" :input-props="{ autocomplete: 'off', spellcheck: false }" />
               </setting-row>
               <setting-row :label="t('settings.mail.test')" :help="t('settings.mail.testHelp')" :error="mailTestError">
                 <div class="test-row">
@@ -200,19 +201,19 @@
               <h2>{{ t('settings.alerts.title') }}</h2>
               <div class="muted lead">{{ t('settings.alerts.lead') }}</div>
               <setting-row v-bind="rowProps('alerts.webhookUrl')" :label="t('settings.alerts.webhookUrl')" :help="t('settings.alerts.webhookUrlHelp')" @reset="reset('alerts.webhookUrl')" @undo="undo('alerts.webhookUrl')">
-                <n-input v-model:value="f['alerts.webhookUrl']" :disabled="resets.includes('alerts.webhookUrl')" :placeholder="srv.alerts.webhookUrl.value || 'https://…'" class="ctl wide" :input-props="{ autocomplete: 'off', spellcheck: false, name: 'hook-url' }" />
+                <n-input v-model:value="f['alerts.webhookUrl']" :disabled="off('alerts.webhookUrl')" :placeholder="srv.alerts.webhookUrl.value || 'https://…'" class="ctl wide" :input-props="{ autocomplete: 'off', spellcheck: false, name: 'hook-url' }" />
                 <template #extra>
                   <div v-if="srv.alerts.webhookUrl.value" class="muted help-s mono wrapany">{{ t('settings.alerts.current') }} {{ srv.alerts.webhookUrl.value }}</div>
                 </template>
               </setting-row>
               <setting-row v-bind="rowProps('alerts.kind')" :label="t('settings.alerts.kind')" :help="t('settings.alerts.kindHelp')" @reset="reset('alerts.kind')" @undo="undo('alerts.kind')">
-                <n-select v-model:value="f['alerts.kind']" :options="kindOptions" :disabled="resets.includes('alerts.kind')" class="ctl" />
+                <n-select v-model:value="f['alerts.kind']" :options="kindOptions" :disabled="off('alerts.kind')" class="ctl" />
               </setting-row>
               <setting-row v-if="f['alerts.kind'] === 'telegram'" v-bind="rowProps('alerts.telegramChatId')" :label="t('settings.alerts.chatId')" :help="t('settings.alerts.chatIdHelp')" @reset="reset('alerts.telegramChatId')" @undo="undo('alerts.telegramChatId')">
-                <n-input v-model:value="f['alerts.telegramChatId']" :disabled="resets.includes('alerts.telegramChatId')" class="ctl" :input-props="{ autocomplete: 'off' }" />
+                <n-input v-model:value="f['alerts.telegramChatId']" :disabled="off('alerts.telegramChatId')" class="ctl" :input-props="{ autocomplete: 'off' }" />
               </setting-row>
               <setting-row v-bind="rowProps('alerts.lang')" :label="t('settings.alerts.lang')" :help="t('settings.alerts.langHelp')" @reset="reset('alerts.lang')" @undo="undo('alerts.lang')">
-                <n-select v-model:value="f['alerts.lang']" :options="langOptions" :disabled="resets.includes('alerts.lang')" class="ctl" />
+                <n-select v-model:value="f['alerts.lang']" :options="langOptions" :disabled="off('alerts.lang')" class="ctl" />
               </setting-row>
             </section>
             <alerts-card :key="alertsKey" />
@@ -221,22 +222,25 @@
               <h2>{{ t('settings.auditForward.title') }}</h2>
               <div class="muted lead">{{ t('settings.auditForward.lead') }}</div>
               <setting-row v-bind="rowProps('auditForward.syslogHost')" :label="t('settings.auditForward.syslogHost')" :help="t('settings.auditForward.syslogHostHelp')" @reset="reset('auditForward.syslogHost')" @undo="undo('auditForward.syslogHost')">
-                <n-input v-model:value="f['auditForward.syslogHost']" :disabled="resets.includes('auditForward.syslogHost')" placeholder="logs.example.com" class="ctl" :input-props="{ autocomplete: 'off', spellcheck: false, name: 'syslog-host' }" />
+                <n-input v-model:value="f['auditForward.syslogHost']" :disabled="off('auditForward.syslogHost')" placeholder="logs.example.com" class="ctl" :input-props="{ autocomplete: 'off', spellcheck: false, name: 'syslog-host' }" />
               </setting-row>
               <setting-row v-bind="rowProps('auditForward.syslogPort')" :label="t('settings.auditForward.syslogPort')" @reset="reset('auditForward.syslogPort')" @undo="undo('auditForward.syslogPort')">
-                <n-input-number v-model:value="f['auditForward.syslogPort']" :min="1" :max="65535" :precision="0" :show-button="false" :disabled="resets.includes('auditForward.syslogPort')" class="ctl" />
+                <n-input-number v-model:value="f['auditForward.syslogPort']" :min="1" :max="65535" :precision="0" :show-button="false" :disabled="off('auditForward.syslogPort')" class="ctl" />
               </setting-row>
               <setting-row v-bind="rowProps('auditForward.syslogProto')" :label="t('settings.auditForward.syslogProto')" :help="t('settings.auditForward.syslogProtoHelp')" @reset="reset('auditForward.syslogProto')" @undo="undo('auditForward.syslogProto')">
-                <n-select v-model:value="f['auditForward.syslogProto']" :options="protoOptions" :disabled="resets.includes('auditForward.syslogProto')" class="ctl" />
+                <n-select v-model:value="f['auditForward.syslogProto']" :options="protoOptions" :disabled="off('auditForward.syslogProto')" class="ctl" />
               </setting-row>
               <setting-row v-bind="rowProps('auditForward.syslogFacility')" :label="t('settings.auditForward.syslogFacility')" :help="t('settings.auditForward.syslogFacilityHelp')" @reset="reset('auditForward.syslogFacility')" @undo="undo('auditForward.syslogFacility')">
-                <n-input-number v-model:value="f['auditForward.syslogFacility']" :min="0" :max="23" :precision="0" :show-button="false" :disabled="resets.includes('auditForward.syslogFacility')" class="ctl" />
+                <n-input-number v-model:value="f['auditForward.syslogFacility']" :min="0" :max="23" :precision="0" :show-button="false" :disabled="off('auditForward.syslogFacility')" class="ctl" />
               </setting-row>
               <setting-row v-bind="rowProps('auditForward.webhookUrl')" :label="t('settings.auditForward.webhookUrl')" :help="t('settings.auditForward.webhookUrlHelp')" @reset="reset('auditForward.webhookUrl')" @undo="undo('auditForward.webhookUrl')">
-                <n-input v-model:value="f['auditForward.webhookUrl']" :disabled="resets.includes('auditForward.webhookUrl')" :placeholder="srv.auditForward.webhookUrl.value || 'https://…'" class="ctl wide" :input-props="{ autocomplete: 'off', spellcheck: false, name: 'audit-hook-url' }" />
+                <n-input v-model:value="f['auditForward.webhookUrl']" :disabled="off('auditForward.webhookUrl')" :placeholder="srv.auditForward.webhookUrl.value || 'https://…'" class="ctl wide" :input-props="{ autocomplete: 'off', spellcheck: false, name: 'audit-hook-url' }" />
                 <template #extra>
                   <div v-if="srv.auditForward.webhookUrl.value" class="muted help-s mono wrapany">{{ t('settings.alerts.current') }} {{ srv.auditForward.webhookUrl.value }}</div>
                 </template>
+              </setting-row>
+              <setting-row v-bind="rowProps('auditForward.webhookSecret')" :label="t('settings.auditForward.webhookSecret')" :help="t('settings.auditForward.webhookSecretHelp')" @reset="reset('auditForward.webhookSecret')" @undo="undo('auditForward.webhookSecret')">
+                <n-input v-model:value="f['auditForward.webhookSecret']" type="password" show-password-on="click" :disabled="off('auditForward.webhookSecret')" :placeholder="srv.auditForward.webhookSecretSet ? t('settings.mail.passSet') : ''" class="ctl" :input-props="{ autocomplete: 'new-password', name: 'audit-hook-secret' }" />
               </setting-row>
             </section>
           </template>
@@ -246,26 +250,33 @@
             <section class="surface block" data-tour="settings-antivirus">
               <h2>{{ t('settings.antivirus.title') }}</h2>
               <div class="muted lead">{{ t('settings.antivirus.lead') }}</div>
+              <n-alert v-if="avLocked" type="info" :show-icon="false" class="lock-note">{{ t('settings.lockedNoteAv') }}</n-alert>
               <setting-row v-bind="rowProps('antivirus.enabled')" :label="t('settings.antivirus.enabled')" :help="t('settings.antivirus.enabledHelp')" @reset="reset('antivirus.enabled')" @undo="undo('antivirus.enabled')">
-                <n-switch v-model:value="f['antivirus.enabled']" :disabled="resets.includes('antivirus.enabled')" />
+                <n-switch v-model:value="f['antivirus.enabled']" :disabled="off('antivirus.enabled')" />
               </setting-row>
               <setting-row v-bind="rowProps('antivirus.host')" :label="t('settings.antivirus.host')" :help="t('settings.antivirus.hostHelp')" @reset="reset('antivirus.host')" @undo="undo('antivirus.host')">
-                <n-input v-model:value="f['antivirus.host']" :disabled="resets.includes('antivirus.host')" class="ctl" :input-props="{ autocomplete: 'off', spellcheck: false, name: 'clamd-host' }" />
+                <n-input v-model:value="f['antivirus.host']" :disabled="off('antivirus.host')" class="ctl" :input-props="{ autocomplete: 'off', spellcheck: false, name: 'clamd-host' }" />
               </setting-row>
               <setting-row v-bind="rowProps('antivirus.port')" :label="t('settings.antivirus.port')" @reset="reset('antivirus.port')" @undo="undo('antivirus.port')">
-                <n-input-number v-model:value="f['antivirus.port']" :min="1" :max="65535" :precision="0" :show-button="false" :disabled="resets.includes('antivirus.port')" class="ctl" />
+                <n-input-number v-model:value="f['antivirus.port']" :min="1" :max="65535" :precision="0" :show-button="false" :disabled="off('antivirus.port')" class="ctl" />
               </setting-row>
               <setting-row v-bind="rowProps('antivirus.timeoutSeconds')" :label="t('settings.antivirus.timeoutSeconds')" @reset="reset('antivirus.timeoutSeconds')" @undo="undo('antivirus.timeoutSeconds')">
-                <n-input-number v-model:value="f['antivirus.timeoutSeconds']" :min="1" :max="600" :precision="0" :show-button="false" :disabled="resets.includes('antivirus.timeoutSeconds')" class="ctl"><template #suffix>{{ t('settings.unit.seconds') }}</template></n-input-number>
+                <n-input-number v-model:value="f['antivirus.timeoutSeconds']" :min="1" :max="600" :precision="0" :show-button="false" :disabled="off('antivirus.timeoutSeconds')" class="ctl"><template #suffix>{{ t('settings.unit.seconds') }}</template></n-input-number>
               </setting-row>
               <setting-row v-bind="rowProps('antivirus.maxScanMb')" :label="t('settings.antivirus.maxScanMb')" :help="t('settings.antivirus.maxScanMbHelp')" @reset="reset('antivirus.maxScanMb')" @undo="undo('antivirus.maxScanMb')">
-                <n-input-number v-model:value="f['antivirus.maxScanMb']" :min="1" :max="4096" :precision="0" :show-button="false" :disabled="resets.includes('antivirus.maxScanMb')" class="ctl"><template #suffix>MB</template></n-input-number>
+                <n-input-number v-model:value="f['antivirus.maxScanMb']" :min="1" :max="4096" :precision="0" :show-button="false" :disabled="off('antivirus.maxScanMb')" class="ctl"><template #suffix>MB</template></n-input-number>
+              </setting-row>
+              <setting-row v-bind="rowProps('antivirus.onTooBigLinks')" :label="t('settings.antivirus.onTooBigLinks')" :help="t('settings.antivirus.onTooBigLinksHelp')" @reset="reset('antivirus.onTooBigLinks')" @undo="undo('antivirus.onTooBigLinks')">
+                <n-select v-model:value="f['antivirus.onTooBigLinks']" :options="onErrorOptions" :disabled="off('antivirus.onTooBigLinks')" class="ctl" />
+              </setting-row>
+              <setting-row v-bind="rowProps('antivirus.onTooBigUsers')" :label="t('settings.antivirus.onTooBigUsers')" :help="t('settings.antivirus.onTooBigUsersHelp')" @reset="reset('antivirus.onTooBigUsers')" @undo="undo('antivirus.onTooBigUsers')">
+                <n-select v-model:value="f['antivirus.onTooBigUsers']" :options="onErrorOptions" :disabled="off('antivirus.onTooBigUsers')" class="ctl" />
               </setting-row>
               <setting-row v-bind="rowProps('antivirus.onErrorLinks')" :label="t('settings.antivirus.onErrorLinks')" :help="t('settings.antivirus.onErrorLinksHelp')" @reset="reset('antivirus.onErrorLinks')" @undo="undo('antivirus.onErrorLinks')">
-                <n-select v-model:value="f['antivirus.onErrorLinks']" :options="onErrorOptions" :disabled="resets.includes('antivirus.onErrorLinks')" class="ctl" />
+                <n-select v-model:value="f['antivirus.onErrorLinks']" :options="onErrorOptions" :disabled="off('antivirus.onErrorLinks')" class="ctl" />
               </setting-row>
               <setting-row v-bind="rowProps('antivirus.onErrorUsers')" :label="t('settings.antivirus.onErrorUsers')" :help="t('settings.antivirus.onErrorUsersHelp')" @reset="reset('antivirus.onErrorUsers')" @undo="undo('antivirus.onErrorUsers')">
-                <n-select v-model:value="f['antivirus.onErrorUsers']" :options="onErrorOptions" :disabled="resets.includes('antivirus.onErrorUsers')" class="ctl" />
+                <n-select v-model:value="f['antivirus.onErrorUsers']" :options="onErrorOptions" :disabled="off('antivirus.onErrorUsers')" class="ctl" />
               </setting-row>
               <div class="av-test">
                 <n-button :loading="avTesting" :disabled="avDirty" @click="sendAvTest"><template #icon><n-icon :component="BugOutline" /></template>{{ t('settings.antivirus.test') }}</n-button>
@@ -290,7 +301,7 @@
       </div>
     </n-spin>
 
-    <!-- security, mail, alerts and rights for visitors to change files ask for the admin's password -->
+    <!-- security, mail, alerts, share-link rules, switching the public page on and rights for visitors to change files ask for the admin's password -->
     <n-modal v-model:show="pwOpen" preset="card" :title="t('settings.pwTitle')" style="width: min(420px, 94vw)" :mask-closable="!saving" :closable="!saving">
       <p class="muted pw-text">{{ t('settings.pwText') }}</p>
       <n-input v-model:value="pw" type="password" show-password-on="click" :placeholder="t('security.yourPassword')" :status="pwError ? 'error' : undefined" :input-props="{ autocomplete: 'current-password', 'aria-label': t('security.yourPassword') }" @keyup.enter="confirmPw" />
@@ -353,13 +364,13 @@ const GROUPED = {
   files: ['uploadMaxSize', 'defaultQuotaBytes', 'thumbnails', 'webdav', ...FILE_NUMBERS],
   mail: ['host', 'port', 'secure', 'user', 'pass', 'from'],
   alerts: ['webhookUrl', 'kind', 'telegramChatId', 'lang'],
-  auditForward: ['syslogHost', 'syslogPort', 'syslogProto', 'syslogFacility', 'webhookUrl'],
-  antivirus: ['enabled', 'host', 'port', 'timeoutSeconds', 'maxScanMb', 'onErrorLinks', 'onErrorUsers'],
+  auditForward: ['syslogHost', 'syslogPort', 'syslogProto', 'syslogFacility', 'webhookUrl', 'webhookSecret'],
+  antivirus: ['enabled', 'host', 'port', 'timeoutSeconds', 'maxScanMb', 'onTooBigLinks', 'onTooBigUsers', 'onErrorLinks', 'onErrorUsers'],
 }
 const CAT_OF = { appName: 'general', primaryColor: 'general', guestPermissions: 'public', welcomeTitle: 'public', welcomeText: 'public', publicEmptyText: 'public', publicEnabled: 'public', share: 'share', security: 'security', files: 'files', mail: 'mail', alerts: 'mail', auditForward: 'mail', antivirus: 'antivirus' }
 const catOfPath = p => CAT_OF[p.includes('.') ? p.split('.')[0] : p]
 // never shown back: a blank box means "keep what is there"
-const WRITE_ONLY = ['mail.pass', 'alerts.webhookUrl', 'auditForward.webhookUrl']
+const WRITE_ONLY = ['mail.pass', 'alerts.webhookUrl', 'auditForward.webhookUrl', 'auditForward.webhookSecret']
 const ALL_PATHS = [...FLAT, 'guestPermissions', ...Object.entries(GROUPED).flatMap(([g, ks]) => ks.map(k => `${g}.${k}`))]
 
 const { t } = useI18n()
@@ -429,10 +440,24 @@ const sourceOf = p => {
   if (!srv.value || !p.includes('.')) return ''
   const [g, k] = p.split('.')
   if (p === 'mail.pass') return srv.value.mail.passSource
+  if (p === 'auditForward.webhookSecret') return srv.value.auditForward.webhookSecretSource
   return srv.value[g][k]?.source || ''
 }
+// LOCK_OUTBOUND_SETTINGS: the server marks these `locked`; they show the .env value read-only and are never sent
+const isLocked = p => {
+  if (!srv.value || !p.includes('.')) return false
+  const [g, k] = p.split('.')
+  if (p === 'mail.pass') return !!srv.value.mail.passLocked
+  if (p === 'auditForward.webhookSecret') return !!srv.value.auditForward.webhookSecretLocked
+  return !!srv.value[g][k]?.locked
+}
+const lockedIn = prefix => computed(() => ready.value && ALL_PATHS.some(p => prefix.some(x => p.startsWith(x)) && isLocked(p)))
+const mailLocked = lockedIn(['mail.', 'alerts.', 'auditForward.'])
+const avLocked = lockedIn(['antivirus.'])
+const off = p => resets.value.includes(p) || isLocked(p)
 const same = (a, b) => (Array.isArray(a) ? [...a].sort().join() === [...b].sort().join() : a === b)
 function isChanged(p) {
+  if (isLocked(p)) return false
   if (resets.value.includes(p)) return true
   if (WRITE_ONLY.includes(p)) return f[p] !== ''
   if (p === 'files.defaultQuotaBytes') return f.quotaUnlimited !== orig.quotaUnlimited || (!f.quotaUnlimited && f[p] !== orig[p])
@@ -450,7 +475,7 @@ const undo = p => { resets.value = resets.value.filter(x => x !== p) }
 // field-level problems the page can see itself (the server checks the same again)
 const bytesText = n => formatBytes(n)
 function localError(p) {
-  if (!ready.value || resets.value.includes(p)) return ''
+  if (!ready.value || off(p)) return ''
   const r = RANGE[p]
   if (r) {
     const v = f[p]
@@ -481,7 +506,8 @@ const covers = { none: [], admin: ['admin'], staff: ['admin', 'manager'], all: [
 const warn2fa = computed(() => ready.value && isChanged('security.require2fa') && !resets.value.includes('security.require2fa') && !app.user?.twoFactor && (covers[f['security.require2fa']] || []).includes(app.user?.role))
 
 // ───────── save ─────────
-const needsPassword = computed(() => changedPaths.value.some(p => p.startsWith('security.') || p.startsWith('mail.') || p.startsWith('alerts.') || p.startsWith('auditForward.') || p.startsWith('antivirus.'))
+const needsPassword = computed(() => changedPaths.value.some(p => p.startsWith('security.') || p.startsWith('mail.') || p.startsWith('alerts.') || p.startsWith('auditForward.') || p.startsWith('antivirus.') || p.startsWith('share.'))
+  || (f.publicEnabled && !orig.publicEnabled)
   || ADVANCED.some(p => hasPerm(p) && !orig.guestPermissions.includes(p)))
 
 function toApi(p) {
@@ -536,6 +562,20 @@ async function send(password) {
       serverErrors.value = { [p]: e.params.min !== undefined ? t('settings.range', { min: e.params.min, max: e.params.max }) : t('settings.badValue') }
       if (p === 'share.defaultDays' && e.params.max) serverErrors.value[p] = t('settings.share.defaultTooLong', { n: e.params.max })
       cat.value = catOfPath(p)
+    } else if (e.code === 'admin.setting-locked') {
+      // the lock was switched on after this page loaded: reload so locked rows turn read-only, keep the edits that are still allowed
+      pwOpen.value = false
+      const kept = changedPaths.value.map(p => [p, f[p]])
+      const keptResets = [...resets.value]
+      const keptUnlimited = f.quotaUnlimited
+      try {
+        fill(await api.settings())
+        for (const [p, v] of kept) if (!isLocked(p)) f[p] = v
+        // fill() forgets the reset-to-default marks and the quota switch: they are edits too
+        resets.value = keptResets.filter(p => !isLocked(p))
+        f.quotaUnlimited = keptUnlimited
+      } catch { /* the message below still tells what happened; the page keeps its unsaved edits */ }
+      fb.fail(e)
     } else if (e.code === 'admin.upload-over-ceiling') {
       pwOpen.value = false
       serverErrors.value = { 'files.uploadMaxSize': t('settings.files.overCeiling', { max: bytesText(e.params?.max ?? srv.value.files.uploadMaxSizeCeiling) }) }
@@ -613,6 +653,7 @@ onBeforeUnmount(() => window.removeEventListener('beforeunload', beforeUnload))
 .block { padding: 22px; margin-bottom: 16px; }
 .block h2 { margin: 0 0 16px; font-size: 16px; font-weight: 600; }
 .lead { font-size: 13px; line-height: 1.6; margin: -8px 0 14px; overflow-wrap: anywhere; }
+.lock-note { margin-bottom: 14px; }
 .ctl { width: 100%; max-width: 320px; }
 .av-test { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 16px; }
 .av-test .help-s { margin-top: 0; }

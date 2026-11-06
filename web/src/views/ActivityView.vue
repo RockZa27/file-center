@@ -45,7 +45,7 @@ const hasMore = ref(false)
 const page = ref(1)
 const f = reactive({ q: '', user: '', action: null })
 
-const ACTIONS = ['login', 'login-failed', 'logout', 'upload', 'download', 'download-zip', 'view', 'delete', 'restore', 'purge', 'mkdir', 'create', 'edit', 'rename', 'copy', 'move', 'zip', 'unzip', 'password-change', 'user-create', 'user-update', 'user-delete', 'user-password-reset', 'browse', 'settings-update', 'logo-update', 'logo-remove', 'update-stage', 'update-apply', 'update-apply-unsigned', 'update-rollback', 'update-denied', 'backup-create', 'backup-download', 'backup-delete', 'backup-restore', 'backup-restore-denied', 'logs-download', 'activity-export', 'update-fetch', 'share-create', 'share-download', 'share-revoke', 'share-link-view', 'alert-test', 'group-create', 'group-update', 'group-delete', 'group-delete-denied', 'group-member-add', 'group-member-remove', 'app-password-create', 'app-password-delete', 'app-password-denied', 'share-view', 'virus-found', 'virus-scan-failed', 'quarantine-delete', 'quarantine-release', 'antivirus-test']
+const ACTIONS = ['login', 'login-failed', 'logout', 'upload', 'download', 'download-zip', 'view', 'delete', 'restore', 'purge', 'mkdir', 'create', 'edit', 'rename', 'copy', 'move', 'zip', 'unzip', 'password-change', 'user-create', 'user-update', 'user-delete', 'user-files-trashed', 'orphan-home-trashed', 'orphan-home-denied', 'user-password-reset', 'browse', 'settings-update', 'logo-update', 'logo-remove', 'update-stage', 'update-apply', 'update-apply-unsigned', 'update-rollback', 'update-denied', 'backup-create', 'backup-download', 'backup-delete', 'backup-restore', 'backup-restore-denied', 'logs-download', 'activity-export', 'update-fetch', 'share-create', 'share-download', 'share-revoke', 'share-link-view', 'alert-test', 'group-create', 'group-update', 'group-delete', 'group-delete-denied', 'group-member-add', 'group-member-remove', 'app-password-create', 'app-password-delete', 'app-password-denied', 'share-view', 'share-upload', 'virus-found', 'virus-scan-failed', 'virus-scan-skipped', 'settings-locked', 'quarantine-delete', 'quarantine-release', 'antivirus-test']
 // the file holds what the filter boxes show; the click also applies them, so the table matches the file
 const exportUrl = computed(() => api.activityExportUrl({ q: f.q, user: f.user, action: f.action || '' }))
 const { busy: saving, follow } = useDownload()
@@ -76,6 +76,8 @@ async function more() {
   if (r) { page.value++; rows.value = rows.value.concat(keyed(r.items, rows.value.length)); hasMore.value = r.hasMore }
 }
 
+// a failed sign-in with a name that is no account is recorded as ?xxxxxxxx (never the typed text): show it as such
+const who = u => { const m = /^\?([0-9a-f]{8})$/.exec(u || ''); return m ? t('activity.unknownName', { id: m[1] }) : u }
 const detail = r => (r.action === 'upload' && r.detail ? formatBytes(Number(r.detail)) : r.detail || '')
 const actionTag = r => h(NTag, { size: 'small', round: true, type: tone(r.action), bordered: false }, () => t(`action.${r.action}`))
 
@@ -85,7 +87,7 @@ const columns = computed(() => (narrow.value
   ? [{
       title: t('activity.event'), key: 'event',
       render: r => h('div', { class: 'stacked' }, [
-        h('div', { class: 'stacked-head' }, [h('span', { class: 'muted nowrap' }, formatDate(r.ts)), h('span', { class: 'who' }, r.user)]),
+        h('div', { class: 'stacked-head' }, [h('span', { class: 'muted nowrap' }, formatDate(r.ts)), h('span', { class: 'who' }, who(r.user))]),
         h('div', {}, [actionTag(r)]),
         r.target ? h('div', { class: 'mono target', title: r.target }, r.target) : null,
         detail(r) ? h('div', { class: 'muted small wrap' }, detail(r)) : null,
@@ -94,7 +96,7 @@ const columns = computed(() => (narrow.value
     }]
   : [
       { title: t('activity.time'), key: 'ts', width: 150, render: r => formatDate(r.ts) },
-      { title: t('activity.user'), key: 'user', width: 130, render: r => h('span', { style: 'font-weight:500' }, r.user) },
+      { title: t('activity.user'), key: 'user', width: 130, render: r => h('span', { style: 'font-weight:500' }, who(r.user)) },
       { title: t('activity.action'), key: 'action', width: 160, render: actionTag },
       { title: t('activity.target'), key: 'target', minWidth: 170, render: r => h('div', { style: 'min-width:0' }, [h('div', { class: 'mono truncate', title: r.target }, r.target || '—'), detail(r) ? h('div', { class: 'muted', style: 'font-size:12px' }, detail(r)) : null]) },
       { title: 'IP', key: 'ip', width: 130, render: r => h('span', { class: 'mono muted' }, r.ip) },

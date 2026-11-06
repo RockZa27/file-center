@@ -28,6 +28,11 @@
             <n-radio-button value="readwrite">{{ t('dav.scopeReadwrite') }}</n-radio-button>
           </n-radio-group>
         </n-form-item>
+        <n-form-item :label="t('dav.lifetime')">
+          <n-radio-group v-model:value="form.days" name="dav-days">
+            <n-radio-button v-for="o in lifetimes" :key="o.days" :value="o.days">{{ t('dav.' + o.key) }}</n-radio-button>
+          </n-radio-group>
+        </n-form-item>
         <n-form-item :label="t('dav.currentPassword')">
           <n-input v-model:value="form.password" type="password" show-password-on="click" :input-props="{ autocomplete: 'current-password' }" @keyup.enter="create" />
         </n-form-item>
@@ -44,10 +49,13 @@
         <div class="item-main">
           <div class="item-head">
             <span class="item-name">{{ p.name }}</span>
+            <n-tag v-if="isExpired(p)" size="small" round :bordered="false" type="error" data-testid="dav-expired">{{ t('dav.expired') }}</n-tag>
             <n-tag size="small" round :bordered="false" :type="p.scope === 'readwrite' ? 'warning' : 'info'">{{ p.scope === 'readwrite' ? t('dav.scopeReadwrite') : t('dav.scopeRead') }}</n-tag>
           </div>
           <div class="small muted"><span>{{ t('dav.hint') }}</span> <span class="mono">{{ p.hint }}…</span></div>
           <div class="small muted">{{ t('dav.createdAt', { date: formatDate(p.createdAt) }) }}</div>
+          <div class="small muted" :class="{ bad: isExpired(p) }" data-testid="dav-expires">{{ p.expiresAt ? t('dav.expiresAt', { date: formatDate(p.expiresAt) }) : t('dav.neverExpires') }}</div>
+          <div v-if="isExpired(p)" class="small bad">{{ t('dav.expiredHint') }}</div>
           <div class="small muted">
             <template v-if="p.lastUsedAt">{{ t('dav.lastUsed', { date: formatDate(p.lastUsedAt) }) }}<template v-if="p.lastIp"> · {{ t('dav.lastIp', { ip: p.lastIp }) }}</template></template>
             <template v-else>{{ t('dav.neverUsed') }}</template>
@@ -113,7 +121,9 @@ const loading = ref(false)
 const busy = ref(false)
 const removing = ref('')
 const secret = ref(null)
-const form = reactive({ name: '', scope: 'read', password: '' })
+const form = reactive({ name: '', scope: 'read', password: '', days: 365 })
+const lifetimes = [{ days: 0, key: 'lifeNever' }, { days: 30, key: 'life30' }, { days: 90, key: 'life90' }, { days: 180, key: 'life180' }, { days: 365, key: 'life365' }]
+const isExpired = p => !!p.expiresAt && new Date(p.expiresAt).getTime() <= Date.now()
 
 const url = `${location.origin}/dav/`
 const items = computed(() => data.value?.items ?? [])
@@ -135,7 +145,7 @@ async function create() {
   if (!valid.value || busy.value || full.value) return
   busy.value = true
   try {
-    const r = await api.createAppPassword(form.name.trim(), form.scope, form.password)
+    const r = await api.createAppPassword(form.name.trim(), form.scope, form.password, form.days)
     secret.value = r
     emit('lock', true)
     form.name = ''
@@ -177,6 +187,7 @@ onMounted(load)
 .item-name { font-weight: 600; overflow-wrap: anywhere; }
 .steps { margin: 0; padding-left: 20px; font-size: 13.5px; display: flex; flex-direction: column; gap: 6px; overflow-wrap: anywhere; }
 .code { margin: 6px 0 0; padding: 10px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--border); white-space: pre-wrap; overflow-wrap: anywhere; }
+.bad { color: var(--danger); }
 .cf { margin-top: 12px; }
 .warn { margin-bottom: 12px; }
 .secret { margin: 0 0 10px; padding: 12px; border-radius: 8px; background: var(--primary-soft); font-size: 16px; font-weight: 600; text-align: center; overflow-wrap: anywhere; user-select: all; }

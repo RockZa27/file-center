@@ -1,4 +1,4 @@
-import { rmSync } from 'node:fs'
+import { lstatSync, readdirSync, realpathSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { Elysia, t } from 'elysia'
 import { alert } from '../alerts'
@@ -6,23 +6,25 @@ import { audit, queryAudit } from '../audit'
 import type { Perm } from '../settings'
 import {
   allUsers, canManage, checkPasswordStrength, cleanHomedir, cleanPerms, confirmPassword, defaultHome, destroyUserSessions,
-  dropLoginTickets, findUser, hashPassword, homeIsTaken, isAdmin, isReservedUsername, listUserSessions, publicUser, saveUsers, USERNAME_RE,
+  dropLoginTickets, findUser, hashPassword, homeIsTaken, homeOverlapsOther, isAdmin, isReservedUsername, listUserSessions, publicUser, saveUsers, USERNAME_RE,
 } from '../auth'
 import { staleAfterMs, statusIn } from '../backup'
 import { config, paths } from '../config'
 import * as policy from '../policy'
 import { context, manageable, requireAdmin, requireStaff } from '../context'
-import { bad, conflict, ensureDir, forbidden, HttpError, isDir, listDirAsync, normRel, notFound, resolveIn } from '../fsx'
+import { bad, conflict, countEntries, ensureDir, forbidden, HttpError, isDir, listDirAsync, normRel, notFound, resolveIn, validName } from '../fsx'
 import { errorsSince } from '../logger'
 import { langOf, type MessageCode, type Params, text } from '../messages'
 import type { User } from '../auth'
 import { cleanQuota, forget, usage } from '../quota'
 import { logoExt, settings } from '../settings'
-import { policyView, savePolicy, STEP_UP_GROUPS } from '../policy'
+import { lockedKeysIn, policyView, savePolicy, STEP_UP_GROUPS } from '../policy'
 import { forgetAccount } from '../account-records'
 import { DISK_CRITICAL_PERCENT, DISK_LOW_PERCENT, diskInfo, storageStats } from '../stats'
 import { removeAppPasswordsOf } from '../app-passwords'
-import { listTrash, purge, restore, tombstoneTrashOf, trashSummary } from '../trash'
+import { listTrash, moveToTrash, purge, restore, tombstoneTrashOf, trashSummary, type TrashMeta } from '../trash'
+import { grantsOf, removeGrant } from '../grants'
+import { revokeShare, sharesOf } from '../shares'
 import { isBeta } from '../release'
 import { availableVersion } from '../update-source'
 import { uploadsInProgress } from '../uploads'
@@ -52,6 +54,63 @@ function checkPublicPerms(actor: User, wanted: Perm[], already: Perm[] = []) {
   if (isAdmin(actor)) return
   const mine = new Set(actor.publicPermissions)
   if (wanted.some(p => !mine.has(p) && !already.includes(p))) throw forbidden('admin.public-perms-exceed')
+}
+
+/** accounts being deleted right now (lower case): a second DELETE for one of them waits its turn (409) */
+const deleting = new Set<string>()
+
+/**
+ * An admin giving an account a folder must do it on purpose when the folder is not new: it is another account's home
+ * (or inside or above one: a shared folder), or it holds files already (maybe a deleted account's leftovers, which
+ * would pass to whoever gets the name next, with their version history and thumbnails). Throws 409 unless `adopt`;
+ * returns what was taken over, for the audit line (never file names), or '' when the folder is new.
+ */
+function checkAdoptHome(home: string, except: string | undefined, adopt: boolean | undefined): string {
+  // a folder on its way to the trash (orphan-homes/trash awaits while it counts) is not given to an account meanwhile
+  if (trashingHomes.has(home.toLowerCase())) throw conflict('admin.home-busy', { home })
+  let note = ''
+  if (homeOverlapsOther(home, except)) {
+    if (!adopt) throw conflict('admin.home-of-other', { home })
+    note = 'home shared with another account'
+  } else {
+    // only "is anything there" matters: a folder of a million entries is not read to the end for a count
+    const n = countEntries(resolveIn(config.storageDir, home), HOME_COUNT_CAP)
+    if (n) {
+      const files = n >= HOME_COUNT_CAP ? `${HOME_COUNT_CAP}+` : n
+      if (!adopt) throw conflict('admin.home-has-files', { home, files })
+      note = `home taken over with ${files} existing entries`
+    }
+  }
+  return note
+}
+
+const HOME_COUNT_CAP = 1000
+/** /users/<name> folders (lower case) being moved to the trash right now; checkAdoptHome refuses them meanwhile */
+const trashingHomes = new Set<string>()
+/** claims a home for its move to the trash; null when it is being moved already. The returned function lets it go */
+export function holdHomeForTrash(home: string): (() => void) | null {
+  const key = home.toLowerCase()
+  if (trashingHomes.has(key)) return null
+  trashingHomes.add(key)
+  return () => { trashingHomes.delete(key) }
+}
+
+/** the real folders directly under /users that no live account's home overlaps, as the list shows them */
+function orphanHomes() {
+  const root = join(config.storageDir, 'users')
+  let names: string[]
+  try { names = readdirSync(root) } catch { return [] }
+  const out: { name: string; path: string; mtime: string; entries: number }[] = []
+  for (const name of names.sort()) {
+    const path = defaultHome(name)
+    let st
+    try { st = lstatSync(join(root, name)) } catch { continue }
+    if (st.isSymbolicLink() || !st.isDirectory() || homeOverlapsOther(path)) continue
+    // only what the trash route accepts (one plain name, as it is): a folder it would refuse is not offered
+    try { if (validName(name) !== name) continue } catch { continue }
+    out.push({ name, path, mtime: st.mtime.toISOString(), entries: countEntries(join(root, name), HOME_COUNT_CAP) })
+  }
+  return out
 }
 
 export const adminRoutes = new Elysia({ prefix: '/api' })
@@ -95,7 +154,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     body: t.Object({
       username: t.String(), name: t.String(), password: t.String(), role: roleT,
       homedir: t.Optional(t.String()), permissions: permsT, publicPermissions: permsT,
-      quotaBytes: t.Optional(t.Number()),
+      quotaBytes: t.Optional(t.Number()), adoptHome: t.Optional(t.Boolean()),
     }),
   }, async ({ user, ip, body }) => {
     const admin = requireStaff({ user, ip })
@@ -114,6 +173,8 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     checkPublicPerms(admin, publicPermissions)
     // a manager never takes over a folder that is there already (an admin's shared folder, a deleted user's leftovers)
     if (!isAdmin(admin) && homeIsTaken(username)) throw conflict('admin.home-exists')
+    // an admin must say so (adoptHome) to take a folder that holds files or is another account's; a manager can not
+    const adopted = isAdmin(admin) && body.role !== 'admin' ? checkAdoptHome(homedir, undefined, body.adoptHome) : ''
     ensureDir(resolveIn(config.storageDir, homedir))
     // a name used before (an account a backup restore dropped, not deleted here) starts clean: no old sign-ins,
     // share links, grants, group places or trash of that earlier account
@@ -130,7 +191,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
       createdAt: new Date().toISOString(),
     })
     saveUsers()
-    audit({ user: admin.username, ip, action: 'user-create', target: username })
+    audit({ user: admin.username, ip, action: 'user-create', target: username, ...(adopted ? { detail: adopted } : {}) })
     return { ok: true }
   })
 
@@ -138,7 +199,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     body: t.Object({
       name: t.Optional(t.String()), password: t.Optional(t.String()), confirmPassword: t.Optional(t.String({ maxLength: 1000 })), role: t.Optional(roleT),
       homedir: t.Optional(t.String()), permissions: t.Optional(permsT), publicPermissions: t.Optional(permsT),
-      quotaBytes: t.Optional(t.Number()),
+      quotaBytes: t.Optional(t.Number()), adoptHome: t.Optional(t.Boolean()),
     }),
   }, async ({ user, ip, params, body }) => {
     const admin = requireStaff({ user, ip })
@@ -157,6 +218,10 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
       homedir = cleanHomedir(body.homedir, target.username)
       if (homedir === '/') throw bad('admin.home-required')
     }
+    // a new home (not the one the account has now) is checked like a new account's
+    // compared exactly: on a case-sensitive disk /users/Alice is another folder than /users/alice
+    const adopted = role !== 'admin' && isAdmin(admin) && homedir !== target.homedir
+      ? checkAdoptHome(homedir, target.username, body.adoptHome) : ''
     const homeAbs = resolveIn(config.storageDir, homedir)
     if (body.password) checkPasswordStrength(body.password, target.username)
     const passwordHash = body.password ? await hashPassword(body.password) : null
@@ -186,23 +251,118 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
       removeAppPasswordsOf(target.username)
     }
     saveUsers()
-    audit({ user: admin.username, ip, action: reset ? 'user-password-reset' : 'user-update', target: target.username })
+    audit({ user: admin.username, ip, action: reset ? 'user-password-reset' : 'user-update', target: target.username, ...(adopted ? { detail: adopted } : {}) })
     return { ok: true }
   })
 
-  .delete('/admin/users/:username', ({ user, ip, params }) => {
+  // Folders under /users that no account owns (accounts deleted without their files, or before that option existed).
+  // Only real folders are listed (links and plain files are skipped: not ours to move); hidden names count. No total
+  // size: a tree walk per folder would make the page as slow as the biggest leftover; the capped count tells enough
+  .get('/admin/orphan-homes', ({ user, ip }) => {
+    requireAdmin({ user, ip })
+    return { folders: orphanHomes() }
+  })
+
+  // Sends one of them to the system trash as one entry (restorable until TRASH_RETENTION_DAYS). The password is asked
+  // first; then the folder is checked again, as an account may have been made for it since the list was shown
+  .post('/admin/orphan-homes/trash', {
+    body: t.Object({ name: t.String({ maxLength: 300 }), password: t.String({ maxLength: 1000 }) }),
+  }, async ({ user, ip, body }) => {
+    const admin = requireAdmin({ user, ip })
+    await confirmPassword(admin, ip, body.password, 'orphan-home-denied')
+    // one path segment, exactly as given (validName trims, so " x" must not stand for "x")
+    if (validName(body.name) !== body.name) throw bad('fs.bad-name')
+    const home = defaultHome(body.name)
+    // held from the ownership check to the end of the move: moveToTrash awaits (it counts the tree), and an account
+    // must not take the folder (a create or home change with adoptHome) in between
+    const release = holdHomeForTrash(home)
+    if (!release) throw conflict('admin.home-busy', { home })
+    try {
+      if (homeOverlapsOther(home)) throw conflict('admin.orphan-home-owned', { home })
+      const abs = resolveIn(config.storageDir, home)
+      let st: ReturnType<typeof lstatSync>
+      try { st = lstatSync(abs) } catch { throw notFound() }
+      if (st.isSymbolicLink() || !st.isDirectory()) throw bad('admin.orphan-home-bad')
+      // a link in the middle of the path would move some other folder
+      if (realpathSync(abs) !== join(realpathSync(config.storageDir), 'users', body.name)) throw bad('admin.orphan-home-bad')
+      const moved = await moveToTrash(abs, admin.username)
+      audit({ user: admin.username, ip, action: 'orphan-home-trashed', target: home, detail: `trash ${moved.id}, ${moved.size} bytes` })
+      return { ok: true, trashId: moved.id }
+    } finally {
+      release()
+    }
+  })
+
+  // `deleteFiles` (admin only, password asked again) also sends the account's home folder to the system trash as one
+  // entry; everything is checked before anything moves, and a failed move leaves the account as it was. One deletion per
+  // account at a time: the handler awaits (password, move), and a second request for the same account must not run alongside
+  .delete('/admin/users/:username', {
+    body: t.Optional(t.Object({ deleteFiles: t.Optional(t.Boolean()), password: t.Optional(t.String({ maxLength: 1000 })) })),
+  }, async ({ user, ip, params, body }) => {
     const admin = requireStaff({ user, ip })
     const target = manageable(admin, params.username)
     if (target.username === admin.username) throw bad('admin.delete-self')
     if (target.role === 'admin' && adminCount() <= 1) throw bad('admin.last-admin')
-    // before the account leaves the list: old trash entries find their owner from the home
-    tombstoneTrashOf(target.username)
-    const list = allUsers()
-    list.splice(list.indexOf(target), 1)
-    saveUsers()
-    forgetAccount(target.username)
-    audit({ user: admin.username, ip, action: 'user-delete', target: target.username })
-    return { ok: true }
+    const key = target.username.toLowerCase()
+    if (deleting.has(key)) throw conflict('admin.delete-busy')
+    deleting.add(key)
+    try {
+      let moved: TrashMeta | null = null
+      if (body?.deleteFiles) {
+        if (!isAdmin(admin)) throw forbidden()
+        await confirmPassword(admin, ip, body.password ?? '', 'user-delete-denied')
+        const home = normRel(target.homedir)
+        const low = home.toLowerCase()
+        const inside = (root: string) => low === root || low.startsWith(`${root}/`)
+        // the root, the public folder, the group folders, /users itself, or a folder that is also (or holds, or is inside)
+        // another account's: not this account's alone, so not ours to erase
+        if (target.role === 'admin' || home === '/' || inside(`/${config.publicDirName.toLowerCase()}`) || inside('/groups')
+          || low === '/users' || homeOverlapsOther(home, target.username)) throw bad('admin.delete-files-home')
+        const abs = resolveIn(config.storageDir, home)
+        let st: ReturnType<typeof lstatSync> | null = null
+        try { st = lstatSync(abs) } catch { /* never made, or gone */ }
+        if (st && (st.isSymbolicLink() || !st.isDirectory())) throw bad('admin.delete-files-home')
+        // a link in a middle part of the path would move some other folder (the string checks above only see the name)
+        if (st && realpathSync(abs) !== join(realpathSync(config.storageDir), home)) throw bad('admin.delete-files-home')
+        // links and grants someone else (an admin) made to something inside it: a new account of this name must not bring
+        // them back. Found before anything moves (a bad stored path throws here, not half way)
+        const strayGrants: ReturnType<typeof grantsOf> = []
+        const strayShares: ReturnType<typeof sharesOf> = []
+        for (const u of allUsers()) {
+          if (u === target) continue
+          const root = normRel(u.homedir).toLowerCase()
+          const hit = (p: string) => {
+            const x = normRel(`${root === '/' ? '' : root}/${p}`).toLowerCase()
+            return x === low || x.startsWith(`${low}/`)
+          }
+          for (const g of grantsOf(u.username)) if (hit(g.path)) strayGrants.push(g)
+          for (const s of sharesOf(u.username)) if (s.space === 'home' && hit(s.path)) strayShares.push(s)
+        }
+        // a home that does not exist is nothing to move: the account is deleted and the answer says no files were found
+        if (st) {
+          moved = await moveToTrash(abs, admin.username)
+          // in the trail at once: if a later step fails, the admin still finds where the files went
+          audit({ user: admin.username, ip, action: 'user-files-trashed', target: target.username, detail: `trash ${moved.id}, ${moved.size} bytes` })
+        }
+        for (const g of strayGrants) removeGrant(g)
+        for (const s of strayShares) revokeShare(s)
+      }
+      // the awaits above let other requests run: the account must still be the one in the list (never splice(-1))
+      const list = allUsers()
+      const at = list.indexOf(target)
+      if (at < 0) throw notFound()
+      // before the account leaves the list: old trash entries find their owner from the home
+      tombstoneTrashOf(target.username)
+      list.splice(at, 1)
+      saveUsers()
+      forgetAccount(target.username)
+      forget(target.username)
+      audit({
+        user: admin.username, ip, action: 'user-delete', target: target.username,
+        detail: moved ? `files to trash ${moved.id}, ${moved.size} bytes` : body?.deleteFiles ? 'no home folder found' : undefined,
+      })
+      return { ok: true, filesMoved: !!moved, ...(moved ? { trashId: moved.id } : {}) }
+    } finally { deleting.delete(key) }
   })
 
   // a user's signed-in devices, and ending them all (a lost phone, a stolen cookie)
@@ -365,6 +525,12 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     }),
   }, async ({ user, ip, body }) => {
     const admin = requireAdmin({ user, ip })
+    // LOCK_OUTBOUND_SETTINGS: a body naming a locked key is refused whole, before the password is asked (no guess is counted) and before anything is saved
+    const lockedKeys = lockedKeysIn(body as Record<string, unknown>)
+    if (lockedKeys.length) {
+      audit({ user: admin.username, ip, action: 'settings-locked', detail: lockedKeys.join(', ') })
+      throw forbidden('admin.setting-locked', { key: lockedKeys.join(', ') })
+    }
     const patch: Record<string, unknown> = {}
     const text = (key: keyof typeof body, max: number, min = 0) => {
       const v = body[key]
@@ -386,14 +552,16 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     // visitors gaining the right to change things (not read/download) is as sensitive as a security setting
     const had = settings.get().guestPermissions
     const widens = Array.isArray(patch.guestPermissions) && (patch.guestPermissions as Perm[]).some(p => ['write', 'upload', 'zip'].includes(p) && !had.includes(p))
+    // so is switching the public page on
+    const opens = patch.publicEnabled === true && !settings.get().publicEnabled
     const sensitive = STEP_UP_GROUPS.some(g => (body as Record<string, unknown>)[g] !== undefined)
-    if (widens || sensitive) await confirmPassword(admin, ip, body.password ?? '', 'settings-denied')
+    if (widens || opens || sensitive) await confirmPassword(admin, ip, body.password ?? '', 'settings-denied')
     const changed = savePolicy(body as Record<string, unknown>)
     settings.update(patch)
     // the names of what changed, never a value (a password or a webhook URL is among them)
     audit({ user: admin.username, ip, action: 'settings-update', detail: [...Object.keys(patch), ...changed].join(', ') })
-    // mail and alerts decide where messages go: a changed webhook or SMTP server is worth a message to the admins
-    const security = changed.filter(k => k.startsWith('security.') || k.startsWith('mail.') || k.startsWith('alerts.') || k.startsWith('auditForward.') || k.startsWith('antivirus.'))
+    // mail and alerts decide where messages go, share rules how data leaves: a change in them is worth a message to the admins
+    const security = changed.filter(k => k.startsWith('security.') || k.startsWith('mail.') || k.startsWith('alerts.') || k.startsWith('auditForward.') || k.startsWith('antivirus.') || k.startsWith('share.'))
     if (security.length) alert('settings-security', 'admin.alert-security-changed', { user: admin.username, keys: security.join(', ') })
     return settingsView()
   })

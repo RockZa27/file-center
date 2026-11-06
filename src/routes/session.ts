@@ -5,7 +5,7 @@ import { removeAppPasswordsOf } from '../app-passwords'
 import {
   accessFor, checkPasswordStrength, checkSecondFactor, clearFailures, confirmPassword, createLoginTicket, createSession,
   destroySession, destroySessionById, destroyUserSessions, finishTwoFactorSetup, findUser, hasPendingSetup, hashPassword,
-  listUserSessions, lockedFor, newBackupCodes, PASSWORD_MIN_LENGTH, peekLoginTicket, publicUser, recordFailure, recordWideCodeFailure,
+  listUserSessions, lockedFor, newBackupCodes, PASSWORD_MIN_LENGTH, peekLoginTicket, publicUser, recordedName, recordFailure, recordWideCodeFailure,
   recordWideLoginFailure, saveUsers, startTwoFactorSetup, useLoginTicket, verifyLogin, wideCodeWait, wideLoginWait, type Session, type User,
 } from '../auth'
 import { config } from '../config'
@@ -140,11 +140,13 @@ export const sessionRoutes = new Elysia({ prefix: '/api' })
     if (wait) throw new HttpError(429, 'auth.locked', { seconds: wait })
     const user = await verifyLogin(username, body.password)
     if (!user) {
-      if (recordFailure(key)) alert('lockout', 'admin.alert-login-locked', { user: username || '-', ip })
+      // what was typed may be a password: only an existing account's name or a keyed label is recorded
+      const who = recordedName(username)
+      if (recordFailure(key)) alert('lockout', 'admin.alert-login-locked', { user: who, ip })
       const wideLock = recordWideLoginFailure(username, ip)
-      if (wideLock.account) alert('lockout', 'admin.alert-account-locked', { user: username || '-', ip })
+      if (wideLock.account) alert('lockout', 'admin.alert-account-locked', { user: who, ip })
       if (wideLock.address) alert('lockout', 'admin.alert-address-locked', { ip })
-      auditFailure(key, { user: username || '-', ip, action: 'login-failed' })
+      auditFailure(key, { user: who, ip, action: 'login-failed' })
       throw new HttpError(401, 'auth.bad-credentials')
     }
     clearFailures(key)

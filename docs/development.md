@@ -121,6 +121,7 @@ dist-update/        แพ็กเกจที่ bun run package สร้า�
 | `update.test.ts`, `backup.test.ts` | อัปเดตและกู้คืนข้อมูลกับ launcher จริง |
 | `update-signing.test.ts`, `update-beta.test.ts`, `update-source.test.ts` | ลายเซ็นแพ็กเกจ · ช่องทางเบตา · ตรวจหา/ดาวน์โหลดอัปเดตจาก server ทดสอบในเครื่อง |
 | `release.test.ts`, `release-beta.test.ts` | `bun run release` กับ repo ชั่วคราว (ไม่แตะ repo จริง) |
+| `backup-encryption.test.ts` | เข้ารหัสไฟล์สำรอง (`BACKUP_ENCRYPTION_KEY`): สตรีมเข้า/ถอดรหัสถูกต้องทุกไบต์ ไฟล์ที่ถูกแก้/ตัด/ต่อท้ายเปิดไม่ได้ ไม่มีข้อความธรรมดาในไฟล์ ไฟล์ข้างเคียง การตัดของเก่า ปฏิเสธโดยไม่เปลี่ยนอะไร CLI `backup-key`/`backup-decrypt` และกู้คืนกับ launcher จริง |
 | `backup-settings.test.ts`, `durability.test.ts` | ตั้งค่าสำรอง (บีบอัด ตารางเวลา) และ disk-full guard · หยุดระบบ/เขียนไฟล์ข้อมูลล้มเหลว/ถังขยะค้าง/ชื่อและลำดับไฟล์สำรอง/launcher ช้า/กู้คืน 2FA ข้ามเครื่อง |
 | `office.test.ts` | ONLYOFFICE กับ document server ปลอม: สิทธิ์ โทเคน JWT การบันทึกเป็นเวอร์ชัน CSP และ `expectedMtime` ของไฟล์ข้อความ |
 | `alerts.test.ts`, `notify.test.ts` | แจ้งเตือนผู้ดูแลกับ webhook ทดสอบในเครื่อง (รูปแบบ ชั่วโมงละครั้ง ตัดความลับ ตรวจเวอร์ชันใหม่รายวัน) · แจ้งเตือนส่วนตัวกับเซิร์ฟเวอร์ SMTP และ LINE จำลอง (ไม่เห็นของคนอื่น ครั้งเดียวต่อเหตุการณ์ ไม่ส่งอีเมลก่อนยืนยัน กัน header injection ลายเซ็น webhook รหัสเชื่อม LINE ข้อจำกัดอัตรา) |
@@ -531,7 +532,7 @@ File Center เขียนใหม่ทั้งหมดด้วย ElysiaJ
 
 | | |
 |---|---|
-| `GET /api/admin/backups` | `{ items, status, settings }`: `items` คือไฟล์สำรอง `{ name, size, createdAt, parts }` (`parts: null` = ไฟล์สำรองก่อน 1.10) `status` คือผลล่าสุด `settings` คือการตั้งค่าที่ใช้อยู่ |
+| `GET /api/admin/backups` | `{ items, status, settings }`: `items` คือไฟล์สำรอง `{ name, size, createdAt, parts, encrypted }` (`parts: null` = ไฟล์สำรองก่อน 1.10 หรือไฟล์ `.zip.enc` ที่ไม่มีไฟล์ข้างเคียง `.json`; `encrypted: true` = `.zip.enc`) `settings.encryption` บอกว่าไฟล์สำรองใหม่จะเข้ารหัสหรือไม่ `status` คือผลล่าสุด `settings` คือการตั้งค่าที่ใช้อยู่ |
 | `PUT /api/admin/backups/settings` | ส่งเฉพาะที่เปลี่ยน (ไม่ส่ง = คงเดิม `null` = กลับเป็นค่าเริ่มต้น) ตอบการตั้งค่าที่ใช้อยู่ บันทึก `backup-settings` ในประวัติการใช้งาน: `compression` (`fast` / `balanced` / `smallest`) · `schedule` (`{ "mode": "off" }` · `{ "mode": "daily", "time": "03:00" }` · `{ "mode": "weekly", "days": [1, 4], "time": "03:00" }` โดย 0=อาทิตย์ ... 6=เสาร์ · `{ "mode": "interval", "hours": 12 }` 1–168) · `keep` (1–30) · `includeFiles` (เปิดต้องส่ง `password`) |
 | `GET /api/admin/backups/estimate` | `{ estimate, free, needed, ok, parts: { data, logs, storage } }` แต่ละส่วน (`parts.data`, `parts.logs`, `parts.storage`) บอก `files`, `size` ก่อนบีบ และ `compressed` หลังบีบ `backup.json` ในไฟล์สำรองมีรูปแบบเดียวกัน (`{ version, createdAt, includesFiles, parts }`) |
 | `POST /api/admin/backups` | สำรองทันที |

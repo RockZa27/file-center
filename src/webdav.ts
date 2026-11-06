@@ -28,8 +28,8 @@ import { basename, dirname, join } from 'node:path'
 import { alert } from './alerts'
 import { touchAppPassword, verifyAppPassword, type AppPassword, type AppScope } from './app-passwords'
 import { audit, auditOnce } from './audit'
-import { accessFor, clearFailures, lockedFor, recordFailure, reloadIfChangedByCli, USER_SPACE, type Access, type Lockout, type User } from './auth'
-import { config, paths } from './config'
+import { accessFor, clearFailures, lockedFor, recordedName, recordFailure, reloadIfChangedByCli, USER_SPACE, type Access, type Lockout, type User } from './auth'
+import { config, paths, proxyTrusted } from './config'
 import * as policy from './policy'
 import { clientIp } from './context'
 import { moveState } from './favorites'
@@ -109,7 +109,7 @@ function failure(request: Request, err: unknown): Response {
   const known = fromFsError(err)
   if (known) {
     if (!(err instanceof HttpError)) log.warn('fs-error', { method: request.method, path: safePath(request.url), error: (err as Error).message.slice(0, 300) })
-    return reply(request, known.status, known.code, known.params, known.status === 401 ? { 'WWW-Authenticate': CHALLENGE } : {})
+    return reply(request, known.status, known.code, known.params, known.status === 401 ? { 'WWW-Authenticate': CHALLENGE } : known.status === 503 ? { 'Retry-After': '3' } : {})
   }
   log.error('request-failed', { method: request.method, path: safePath(request.url), error: err })
   return reply(request, 500, 'request.internal')
@@ -124,9 +124,9 @@ const xmlResponse = (status: number, body: string, headers: Record<string, strin
 /** the same limits as the web login: a few wrong passwords from one address for one name, and a wider net per address */
 const addressLimits = (): Lockout => ({ max: config.loginAddressMaxAttempts, lockMs: config.loginWideWindowMs, windowMs: config.loginWideWindowMs })
 
-type Ctx = { request: Request; user: User; ip: string; scope: AppScope; item: AppPassword }
+type Ctx = { request: Request; user: User; ip: string; socketIp: string; scope: AppScope; item: AppPassword }
 
-async function authenticate(request: Request, ip: string): Promise<Ctx | Response> {
+async function authenticate(request: Request, ip: string, socketIp: string): Promise<Ctx | Response> {
   const challenge = (code: MessageCode) => reply(request, 401, code, {}, { 'WWW-Authenticate': CHALLENGE })
   const m = (request.headers.get('authorization') ?? '').match(/^Basic\s+([A-Za-z0-9+/=]+)\s*$/i)
   if (!m) return challenge('auth.required')
@@ -144,10 +144,17 @@ async function authenticate(request: Request, ip: string): Promise<Ctx | Respons
 
   const found = await verifyAppPassword(username, secret)
   if (!found) {
-    if (recordFailure(userKey)) alert('lockout', 'admin.alert-login-locked', { user: username, ip })
+    // what was typed may be a password: only an existing account's name or a keyed label is recorded
+    const who = recordedName(username)
+    if (recordFailure(userKey)) alert('lockout', 'admin.alert-login-locked', { user: who, ip })
     if (recordFailure(addrKey, addressLimits())) alert('lockout', 'admin.alert-address-locked', { ip })
-    auditOnce(`dav-login-failed|${userKey}`, { user: username, ip, action: 'login-failed', detail: 'WebDAV' })
+    auditOnce(`dav-login-failed|${userKey}`, { user: who, ip, action: 'login-failed', detail: 'WebDAV' })
     return challenge('auth.bad-credentials')
+  }
+  // a right secret of an expired record: a device that keeps retrying must not lock the user or the whole address
+  if (found.expired) {
+    auditOnce(`dav-expired|${userKey}|${found.item.id}`, { user: found.user.username, ip, action: 'login-failed', detail: `WebDAV: รหัสผ่านแอป ${found.item.name} หมดอายุ` })
+    return challenge('auth.app-password-expired')
   }
   clearFailures(userKey)
   // an account that must change its password first may do nothing else, WebDAV included
@@ -155,7 +162,7 @@ async function authenticate(request: Request, ip: string): Promise<Ctx | Respons
   // and one the 2FA rule says must turn on two-step sign-in first: an app password made before the rule does not skip it
   if (policy.mustSetup2fa(found.user)) return reply(request, 403, 'auth.2fa-required')
   touchAppPassword(found.item, ip)
-  return { request, user: found.user, ip, scope: found.item.scope, item: found.item }
+  return { request, user: found.user, ip, socketIp, scope: found.item.scope, item: found.item }
 }
 
 // ───────────── paths ─────────────
@@ -746,13 +753,13 @@ function mkcolMethod(ctx: Ctx, segs: string[], place_: Place | null): Response {
 }
 
 /** where the Destination header points: a path under /dav of this server (or the public address behind a proxy) */
-function destinationOf(request: Request): string[] {
+function destinationOf(request: Request, socketIp: string): string[] {
   const header = request.headers.get('destination')
   if (!header) throw bad('files.dav-bad-destination')
   let u: URL
   try { u = new URL(header, request.url) } catch { throw bad('files.dav-bad-destination') }
   const hosts = new Set([new URL(request.url).host.toLowerCase()])
-  if (config.trustProxy !== 'false') {
+  if (proxyTrusted(socketIp)) {
     const fwd = request.headers.get('x-forwarded-host')?.split(',').at(-1)?.trim().toLowerCase()
     if (fwd) hosts.add(fwd)
   }
@@ -762,9 +769,9 @@ function destinationOf(request: Request): string[] {
 }
 
 async function copyMoveMethod(ctx: Ctx, kind: 'copy' | 'move', place_: Place | null): Promise<Response> {
-  const { request, user, ip } = ctx
+  const { request, user, ip, socketIp } = ctx
   const src = spaceOnly(place_)
-  const dstSegs = destinationOf(request)
+  const dstSegs = destinationOf(request, socketIp)
   const dp = placeOf(ctx, dstSegs)
   if (!dp) throw conflict('files.dest-not-found')
   const dst = spaceOnly(dp)
@@ -892,7 +899,7 @@ export async function handleDav(request: Request, socketIp: string): Promise<Res
   reloadIfChangedByCli()
   try {
     const ip = clientIp(request, socketIp)
-    const ctx = await authenticate(request, ip)
+    const ctx = await authenticate(request, ip, socketIp)
     if (ctx instanceof Response) return ctx
     const allowed = ctx.scope === 'read' ? ALLOW_READ : ALLOW_ALL
     const method = request.method.toUpperCase()

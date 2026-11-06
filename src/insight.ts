@@ -8,7 +8,7 @@
  * the scanned folder; who may see it is decided by the route on every request, not by the cache.
  */
 import { createHash } from 'node:crypto'
-import { createReadStream } from 'node:fs'
+import { createReadStream, lstatSync } from 'node:fs'
 import { lstat, readdir } from 'node:fs/promises'
 import { extname, join, relative } from 'node:path'
 import { normRel } from './fsx'
@@ -34,6 +34,8 @@ export const INSIGHT_LIMITS = {
   /** a result is reused for this long; a rescan of the same folder is refused sooner than rescanMs */
   cacheMs: 10 * 60_000,
   rescanMs: 30_000,
+  /** a user who is not an admin waits this long after their last scan finished before starting another */
+  userCooldownMs: 2 * 60_000,
   cacheEntries: 20,
 }
 
@@ -170,34 +172,84 @@ export async function scanFolder(root: string): Promise<InsightResult> {
 
 // ───────────── the job: one at a time, results kept ─────────────
 
-const cache = new Map<string, { at: number; result: InsightResult }>()
+const cache = new Map<string, { at: number; root: string; result: InsightResult }>()
+/** when a scan of a folder last started: kept apart from the cache so that forgetting a result (a delete) does not allow an earlier rescan */
+const lastStart = new Map<string, number>()
+/** when the last scan a (non-admin) user started finished */
+const userDone = new Map<string, number>()
 let running: { key: string; promise: Promise<void> } | null = null
+/** bumped when every result is forgotten: a scan that started before must not put its result back afterwards */
+let generation = 0
+
+const exists = (abs: string) => { try { lstatSync(abs); return true } catch { return false } }
+
+/**
+ * The cached result as it can be shown now: files that are gone since the scan (deleted, renamed or moved by any route,
+ * WebDAV included) are left out of the lists, so a name that was removed is not served for ten minutes. The totals stay
+ * as scanned. Bounded work: at most topFiles + topGroups * perGroup lstat calls (about 2,000 by default, a few ms).
+ */
+function current(root: string, r: InsightResult): InsightResult {
+  const there = (f: InsightFile) => exists(join(root, f.path))
+  const groups: InsightGroup[] = []
+  for (const g of r.duplicates.groups) {
+    const files = g.files.filter(there)
+    const count = g.count - (g.files.length - files.length)
+    if (count < 2 || !files.length) continue
+    groups.push({ ...g, files, count, wasted: g.size * (count - 1) })
+  }
+  return { ...r, largest: r.largest.filter(there), duplicates: { ...r.duplicates, groups } }
+}
 
 /** what is known about a folder: nothing yet, a scan under way, or the last result (while it is still young) */
 export function insightState(key: string): InsightState {
   const hit = cache.get(key)
   if (hit && Date.now() - hit.at > INSIGHT_LIMITS.cacheMs) cache.delete(key)
   const fresh = cache.get(key)
-  if (running?.key === key) return { state: 'running', result: fresh?.result }
-  return fresh ? { state: 'done', result: fresh.result } : { state: 'none' }
+  const result = fresh && current(fresh.root, fresh.result)
+  if (running?.key === key) return { state: 'running', result }
+  return result ? { state: 'done', result } : { state: 'none' }
 }
 
-export type StartOutcome = 'started' | 'running' | 'recent' | 'busy'
+/** seconds a non-admin user still has to wait before their next scan (0: may start) */
+export function cooldownLeft(user: string): number {
+  const done = userDone.get(user)
+  if (done === undefined) return 0
+  const left = done + INSIGHT_LIMITS.userCooldownMs - Date.now()
+  if (left <= 0) { userDone.delete(user); return 0 }
+  return Math.ceil(left / 1000)
+}
 
-/** start a scan in the background. `busy`: another folder is being scanned; `recent`: this one was scanned a moment ago */
-export function startInsight(key: string, root: string): StartOutcome {
+export type StartOutcome = 'started' | 'running' | 'recent' | 'busy' | 'cooldown'
+
+/**
+ * start a scan in the background. `busy`: another folder is being scanned; `recent`: this one was started a moment ago;
+ * `cooldown`: `limitedUser` (pass the name of a user who is not an admin) finished a scan too recently
+ */
+export function startInsight(key: string, root: string, limitedUser?: string): StartOutcome {
   if (running) return running.key === key ? 'running' : 'busy'
-  const hit = cache.get(key)
-  if (hit && Date.now() - hit.at < INSIGHT_LIMITS.rescanMs) return 'recent'
+  if (limitedUser && cooldownLeft(limitedUser) > 0) return 'cooldown'
+  const prev = lastStart.get(key)
+  if (prev !== undefined && Date.now() - prev < INSIGHT_LIMITS.rescanMs) return 'recent'
+  if (lastStart.size >= 1000) for (const [k, v] of lastStart) if (Date.now() - v >= INSIGHT_LIMITS.rescanMs) lastStart.delete(k)
+  lastStart.set(key, Date.now())
+  const gen = generation
   const promise = scanFolder(root).then(result => {
+    // everything was forgotten while it ran (an account was deleted or made): its result may be the old account's
+    if (gen !== generation) return
     if (cache.size >= INSIGHT_LIMITS.cacheEntries) cache.delete(cache.keys().next().value!)
     cache.delete(key)
-    cache.set(key, { at: Date.now(), result })
-  }).catch(err => log.warn('insight-failed', { error: err })).finally(() => { running = null })
+    cache.set(key, { at: Date.now(), root, result })
+  }).catch(err => log.warn('insight-failed', { error: err })).finally(() => {
+    if (limitedUser) userDone.set(limitedUser, Date.now())
+    running = null
+  })
   running = { key, promise }
   return 'started'
 }
 
 /** wait for the running scan (tests) */
 export const insightIdle = async () => { await running?.promise }
-export const forgetInsight = (key?: string) => { if (key) cache.delete(key); else cache.clear() }
+/** drop cached results (all, or one folder); the rescan guard and the user cooldown stay */
+export const forgetInsight = (key?: string) => { if (key) cache.delete(key); else { cache.clear(); generation++ } }
+/** a deleted (or newly made) account does not carry the cooldown of an earlier account of that name */
+export const forgetInsightUser = (username: string) => { for (const k of userDone.keys()) if (k.toLowerCase() === username.toLowerCase()) userDone.delete(k) }

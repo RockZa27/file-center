@@ -65,7 +65,9 @@ File Center คือระบบฝากและแจกจ่ายไฟ�
    ```
 2. เปิด `.env` แล้วแก้ตามต้องการ
    - ถ้าใช้แค่ในเครื่องหรือวง LAN ให้ลบหรือคอมเมนต์บรรทัด `COMPOSE_PROFILES=tunnel` (ตัวอย่างเปิด Cloudflare Tunnel ไว้)
+   - ถ้าไม่ใช้ tunnel ให้ตั้ง `TRUST_PROXY=false` และลบบรรทัด `TRUSTED_PROXIES` ด้วย หรือถ้าอยู่หลัง nginx/Caddy ของคุณเองบนเครื่องเดียวกัน ให้ตั้ง `TRUST_PROXY=true` กับ `TRUSTED_PROXIES=127.0.0.1,::1`
    - อยากตั้งรหัสผ่าน admin เอง ใส่ `ADMIN_PASSWORD=...`
+   - ไฟล์ตัวอย่างตั้ง `REQUIRE_2FA=staff` (admin และ manager ต้องตั้ง 2FA) และ `PUBLIC_PAGE=off` (ปิดหน้าสาธารณะ) ไว้ให้แล้ว
 3. สร้างและเริ่มระบบ
    ```bash
    docker compose up -d --build
@@ -74,7 +76,7 @@ File Center คือระบบฝากและแจกจ่ายไฟ�
    ```bash
    docker compose logs file-center
    ```
-5. เปิด `http://localhost:3000` เข้าสู่ระบบด้วย `admin` ระบบบังคับให้เปลี่ยนรหัสผ่านทันที
+5. เปิด `http://localhost:3000` เข้าสู่ระบบด้วย `admin` ถ้าปล่อย `ADMIN_PASSWORD` ว่าง (ใช้รหัสที่สุ่มใน log) ระบบบังคับให้เปลี่ยนรหัสผ่านทันที และเมื่อตั้ง `REQUIRE_2FA` ไว้ จะให้ตั้ง 2FA ต่อ (เตรียมแอป authenticator ไว้ในมือ)
 
 ข้อมูลทั้งหมดอยู่ข้างไฟล์ `docker-compose.yml`:
 

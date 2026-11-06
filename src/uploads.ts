@@ -89,6 +89,9 @@ function stillThere(id: string, meta: Meta) {
 /** throws unless `owner` has this upload and may still add to it; lets a route refuse before it reads the request body */
 export function checkUpload(id: string, owner: string, user?: User | null) {
   const meta = loadMeta(id, owner)
+  // once completion has started the file is checked, scanned and moved: no chunk may change it any more. Asked before
+  // the checks below, which drop an upload that may no longer be added to: one being completed is not theirs to drop
+  if (finishing.has(id)) throw conflict('upload.completing')
   stillAllowed(id, meta, user)
   stillThere(id, meta)
 }
@@ -327,14 +330,33 @@ export function receivedChunks(id: string, owner: string): { received: number[];
   return { received, total: meta.total }
 }
 
+/**
+ * chunk writes in flight, per upload id. A write takes its place in the same tick as the "not completing" check (no await
+ * between them) and completion waits for all of them before it looks at the file, so the bytes that are checked and
+ * scanned are the bytes that land. An entry exists only while a write runs.
+ */
+const writing = new Map<string, Set<Promise<void>>>()
+
 export async function saveChunk(id: string, owner: string, index: number, data: ArrayBuffer, user?: User | null) {
   const meta = loadMeta(id, owner)
+  if (finishing.has(id)) throw conflict('upload.completing')
   stillAllowed(id, meta, user)
   stillThere(id, meta)
   if (!Number.isInteger(index) || index < 0 || index >= meta.total) throw bad('upload.bad-chunk-index')
   const expected = index === meta.total - 1 ? meta.size - meta.chunkSize * (meta.total - 1) : meta.chunkSize
   if (data.byteLength !== expected) throw bad('upload.bad-chunk-size', { bytes: expected })
   ensureSpace(paths.tmp, data.byteLength)
+  const job = writeChunk(id, meta, index, data)
+  let slot = writing.get(id)
+  if (!slot) writing.set(id, (slot = new Set()))
+  const mine = slot
+  const leave = () => { mine.delete(job); if (!mine.size && writing.get(id) === mine) writing.delete(id) }
+  mine.add(job)
+  job.then(leave, leave)
+  await job
+}
+
+async function writeChunk(id: string, meta: Meta, index: number, data: ArrayBuffer) {
   const fh = await open(dataOf(id), 'r+')
   try {
     await fh.write(new Uint8Array(data), 0, data.byteLength, index * meta.chunkSize)
@@ -388,6 +410,8 @@ export async function completeUpload(id: string, owner: string, user?: User | nu
 }
 
 async function finishUpload(id: string, owner: string, user?: User | null) {
+  // a chunk accepted before completion started finishes first (none is accepted after: see saveChunk)
+  while (writing.get(id)?.size) await Promise.allSettled([...writing.get(id)!])
   restoreReservations()
   const meta = loadMeta(id, owner)
   stillAllowed(id, meta, user)

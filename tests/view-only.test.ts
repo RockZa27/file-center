@@ -140,12 +140,12 @@ describe('admin policy', () => {
   })
 
   test('the policy is saved by an admin with the settings API and validated', async () => {
-    const ok = await admin.json('PUT', '/api/admin/settings', { share: { viewOnly: 'force', forceWatermark: true } })
+    const ok = await admin.json('PUT', '/api/admin/settings', { share: { viewOnly: 'force', forceWatermark: true }, password: process.env.ADMIN_PASSWORD })
     expect(ok.status).toBe(200)
     expect(ok.data.share.viewOnly).toEqual({ value: 'force', source: 'web' })
     expect(ok.data.share.forceWatermark.value).toBe(true)
-    expect((await admin.json('PUT', '/api/admin/settings', { share: { viewOnly: 'sometimes' } })).status).toBe(400)
-    const reset = await admin.json('PUT', '/api/admin/settings', { share: { viewOnly: null, forceWatermark: null } })
+    expect((await admin.json('PUT', '/api/admin/settings', { share: { viewOnly: 'sometimes' }, password: process.env.ADMIN_PASSWORD })).status).toBe(400)
+    const reset = await admin.json('PUT', '/api/admin/settings', { share: { viewOnly: null, forceWatermark: null }, password: process.env.ADMIN_PASSWORD })
     expect(reset.data.share.viewOnly).toEqual({ value: 'allow', source: 'default' })
   })
 })

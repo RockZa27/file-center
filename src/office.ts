@@ -18,6 +18,7 @@ import { basename, dirname, extname, join } from 'node:path'
 import { accessFor, findUser, type Space, type User } from './auth'
 import { config, paths } from './config'
 import { bad, ensureDir, ensureSpace, forbidden, HttpError, moveTree, normRel, notFound, resolveIn, storagePath } from './fsx'
+import { gate } from './antivirus'
 import type { Lang } from './messages'
 import { recordRecent } from './favorites'
 import { holdNow, markStale, ownerOfPath, ready } from './quota'
@@ -344,7 +345,7 @@ const saving = new Map<string, Promise<unknown>>()
  * when versions are off) and put the new one in its place with a rename, so nobody ever reads half a file. Throws on any failure; the caller
  * answers { error: 1 }.
  */
-export async function saveVersion(t: OfficeToken, data: Record<string, unknown>): Promise<{ user: User; abs: string; size: number }> {
+export async function saveVersion(t: OfficeToken, data: Record<string, unknown>, ip = ''): Promise<{ user: User; abs: string; size: number }> {
   if (t.m !== 'edit') throw forbidden('office.bad-token')
   const { abs } = tokenFile(t, ['write'])
   const url = savedFileUrl(data.url)
@@ -361,6 +362,9 @@ export async function saveVersion(t: OfficeToken, data: Record<string, unknown>)
     const stage = join(dirname(abs), `.${basename(abs)}.office-${randomBytes(6).toString('hex')}`)
     try {
       const size = await download(url, tmp)
+      // scanned like an upload before anything is reserved or moved: an infected save is quarantined and refused, the stored
+      // file stays. The ip is the document server's (it posts the callback), which is all there is to record here.
+      await gate(tmp, { who: 'user', via: 'office', by: tokenFile(t, ['write']).user.username, ip, name: basename(abs), destDir: dirname(abs) })
       ensureSpace(dirname(abs), size)
       // the count is awaited before the rights are checked, so nothing awaits between that check and the reservation
       if (t.s === 'home') await ready(findUser(t.u))

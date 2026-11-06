@@ -1,9 +1,10 @@
 import { randomBytes } from 'node:crypto'
 import { access } from 'node:fs/promises'
-import { existsSync, lstatSync, mkdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdirSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
 import { Elysia, t } from 'elysia'
 import { audit, auditOnce } from '../audit'
+import { antivirusOn, gate } from '../antivirus'
 import { isForeignSpace } from '../auth'
 import { config, paths } from '../config'
 import { takeUnzipSlot } from '../archive'
@@ -203,17 +204,34 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
 
   .put('/content', { body: t.Object({ space: t.String(), path: t.String(), content: t.String(), expectedMtime: t.Optional(t.Number()) }) }, async ({ user, ip, body }) => {
     const a = need({ user, ip }, body.space, 'write')
-    // the count is awaited first: from the check of the version to the write there is no await
     const q = quotaUserOf(a, user)
-    await ready(q)
     const rel = normRel(body.path)
     const abs = resolveIn(a.root, rel)
     // the earlier versions of the file count against the owner of the home it is in (not always the one saving)
     const owner = ownerOfPath(abs)
+    const st0 = existsSync(abs) ? statSync(abs) : null
+    if (!st0 || !st0.isFile()) throw notFound()
+    const bytes = Buffer.byteLength(body.content)
+    if (bytes > MAX_TEXT) throw new HttpError(413, 'files.text-too-big')
+    // scanned like an upload (a script or phishing page is text too); the scan comes before the check-and-write block below
+    if (antivirusOn()) {
+      mkdirSync(paths.tmp, { recursive: true, mode: 0o700 })
+      ensureSpace(paths.tmp, bytes)
+      const tmp = join(paths.tmp, `edit-${Date.now()}-${randomBytes(6).toString('hex')}`)
+      try {
+        writeFileSync(tmp, body.content, { mode: 0o600 })
+        // a visitor who may edit the public folder is held to the stricter link policy, as visitors' uploads are
+        await gate(tmp, { who: user ? 'user' : 'link', via: 'edit', by: user?.username ?? 'guest', ip, name: basename(abs), destDir: dirname(abs) })
+      } finally {
+        rmSync(tmp, { force: true })
+      }
+    }
+    // the counts are awaited last (after the scan, which may take a while): from here to the write there is no await
+    await ready(q)
     await ready(owner)
+    // read again: the file may have changed during the scan
     const st = existsSync(abs) ? statSync(abs) : null
     if (!st || !st.isFile()) throw notFound()
-    if (Buffer.byteLength(body.content) > MAX_TEXT) throw new HttpError(413, 'files.text-too-big')
     // the mtime GET /api/content gave: someone else saved since then, and writing now would silently undo their work
     // check and write in one step, with no await between them: two saves of the same version can not both pass
     if (body.expectedMtime !== undefined && Math.round(st.mtimeMs) !== body.expectedMtime) throw conflict('files.changed-elsewhere')
@@ -344,21 +362,62 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     const release = takeUnzipSlot()
     let hold
     try { hold = holdNow(q, maxBytes) } catch (err) { release(); throw err }
-    mkdirSync(dest)
+    // with the antivirus on, the files come out into a private folder in tmp and reach the storage only when all are clean
+    const stage = antivirusOn() ? join(paths.tmp, `unzip-${Date.now()}-${randomBytes(8).toString('hex')}`) : null
+    let landed = dest
+    // the staging folder may be on another disk (DATA_DIR): what that disk can take bounds the extraction there too. Not
+    // the whole budget up front, which on a small DATA_DIR disk would refuse even a tiny zip
+    let tmpRoom = Infinity
+    // set once the destination folder is ours: only then may a failure remove it
+    let claimed = false
     try {
-      const count = await unzipTo(abs, dest, { maxBytes, maxFiles: config.unzipMaxFiles })
-      hold.commit((await treeStats(dest)).size)
-      indexTouched(dest)
+      let count: number
+      if (stage) {
+        const tmpFree = freeSpace(paths.tmp)
+        tmpRoom = tmpFree === null ? Infinity : Math.max(0, tmpFree - config.minFreeSpace)
+        mkdirSync(stage, { recursive: true, mode: 0o700 })
+        const out = join(stage, 'out')
+        // there even for a zip with no entries (the old path makes an empty folder too)
+        mkdirSync(out)
+        count = await unzipTo(abs, out, { maxBytes: Math.min(maxBytes, tmpRoom), maxFiles: config.unzipMaxFiles })
+        // one file at a time while the unzip slot is still ours: a zip of many files takes longer to extract while scanning is on.
+        // The first infected or refused file ends it all (gate() has quarantined the infected one); the folder goes in `finally`
+        const who = user ? 'user' : 'link'
+        for (const file of listFiles(out)) {
+          const name = `${basename(abs)}/${file.slice(out.length + 1)}`.replaceAll('\\', '/')
+          await gate(file, { who, via: 'unzip', by: user?.username ?? 'guest', ip, name: name.slice(0, 255), destDir: dirname(abs) })
+          // a staging folder that looks idle for UPLOAD_STALE_HOURS is swept from tmp (cleanStaleUploads): a long scan keeps it fresh
+          const now = new Date()
+          utimesSync(stage, now, now)
+        }
+        // the name is claimed first (mkdir fails on a taken one), then the clean tree is moved into it: nothing is
+        // overwritten, and a move that fails half way (another disk) leaves no partial folder behind
+        for (let tries = 0; ; tries++) {
+          landed = uniquePath(join(dirname(abs), folderName))
+          try { mkdirSync(landed); break } catch (e: any) { if (e?.code !== 'EEXIST' || tries >= 5) throw e }
+        }
+        claimed = true
+        for (const entry of readdirSync(out)) await moveTree(join(out, entry), join(landed, entry))
+      } else {
+        mkdirSync(dest)
+        count = await unzipTo(abs, dest, { maxBytes, maxFiles: config.unzipMaxFiles })
+      }
+      hold.commit((await treeStats(landed)).size)
+      indexTouched(landed)
       audit({ user: user?.username ?? 'guest', ip, action: 'unzip', target: storagePath(abs), detail: `${count} ไฟล์` })
-      return { ok: true, folder: basename(dest), files: count }
+      return { ok: true, folder: basename(landed), files: count }
     } catch (err) {
       // a half-extracted folder is useless; keeping it in the trash would only hold the disk space for weeks
-      rmSync(dest, { recursive: true, force: true })
+      if (!stage) rmSync(dest, { recursive: true, force: true })
+      else if (claimed) rmSync(landed, { recursive: true, force: true })
       hold.release()
+      // the staging disk was the smaller room: that disk is full, the zip is not too big
+      if (stage && tmpRoom < maxBytes && err instanceof HttpError && err.code === 'zip.too-big') throw new HttpError(507, 'disk-full')
       // too much for the quota is a full home, not a zip that is too big
       if (q && room < otherMax && err instanceof HttpError && err.code === 'zip.too-big') throw exceeded(q)
       throw err instanceof HttpError ? err : bad('zip.extract-failed')
     } finally {
+      if (stage) rmSync(stage, { recursive: true, force: true })
       release()
     }
   })
@@ -497,4 +556,15 @@ async function transfer(
     }
   }
   return { done, failed }
+}
+
+/** every regular file under a folder (links are never followed) */
+function listFiles(dir: string): string[] {
+  const out: string[] = []
+  for (const e of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, e.name)
+    if (e.isDirectory()) out.push(...listFiles(p))
+    else if (e.isFile()) out.push(p)
+  }
+  return out
 }

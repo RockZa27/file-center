@@ -11,7 +11,7 @@
  */
 import { createHash, randomBytes } from 'node:crypto'
 import { basename } from 'node:path'
-import { allUsers, findUser, type User } from './auth'
+import { allUsers, findUser, UNKNOWN_NAME_RE, type User } from './auth'
 import { config, paths } from './config'
 import { enqueue } from './deliver'
 import { bad, HttpError } from './fsx'
@@ -131,6 +131,8 @@ export function describe(lang: Lang, kind: NotifyKind, params: Record<string, st
     const code = String(p.code)
     // a reason that is itself a catalog message (backup failures) is told in the same language
     if (typeof p.reasonCode === 'string' && Object.hasOwn(MESSAGES, p.reasonCode)) p.reason = text(lang, p.reasonCode as MessageCode)
+    // a failed sign-in with a name that is no account carries its label (auth.ts recordedName): told as what it is
+    if (typeof p.user === 'string' && UNKNOWN_NAME_RE.test(p.user)) p.user = text(lang, 'admin.alert-unknown-name', { id: p.user.slice(1) })
     return Object.hasOwn(MESSAGES, code) ? scrub(text(lang, code as MessageCode, p)) : code
   }
   if (kind === 'upload-received' && typeof p.n === 'number' && p.n > 1) return text(lang, 'notify.upload-received-many', p)

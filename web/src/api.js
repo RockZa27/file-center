@@ -152,10 +152,13 @@ export const api = {
   users: () => get('/api/admin/users'),
   createUser: u => post('/api/admin/users', u),
   updateUser: (username, u) => call('PUT', `/api/admin/users/${encodeURIComponent(username)}`, u),
-  deleteUser: username => call('DELETE', `/api/admin/users/${encodeURIComponent(username)}`),
+  /** `opts`: { deleteFiles: true, password } also sends the home folder to the system trash (admin only) */
+  deleteUser: (username, opts) => call('DELETE', `/api/admin/users/${encodeURIComponent(username)}`, opts),
   userSessions: username => get(`/api/admin/users/${encodeURIComponent(username)}/sessions`),
   revokeUserSessions: username => post(`/api/admin/users/${encodeURIComponent(username)}/sessions/revoke`),
   resetTwoFactor: (username, password) => post(`/api/admin/users/${encodeURIComponent(username)}/2fa/reset`, { password }),
+  orphanHomes: () => get('/api/admin/orphan-homes'),
+  trashOrphanHome: (name, password) => post('/api/admin/orphan-homes/trash', { name, password }),
   adminFolders: path => get('/api/admin/folders', { path }),
   status: () => get('/api/admin/status'),
   activity: params => get('/api/admin/activity', params),
@@ -203,7 +206,7 @@ export const api = {
   /** WebDAV app passwords of the signed-in user: { items: [{ id, name, scope, hint, createdAt, lastUsedAt, lastIp }], max, enabled } */
   appPasswords: () => get('/api/me/app-passwords'),
   /** -> the item plus `secret`, told this once only */
-  createAppPassword: (name, scope, password) => post('/api/me/app-passwords', { name, scope, password }),
+  createAppPassword: (name, scope, password, days) => post('/api/me/app-passwords', days === undefined ? { name, scope, password } : { name, scope, password, days }),
   deleteAppPassword: id => call('DELETE', `/api/me/app-passwords/${encodeURIComponent(id)}`),
 
   settings: () => get('/api/admin/settings'),
@@ -240,7 +243,7 @@ export const api = {
   backups: () => get('/api/admin/backups'),
   backupNow: () => post('/api/admin/backups'),
   backupDelete: name => call('DELETE', `/api/admin/backups/${encodeURIComponent(name)}`),
-  backupRestore: (name, password) => post('/api/admin/backups/restore', { name, password }),
+  backupRestore: (name, password, allowUnencrypted) => post('/api/admin/backups/restore', { name, password, ...(allowUnencrypted ? { allowUnencrypted: true } : {}) }),
   backupUrl: name => `/api/admin/backups/${encodeURIComponent(name)}/download`,
   backupEstimate: () => get('/api/admin/backups/estimate'),
   /** body: any of compression, schedule, keep, includeFiles (null = back to the default) and password; answers the new settings */

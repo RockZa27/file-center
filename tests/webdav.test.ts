@@ -161,7 +161,7 @@ describe('app passwords: the routes', () => {
 
     const list = await web.json('GET', '/api/me/app-passwords')
     expect(list.data.items).toHaveLength(1)
-    expect(Object.keys(list.data.items[0]).sort()).toEqual(['createdAt', 'hint', 'id', 'lastIp', 'lastUsedAt', 'name', 'scope'])
+    expect(Object.keys(list.data.items[0]).sort()).toEqual(['createdAt', 'expiresAt', 'hint', 'id', 'lastIp', 'lastUsedAt', 'name', 'scope'])
     expect(JSON.stringify(list.data)).not.toContain(made.data.secret)
     // on disk only a hash
     const stored = readFileSync(paths.appPasswords, 'utf8')

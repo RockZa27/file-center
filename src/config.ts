@@ -1,9 +1,79 @@
-import { mkdirSync } from 'node:fs'
+import { chmodSync, mkdirSync, statSync } from 'node:fs'
+import { isIPv4, isIPv6 } from 'node:net'
 import { dirname, join, resolve } from 'node:path'
 import pkg from '../package.json'
 
 const root = resolve(import.meta.dir, '..')
 const env = (k: string, d: string) => process.env[k] ?? d
+
+// ───────────── TRUSTED_PROXIES: which sockets may tell us the client's address ─────────────
+
+/** an address as a number: IPv4 is 32 bits, IPv6 128; an IPv4-mapped IPv6 (::ffff:a.b.c.d) is read as the IPv4 it carries */
+function ipValue(text: string): { v6: boolean; n: bigint } | null {
+  let t = text.trim()
+  if (t.startsWith('[') && t.endsWith(']')) t = t.slice(1, -1)
+  t = t.replace(/%.*$/, '') // zone id (fe80::1%eth0)
+  if (isIPv4(t)) return { v6: false, n: t.split('.').reduce((a, o) => (a << 8n) | BigInt(o), 0n) }
+  if (!isIPv6(t)) return null
+  let tail = 0n
+  const dotted = /(\d+\.\d+\.\d+\.\d+)$/.exec(t)
+  if (dotted) { // ::ffff:1.2.3.4 -> two hex groups
+    const v4 = ipValue(dotted[1])
+    if (!v4) return null
+    tail = v4.n
+    t = t.slice(0, dotted.index) + '0:0'
+  }
+  const [head, rest] = t.split('::')
+  const a = head ? head.split(':') : []
+  const b = rest ? rest.split(':') : []
+  const groups = rest === undefined ? a : [...a, ...Array(8 - a.length - b.length).fill('0'), ...b]
+  if (groups.length !== 8) return null
+  let n = groups.reduce((acc, g) => (acc << 16n) | BigInt(parseInt(g, 16)), 0n)
+  if (dotted) n = (n & ~0xffffffffn) | tail
+  if (n >> 32n === 0xffffn) return { v6: false, n: n & 0xffffffffn }
+  return { v6: true, n }
+}
+
+export type IpRule = { v6: boolean; n: bigint; bits: number }
+
+/** "1.2.3.4", "10.0.0.0/8", "::1" or "fd00::/8" -> a rule, or null when it is not one. A mapped IPv6 (::ffff:10.0.0.0/104) is the IPv4 range */
+export function parseIpRule(entry: string): IpRule | null {
+  const [addr, len, extra] = entry.trim().split('/')
+  if (extra !== undefined) return null
+  const ip = ipValue(addr)
+  if (!ip) return null
+  const max = ip.v6 ? 128 : 32
+  if (len === undefined) return { ...ip, bits: max }
+  if (!/^\d{1,3}$/.test(len)) return null
+  let bits = Number(len)
+  if (!ip.v6 && addr.includes(':')) { // the 96 bits of the mapping prefix are not part of the IPv4 length
+    if (bits < 96) return null
+    bits -= 96
+  }
+  return bits > max ? null : { ...ip, bits }
+}
+
+/** the rules of a comma-separated list, and the entries that are not an address or range (to be warned about) */
+export function parseIpList(raw: string): { rules: IpRule[]; invalid: string[] } {
+  const rules: IpRule[] = []
+  const invalid: string[] = []
+  for (const part of raw.split(',').map(s => s.trim()).filter(Boolean)) {
+    const rule = parseIpRule(part)
+    if (rule) rules.push(rule)
+    else invalid.push(part)
+  }
+  return { rules, invalid }
+}
+
+export function ipInRules(ip: string, rules: IpRule[]): boolean {
+  const v = ipValue(ip)
+  if (!v) return false
+  return rules.some(r => {
+    if (r.v6 !== v.v6) return false
+    const shift = BigInt((r.v6 ? 128 : 32) - r.bits)
+    return (v.n >> shift) === (r.n >> shift)
+  })
+}
 
 /** where File Center publishes its signed releases (the `updates` branch, see scripts/release.ts) */
 export const OFFICIAL_UPDATE_SOURCE = 'https://raw.githubusercontent.com/RockZa27/file-center/updates'
@@ -11,6 +81,12 @@ export function updateSourceOf(value: string | undefined): string {
   if (value === undefined) return OFFICIAL_UPDATE_SOURCE
   const v = value.trim()
   return v.toLowerCase() === 'off' ? '' : v
+}
+/** a retention in days: a positive whole number; empty or unset is 0 (off); anything else is 0 too and `invalid` holds the text for one start-up warning */
+export function parseRetentionDays(raw: string | undefined): { days: number; invalid: string } {
+  const t = (raw ?? '').trim()
+  if (!t) return { days: 0, invalid: '' }
+  return /^\d+$/.test(t) && Number.isSafeInteger(Number(t)) ? { days: Number(t), invalid: '' } : { days: 0, invalid: t }
 }
 const num = (k: string, d: number) => {
   const v = Number(process.env[k])
@@ -22,7 +98,50 @@ function backupHour(v: string): number | null {
   return Number.isInteger(h) && h >= 0 && h <= 23 && v.trim() !== '' ? h : 3
 }
 
+/** FC_UMASK: 3 octal digits; anything else gives the default 077 (files private to the app's account) */
+export const DEFAULT_UMASK = 0o077
+export function parseUmask(v: string | undefined): { mask: number; invalid: boolean } {
+  const t = (v ?? '').trim()
+  if (t === '') return { mask: DEFAULT_UMASK, invalid: false }
+  return /^[0-7]{3}$/.test(t) ? { mask: parseInt(t, 8), invalid: false } : { mask: DEFAULT_UMASK, invalid: true }
+}
+/**
+ * The umask this process runs with: FC_UMASK, but only when it owns the data. A process of another account (root running
+ * the CLI with `docker compose exec`) keeps its own umask, so what it writes stays readable by the owner of DATA_DIR.
+ * dataOwnerUid null = DATA_DIR does not exist yet (this process makes it), processUid null = no uid (Windows).
+ */
+export function effectiveUmask(o: { setting: number; processUid: number | null; dataOwnerUid: number | null; current: number }): number {
+  if (o.processUid === null || o.dataOwnerUid === null || o.processUid === o.dataOwnerUid) return o.setting
+  return o.current
+}
+const umaskSetting = parseUmask(process.env.FC_UMASK)
 const dataDir = resolve(env('DATA_DIR', join(root, 'data')))
+const umaskNow = (() => { try { return process.umask() } catch { return DEFAULT_UMASK } })()
+let ownsData = true
+const umaskApplied = (() => {
+  let dataOwnerUid: number | null = null
+  try { dataOwnerUid = statSync(dataDir).uid } catch { /* not there yet: this process makes it */ }
+  const processUid = typeof process.getuid === 'function' ? process.getuid() : null
+  ownsData = processUid === null || dataOwnerUid === null || processUid === dataOwnerUid
+  return effectiveUmask({ setting: umaskSetting.mask, processUid, dataOwnerUid, current: umaskNow })
+})()
+/** the bad FC_UMASK value (index.ts warns once at start), '' when it was fine */
+export const invalidUmask = umaskSetting.invalid ? process.env.FC_UMASK!.trim() : ''
+// before any folder or file is made, so that every file the app (and the vips / ffmpeg / app processes it starts) writes gets it
+try { process.umask(umaskApplied) } catch { /* Windows */ }
+export const umask = umaskApplied
+
+/**
+ * Existing installs: a top-level folder made with the old 022 is made as private as the umask says. Not recursive and
+ * never fatal (a mount the app does not own, Windows).
+ */
+export function tightenDir(p: string) {
+  if (!ownsData) return // not the owner of DATA_DIR: leave the modes alone
+  try {
+    const mode = statSync(p).mode & 0o777
+    if (mode & umaskSetting.mask) chmodSync(p, mode & ~umaskSetting.mask)
+  } catch { /* EPERM etc.: keep going */ }
+}
 
 export const config = {
   /** a web update runs with FC_VERSION set to the version in its manifest; otherwise the version of package.json */
@@ -54,6 +173,27 @@ export const config = {
   /** uploads are refused when they would leave less free disk space than this */
   minFreeSpace: num('MIN_FREE_SPACE', 2 * 1024 ** 3), // 2 GB
   sessionTtlMs: num('SESSION_TTL_HOURS', 24 * 7) * 3600_000,
+  /** a signed-in session ends this long after sign-in however often it is used (never below the idle TTL); positive whole hours */
+  sessionMaxMs: (Number.isInteger(Number(process.env.SESSION_MAX_HOURS)) && Number(process.env.SESSION_MAX_HOURS) > 0 ? Number(process.env.SESSION_MAX_HOURS) : 24 * 30) * 3600_000,
+  /** who must set up 2FA while the settings page has no value (the web setting wins); an invalid value is 'none' (`require2faInvalid` holds it, one warning at start) */
+  require2fa: (['none', 'admin', 'staff', 'all'].includes(process.env.REQUIRE_2FA?.trim().toLowerCase() ?? 'none') ? (process.env.REQUIRE_2FA?.trim().toLowerCase() || 'none') : 'none') as 'none' | 'admin' | 'staff' | 'all',
+  require2faInvalid: ['', 'none', 'admin', 'staff', 'all'].includes(process.env.REQUIRE_2FA?.trim().toLowerCase() ?? '') ? '' : process.env.REQUIRE_2FA!.trim(),
+  /** LOCK_OUTBOUND_SETTINGS=true: the settings that choose where data leaves the server (ClamAV, audit forwarding, alerts, SMTP) come from .env only; the web can not change them and stored web values are ignored (read at call time, see LOCKED_WHEN_OUTBOUND_LOCK in policy.ts) */
+  lockOutbound: ['true', '1', 'yes'].includes(process.env.LOCK_OUTBOUND_SETTINGS?.trim().toLowerCase() ?? ''),
+  /**
+   * Audit forwarding (audit-forward.ts) from .env: the fallback of the web settings, and the only source while
+   * LOCK_OUTBOUND_SETTINGS is on. Kept as the text that was written; policy.ts checks it (a bad value is ignored and
+   * named in a start-up warning, a bad AUDIT_WEBHOOK_SECRET stops the webhook instead of sending unsigned).
+   */
+  auditSyslogHost: env('AUDIT_SYSLOG_HOST', '').trim(),
+  auditSyslogPort: env('AUDIT_SYSLOG_PORT', '').trim(),
+  auditSyslogProto: env('AUDIT_SYSLOG_PROTO', '').trim().toLowerCase(),
+  auditSyslogFacility: env('AUDIT_SYSLOG_FACILITY', '').trim(),
+  auditWebhookUrl: env('AUDIT_WEBHOOK_URL', '').trim(),
+  auditWebhookSecret: env('AUDIT_WEBHOOK_SECRET', ''),
+  /** PUBLIC_PAGE=off: a FRESH install starts with the public page closed (only the first settings.json is made from it); invalid = on */
+  publicPageOff: process.env.PUBLIC_PAGE?.trim().toLowerCase() === 'off',
+  publicPageInvalid: ['', 'on', 'off'].includes(process.env.PUBLIC_PAGE?.trim().toLowerCase() ?? '') ? '' : process.env.PUBLIC_PAGE!.trim(),
   trashRetentionDays: num('TRASH_RETENTION_DAYS', 30),
   /** old contents of a file kept on every save (0 = off) and for how many days (0 = until pushed out by the count) */
   versionsKeep: Math.max(0, Math.floor(num('VERSIONS_KEEP', 10))),
@@ -69,6 +209,12 @@ export const config = {
   shareMaxDays: num('SHARE_MAX_DAYS', 30),
   auditMaxBytes: 10 * 1024 * 1024,
   auditMaxFiles: 10,
+  /** AUDIT_RETENTION_DAYS: entries of audit.log older than this are deleted by the daily sweep (log-retention.ts); 0 = off */
+  auditRetentionDays: parseRetentionDays(process.env.AUDIT_RETENTION_DAYS).days,
+  auditRetentionInvalid: parseRetentionDays(process.env.AUDIT_RETENTION_DAYS).invalid,
+  /** LOG_RETENTION_DAYS: the same for system.log, access.log and launcher.log; 0 = off */
+  logRetentionDays: parseRetentionDays(process.env.LOG_RETENTION_DAYS).days,
+  logRetentionInvalid: parseRetentionDays(process.env.LOG_RETENTION_DAYS).invalid,
   /** logs/system.log (and access.log) is rotated past this size; LOG_MAX_FILES counts the current file too */
   logMaxBytes: num('LOG_MAX_BYTES', 10 * 1024 ** 2), // 10 MB
   logMaxFiles: Math.max(2, Math.floor(num('LOG_MAX_FILES', 5))),
@@ -78,6 +224,11 @@ export const config = {
   thumbnails: !['off', 'false', '0'].includes(env('THUMBNAILS', 'on').trim().toLowerCase()),
   /** the thumbnail cache (DATA_DIR/thumbs) is trimmed to this size, oldest used first */
   thumbCacheMax: Math.max(1, num('THUMB_CACHE_MAX_MB', 1024)) * 1024 ** 2,
+  /**
+   * a cached thumbnail not used for this many days goes, whatever the cache size: a picture of a file that was deleted,
+   * moved or purged must not stay in DATA_DIR/thumbs for good on a site whose cache never fills (0 = only the size cap)
+   */
+  thumbCacheDays: Math.max(0, Math.floor(num('THUMB_CACHE_DAYS', 30))),
   unzipMaxBytes: num('UNZIP_MAX_BYTES', 20 * 1024 ** 3),
   unzipMaxFiles: num('UNZIP_MAX_FILES', 50_000),
   /** code page of the names in a zip that are not UTF-8 (zip.js would read them as CP437): cp874 = Thai Windows; cp437 = leave it to zip.js */
@@ -90,6 +241,15 @@ export const config = {
    * "true" = the last X-Forwarded-For entry, the one written by your own reverse proxy (earlier entries come from the client)
    */
   trustProxy: env('TRUST_PROXY', 'false') as 'false' | 'true' | 'cloudflare',
+  /**
+   * who may send those headers: a comma-separated list of IPs and CIDR ranges (127.0.0.1,::1,172.16.0.0/12). Not set = every
+   * connection is believed (the old behaviour). The headers of a connection that is not in the list are ignored.
+   * `trustedProxiesSet` is true when the variable has a value at all: then a list with no valid entry trusts NO connection
+   * (a typo must close, not open). `trustedProxiesInvalid` holds the entries that were not an address or range (one warning at start)
+   */
+  trustedProxies: parseIpList(env('TRUSTED_PROXIES', '')).rules,
+  trustedProxiesSet: env('TRUSTED_PROXIES', '').trim() !== '',
+  trustedProxiesInvalid: parseIpList(env('TRUSTED_PROXIES', '')).invalid,
   /** first-run admin password; random one is printed to the console when empty */
   adminPassword: env('ADMIN_PASSWORD', ''),
   /** "off" turns WebDAV (/dav, webdav.ts) off: it then answers 404 */
@@ -186,7 +346,10 @@ export const config = {
   clamavTimeoutSeconds: num('CLAMAV_TIMEOUT_SECONDS', 60),
   clamavMaxScanMb: num('CLAMAV_MAX_SCAN_MB', 25),
   clamavOnErrorLinks: (env('CLAMAV_ON_ERROR_LINKS', 'reject').trim().toLowerCase() === 'allow' ? 'allow' : 'reject') as 'allow' | 'reject',
-  clamavOnErrorUsers: (env('CLAMAV_ON_ERROR_USERS', 'allow').trim().toLowerCase() === 'reject' ? 'reject' : 'allow') as 'allow' | 'reject',
+  clamavOnErrorUsers: (env('CLAMAV_ON_ERROR_USERS', 'reject').trim().toLowerCase() === 'allow' ? 'allow' : 'reject') as 'allow' | 'reject',
+  /** a file over CLAMAV_MAX_SCAN_MB is not a scanner failure: decided apart, per sender (links and visitors stay strict) */
+  clamavOnTooBigLinks: (env('CLAMAV_ON_TOO_BIG_LINKS', 'reject').trim().toLowerCase() === 'allow' ? 'allow' : 'reject') as 'allow' | 'reject',
+  clamavOnTooBigUsers: (env('CLAMAV_ON_TOO_BIG_USERS', 'allow').trim().toLowerCase() === 'reject' ? 'reject' : 'allow') as 'allow' | 'reject',
   /** quarantined files are deleted after this many days, and the oldest go first when they take more than the cap */
   quarantineDays: Math.max(1, Math.floor(num('QUARANTINE_DAYS', 30))),
   quarantineMaxBytes: Math.max(0, num('QUARANTINE_MAX_MB', 2048)) * 1024 ** 2,
@@ -251,7 +414,17 @@ export function ensureDirs() {
   for (const p of [config.storageDir, config.dataDir, paths.logs, paths.trash, paths.tmp, paths.quarantine, paths.branding, paths.app, paths.publicDir]) {
     mkdirSync(p, { recursive: true })
   }
+  tightenDir(config.dataDir)
 }
 
 // stores are created while modules load, so the folders must exist before that
 ensureDirs()
+
+/**
+ * may the headers that name the client (CF-Connecting-IP, X-Forwarded-For/-Host/-Proto) be believed from this socket address?
+ * Only when TRUST_PROXY is set and, if TRUSTED_PROXIES is set, the socket is one of those addresses (a set value with no valid entry trusts none)
+ */
+export function proxyTrusted(socketIp: string): boolean {
+  if (config.trustProxy === 'false') return false
+  return !config.trustedProxiesSet || ipInRules(socketIp, config.trustedProxies)
+}

@@ -1,6 +1,7 @@
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
+import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'node:crypto'
 import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { paths } from './config'
+import { unreadableMessage } from './store'
 
 // AES-256-GCM for small secrets kept in users.json (the 2FA secret). Sealed form: base64url(iv | tag | ciphertext).
 let keyCache: Buffer | null = null
@@ -10,7 +11,18 @@ function key(): Buffer {
   if (keyCache) return keyCache
   const file = paths.secretKey
   if (existsSync(file)) {
-    const k = Buffer.from(readFileSync(file, 'utf8').trim(), 'base64url')
+    let text: string
+    try { text = readFileSync(file, 'utf8') } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code
+      // not readable is not missing: a new key would make every sealed value unreadable
+      if (code === 'EACCES' || code === 'EPERM') {
+        const message = unreadableMessage(file, err as Error, typeof process.getuid === 'function' ? process.getuid() : null)
+        console.error(message)
+        throw new Error(message.trim())
+      }
+      throw err
+    }
+    const k = Buffer.from(text.trim(), 'base64url')
     // a damaged key is not replaced: a new one would silently make every sealed value unreadable
     if (k.length !== 32) throw new Error('secret.key is damaged')
     return (keyCache = k)
@@ -35,6 +47,11 @@ export function open(sealed: string): string {
   const d = createDecipheriv('aes-256-gcm', key(), raw.subarray(0, 12))
   d.setAuthTag(raw.subarray(12, 28))
   return Buffer.concat([d.update(raw.subarray(28)), d.final()]).toString('utf8')
+}
+
+/** a separate key for one purpose (HMAC of the purpose under the secret key): the sealing key itself is never used for anything else */
+export function subKey(purpose: string): Buffer {
+  return createHmac('sha256', key()).update(`file-center:${purpose}`).digest()
 }
 
 /** for tests: forget the key held in memory so the next call reads the file again */
