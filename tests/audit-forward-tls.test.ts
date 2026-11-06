@@ -1,7 +1,7 @@
 /**
  * Audit forwarding to syslog over TLS (src/audit-forward.ts): same octet-counted framing as TCP, certificate always verified
  * (system CAs plus AUDIT_SYSLOG_CA), nothing sent when verification fails, no plain-text warning for tls, and the web / .env
- * values accept `tls`. The server certificate is a fixed self-signed test pair (tests/fixtures, SAN localhost + 127.0.0.1).
+ * values accept `tls`. The server certificate is a fixed self-signed test pair (tests/syslog-tls-*.pem, SAN localhost + 127.0.0.1).
  * Local receivers only. Runs in-process (see in-process-env.ts).
  */
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
@@ -18,8 +18,8 @@ let audit: typeof import('../src/audit').audit
 let cookie = ''
 let csrf = ''
 
-const CERT = join(import.meta.dir, 'fixtures', 'syslog-tls-cert.pem')
-const KEY = join(import.meta.dir, 'fixtures', 'syslog-tls-key.pem')
+const CERT = join(import.meta.dir, 'syslog-tls-cert.pem')
+const KEY = join(import.meta.dir, 'syslog-tls-key.pem')
 const got: Buffer[] = []
 let handshakes = 0
 let server: Server
