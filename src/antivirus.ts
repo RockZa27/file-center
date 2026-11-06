@@ -206,7 +206,7 @@ export type QuarantineMeta = {
   /** who sent it: a user name, or `guest` / `share:<link id>` */
   by: string
   ip: string
-  via: 'upload' | 'link' | 'webdav'
+  via: 'upload' | 'link' | 'webdav' | 'office' | 'edit'
   at: string
   /** the folder it was meant for, as a path under the storage (storagePath form) */
   dest: string

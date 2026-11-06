@@ -4,6 +4,7 @@ import { existsSync, lstatSync, mkdirSync, rmSync, statSync, writeFileSync } fro
 import { basename, dirname, extname, join } from 'node:path'
 import { Elysia, t } from 'elysia'
 import { audit, auditOnce } from '../audit'
+import { antivirusOn, gate } from '../antivirus'
 import { isForeignSpace } from '../auth'
 import { config, paths } from '../config'
 import { takeUnzipSlot } from '../archive'
@@ -211,9 +212,23 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     // the earlier versions of the file count against the owner of the home it is in (not always the one saving)
     const owner = ownerOfPath(abs)
     await ready(owner)
+    const st0 = existsSync(abs) ? statSync(abs) : null
+    if (!st0 || !st0.isFile()) throw notFound()
+    if (Buffer.byteLength(body.content) > MAX_TEXT) throw new HttpError(413, 'files.text-too-big')
+    // scanned like an upload (a script or phishing page is text too); the scan comes before the check-and-write block below
+    if (antivirusOn()) {
+      mkdirSync(paths.tmp, { recursive: true, mode: 0o700 })
+      const tmp = join(paths.tmp, `edit-${Date.now()}-${randomBytes(6).toString('hex')}`)
+      try {
+        writeFileSync(tmp, body.content, { mode: 0o600 })
+        await gate(tmp, { who: 'user', via: 'edit', by: user?.username ?? 'guest', ip, name: basename(abs), destDir: dirname(abs) })
+      } finally {
+        rmSync(tmp, { force: true })
+      }
+    }
+    // read again: the file may have changed during the scan, and from here to the write there is no await
     const st = existsSync(abs) ? statSync(abs) : null
     if (!st || !st.isFile()) throw notFound()
-    if (Buffer.byteLength(body.content) > MAX_TEXT) throw new HttpError(413, 'files.text-too-big')
     // the mtime GET /api/content gave: someone else saved since then, and writing now would silently undo their work
     // check and write in one step, with no await between them: two saves of the same version can not both pass
     if (body.expectedMtime !== undefined && Math.round(st.mtimeMs) !== body.expectedMtime) throw conflict('files.changed-elsewhere')
