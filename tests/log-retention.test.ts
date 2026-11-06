@@ -42,6 +42,15 @@ describe('sweepFamilies', () => {
     expect(out).toEqual([{ name: 'audit', lines: 2 + 2 + 1, files: 1 }])
   })
 
+  test('a file whose first line is inside the window is not parsed further (lines are in time order)', () => {
+    // a line out of order after a dated new first line is not looked at: the file is judged by its head
+    write(file, [at(5, 'x'), at(40, 'out-of-order'), at(4, 'y')])
+    const before = statSync(file)
+    expect(sweepFamilies([fam], NOW)).toEqual([])
+    expect(statSync(file).ino).toBe(before.ino)
+    expect(actions(file)).toEqual(['x', 'out-of-order', 'y'])
+  })
+
   test('a rotated file with only undated lines is not deleted', () => {
     write(`${file}.1`, ['broken', JSON.stringify({ x: 1 })])
     expect(sweepFamilies([fam], NOW)).toEqual([])

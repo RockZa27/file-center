@@ -3,7 +3,7 @@
  * Off by default (AUDIT_RETENTION_DAYS / LOG_RETENTION_DAYS = 0). A daily sweep, started from housekeeping(), deletes rotated
  * files with nothing newer than the cutoff and rewrites the files that straddle it.
  */
-import { existsSync, readFileSync, unlinkSync } from 'node:fs'
+import { closeSync, existsSync, openSync, readFileSync, readSync, unlinkSync } from 'node:fs'
 import { config, paths } from './config'
 import { writeFileAtomic } from './fsx'
 import { log } from './logger'
@@ -23,18 +23,42 @@ export type SweepCount = { name: string; lines: number; files: number }
  * rotating first, which would push still-valid history out of the last file.) launcher.log is also written by the launcher
  * process; there the window is the few milliseconds between the read and the rename.
  */
+/** the time of a log line, or null when it can not be dated */
+function lineTs(line: string): number | null {
+  try {
+    const ts = Date.parse((JSON.parse(line) as { ts?: unknown }).ts as string)
+    return Number.isFinite(ts) ? ts : null
+  } catch { return null }
+}
+
+/**
+ * Lines are appended in time order, so a file whose FIRST line is dated inside the window has nothing to drop: it is
+ * left alone after reading its head only. The daily sweep then parses just the one file that straddles the cutoff (and
+ * deletes the old ones), not 100 MB of history each day.
+ */
+function firstLineNewer(file: string, cutoff: number): boolean {
+  const fd = openSync(file, 'r')
+  try {
+    const buf = Buffer.alloc(64 * 1024)
+    const n = readSync(fd, buf, 0, buf.length, 0)
+    const text = buf.subarray(0, n).toString('utf8')
+    const end = text.indexOf('\n')
+    if (end < 0) return false
+    const ts = lineTs(text.slice(0, end))
+    return ts !== null && ts >= cutoff
+  } finally { closeSync(fd) }
+}
+
 function sweepFile(file: string, cutoff: number, current: boolean): { lines: number; deleted: boolean } {
+  if (firstLineNewer(file, cutoff)) return { lines: 0, deleted: false }
   const lines = readFileSync(file, 'utf8').split('\n')
   const kept: string[] = []
   let dropped = 0
   for (const line of lines) {
     if (!line) continue
-    let old = false
-    try {
-      const ts = Date.parse((JSON.parse(line) as { ts?: unknown }).ts as string)
-      old = Number.isFinite(ts) && ts < cutoff
-    } catch { /* not JSON: kept */ }
-    if (old) dropped++
+    const ts = lineTs(line)
+    // not JSON or no valid ts: kept
+    if (ts !== null && ts < cutoff) dropped++
     else kept.push(line)
   }
   if (!dropped) return { lines: 0, deleted: false }
