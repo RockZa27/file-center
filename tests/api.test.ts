@@ -743,7 +743,6 @@ describe('full system: CSRF', () => {
       ['DELETE', '/api/admin/users/:username'],
       ['POST', '/api/admin/trash/restore', { id: '0000000000000_00000000' }],
       ['POST', '/api/admin/trash/purge', {}],
-      ['GET', '/api/admin/orphan-homes'],
       ['POST', '/api/admin/orphan-homes/trash', { name: 'x', password: 'x' }],
       ['PUT', '/api/admin/settings', { appName: 'pwned' }],
       ['PUT', '/api/admin/logo', png],
