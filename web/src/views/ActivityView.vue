@@ -76,6 +76,8 @@ async function more() {
   if (r) { page.value++; rows.value = rows.value.concat(keyed(r.items, rows.value.length)); hasMore.value = r.hasMore }
 }
 
+// a failed sign-in with a name that is no account is recorded as ?xxxxxxxx (never the typed text): show it as such
+const who = u => { const m = /^\?([0-9a-f]{8})$/.exec(u || ''); return m ? t('activity.unknownName', { id: m[1] }) : u }
 const detail = r => (r.action === 'upload' && r.detail ? formatBytes(Number(r.detail)) : r.detail || '')
 const actionTag = r => h(NTag, { size: 'small', round: true, type: tone(r.action), bordered: false }, () => t(`action.${r.action}`))
 
@@ -85,7 +87,7 @@ const columns = computed(() => (narrow.value
   ? [{
       title: t('activity.event'), key: 'event',
       render: r => h('div', { class: 'stacked' }, [
-        h('div', { class: 'stacked-head' }, [h('span', { class: 'muted nowrap' }, formatDate(r.ts)), h('span', { class: 'who' }, r.user)]),
+        h('div', { class: 'stacked-head' }, [h('span', { class: 'muted nowrap' }, formatDate(r.ts)), h('span', { class: 'who' }, who(r.user))]),
         h('div', {}, [actionTag(r)]),
         r.target ? h('div', { class: 'mono target', title: r.target }, r.target) : null,
         detail(r) ? h('div', { class: 'muted small wrap' }, detail(r)) : null,
@@ -94,7 +96,7 @@ const columns = computed(() => (narrow.value
     }]
   : [
       { title: t('activity.time'), key: 'ts', width: 150, render: r => formatDate(r.ts) },
-      { title: t('activity.user'), key: 'user', width: 130, render: r => h('span', { style: 'font-weight:500' }, r.user) },
+      { title: t('activity.user'), key: 'user', width: 130, render: r => h('span', { style: 'font-weight:500' }, who(r.user)) },
       { title: t('activity.action'), key: 'action', width: 160, render: actionTag },
       { title: t('activity.target'), key: 'target', minWidth: 170, render: r => h('div', { style: 'min-width:0' }, [h('div', { class: 'mono truncate', title: r.target }, r.target || '—'), detail(r) ? h('div', { class: 'muted', style: 'font-size:12px' }, detail(r)) : null]) },
       { title: 'IP', key: 'ip', width: 130, render: r => h('span', { class: 'mono muted' }, r.ip) },

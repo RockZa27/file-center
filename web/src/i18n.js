@@ -210,7 +210,7 @@ const th = {
   },
   activity: {
     subtitle: 'ใครเข้าสู่ระบบ อัปโหลด ดาวน์โหลด ลบ หรือแก้ไขอะไรบ้าง', search: 'ค้นหาชื่อไฟล์หรือรายละเอียด',
-    user: 'ผู้ใช้', action: 'การกระทำ', time: 'เวลา', target: 'รายการ', none: 'ไม่พบประวัติ', more: 'แสดงเพิ่ม', event: 'เหตุการณ์',
+    user: 'ผู้ใช้', action: 'การกระทำ', time: 'เวลา', target: 'รายการ', none: 'ไม่พบประวัติ', more: 'แสดงเพิ่ม', event: 'เหตุการณ์', unknownName: 'ชื่อที่ไม่มีในระบบ (#{id})',
     export: 'ส่งออก CSV', exportHint: 'ดาวน์โหลดประวัติตามตัวกรองที่ตั้งไว้ เป็นไฟล์ CSV เปิดด้วย Excel ได้',
   },
   action: {
@@ -840,7 +840,7 @@ const en = {
   },
   activity: {
     subtitle: 'Who signed in, uploaded, downloaded, deleted or changed what', search: 'Search file names or details',
-    user: 'User', action: 'Action', time: 'Time', target: 'Item', none: 'No activity found', more: 'Show more', event: 'Event',
+    user: 'User', action: 'Action', time: 'Time', target: 'Item', none: 'No activity found', more: 'Show more', event: 'Event', unknownName: 'Unknown name (#{id})',
     export: 'Export CSV', exportHint: 'Download the activity matching the current filters as a CSV file for Excel',
   },
   action: {

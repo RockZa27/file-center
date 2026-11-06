@@ -28,7 +28,7 @@ import { basename, dirname, join } from 'node:path'
 import { alert } from './alerts'
 import { touchAppPassword, verifyAppPassword, type AppPassword, type AppScope } from './app-passwords'
 import { audit, auditOnce } from './audit'
-import { accessFor, clearFailures, lockedFor, recordFailure, reloadIfChangedByCli, USER_SPACE, type Access, type Lockout, type User } from './auth'
+import { accessFor, clearFailures, lockedFor, recordedName, recordFailure, reloadIfChangedByCli, USER_SPACE, type Access, type Lockout, type User } from './auth'
 import { config, paths, proxyTrusted } from './config'
 import * as policy from './policy'
 import { clientIp } from './context'
@@ -144,9 +144,11 @@ async function authenticate(request: Request, ip: string, socketIp: string): Pro
 
   const found = await verifyAppPassword(username, secret)
   if (!found) {
-    if (recordFailure(userKey)) alert('lockout', 'admin.alert-login-locked', { user: username, ip })
+    // what was typed may be a password: only an existing account's name or a keyed label is recorded
+    const who = recordedName(username)
+    if (recordFailure(userKey)) alert('lockout', 'admin.alert-login-locked', { user: who, ip })
     if (recordFailure(addrKey, addressLimits())) alert('lockout', 'admin.alert-address-locked', { ip })
-    auditOnce(`dav-login-failed|${userKey}`, { user: username, ip, action: 'login-failed', detail: 'WebDAV' })
+    auditOnce(`dav-login-failed|${userKey}`, { user: who, ip, action: 'login-failed', detail: 'WebDAV' })
     return challenge('auth.bad-credentials')
   }
   // a right secret of an expired record: a device that keeps retrying must not lock the user or the whole address

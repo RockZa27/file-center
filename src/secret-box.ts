@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, randomBytes } from 'node:crypto'
+import { createCipheriv, createDecipheriv, createHmac, randomBytes } from 'node:crypto'
 import { chmodSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { paths } from './config'
 import { unreadableMessage } from './store'
@@ -47,6 +47,11 @@ export function open(sealed: string): string {
   const d = createDecipheriv('aes-256-gcm', key(), raw.subarray(0, 12))
   d.setAuthTag(raw.subarray(12, 28))
   return Buffer.concat([d.update(raw.subarray(28)), d.final()]).toString('utf8')
+}
+
+/** a separate key for one purpose (HMAC of the purpose under the secret key): the sealing key itself is never used for anything else */
+export function subKey(purpose: string): Buffer {
+  return createHmac('sha256', key()).update(`file-center:${purpose}`).digest()
 }
 
 /** for tests: forget the key held in memory so the next call reads the file again */

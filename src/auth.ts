@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto'
+import { createHash, createHmac, randomBytes } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { alert } from './alerts'
@@ -10,7 +10,7 @@ import { bad, ensureDir, HttpError, normRel, resolveIn } from './fsx'
 import { GRANT_SPACE, grantSpace } from './grants'
 import { GROUP_SPACE, GROUPS_TOP, groupSpace } from './groups'
 import { log } from './logger'
-import { open, seal } from './secret-box'
+import { open, seal, subKey } from './secret-box'
 import { cleanPerms, PERMISSIONS, settings, type Perm } from './settings'
 import { JsonStore } from './store'
 import { newTotpSecret, verifyTotp } from './totp'
@@ -90,6 +90,22 @@ export const isReservedUsername = (username: string) => username.toLowerCase() =
 export const allUsers = () => userStore.value.users
 export const findUser = (username: string) =>
   userStore.value.users.find(u => u.username.toLowerCase() === username.toLowerCase())
+
+/** what a failed sign-in records for a typed name: ?xxxxxxxx never is a user name (USERNAME_RE), see recordedName */
+export const UNKNOWN_NAME_RE = /^\?[0-9a-f]{8}$/
+
+/**
+ * The name to put in the audit log, alerts and notifications for a sign-in that was typed: the canonical name of an
+ * existing account, otherwise a label (? and 8 hex characters of an HMAC under a key of this server) and never the
+ * typed text, which may be a password pasted in the wrong box. The same typed name gives the same label.
+ */
+export function recordedName(typed: string): string {
+  const name = typed.trim()
+  if (!name) return '-'
+  const user = findUser(name)
+  if (user) return user.username
+  return '?' + createHmac('sha256', subKey('login-name-label')).update(name.toLowerCase()).digest('hex').slice(0, 8)
+}
 
 export const publicUser = (u: User) => ({
   username: u.username,
