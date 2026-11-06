@@ -71,14 +71,14 @@ export const backupRoutes = new Elysia({ prefix: '/api/admin' })
   })
 
   // puts back users, passwords, settings and the logo of a backup, then restarts so the app reads them
-  .post('/backups/restore', { body: t.Object({ name: t.String({ maxLength: 200 }), password: t.String({ maxLength: 1000 }) }) }, async ({ user, ip, body, request }) => {
+  .post('/backups/restore', { body: t.Object({ name: t.String({ maxLength: 200 }), password: t.String({ maxLength: 1000 }), allowUnencrypted: t.Optional(t.Boolean()) }) }, async ({ user, ip, body, request }) => {
     const admin = requireAdmin({ user, ip })
     if (!supervised()) {
       throw new HttpError(409, 'not-supervised')
     }
     if (!BACKUP_NAME_RE.test(body.name)) throw bad('backup.bad-name')
     await confirmPassword(admin, ip, body.password, 'backup-restore-denied')
-    const { safety, twoFactorLost } = await restoreBackup(body.name)
+    const { safety, twoFactorLost } = await restoreBackup(body.name, body.allowUnencrypted === true)
     audit({
       user: admin.username, ip, action: 'backup-restore', target: body.name,
       detail: `สำรองข้อมูลก่อนกู้คืนไว้ที่ ${safety.name}${twoFactorLost.length ? ` (2FA ใช้ไม่ได้บนเครื่องนี้: ${twoFactorLost.join(', ')})` : ''}`,

@@ -540,6 +540,9 @@ async function writeBackup(protect?: string): Promise<BackupItem> {
   /** old backups deleted to make room for this one */
   const removed: string[] = []
   try {
+    // a key that is set but wrong means the operator asked for encryption: fail closed, before anything is written
+    // or pruned, instead of leaving a plain zip (password hashes, logs) behind
+    if (backupKeyState().state === 'invalid') throw bad('backup.key-invalid')
     mkdirSync(config.backupDir, { recursive: true })
     tightenDir(config.backupDir)
     // left over from a backup that was cut off (crash, power loss)
@@ -611,7 +614,7 @@ async function writeBackup(protect?: string): Promise<BackupItem> {
     const noSpace = err instanceof HttpError && (err.code === 'backup.no-space' || err.code === 'backup.aborted-no-space') ? err : null
     // a known reason (disk full...) is shown in the reader's language too; anything else as it was said
     const params: Params = noSpace ? noSpace.params : known && !Object.keys(known.params).length ? { reason: why, reasonCode: known.code } : { reason: why }
-    const code: MessageCode = noSpace ? noSpace.code : 'backup.failed'
+    const code: MessageCode = noSpace ? noSpace.code : err instanceof HttpError && err.code === 'backup.key-invalid' ? 'backup.key-invalid' : 'backup.failed'
     writeStatus({ status: 'failed', lastSuccess: readStatus()?.lastSuccess ?? null, lastAttempt: attempt, code, params, file: null, size: null })
     alert('backup-failed', code, params)
     // the old copies went to make room and the new one is not there: the admin must know there are fewer than before
@@ -701,8 +704,10 @@ function lostTwoFactor(dir: string): string[] {
  * can itself be undone. The caller restarts the app afterwards: the stores in memory still hold the old data.
  */
 /** `twoFactorLost`: users who can not use 2FA on this server after the restart (see lostTwoFactor) */
-export function restoreBackup(name: string): Promise<{ safety: BackupItem; twoFactorLost: string[] }> {
+export function restoreBackup(name: string, allowUnencrypted = false): Promise<{ safety: BackupItem; twoFactorLost: string[] }> {
   return exclusive(async () => {
+    // with a valid key an operator may assume only authenticated (GCM) files are restored: a plain zip needs an explicit yes
+    if (!name.endsWith('.enc') && !allowUnencrypted && backupKeyState().state === 'on') throw bad('backup.restore-unencrypted')
     const sealedAbs = backupPath(name)
     // an encrypted backup is opened to a temporary zip beside the backups (never in tmp/: that may be on a small disk),
     // before anything is changed, so a wrong key or a damaged file costs nothing; it is always removed again

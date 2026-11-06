@@ -24,8 +24,8 @@ export function envWarnings(): ConfigWarning[] {
   // set but no valid entry: no connection is believed, every visitor shows as the proxy's address (one shared lockout)
   if (config.trustProxy !== 'false' && config.trustedProxiesSet && !config.trustedProxies.length) out.push({ code: 'admin.config-proxy-list-invalid', severity: 'critical' })
   out.push(...auditForwardWarnings())
-  // a bad key leaves backups unencrypted: the admin must see it, the app still runs
-  if (backupKeyState().state === 'invalid') out.push({ code: 'admin.config-backup-key-invalid', severity: 'warning' })
+  // a bad key stops every backup (they would be plain): the admin must see it, the app still runs
+  if (backupKeyState().state === 'invalid') out.push({ code: 'admin.config-backup-key-invalid', severity: 'critical' })
   if (antivirusUnreachable()) out.push({ code: 'admin.config-antivirus-unreachable', severity: 'warning' })
   return out
 }

@@ -192,6 +192,8 @@
       <n-alert type="success" class="gap">{{ t('backup.restoreNotFiles') }}</n-alert>
       <n-alert type="info" class="gap">{{ t('backup.restoreSafety') }}</n-alert>
       <n-alert type="warning" class="gap">{{ t('backup.restoreRestart') }}</n-alert>
+      <n-alert v-if="plainWhileOn" type="warning" class="gap" data-testid="restore-unencrypted-warning">{{ t('backup.restoreUnencryptedWarn') }}</n-alert>
+      <n-checkbox v-if="plainWhileOn" v-model:checked="allowUnencrypted" class="gap" data-testid="restore-unencrypted-check">{{ t('backup.restoreUnencryptedCheck') }}</n-checkbox>
       <n-form label-placement="top" @submit.prevent="restore">
         <n-form-item :label="t('backup.password')">
           <n-input :placeholder="t('backup.password')" v-model:value="password" type="password" show-password-on="click" autocomplete="current-password" :input-props="{ name: 'confirm-password' }" @keyup.enter="restore" />
@@ -199,7 +201,7 @@
       </n-form>
       <div class="actions">
         <n-button :disabled="working" @click="restoreOpen = false">{{ t('common.cancel') }}</n-button>
-        <n-button type="error" :disabled="!password" :loading="working" @click="restore"><template #icon><n-icon :component="ArrowUndoOutline" /></template>{{ t('backup.restoreGo') }}</n-button>
+        <n-button type="error" :disabled="!password || (plainWhileOn && !allowUnencrypted)" :loading="working" @click="restore"><template #icon><n-icon :component="ArrowUndoOutline" /></template>{{ t('backup.restoreGo') }}</n-button>
       </div>
     </n-modal>
   </div>
@@ -228,6 +230,9 @@ const restoring = ref(false)
 const restoreOpen = ref(false)
 const target = ref(null)
 const password = ref('')
+const allowUnencrypted = ref(false)
+// encryption is on and the chosen backup is a plain zip: a restore of it needs an explicit yes
+const plainWhileOn = computed(() => !!settings.value?.encryption && !!target.value && !target.value.encrypted)
 
 const items = computed(() => data.value?.items ?? [])
 const status = computed(() => data.value?.status ?? null)
@@ -381,6 +386,7 @@ async function remove(b) {
 function askRestore(b) {
   target.value = b
   password.value = ''
+  allowUnencrypted.value = false
   restoreOpen.value = true
 }
 
@@ -389,7 +395,7 @@ async function restore() {
   working.value = true
   try {
     const before = await bootId()
-    await api.backupRestore(target.value.name, password.value)
+    await api.backupRestore(target.value.name, password.value, plainWhileOn.value && allowUnencrypted.value)
     password.value = ''
     restoreOpen.value = false
     working.value = false

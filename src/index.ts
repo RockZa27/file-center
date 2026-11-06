@@ -92,7 +92,7 @@ if (config.trustedProxiesInvalid.length || proxyListEmpty) {
   log.warn('trusted-proxies-invalid', `TRUSTED_PROXIES มีค่าที่ไม่ใช่ IP หรือช่วง IP (CIDR) จึงข้ามไป: ${config.trustedProxiesInvalid.join(', ') || '(ว่าง)'}`
     + (none ? ' · ไม่มีรายการที่ใช้ได้เลย ระบบจึงไม่สนใจหัวบอก IP ผู้ใช้ (CF-Connecting-IP / X-Forwarded-For) จากทุกการเชื่อมต่อ ผู้เข้าใช้ทุกคนจะแสดงเป็น IP ของ proxy และการล็อกต่อ IP จะนับรวมกันทั้งหมด แก้ค่า TRUSTED_PROXIES' : ''))
 }
-if (backupKeyState().state === 'invalid') log.warn('backup-key-invalid', 'BACKUP_ENCRYPTION_KEY ไม่ถูกต้อง (ต้องเป็นข้อมูลสุ่ม 32 ไบต์แบบ base64url ยาว 43 ตัวอักษร สร้างด้วย bun src/cli.ts backup-key) จึงยังไม่เข้ารหัสไฟล์สำรองใหม่')
+if (backupKeyState().state === 'invalid') log.warn('backup-key-invalid', 'BACKUP_ENCRYPTION_KEY ไม่ถูกต้อง (ต้องเป็นข้อมูลสุ่ม 32 ไบต์แบบ base64url ยาว 43 ตัวอักษร สร้างด้วย bun src/cli.ts backup-key) จึงไม่สร้างไฟล์สำรองใดเลยจนกว่าจะแก้ค่านี้')
 if (config.updateAllowUnsigned) log.warn('update-allow-unsigned', 'UPDATE_ALLOW_UNSIGNED=true: ระบบรับแพ็กเกจอัปเดตที่ไม่เซ็น (เสี่ยง: ผู้ที่ได้ session และรหัสผ่านของ admin จะติดตั้งโค้ดของตัวเองได้)')
 // the same for UPDATE_SOURCE: the app starts, checking for updates stays off
 const source = sourceConfig()

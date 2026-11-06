@@ -368,11 +368,89 @@ describe('encrypted backups (API)', () => {
     const users = readFileSync(paths.users, 'utf8')
     await supervised(async () => {
       // it gets as far as the content check: the key plays no part
-      const r = await restore(name)
-      expect([r.status, r.data.code]).toEqual([400, 'backup.no-admin'])
+      const flagged = await admin.json('POST', '/api/admin/backups/restore', { name, password: PASSWORD, allowUnencrypted: true })
+      expect([flagged.status, flagged.data.code]).toEqual([400, 'backup.no-admin'])
+      // without a key it needs no flag
+      delete process.env.BACKUP_ENCRYPTION_KEY
+      try {
+        const r = await restore(name)
+        expect([r.status, r.data.code]).toEqual([400, 'backup.no-admin'])
+      } finally { process.env.BACKUP_ENCRYPTION_KEY = KEY }
     })
     expect(readFileSync(paths.users, 'utf8')).toBe(users)
     expect(names().filter(n => n.includes('.tmp'))).toEqual([])
+  })
+
+  test('a valid key: a plain zip is not restored without allowUnencrypted, and nothing changes (no safety copy either)', async () => {
+    const name = 'file-center-backup-20000110-000000.zip'
+    writeFileSync(join(dir, name), zipSync({ 'users.json': new TextEncoder().encode(JSON.stringify({ users: [{ username: 'u', role: 'user', passwordHash: 'x' }] })) }))
+    const users = readFileSync(paths.users, 'utf8')
+    const settings = readFileSync(paths.settings, 'utf8')
+    const before = names()
+    await supervised(async () => {
+      for (const body of [{}, { allowUnencrypted: false }]) {
+        const r = await admin.json('POST', '/api/admin/backups/restore', { name, password: PASSWORD, ...body })
+        expect([r.status, r.data.code]).toEqual([400, 'backup.restore-unencrypted'])
+      }
+    })
+    expect(names()).toEqual(before)
+    expect(readFileSync(paths.users, 'utf8')).toBe(users)
+    expect(readFileSync(paths.settings, 'utf8')).toBe(settings)
+  })
+
+  test('an invalid key: no backup of any kind is written, the scheduled run alerts with the reason, a restore is refused', async () => {
+    const plain = 'file-center-backup-20000111-000000.zip'
+    writeFileSync(join(dir, plain), zipSync({ 'users.json': new TextEncoder().encode('{}') }))
+    const users = readFileSync(paths.users, 'utf8')
+    const before = names()
+    const hooks: any[] = []
+    const server = Bun.serve({ port: 0, hostname: '127.0.0.1', async fetch(req) { hooks.push(await req.json()); return new Response('ok') } })
+    const alerts = await import('../src/alerts')
+    const { runBackup } = await import('../src/backup')
+    const saved = { url: config.alertWebhookUrl, kind: config.alertWebhookKind }
+    process.env.BACKUP_ENCRYPTION_KEY = KEY.slice(0, -1) // one character missing
+    try {
+      config.alertWebhookUrl = `http://127.0.0.1:${server.port}/hook`
+      config.alertWebhookKind = 'json'
+      alerts.resetAlerts()
+      // what the scheduler calls
+      const err = await runBackup().then(() => null, e => e)
+      expect(err?.code).toBe('backup.key-invalid')
+      await alerts.alertsIdle()
+      expect(hooks.length).toBe(1)
+      expect(hooks[0]).toMatchObject({ event: 'backup-failed', code: 'backup.key-invalid' })
+      expect(hooks[0].message).toContain('BACKUP_ENCRYPTION_KEY')
+      expect(JSON.stringify(hooks[0]).includes(KEY.slice(0, -1))).toBe(false)
+      const status = (await admin.json('GET', '/api/admin/backups')).data.status
+      expect(status).toMatchObject({ status: 'failed', code: 'backup.key-invalid' })
+      // the safety backup of a restore fails first: the restore is refused, nothing changes (the old copies are not pruned either)
+      const keep = config.backupKeep
+      config.backupKeep = 1
+      await supervised(async () => {
+        const r = await admin.json('POST', '/api/admin/backups/restore', { name: plain, password: PASSWORD, allowUnencrypted: true })
+        expect([r.status, r.data.code]).toEqual([400, 'backup.key-invalid'])
+      })
+      config.backupKeep = keep
+      expect(names()).toEqual(before)
+      expect(readFileSync(paths.users, 'utf8')).toBe(users)
+    } finally {
+      process.env.BACKUP_ENCRYPTION_KEY = KEY
+      config.alertWebhookUrl = saved.url
+      config.alertWebhookKind = saved.kind
+      alerts.resetAlerts()
+      await server.stop(true)
+    }
+  })
+
+  test('the invalid-key warning on the system page is critical and says that no backups are made', async () => {
+    const { envWarnings: configWarnings } = await import('../src/config-warnings')
+    const { MESSAGES } = await import('../src/messages')
+    process.env.BACKUP_ENCRYPTION_KEY = 'x'.repeat(42)
+    try {
+      expect(configWarnings().filter(w => w.code === 'admin.config-backup-key-invalid')).toEqual([{ code: 'admin.config-backup-key-invalid', severity: 'critical' }])
+    } finally { process.env.BACKUP_ENCRYPTION_KEY = KEY }
+    expect(configWarnings().some(w => w.code === 'admin.config-backup-key-invalid')).toBe(false)
+    expect(MESSAGES['admin.config-backup-key-invalid'].en).toContain('NO backups')
   })
 
   test('pruning counts both kinds together and takes sidecars with the backups', async () => {
@@ -422,17 +500,17 @@ describe('encrypted backups (API)', () => {
         if (existsSync(f)) expect(readFileSync(f, 'utf8').includes(k)).toBe(false)
       }
     }
-    // an invalid key: the app runs, backups stay plain, the system page warns, and the bad value is not echoed
+    // an invalid key: the app runs, the system page warns (critical), backups are refused, and the bad value is not echoed
     const bad = 'not-a-valid-key-SECRETISH'
     process.env.BACKUP_ENCRYPTION_KEY = bad
     try {
       const warnings = await admin.json('GET', '/api/admin/config-warnings')
       expect(warnings.data.items.map((w: any) => w.code)).toContain('admin.config-backup-key-invalid')
       expect(JSON.stringify(warnings.data).includes(bad)).toBe(false)
-      const plain = await admin.json('POST', '/api/admin/backups')
-      expect(plain.status).toBe(200)
-      expect(plain.data).toMatchObject({ encrypted: false })
-      expect(plain.data.name).toMatch(/\.zip$/)
+      const refused = await admin.json('POST', '/api/admin/backups')
+      expect(refused.status).toBe(400)
+      expect(refused.data.code).toBe('backup.key-invalid')
+      expect(JSON.stringify(refused.data).includes(bad)).toBe(false)
       expect((await admin.json('GET', '/api/admin/backups')).data.settings.encryption).toBe(false)
     } finally {
       process.env.BACKUP_ENCRYPTION_KEY = KEY
