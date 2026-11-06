@@ -292,11 +292,13 @@ describe('settings: step-up password', () => {
     await alerts.alertsIdle()
     expect(hookBodies.length).toBe(1)
     expect(hookBodies[0]).toContain('security.loginMaxAttempts')
-    expect(hookBodies[0]).not.toContain('77')
+    // the value (77) must be nowhere; the timestamps are not the value, and one like 04:47:04.977 holds "77" by chance
+    const noTimes = (s: string) => s.replace(/"(time|ts|at)":"[^"]*"/g, '')
+    expect(noTimes(hookBodies[0])).not.toContain('77')
     const log = (await admin.json('GET', '/api/admin/activity?action=settings-update')).data
     const line = JSON.stringify(log.items[0])
     expect(line).toContain('security.sessionTtlHours')
-    expect(line).not.toContain('77')
+    expect(noTimes(line)).not.toContain('77')
     expect(line).not.toContain(HOOK_SECRET)
   })
 })
