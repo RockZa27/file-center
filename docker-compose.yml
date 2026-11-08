@@ -89,7 +89,7 @@ services:
   # ทำงานเมื่อ .env มี COMPOSE_PROFILES=clamav (หรือ tunnel,clamav) จากนั้นเปิด ระบบ → ตั้งค่า → สแกนไวรัส (หรือ CLAMAV_ENABLED=true) แล้วกด "ทดสอบการเชื่อมต่อ"
   # ครั้งแรก clamd ต้องดาวน์โหลดฐานข้อมูลไวรัสก่อน (หลายนาที) ระหว่างนั้นระบบเตือนว่าติดต่อ ClamAV ไม่ได้ พอร์ต 3310 เปิดในเครือข่ายภายในของ Docker เท่านั้น ไม่ได้เปิดออกเครื่อง
   clamav:
-    image: clamav/clamav:1.4@sha256:982e28f90061d0e66eb03276419f589a47c9fa601e985e472fc2f6c64b497ca0
+    image: clamav/clamav:1.5@sha256:6d87c712e3391e13c1ba6e05dfb074d4b1ddb5a6834b23bb9da990d2a4ef042a
     container_name: file-center-clamav
     profiles: [clamav]
     restart: unless-stopped
