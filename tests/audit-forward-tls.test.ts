@@ -1,11 +1,12 @@
 /**
  * Audit forwarding to syslog over TLS (src/audit-forward.ts): same octet-counted framing as TCP, certificate always verified
  * (system CAs plus AUDIT_SYSLOG_CA), nothing sent when verification fails, no plain-text warning for tls, and the web / .env
- * values accept `tls`. The server certificate is a fixed self-signed test pair (tests/syslog-tls-*.pem, SAN localhost + 127.0.0.1).
+ * values accept `tls`. The server certificate is a self-signed pair made with openssl for each run (SAN localhost + 127.0.0.1).
  * Local receivers only. Runs in-process (see in-process-env.ts).
  */
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
-import { readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createServer, type Server } from 'node:tls'
 import './in-process-env'
@@ -18,8 +19,15 @@ let audit: typeof import('../src/audit').audit
 let cookie = ''
 let csrf = ''
 
-const CERT = join(import.meta.dir, 'syslog-tls-cert.pem')
-const KEY = join(import.meta.dir, 'syslog-tls-key.pem')
+// A throw-away self-signed certificate made for this run (no private key is kept in the repository)
+const CERT_DIR = mkdtempSync(join(tmpdir(), 'fc-syslog-tls-'))
+const CERT = join(CERT_DIR, 'cert.pem')
+const KEY = join(CERT_DIR, 'key.pem')
+{
+  const r = Bun.spawnSync(['openssl', 'req', '-x509', '-newkey', 'ec', '-pkeyopt', 'ec_paramgen_curve:P-256', '-nodes', '-subj', '/CN=localhost',
+    '-addext', 'subjectAltName=DNS:localhost,IP:127.0.0.1', '-days', '1', '-keyout', KEY, '-out', CERT], { stdout: 'ignore', stderr: 'pipe' })
+  if (r.exitCode !== 0) throw new Error('openssl could not make the test certificate: ' + r.stderr.toString())
+}
 const got: Buffer[] = []
 let handshakes = 0
 let server: Server
@@ -68,7 +76,7 @@ afterEach(async () => {
   Object.assign(cfg, savedCfg)
   got.length = 0; handshakes = 0
 })
-afterAll(() => { server.close() })
+afterAll(() => { server.close(); rmSync(CERT_DIR, { recursive: true, force: true }) })
 
 describe('syslog over TLS', () => {
   test('with AUDIT_SYSLOG_CA the entry arrives encrypted, octet-counted like TCP', async () => {
