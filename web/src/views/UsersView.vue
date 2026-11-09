@@ -144,7 +144,7 @@ const edit = u => { form.user = u; form.show = true }
 
 async function remove(u) {
   // an admin may also send the folder to the trash with the account (password asked again); a manager only deletes the account
-  if (app.user?.role === 'admin') { Object.assign(del, { user: u, files: false, password: '', show: true }); return }
+  if (app.user?.role === 'admin') { Object.assign(del, { user: u, files: u.role === 'user', password: '', show: true }); return }
   if (!(await fb.confirm({ title: t('users.delete'), content: t('users.deleteConfirm', { name: u.name }), positive: t('common.delete'), danger: true }))) return
   try { await api.deleteUser(u.username); fb.ok(t('files.done')); await load() } catch (e) { fb.fail(e) }
 }
