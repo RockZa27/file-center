@@ -122,6 +122,7 @@ export const MESSAGES = {
   // ───────────── versions and favorites ─────────────
   'versions.not-found': { th: 'ไม่พบฉบับเก่านี้ของไฟล์', en: 'This earlier version of the file was not found.' },
   'favorites.too-many': { th: 'รายการโปรดเต็มแล้ว (สูงสุด {max} รายการ) กรุณาเอาบางรายการออกก่อน', en: 'Your favorites are full (at most {max}). Remove some first.' },
+  'me.export-cooldown': { th: 'ขอสำเนาข้อมูลได้นาทีละครั้ง กรุณารอ {seconds} วินาทีแล้วลองใหม่', en: 'You can export your data once a minute. Wait {seconds} seconds and try again.' },
 
   // ───────────── guide ─────────────
   'guide.bad-version': { th: 'หมายเลขเวอร์ชันไม่ถูกต้อง (ตัวอย่าง 1.12.0)', en: 'The version is not valid (for example 1.12.0).' },

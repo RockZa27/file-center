@@ -801,6 +801,7 @@ describe('full system: CSRF', () => {
       ['DELETE', '/api/grants/:id'],
       ['POST', '/api/me/app-passwords/', { name: 'csrf', scope: 'readwrite', password: 'test-admin-pass' }],
       ['DELETE', '/api/me/app-passwords/:id'],
+      ['POST', '/api/me/export', { password: 'test-admin-pass' }],
       ['POST', '/api/admin/mail/test', {}],
       ['POST', '/api/insight/scan', {}],
       ['POST', '/api/admin/groups', { name: 'csrf group' }],

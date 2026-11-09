@@ -204,6 +204,8 @@ export const api = {
   removeGroupMember: (id, username) => call('DELETE', `/api/admin/groups/${encodeURIComponent(id)}/members/${encodeURIComponent(username)}`),
 
   /** WebDAV app passwords of the signed-in user: { items: [{ id, name, scope, hint, createdAt, lastUsedAt, lastIp }], max, enabled } */
+  /** the signed-in user's own audit entries, newest first: { items: [{ ts, ip, action, target, detail }], hasMore } */
+  myActivity: params => get('/api/me/activity', params),
   appPasswords: () => get('/api/me/app-passwords'),
   /** -> the item plus `secret`, told this once only */
   createAppPassword: (name, scope, password, days) => post('/api/me/app-passwords', days === undefined ? { name, scope, password } : { name, scope, password, days }),
@@ -305,6 +307,39 @@ export function putChunk(id, index, blob, onProgress, registerAbort, base = '/ap
     registerAbort(() => xhr.abort())
     xhr.send(blob)
   })
+}
+
+/**
+ * "Download my personal data": a POST (the password is asked again), so the answer is read as a blob and saved from
+ * memory (the file is small: one person's records). A refusal ({ error, code, params }) is thrown like any API error.
+ */
+export async function downloadMyData(password) {
+  let res
+  try {
+    res = await fetch('/api/me/export', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'x-csrf-token': csrf, 'x-lang': lang(), 'content-type': 'application/json' },
+      body: JSON.stringify({ password }),
+    })
+  } catch {
+    throw new ApiError(0, t('api.noConnection'))
+  }
+  if (!res.ok) {
+    let data = null
+    try { data = await res.json() } catch { /* not JSON */ }
+    if (res.status === 401 && hooks.onUnauthorized) hooks.onUnauthorized()
+    throw new ApiError(res.status, data?.error || t('api.failed', { status: res.status }), data?.code, data?.params)
+  }
+  const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') || '')?.[1] || 'file-center-my-data.json'
+  const url = URL.createObjectURL(await res.blob())
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  a.style.display = 'none'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
 
 /**

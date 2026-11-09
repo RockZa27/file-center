@@ -32,6 +32,9 @@
       <n-tab-pane v-if="!app.user?.mustChangePassword && app.config.webdav" name="dav" :tab="tabLabel('profile-dav', t('dav.tab'))">
         <app-passwords-panel v-if="show && tab === 'dav'" @lock="v => (locked = v)" />
       </n-tab-pane>
+      <n-tab-pane v-if="!app.user?.mustChangePassword" name="mydata" :tab="tabLabel('profile-mydata', t('profile.myDataTab'))">
+        <my-data-panel v-if="show && tab === 'mydata'" />
+      </n-tab-pane>
       <n-tab-pane v-if="!app.user?.mustChangePassword" name="display" :tab="tabLabel('profile-display', t('profile.tabDisplay'))">
         <p class="muted hint">{{ t('profile.displayHint') }}</p>
         <div class="pref-row"><span>{{ t('nav.theme') }} / {{ t('nav.language') }}</span><preference-controls /></div>
@@ -60,10 +63,11 @@ import { useAppStore } from '../store'
 import PreferenceControls from './PreferenceControls.vue'
 import PasswordRules from './PasswordRules.vue'
 import AppPasswordsPanel from './AppPasswordsPanel.vue'
+import MyDataPanel from './MyDataPanel.vue'
 import NotifyPanel from './NotifyPanel.vue'
 import SecurityPanel from './SecurityPanel.vue'
 
-const props = defineProps({ show: Boolean, /** the tab to open on: 'password' (default), 'security', 'notify' or 'dav' */ openTab: { type: String, default: 'password' } })
+const props = defineProps({ show: Boolean, /** the tab to open on: 'password' (default), 'security', 'notify', 'mydata' or 'dav' */ openTab: { type: String, default: 'password' } })
 const emit = defineEmits(['update:show'])
 const { t } = useI18n()
 const app = useAppStore()

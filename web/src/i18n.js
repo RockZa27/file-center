@@ -52,7 +52,7 @@ const th = {
   },
   profile: {
     passwordTab: 'รหัสผ่าน', securityTab: 'ความปลอดภัย', notifyTab: 'แจ้งเตือน',
-    tabDisplay: 'การแสดงผล', displayHint: 'เลือกธีมและภาษาที่ใช้แสดงผลบนอุปกรณ์เครื่องนี้',
+    tabDisplay: 'การแสดงผล', myDataTab: 'ข้อมูลของฉัน', displayHint: 'เลือกธีมและภาษาที่ใช้แสดงผลบนอุปกรณ์เครื่องนี้',
     current: 'รหัสผ่านปัจจุบัน', new: 'รหัสผ่านใหม่', confirm: 'ยืนยันรหัสผ่านใหม่',
     mismatch: 'รหัสผ่านไม่ตรงกัน', done: 'เปลี่ยนรหัสผ่านแล้ว',
     mustChange: 'บัญชีนี้ยังใช้รหัสผ่านเริ่มต้นที่ระบบสร้างให้ กรุณาตั้งรหัสผ่านใหม่ก่อนใช้งานต่อ',
@@ -229,6 +229,7 @@ const th = {
     'alert-test': 'ทดสอบการแจ้งเตือน', 'share-view': 'ดูไฟล์ผ่านลิงก์แชร์ (ดูอย่างเดียว)', 'share-upload': 'ส่งไฟล์ผ่านลิงก์รับไฟล์', 'virus-found': 'พบไวรัส (กักกันไฟล์)', 'virus-scan-failed': 'สแกนไวรัสไม่ได้ (ปฏิเสธไฟล์)', 'settings-locked': 'ความพยายามแก้การตั้งค่าที่ล็อกไว้ใน .env', 'virus-scan-skipped': 'ไม่ได้สแกนไวรัส (ไฟล์ใหญ่เกิน รับไฟล์ไว้)', 'quarantine-delete': 'ลบไฟล์ที่กักกัน', 'quarantine-release': 'ปล่อยไฟล์ที่กักกัน', 'antivirus-test': 'ทดสอบ ClamAV',
     'group-create': 'สร้างกลุ่ม', 'group-update': 'แก้ไขกลุ่ม', 'group-delete': 'ลบกลุ่ม', 'group-delete-denied': 'ยืนยันลบกลุ่มไม่สำเร็จ', 'group-member-add': 'เพิ่มสมาชิกกลุ่ม', 'group-member-remove': 'นำสมาชิกออกจากกลุ่ม',
     'app-password-create': 'สร้างรหัสผ่านแอป', 'app-password-delete': 'ลบรหัสผ่านแอป', 'app-password-denied': 'ยืนยันสร้างรหัสผ่านแอปไม่สำเร็จ',
+    'data-export': 'ดาวน์โหลดข้อมูลส่วนตัว', 'export-denied': 'ยืนยันดาวน์โหลดข้อมูลส่วนตัวไม่สำเร็จ',
   },
   logs: {
     subtitle: 'ข้อผิดพลาดและเหตุการณ์ของเซิร์ฟเวอร์ ดูได้จากที่นี่โดยไม่ต้องเข้าเครื่อง server', search: 'ค้นหาเหตุการณ์หรือรายละเอียด',
@@ -548,6 +549,13 @@ const th = {
       'quota-low': 'พื้นที่เก็บไฟล์ใกล้เต็ม', 'folder-shared': 'มีคนแชร์โฟลเดอร์ให้', 'group-added': 'ถูกเพิ่มเข้ากลุ่ม', 'system-alert': 'แจ้งเตือนระบบ (ผู้ดูแล)',
     },
   },
+  // my data (profile tab)
+  myData: {
+    activityTitle: 'กิจกรรมของฉัน', activityIntro: 'สิ่งที่ระบบบันทึกไว้เกี่ยวกับบัญชีของคุณ นับตั้งแต่วันที่สร้างบัญชี เช่น การเข้าสู่ระบบ (พร้อมที่อยู่ IP) การดาวน์โหลด และการแชร์ ไม่รวมสิ่งที่ผู้อื่นทำกับบัญชีของคุณ',
+    none: 'ยังไม่มีกิจกรรม', more: 'ดูเพิ่ม',
+    downloadTitle: 'ดาวน์โหลดข้อมูลส่วนตัวของฉัน', downloadIntro: 'ได้ไฟล์ JSON ที่รวมข้อมูลบัญชี อุปกรณ์ที่เข้าสู่ระบบ รหัสผ่านแอป ลิงก์แชร์ การแชร์โฟลเดอร์ รายการโปรด และกิจกรรมของคุณ ไม่รวมรหัสผ่านหรือโทเคน ไม่รวมตัวไฟล์ และไม่รวมสำเนาในไฟล์สำรองหรือ syslog',
+    password: 'รหัสผ่านบัญชีของคุณ (ยืนยันตัวตน)', download: 'ดาวน์โหลดข้อมูลส่วนตัวของฉัน', done: 'ดาวน์โหลดข้อมูลแล้ว',
+  },
   // WebDAV app passwords (profile tab)
   dav: {
     tab: 'WebDAV / แอปและไดรฟ์', title: 'เชื่อม File Center เป็นไดรฟ์เครือข่าย',
@@ -690,7 +698,7 @@ const en = {
   },
   profile: {
     passwordTab: 'Password', securityTab: 'Security', notifyTab: 'Alerts',
-    tabDisplay: 'Display', displayHint: 'Choose the theme and language used on this device.',
+    tabDisplay: 'Display', myDataTab: 'My data', displayHint: 'Choose the theme and language used on this device.',
     current: 'Current password', new: 'New password', confirm: 'Confirm new password',
     mismatch: 'Passwords do not match', done: 'Password changed',
     mustChange: 'This account still uses the generated first-run password. Please choose a new one to continue.',
@@ -864,6 +872,7 @@ const en = {
     'alert-test': 'Test alert', 'share-view': 'View file via share link (view only)', 'share-upload': 'File sent via upload link', 'virus-found': 'Virus found (file quarantined)', 'virus-scan-failed': 'Virus scan failed (file rejected)', 'settings-locked': 'Attempt to change a setting locked in .env', 'virus-scan-skipped': 'Not scanned for viruses (file too big, kept)', 'quarantine-delete': 'Delete quarantined file', 'quarantine-release': 'Release quarantined file', 'antivirus-test': 'Test ClamAV',
     'group-create': 'Create group', 'group-update': 'Edit group', 'group-delete': 'Delete group', 'group-delete-denied': 'Group delete confirmation failed', 'group-member-add': 'Add group member', 'group-member-remove': 'Remove group member',
     'app-password-create': 'Create app password', 'app-password-delete': 'Delete app password', 'app-password-denied': 'App password confirmation failed',
+    'data-export': 'Download of personal data', 'export-denied': 'Personal data download confirmation failed',
   },
   logs: {
     subtitle: 'Errors and events of the server, readable here without logging into the server', search: 'Search events or details',
@@ -1181,6 +1190,13 @@ const en = {
       'upload-received': 'Someone uploaded a file for you', 'link-expiring': 'A link is about to expire', 'link-limit-reached': 'A link reached its limit',
       'quota-low': 'Storage is almost full', 'folder-shared': 'Someone shared a folder with you', 'group-added': 'Added to a group', 'system-alert': 'System alerts (admins)',
     },
+  },
+  // my data (profile tab)
+  myData: {
+    activityTitle: 'My activity', activityIntro: 'What the system has recorded about your account since it was created: sign-ins (with the IP address), downloads, shares and so on. What other people did to your account is not shown.',
+    none: 'No activity yet', more: 'Show more',
+    downloadTitle: 'Download my personal data', downloadIntro: 'A JSON file with your account details, signed-in devices, app passwords, share links, shared folders, favorites and activity. It holds no passwords or tokens, not your files, and not copies kept in backups or a syslog.',
+    password: 'Your account password (to confirm it is you)', download: 'Download my personal data', done: 'Your data was downloaded',
   },
   // WebDAV app passwords (profile tab)
   dav: {
