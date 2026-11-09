@@ -20,7 +20,7 @@
   },
   "dependencies": {
     "@zip.js/zip.js": "^2.24.0",
-    "elysia": "2.0.0-beta.32",
+    "elysia": "2.0.0-rc.3",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
