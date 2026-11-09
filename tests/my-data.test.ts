@@ -133,6 +133,17 @@ describe('GET /api/me/activity', () => {
     expect((await a.json('GET', '/api/me/activity?pageSize=1')).data.items.length).toBe(5)
   })
 
+  test('an account with no valid creation time sees nothing (fails closed); an entry with no valid time is left out', () => {
+    const e = (ts: string, user = 'md-x') => ({ ts, user, ip: '1.2.3.4', action: 'login' })
+    for (const createdAt of [undefined, '', 'not a date'] as any[]) {
+      const own = myData.ownEntries({ username: 'md-x', createdAt })
+      expect([e('2020-01-01T00:00:00.000Z'), e('2030-01-01T00:00:00.000Z')].filter(own)).toEqual([])
+    }
+    const own = myData.ownEntries({ username: 'md-x', createdAt: '2025-01-01T00:00:00.000Z' })
+    expect([e('2024-12-31T23:59:59.999Z'), e('2025-01-01T00:00:00.000Z'), e('garbage'), e('2026-01-01T00:00:00.000Z', 'md-y')].filter(own).map(r => r.ts))
+      .toEqual(['2025-01-01T00:00:00.000Z'])
+  })
+
   test('a new account with the name of a deleted one does not see the old person\'s entries', async () => {
     const old = await userWith('md-old')
     expect((await old.json('GET', '/api/me/activity')).data.items.some((i: any) => i.action === 'login')).toBe(true)

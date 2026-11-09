@@ -40,9 +40,12 @@ export const markExport = (username: string, now = Date.now()) => { lastExport.s
  * failed sign-ins with a name that is no account (`?xxxxxxxx`) are nobody's; and an older account with the same name
  * (deleted, then made again) was another person: its entries stay before `createdAt`.
  */
-const ownEntries = (u: User) => {
+export const ownEntries = (u: Pick<User, 'username' | 'createdAt'>) => {
   const from = Date.parse(u.createdAt)
-  return (r: AuditEntry) => r.user === u.username && !(Date.parse(r.ts) < from)
+  // fails closed: with no valid creation time nothing is shown, since an earlier account of the same name cannot be
+  // told apart; an entry whose own time is not a valid date is left out for the same reason
+  if (Number.isNaN(from)) return (_r: AuditEntry) => false
+  return (r: AuditEntry) => r.user === u.username && Date.parse(r.ts) >= from
 }
 const shown = ({ ts, ip, action, target, detail }: AuditEntry) => ({ ts, ip, action, target, detail })
 

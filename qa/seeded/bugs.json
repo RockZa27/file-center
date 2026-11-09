@@ -2166,5 +2166,20 @@
         "replace": "  const meta = loadMeta(id, owner)\n  stillAllowed(id, meta, user)\n  stillThere(id, meta)\n  if (!Number.isInteger(index)"
       }
     ]
+  },
+  {
+    "id": "my-activity-reused-name",
+    "difficulty": "medium",
+    "category": "privacy",
+    "severity": "medium",
+    "tests": "tests/my-data.test.ts",
+    "description": "a person's own activity list is not cut at the account's creation time, so a new account with a deleted account's name sees the old person's sign-ins and addresses",
+    "patches": [
+      {
+        "file": "src/my-data.ts",
+        "find": "  return (r: AuditEntry) => r.user === u.username && Date.parse(r.ts) >= from\n",
+        "replace": "  return (r: AuditEntry) => r.user === u.username\n"
+      }
+    ]
   }
 ]
