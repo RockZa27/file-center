@@ -1,10 +1,10 @@
 import { Elysia, t } from 'elysia'
-import { audit } from '../audit'
+import { audit, auditOnce } from '../audit'
 import { accessFor, isAdmin, USER_SPACE, type User } from '../auth'
 import { config } from '../config'
 import { context, manageable, requireAdmin, requireUser } from '../context'
 import { forbidden, HttpError, normRel } from '../fsx'
-import { insightState, startInsight } from '../insight'
+import { cooldownLeft, insightState, startInsight } from '../insight'
 
 /**
  * Storage insight (src/insight.ts) for one folder tree at a time:
@@ -46,15 +46,19 @@ export const insightRoutes = new Elysia({ prefix: '/api/insight' })
   // what is known: { state: 'none' | 'running' | 'done', result? }
   .get('/', { query: t.Object({ scope: t.Optional(t.String({ maxLength: 100 })) }) }, ({ user, ip, query }) => {
     const u = requireUser({ user, ip })
-    return view(resolve(u, query.scope ?? 'me'))
+    const tg = resolve(u, query.scope ?? 'me')
+    // paths and sizes of someone else's files are read here: a line once a minute, like browsing their home
+    if (tg.foreign) auditOnce(`browse|${u.username}|insight|${tg.scope}`, { user: u.username, ip, action: 'browse', target: tg.scope, detail: 'insight' })
+    return view(tg)
   })
 
   // start a scan in the background (one at a time on the server; a folder scanned a moment ago is not scanned again)
   .post('/scan', { body: t.Object({ scope: t.Optional(t.String({ maxLength: 100 })) }) }, ({ user, ip, body, set }) => {
     const u = requireUser({ user, ip })
     const tg = resolve(u, body.scope ?? 'me')
-    const outcome = startInsight(tg.key, tg.root)
+    const outcome = startInsight(tg.key, tg.root, isAdmin(u) ? undefined : u.username)
     if (outcome === 'busy') throw new HttpError(429, 'insight.busy')
+    if (outcome === 'cooldown') throw new HttpError(429, 'insight.cooldown', { seconds: cooldownLeft(u.username) })
     if (outcome === 'started') {
       audit({ user: u.username, ip, action: 'insight-scan', target: tg.scope })
       set.status = 202

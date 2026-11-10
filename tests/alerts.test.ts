@@ -298,7 +298,10 @@ describe('alerts: events', () => {
     expect(got).toEqual([])
     await guest.json('POST', '/api/login', { username: 'locked-out-user', password: 'wrong' })
     const [g] = await received(1)
-    expect(g.body).toMatchObject({ event: 'lockout', code: 'admin.alert-login-locked', params: { user: 'locked-out-user', ip: expect.any(String) } })
+    // no account has this name: the alert carries its label (auth.ts recordedName), never the typed text
+    const { recordedName } = await import('../src/auth')
+    expect(g.body).toMatchObject({ event: 'lockout', code: 'admin.alert-login-locked', params: { user: recordedName('locked-out-user'), ip: expect.any(String) } })
+    expect(JSON.stringify(g.body)).not.toContain('locked-out-user')
     // more tries while locked send nothing more
     await guest.json('POST', '/api/login', { username: 'locked-out-user', password: 'wrong' })
     await alerts.alertsIdle()

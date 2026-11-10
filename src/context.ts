@@ -1,6 +1,7 @@
+import { timingSafeEqual } from 'node:crypto'
 import { Elysia, NotFound, ParseError, ValidationError } from 'elysia'
 import { accessFor, canManage, getSession, isStaff, reloadIfChangedByCli, type Access, type Session, type User, findUser } from './auth'
-import { config } from './config'
+import { config, proxyTrusted } from './config'
 import { mustSetup2fa } from './policy'
 import { forbidden, fromFsError, HttpError } from './fsx'
 import { log, safePath } from './logger'
@@ -13,6 +14,7 @@ const PASSWORD_CHANGE_ROUTES = new Set(['/api/session', '/api/password', '/api/l
 const SETUP_2FA_ROUTES = new Set([...PASSWORD_CHANGE_ROUTES, '/api/2fa/setup', '/api/2fa/enable', '/api/me/guide'])
 
 export function clientIp(request: Request, socketIp: string): string {
+  if (!proxyTrusted(socketIp)) return socketIp
   if (config.trustProxy === 'cloudflare') return request.headers.get('cf-connecting-ip')?.trim() || socketIp
   if (config.trustProxy === 'true') return request.headers.get('x-forwarded-for')?.split(',').at(-1)?.trim() || socketIp
   return socketIp
@@ -77,9 +79,18 @@ export function errorPage(status: number, lang: Lang, code: MessageCode, params:
   return new Response(html, { status, headers: { ...ERROR_PAGE_HEADERS, 'X-Error-Code': code } })
 }
 
+// constant-time compare, so the time of a refusal tells nothing about how much of the token matched
+function sameToken(got: unknown, want: unknown): boolean {
+  // a session without a string token (hand-edited sessions.json) is a refusal, not a crash
+  if (typeof got !== 'string' || typeof want !== 'string') return false
+  const a = Buffer.from(got)
+  const b = Buffer.from(want)
+  return a.length === b.length && timingSafeEqual(a, b)
+}
+
 /** Per-request context: who is calling, their session, and uniform JSON errors (a small page for download links). */
 export const context = new Elysia({ name: 'context' })
-  .onError({ as: 'global' }, ({ error, set, request }) => {
+  .onError('global', ({ error, set, request }) => {
     // the text in the visitor's language; the code and params let the page tell cases apart without reading it
     const answer = (status: number, c: MessageCode, params: Params = {}) => {
       if (isDownloadNavigation(request)) return errorPage(status, langOf(request), c, params)
@@ -108,7 +119,7 @@ export const context = new Elysia({ name: 'context' })
     log.error('request-failed', { method: request.method, path: safePath(request.url), error })
     return answer(500, 'request.internal')
   })
-  .derive({ as: 'global' }, ({ cookie, request, server }) => {
+  .derive('global', ({ cookie, request, server }) => {
     reloadIfChangedByCli() // users or sessions changed by `bun src/cli.ts`
     const sid = cookie[SESSION_COOKIE]?.value as string | undefined
     const session: Session | null = getSession(sid)
@@ -116,16 +127,16 @@ export const context = new Elysia({ name: 'context' })
     const ip = clientIp(request, server?.requestIP(request)?.address ?? 'unknown')
     return { sid, session, user, ip }
   })
-  .onBeforeHandle({ as: 'global' }, ({ request, session }) => {
+  .onBeforeHandle('global', ({ request, session }) => {
     // CSRF: every state-changing call must carry the token issued with the session
     if (['GET', 'HEAD', 'OPTIONS'].includes(request.method)) return
     const { pathname } = new URL(request.url)
     if (request.method === 'POST' && CSRF_EXEMPT.test(pathname)) return
     if (VISITOR_UPLOAD.test(pathname)) return
     const token = request.headers.get('x-csrf-token')
-    if (!session || !token || token !== session.csrf) throw new HttpError(403, 'csrf')
+    if (!session || !token || !sameToken(token, session.csrf)) throw new HttpError(403, 'csrf')
   })
-  .onBeforeHandle({ as: 'global' }, ({ request, user }) => {
+  .onBeforeHandle('global', ({ request, user }) => {
     // an account with a handed-out password may only change it (or leave) before anything else
     if (!user?.mustChangePassword) return
     const { pathname } = new URL(request.url)
@@ -133,7 +144,7 @@ export const context = new Elysia({ name: 'context' })
       throw new HttpError(403, 'must-change-password')
     }
   })
-  .onBeforeHandle({ as: 'global' }, ({ request, user }) => {
+  .onBeforeHandle('global', ({ request, user }) => {
     if (!user || !mustSetup2fa(user)) return
     const { pathname } = new URL(request.url)
     if (pathname.startsWith('/api/') && !SETUP_2FA_ROUTES.has(pathname)) throw new HttpError(403, 'auth.2fa-required')

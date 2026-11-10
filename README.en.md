@@ -67,7 +67,9 @@ You need Docker and Docker Compose v2.
    ```
 2. Open `.env` and edit what you need.
    - If you use it only on this machine or your LAN, delete or comment out the line `COMPOSE_PROFILES=tunnel` (the example turns on the Cloudflare Tunnel).
+   - Without the tunnel also set `TRUST_PROXY=false` and remove the `TRUSTED_PROXIES` line; behind your own nginx/Caddy on the same machine, set `TRUST_PROXY=true` with `TRUSTED_PROXIES=127.0.0.1,::1`.
    - To choose the admin password yourself, set `ADMIN_PASSWORD=...`.
+   - The example already sets `REQUIRE_2FA=staff` (admins and managers must set up 2FA) and `PUBLIC_PAGE=off` (public page closed).
 3. Build and start:
    ```bash
    docker compose up -d --build
@@ -76,7 +78,7 @@ You need Docker and Docker Compose v2.
    ```bash
    docker compose logs file-center
    ```
-5. Open `http://localhost:3000` and sign in as `admin`. You are asked to change the password right away.
+5. Open `http://localhost:3000` and sign in as `admin`. If you left `ADMIN_PASSWORD` empty (the random password from the log), you are asked to change it right away; when `REQUIRE_2FA` is set, you are asked to set up 2FA next (have an authenticator app ready).
 
 All data lives next to `docker-compose.yml`:
 

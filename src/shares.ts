@@ -151,10 +151,15 @@ export function revokeShare(share: Share) {
   store.save()
 }
 
-/** an account that is deleted takes its links along: a new account by the same name must not bring them back */
-export function revokeSharesOf(username: string) {
-  for (const s of sharesOf(username)) if (!s.revokedAt) s.revokedAt = new Date().toISOString()
-  store.save()
+/**
+ * an account that is deleted takes its links along: they are removed, not revoked, because a link holds the note, the
+ * path and (for an upload link) what visitors sent, and a new account by the same name must not see any of it
+ */
+export function removeSharesOf(username: string) {
+  const mine = sharesOf(username)
+  if (!mine.length) return
+  for (const s of mine) inflight.delete(s.id)
+  store.replace({ shares: store.value.shares.filter(s => !mine.includes(s)) })
 }
 
 /**
@@ -340,10 +345,19 @@ export const linkLockoutKey = (share: Share) => `share-link|${share.id}`
 
 // ───────────── housekeeping ─────────────
 
-/** drop links that ran out (revoked and used-up ones go too, once their time is over); returns how many */
+/** a revoked link stays this long in the owner's list, as a record of what was revoked, then it is removed */
+export const REVOKED_KEEP_MS = 30 * 24 * 60 * 60_000
+
+/**
+ * drop links that ran out, links revoked more than REVOKED_KEEP_MS ago (whatever their expiresAt) and links whose
+ * owner account is gone (left by deletions before removeSharesOf, or by a restore); returns how many
+ */
 export function purgeExpiredShares(now = Date.now()): number {
   const before = store.value.shares.length
-  const keep = store.value.shares.filter(s => Date.parse(s.expiresAt) > now)
+  const keep = store.value.shares.filter(s =>
+    Date.parse(s.expiresAt) > now
+    && !(s.revokedAt && now - Date.parse(s.revokedAt) > REVOKED_KEEP_MS)
+    && findUser(s.owner))
   if (keep.length === before) return 0
   for (const s of store.value.shares) if (!keep.includes(s)) inflight.delete(s.id)
   store.replace({ shares: keep })

@@ -29,15 +29,55 @@ export const NEVER_EXPIRES_AT = '9999-12-31T23:59:59.000Z'
 const DEFAULT_SHARE_DAYS = 7
 
 const envSet = (name: string | null) => !!name && process.env[name] !== undefined && process.env[name] !== ''
-const grp = <G extends 'share' | 'security' | 'files' | 'mail' | 'alerts' | 'auditForward' | 'antivirus'>(g: G): NonNullable<Settings[G]> => (settings.get()[g] ?? {}) as NonNullable<Settings[G]>
+/**
+ * LOCK_OUTBOUND_SETTINGS=true: these keys decide where data leaves the server (uploads to ClamAV, the activity log, alert
+ * texts, e-mail). They come from .env only: a stored web value stays in settings.json but is ignored, and the web can not save them.
+ */
+const LOCKED_KEYS: Record<string, string[]> = {
+  antivirus: ['host', 'port'],
+  auditForward: ['syslogHost', 'syslogPort', 'syslogProto', 'webhookUrl', 'webhookSecret'],
+  alerts: ['webhookUrl', 'kind', 'telegramChatId'],
+  mail: ['host', 'port', 'secure', 'user', 'pass'],
+}
+/** the same as `group.key` paths */
+export const LOCKED_WHEN_OUTBOUND_LOCK: string[] = Object.entries(LOCKED_KEYS).flatMap(([g, ks]) => ks.map(k => `${g}.${k}`))
+export const isLocked = (path: string) => config.lockOutbound && LOCKED_WHEN_OUTBOUND_LOCK.includes(path)
+/** the locked keys of a request body (group.key), whatever their value */
+export function lockedKeysIn(body: Record<string, unknown>): string[] {
+  if (!config.lockOutbound) return []
+  const out: string[] = []
+  for (const g of POLICY_GROUPS) {
+    const given = body[g]
+    if (given === null || typeof given !== 'object' || Array.isArray(given)) continue
+    for (const k of Object.keys(given)) if (isLocked(`${g}.${k}`)) out.push(`${g}.${k}`)
+  }
+  return out
+}
+/** where each locked key is stored in settings.json, per group */
+const lockedStore = (g: string): string[] => LOCKED_WHEN_OUTBOUND_LOCK.filter(p => p.startsWith(`${g}.`)).map(p => SPEC[g][p.slice(g.length + 1)][0])
+
+const grp = <G extends 'share' | 'security' | 'files' | 'mail' | 'alerts' | 'auditForward' | 'antivirus'>(g: G): NonNullable<Settings[G]> => {
+  const stored = (settings.get()[g] ?? {}) as NonNullable<Settings[G]>
+  if (!config.lockOutbound) return stored
+  // locked: the stored web values of the locked keys do not exist as far as every reader is concerned
+  const copy: Record<string, unknown> = { ...stored }
+  for (const k of lockedStore(g)) delete copy[k]
+  return copy as NonNullable<Settings[G]>
+}
+/** the raw stored group, for saving (savePolicy must keep what is stored, locked or not) */
+const storedGroup = (g: string) => (settings.get() as any)[g] ?? {}
 
 /** a sealed secret opened; `null` when this server can not open it (the key is another one), which turns the feature off */
+const warnedUnreadable = new Set<string>()
 function unseal(sealed: string | undefined, what: string): string | null {
   if (sealed === undefined) return null
   if (sealed === '') return ''
   try {
     return open(sealed)
   } catch {
+    // this runs on every audit entry and request: warn once per process for a given stored value, not per call
+    if (warnedUnreadable.has(sealed)) return null
+    warnedUnreadable.add(sealed)
     log.warn('settings-secret-unreadable', `${what} ใน settings.json เปิดไม่ได้ (secret.key ไม่ตรงกัน) จึงไม่ใช้ค่านี้ ให้ตั้งใหม่ที่หน้าตั้งค่า`)
     return null
   }
@@ -65,12 +105,14 @@ export const sessionTtlMs = () => {
   const h = grp('security').sessionTtlHours
   return h !== undefined ? h * 3600_000 : config.sessionTtlMs
 }
+/** how long a signed-in session may live at all, used or not: SESSION_MAX_HOURS, never less than the idle TTL set on the settings page */
+export const sessionMaxMs = () => Math.max(config.sessionMaxMs, sessionTtlMs())
 export const loginMaxAttempts = () => grp('security').loginMaxAttempts ?? config.loginMaxAttempts
 export const loginLockoutMs = () => {
   const s = grp('security').loginLockoutSeconds
   return s !== undefined ? s * 1000 : config.loginLockoutMs
 }
-export const require2fa = (): Require2fa => grp('security').require2fa ?? 'none'
+export const require2fa = (): Require2fa => grp('security').require2fa ?? config.require2fa
 
 /** does the setting ask this role for a second factor? */
 export function roleNeeds2fa(role: string): boolean {
@@ -129,17 +171,55 @@ export const alertLang = () => grp('alerts').lang ?? config.alertLang
 
 // ───────────── audit forwarding ─────────────
 
-export type AuditForwardValues = { syslogHost: string; syslogPort: number; syslogProto: 'udp' | 'tcp'; syslogFacility: number; webhookUrl: string }
-/** web settings only (no env fallback): off until an admin sets a destination */
+export type AuditForwardValues = { syslogHost: string; syslogPort: number; syslogProto: 'udp' | 'tcp' | 'tls'; syslogFacility: number; webhookUrl: string
+  /** signing secret for the webhook ('' = unsigned); `webhookSecretBroken` = one is saved but secret.key can not open it, so nothing may be sent */
+  webhookSecret: string; webhookSecretBroken: boolean }
+/** the AUDIT_* values of .env, checked: a bad one is left out (default) and its variable name is in `invalid` (never its value) */
+let auditEnvCache: { key: string; value: ReturnType<typeof readAuditEnv> } | null = null
+export function auditEnv() {
+  // read on every audit entry: parsed again only when the raw values change (tests change them on `config`)
+  const key = JSON.stringify([config.auditSyslogHost, config.auditSyslogPort, config.auditSyslogProto, config.auditSyslogFacility, config.auditWebhookUrl, config.auditWebhookSecret])
+  if (auditEnvCache?.key !== key) auditEnvCache = { key, value: readAuditEnv() }
+  return auditEnvCache.value
+}
+function readAuditEnv() {
+  const invalid: string[] = []
+  const pick = <T>(name: string, raw: string, def: T, parse: (r: string) => T | undefined): { value: T; set: boolean } => {
+    if (!raw) return { value: def, set: false }
+    const v = parse(raw)
+    if (v === undefined) { invalid.push(name); return { value: def, set: false } }
+    return { value: v, set: true }
+  }
+  const num = (min: number, max: number) => (r: string) => (/^\d{1,5}$/.test(r) && +r >= min && +r <= max ? +r : undefined)
+  const host = pick('AUDIT_SYSLOG_HOST', config.auditSyslogHost, '', r => (r.length <= 253 && /^[A-Za-z0-9.:\[\]-]+$/.test(r) ? r : undefined))
+  const port = pick('AUDIT_SYSLOG_PORT', config.auditSyslogPort, 514, num(1, 65535))
+  const proto = pick<'udp' | 'tcp' | 'tls'>('AUDIT_SYSLOG_PROTO', config.auditSyslogProto, 'udp', r => (r === 'udp' || r === 'tcp' || r === 'tls' ? r : undefined))
+  const facility = pick('AUDIT_SYSLOG_FACILITY', config.auditSyslogFacility, 13, num(0, 23))
+  const url = pick('AUDIT_WEBHOOK_URL', config.auditWebhookUrl, '', r => (r.length <= 1000 && isSafeWebhookUrl(r) ? r : undefined))
+  const secret = pick('AUDIT_WEBHOOK_SECRET', config.auditWebhookSecret, '', r => (/^[\x20-\x7e]{16,200}$/.test(r) ? r : undefined))
+  return { host, port, proto, facility, url, secret, secretBad: invalid.includes('AUDIT_WEBHOOK_SECRET'), invalid }
+}
+
+/** the web setting where one is saved, else the .env value (while LOCK_OUTBOUND_SETTINGS is on only the .env value counts); off until a destination is set */
 export function auditForwardValues(): AuditForwardValues {
   const a = grp('auditForward')
-  const url = unseal(a.webhookSealed, 'URL ส่งต่อบันทึกกิจกรรม')
+  const e = auditEnv()
+  // a saved URL that can not be opened turns the web value off, it does not fall back to .env
+  const url = a.webhookSealed !== undefined ? unseal(a.webhookSealed, 'URL ส่งต่อบันทึกกิจกรรม') : e.url.value
+  // the secret goes with the URL it was made for: AUDIT_WEBHOOK_SECRET signs only for AUDIT_WEBHOOK_URL, never for a URL set on
+  // the web (an admin-chosen receiver must not collect batches signed with the operator's secret), and the web secret only for the web URL
+  const envUrl = a.webhookSealed === undefined && !!e.url.value
+  // no URL = nothing is signed or sent, so the secret is not opened (and not warned about) on every audit entry
+  const webSecret = !envUrl && url && a.webhookSecretSealed !== undefined ? unseal(a.webhookSecretSealed, 'รหัสลับเซ็นชื่อ webhook ส่งต่อบันทึกกิจกรรม') : undefined
   return {
-    syslogHost: a.syslogHost ?? '',
-    syslogPort: a.syslogPort ?? 514,
-    syslogProto: a.syslogProto ?? 'udp',
-    syslogFacility: a.syslogFacility ?? 13,
+    syslogHost: a.syslogHost ?? e.host.value,
+    syslogPort: a.syslogPort ?? e.port.value,
+    syslogProto: a.syslogProto ?? e.proto.value,
+    syslogFacility: a.syslogFacility ?? e.facility.value,
     webhookUrl: url ?? '',
+    webhookSecret: envUrl ? e.secret.value : (webSecret ?? ''),
+    // a secret that can not be used (the saved one is sealed with another key, or AUDIT_WEBHOOK_SECRET is malformed) must never become unsigned sending
+    webhookSecretBroken: !!url && (envUrl ? e.secretBad : webSecret === null),
   }
 }
 
@@ -147,7 +227,7 @@ export function auditForwardValues(): AuditForwardValues {
 
 export type AntivirusValues = {
   enabled: boolean; host: string; port: number; timeoutMs: number; maxScanBytes: number
-  onErrorLinks: 'allow' | 'reject'; onErrorUsers: 'allow' | 'reject'
+  onErrorLinks: 'allow' | 'reject'; onErrorUsers: 'allow' | 'reject'; onTooBigLinks: 'allow' | 'reject'; onTooBigUsers: 'allow' | 'reject'
 }
 export function antivirusValues(): AntivirusValues {
   const a = grp('antivirus')
@@ -159,6 +239,8 @@ export function antivirusValues(): AntivirusValues {
     maxScanBytes: Math.floor((a.maxScanMb ?? config.clamavMaxScanMb) * 1024 ** 2),
     onErrorLinks: a.onErrorLinks ?? config.clamavOnErrorLinks,
     onErrorUsers: a.onErrorUsers ?? config.clamavOnErrorUsers,
+    onTooBigLinks: a.onTooBigLinks ?? config.clamavOnTooBigLinks,
+    onTooBigUsers: a.onTooBigUsers ?? config.clamavOnTooBigUsers,
   }
 }
 
@@ -172,6 +254,7 @@ export function unreadableSecrets(): string[] {
   probe(grp('mail').passSealed, 'mail.pass')
   probe(grp('alerts').webhookSealed, 'alerts.webhookUrl')
   probe(grp('auditForward').webhookSealed, 'auditForward.webhookUrl')
+  probe(grp('auditForward').webhookSecretSealed, 'auditForward.webhookSecret')
   return out
 }
 
@@ -192,14 +275,18 @@ type Eff<T> = { value: T; source: Source }
 const eff = <T>(web: T | undefined, env: T, envName: string | null): Eff<T> =>
   web !== undefined ? { value: web, source: 'web' } : { value: env, source: envSet(envName) ? 'env' : 'default' }
 
+/** like eff(), for the AUDIT_* values that auditEnv() has already checked (`set`: a valid value is in .env) */
+const effEnv = <T>(web: T | undefined, value: T, set: boolean): Eff<T> => (web !== undefined ? { value: web, source: 'web' } : { value, source: set ? 'env' : 'default' })
+
 /** every runtime setting with the value in force and where it comes from; no secret in it */
 export function policyView() {
   const av2 = grp('antivirus'), sh = grp('share'), se = grp('security'), f = grp('files'), m = grp('mail'), a = grp('alerts'), af = grp('auditForward')
   const afv = auditForwardValues()
+  const ae = auditEnv()
   const quota = defaultQuotaBytes()
   const mv = mail()
   const av = alertValues()
-  return {
+  const view = {
     share: {
       defaultDays: { value: shareDefaultDays(), source: (sh.defaultDays !== undefined ? 'web' : 'default') as Source },
       maxDays: eff(sh.maxDays, config.shareMaxDays, 'SHARE_MAX_DAYS'),
@@ -210,7 +297,8 @@ export function policyView() {
       choices: SHARE_DAY_CHOICES,
     },
     security: {
-      require2fa: eff<Require2fa>(se.require2fa, 'none', null),
+      // a REQUIRE_2FA typo falls back to 'none': the page then says default, not ".env" (the start log names the bad value)
+      require2fa: eff<Require2fa>(se.require2fa, config.require2fa, config.require2faInvalid ? null : 'REQUIRE_2FA'),
       sessionTtlHours: eff(se.sessionTtlHours, config.sessionTtlMs / 3600_000, 'SESSION_TTL_HOURS'),
       loginMaxAttempts: eff(se.loginMaxAttempts, config.loginMaxAttempts, 'LOGIN_MAX_ATTEMPTS'),
       loginLockoutSeconds: eff(se.loginLockoutSeconds, config.loginLockoutMs / 1000, 'LOGIN_LOCKOUT_SECONDS'),
@@ -251,15 +339,41 @@ export function policyView() {
       maxScanMb: eff(av2.maxScanMb, config.clamavMaxScanMb, 'CLAMAV_MAX_SCAN_MB'),
       onErrorLinks: eff(av2.onErrorLinks, config.clamavOnErrorLinks, 'CLAMAV_ON_ERROR_LINKS'),
       onErrorUsers: eff(av2.onErrorUsers, config.clamavOnErrorUsers, 'CLAMAV_ON_ERROR_USERS'),
+      onTooBigLinks: eff(av2.onTooBigLinks, config.clamavOnTooBigLinks, 'CLAMAV_ON_TOO_BIG_LINKS'),
+      onTooBigUsers: eff(av2.onTooBigUsers, config.clamavOnTooBigUsers, 'CLAMAV_ON_TOO_BIG_USERS'),
     },
     auditForward: {
-      syslogHost: eff(af.syslogHost, afv.syslogHost, null),
-      syslogPort: eff(af.syslogPort, afv.syslogPort, null),
-      syslogProto: eff<'udp' | 'tcp'>(af.syslogProto, afv.syslogProto, null),
-      syslogFacility: eff(af.syslogFacility, afv.syslogFacility, null),
-      webhookUrl: { value: maskUrl(afv.webhookUrl), source: (af.webhookSealed !== undefined ? 'web' : 'default') as Source },
+      syslogHost: effEnv(af.syslogHost, afv.syslogHost, ae.host.set),
+      syslogPort: effEnv(af.syslogPort, afv.syslogPort, ae.port.set),
+      syslogProto: effEnv<'udp' | 'tcp' | 'tls'>(af.syslogProto, afv.syslogProto, ae.proto.set),
+      syslogFacility: effEnv(af.syslogFacility, afv.syslogFacility, ae.facility.set),
+      webhookUrl: { value: maskUrl(afv.webhookUrl), source: (af.webhookSealed !== undefined ? 'web' : ae.url.set ? 'env' : 'default') as Source },
+      /** the secret itself is never sent */
+      // the secret in use is the one that goes with the URL in use (see auditForwardValues)
+      webhookSecretSet: af.webhookSealed === undefined && ae.url.value ? ae.secret.set : !!af.webhookSecretSealed,
+      webhookSecretSource: (af.webhookSealed === undefined && ae.url.value ? (ae.secret.set ? 'env' : 'default') : af.webhookSecretSealed !== undefined ? 'web' : 'default') as Source,
     },
   }
+  // a locked key says so (the page shows it read-only); the write-only secrets have no entry of their own, so their flag sits next to passSet / webhookSecretSet
+  if (config.lockOutbound) {
+    for (const path of LOCKED_WHEN_OUTBOUND_LOCK) {
+      const [g, k] = path.split('.') as [keyof typeof view, string]
+      const grpView = view[g] as Record<string, any>
+      if (path === 'mail.pass') grpView.passLocked = true
+      else if (path === 'auditForward.webhookSecret') grpView.webhookSecretLocked = true
+      else grpView[k].locked = true
+    }
+  }
+  return view
+}
+
+/** names (never values) of the locked keys that still hold a web value in settings.json: ignored while the lock is on */
+export function ignoredLockedKeys(): string[] {
+  if (!config.lockOutbound) return []
+  return LOCKED_WHEN_OUTBOUND_LOCK.filter(p => {
+    const [g, k] = p.split('.')
+    return storedGroup(g)[SPEC[g][k][0]] !== undefined
+  })
 }
 
 // ───────────── saving ─────────────
@@ -308,6 +422,8 @@ const SPEC: Record<string, Record<string, [string, Parse]>> = {
     maxScanMb: ['maxScanMb', int(1, 4096)],
     onErrorLinks: ['onErrorLinks', oneOf('allow', 'reject')],
     onErrorUsers: ['onErrorUsers', oneOf('allow', 'reject')],
+    onTooBigLinks: ['onTooBigLinks', oneOf('allow', 'reject')],
+    onTooBigUsers: ['onTooBigUsers', oneOf('allow', 'reject')],
   },
   security: {
     require2fa: ['require2fa', oneOf('none', 'admin', 'staff', 'all')],
@@ -345,16 +461,18 @@ const SPEC: Record<string, Record<string, [string, Parse]>> = {
   auditForward: {
     syslogHost: ['syslogHost', (v, k) => { const s = str(253)(v, k) as string; if (s && !/^[A-Za-z0-9.:\[\]-]+$/.test(s)) throw fail(k); return s }],
     syslogPort: ['syslogPort', int(1, 65535)],
-    syslogProto: ['syslogProto', oneOf('udp', 'tcp')],
+    syslogProto: ['syslogProto', oneOf('udp', 'tcp', 'tls')],
     syslogFacility: ['syslogFacility', int(0, 23)],
     webhookUrl: ['webhookSealed', (v, k) => { const s = webhook(v, k) as string; return s ? seal(s) : '' }],
+    // signs every webhook batch (X-FC-Signature); empty = unsigned
+    webhookSecret: ['webhookSecretSealed', (v, k) => { if (typeof v !== 'string' || (v !== '' && !/^[\x20-\x7e]{16,200}$/.test(v))) throw fail(k); return v ? seal(v) : '' }],
   },
 }
 
 export const POLICY_GROUPS = Object.keys(SPEC)
 
-/** the groups of a request body that need the admin's password: anything that changes sign-in rules or where mail and alerts go */
-export const STEP_UP_GROUPS = ['security', 'mail', 'alerts', 'auditForward', 'antivirus']
+/** the groups of a request body that need the admin's password: anything that changes sign-in rules, where mail and alerts go, or how data may leave through share links */
+export const STEP_UP_GROUPS = ['security', 'mail', 'alerts', 'auditForward', 'antivirus', 'share']
 
 /**
  * Check every given key and save them together (nothing is saved when one is wrong). A key given as `null` goes back
@@ -367,7 +485,7 @@ export function savePolicy(body: Record<string, unknown>): string[] {
     const given = body[g]
     if (given === undefined) continue
     if (given === null || typeof given !== 'object' || Array.isArray(given)) throw fail(g)
-    const cur = { ...((settings.get() as any)[g] ?? {}) }
+    const cur = { ...storedGroup(g) }
     for (const [key, value] of Object.entries(given as Record<string, unknown>)) {
       const spec = SPEC[g][key]
       if (!spec) throw fail(`${g}.${key}`)

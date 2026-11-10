@@ -51,7 +51,7 @@ const admin = new Client()
 const home = (user: string, ...p: string[]) => join(process.env.STORAGE_DIR!, 'users', user, ...p)
 
 async function userWith(username: string, permissions: string[]) {
-  const r = await admin.json('POST', '/api/admin/users', { username, name: username, password: PW, role: 'user', permissions, publicPermissions: [] })
+  const r = await admin.json('POST', '/api/admin/users', { username, name: username, password: PW, role: 'user', permissions, publicPermissions: [], adoptHome: true })
   expect(r.status).toBe(200)
   return new Client().login(username, PW)
 }

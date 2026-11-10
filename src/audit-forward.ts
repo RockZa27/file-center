@@ -1,5 +1,5 @@
 /**
- * Audit forwarding: every audit entry is also sent to a syslog server (RFC 5424, over UDP or TCP) and/or a webhook,
+ * Audit forwarding: every audit entry is also sent to a syslog server (RFC 5424, over UDP, TCP or TLS) and/or a webhook,
  * when an admin sets one on the settings page (auditForward.*). The log file stays the record of truth; this is a copy
  * for a log collector or SIEM.
  *
@@ -9,9 +9,12 @@
  * still waiting. The webhook URL follows the same rule as the alert webhook (https, or http to this machine only,
  * no redirects) and is checked again at send time; the syslog line carries the same fields as the log file.
  */
+import { createHmac, X509Certificate } from 'node:crypto'
 import { createSocket, type Socket } from 'node:dgram'
+import { readFileSync } from 'node:fs'
 import { hostname } from 'node:os'
-import { connect, type Socket as TcpSocket } from 'node:net'
+import { connect, isIP, type Socket as TcpSocket } from 'node:net'
+import { connect as tlsConnect, rootCertificates } from 'node:tls'
 import type { AuditEntry } from './audit'
 import { config } from './config'
 import { log, scrub } from './logger'
@@ -90,7 +93,9 @@ export function flush(): Promise<void> {
         const v = auditForwardValues()
         await Promise.all([
           v.syslogHost ? sendSyslog(v, batch).catch(e => failure('syslog', reasonOf(e))) : null,
-          v.webhookUrl ? sendWebhook(v.webhookUrl, batch).catch(e => failure('webhook', reasonOf(e))) : null,
+          // a saved secret that can not be opened must not turn into unsigned batches the receiver would take as genuine
+          v.webhookUrl && v.webhookSecretBroken ? Promise.reject(new ForwardError('secret unreadable')).catch(e => failure('webhook', reasonOf(e)))
+            : v.webhookUrl ? sendWebhook(v.webhookUrl, batch, v.webhookSecret).catch(e => failure('webhook', reasonOf(e))) : null,
         ])
       }
     } finally { flushing = null }
@@ -110,6 +115,28 @@ let udp: Socket | null = null
 let tcp: { key: string; socket: TcpSocket } | null = null
 let tcpBlockedUntil = 0
 
+/**
+ * AUDIT_SYSLOG_CA: a PEM file with the CA that signed the syslog server's certificate, added to the system CAs (never instead
+ * of them). Read once per path; an unreadable or invalid file gives 'invalid' and TLS goes on without it (verification then fails).
+ */
+let caCache: { path: string; pem: string; state: 'none' | 'ok' | 'invalid' } | null = null
+export function syslogCa(): { pem: string; state: 'none' | 'ok' | 'invalid' } {
+  const path = config.auditSyslogCa
+  if (caCache?.path !== path) {
+    let pem = '', state: 'none' | 'ok' | 'invalid' = path ? 'invalid' : 'none'
+    if (path) {
+      try {
+        const text = readFileSync(path, 'utf8')
+        const certs = text.match(/-----BEGIN CERTIFICATE-----[\s\S]*?-----END CERTIFICATE-----/g) ?? []
+        for (const c of certs) new X509Certificate(c)
+        if (certs.length) { pem = certs.join('\n'); state = 'ok' }
+      } catch { /* invalid */ }
+    }
+    caCache = { path, pem, state }
+  }
+  return caCache
+}
+
 function sendUdp(host: string, port: number, lines: string[]): Promise<void> {
   udp ??= (() => { const s = createSocket(host.includes(':') ? 'udp6' : 'udp4'); s.unref(); s.on('error', () => { udp?.close(); udp = null }); return s })()
   const socket = udp
@@ -119,20 +146,24 @@ function sendUdp(host: string, port: number, lines: string[]): Promise<void> {
   }))).then(() => {})
 }
 
-function tcpSocket(host: string, port: number): Promise<TcpSocket> {
-  const key = `${host}:${port}`
+function tcpSocket(host: string, port: number, tls = false): Promise<TcpSocket> {
+  const key = `${tls ? 'tls' : 'tcp'}:${host}:${port}`
   if (tcp && tcp.key === key && !tcp.socket.destroyed && tcp.socket.writable) return Promise.resolve(tcp.socket)
   tcp?.socket.destroy()
   tcp = null
   if (Date.now() < tcpBlockedUntil) return Promise.reject(new ForwardError('waiting to reconnect'))
   return new Promise((resolve, reject) => {
-    const socket = connect({ host, port })
+    // TLS: the certificate is always verified (system CAs plus AUDIT_SYSLOG_CA); there is no way to turn that off
+    const ca = tls ? syslogCa().pem : ''
+    const socket: TcpSocket = tls
+      ? tlsConnect({ host, port, rejectUnauthorized: true, ...(isIP(host.replace(/^\[|\]$/g, '')) ? {} : { servername: host }), ...(ca ? { ca: [...rootCertificates, ca] } : {}) })
+      : connect({ host, port })
     socket.unref()
     socket.setTimeout(FORWARD_TIMING.timeoutMs)
     const fail = (e: unknown) => { socket.destroy(); tcpBlockedUntil = Date.now() + FORWARD_TIMING.retryMs; reject(e) }
     socket.once('timeout', () => fail(new ForwardError('timeout')))
     socket.once('error', fail)
-    socket.once('connect', () => {
+    socket.once(tls ? 'secureConnect' : 'connect', () => {
       socket.setTimeout(0)
       socket.removeListener('error', fail)
       socket.on('error', () => socket.destroy())
@@ -147,7 +178,7 @@ async function sendSyslog(v: ReturnType<typeof auditForwardValues>, batch: Audit
   if (v.syslogProto === 'udp') {
     await sendUdp(v.syslogHost, v.syslogPort, lines)
   } else {
-    const socket = await tcpSocket(v.syslogHost, v.syslogPort)
+    const socket = await tcpSocket(v.syslogHost, v.syslogPort, v.syslogProto === 'tls')
     // RFC 6587 octet counting: "<length> <message>", so a line may hold anything
     const data = Buffer.concat(lines.map(l => { const b = Buffer.from(l, 'utf8'); return Buffer.concat([Buffer.from(`${b.length} `), b]) }))
     await new Promise<void>((resolve, reject) => {
@@ -160,17 +191,24 @@ async function sendSyslog(v: ReturnType<typeof auditForwardValues>, batch: Audit
 
 // ───────────── webhook ─────────────
 
-async function sendWebhook(url: string, batch: AuditEntry[]): Promise<void> {
+/** `X-FC-Signature` value: sha256= and the hex HMAC of "<timestamp>.<body>" */
+export const signWebhook = (secret: string, timestamp: string, body: string) => 'sha256=' + createHmac('sha256', secret).update(`${timestamp}.${body}`).digest('hex')
+
+async function sendWebhook(url: string, batch: AuditEntry[], secret = ''): Promise<void> {
   if (!isSafeWebhookUrl(url)) throw new ForwardError('unsafe url')
   const abort = new AbortController()
   const timer = setTimeout(() => abort.abort(), FORWARD_TIMING.timeoutMs)
   try {
     const entries = batch.map(e => ({ ts: e.ts, user: e.user, ip: e.ip, action: e.action, target: e.target, detail: e.detail === undefined ? undefined : scrub(e.detail) }))
-    const res = await fetch(url, {
-      method: 'POST', redirect: 'error', signal: abort.signal,
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ event: 'audit', source: 'file-center', host: HOST, version: config.version, entries }),
-    })
+    // serialised once: the signature covers exactly the string that is sent
+    const body = JSON.stringify({ event: 'audit', source: 'file-center', host: HOST, version: config.version, entries })
+    const headers: Record<string, string> = { 'content-type': 'application/json' }
+    if (secret) {
+      const ts = String(Math.floor(Date.now() / 1000))
+      headers['x-fc-timestamp'] = ts
+      headers['x-fc-signature'] = signWebhook(secret, ts, body)
+    }
+    const res = await fetch(url, { method: 'POST', redirect: 'error', signal: abort.signal, headers, body })
     void res.body?.cancel().catch(() => {})
     if (!res.ok) throw new ForwardError(`HTTP ${res.status}`)
     success()
@@ -193,5 +231,6 @@ export function resetForwarding(): void {
   udp?.close(); udp = null
   tcp?.socket.destroy(); tcp = null
   tcpBlockedUntil = 0
+  caCache = null
   Object.assign(state, { queued: 0, dropped: 0, sent: 0, failed: 0, lastError: '', lastErrorAt: 0, lastOkAt: 0 })
 }

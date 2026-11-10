@@ -24,7 +24,7 @@
     "patches": [
       {
         "file": "src/context.ts",
-        "find": "token !== session.csrf",
+        "find": "!sameToken(token, session.csrf)",
         "replace": "false"
       }
     ]
@@ -189,8 +189,8 @@
     "patches": [
       {
         "file": "src/auth.ts",
-        "find": "if (Date.now() - s.seen > ttlOf(s)) {",
-        "replace": "if (Date.now() - s.created > ttlOf(s) * 1000) {"
+        "find": "if (Date.now() - s.seen > ttlOf(s) || tooOld(s, Date.now())) {",
+        "replace": "if (Date.now() - s.created > ttlOf(s) * 1000 || tooOld(s, Date.now())) {"
       }
     ],
     "difficulty": "subtle"
@@ -280,8 +280,8 @@
     "patches": [
       {
         "file": "src/backup.ts",
-        "find": "export const BACKUP_NAME_RE = /^file-center-backup-\\d{8}-\\d{6}\\.zip$/",
-        "replace": "export const BACKUP_NAME_RE = /^file-center-backup-.+\\.zip$/"
+        "find": "export const BACKUP_NAME_RE = /^file-center-backup-\\d{8}-\\d{6}\\.zip(?:\\.enc)?$/",
+        "replace": "export const BACKUP_NAME_RE = /^file-center-backup-.+\\.zip(?:\\.enc)?$/"
       }
     ]
   },
@@ -612,8 +612,8 @@
     "patches": [
       {
         "file": "src/alerts.ts",
-        "find": "const message = scrub(`[${settings.get().appName}] ${text(policy.alertLang(), code, p)}`).slice(0, 1500)",
-        "replace": "const message = (`[${settings.get().appName}] ${text(policy.alertLang(), code, p)}`).slice(0, 1500)"
+        "find": "const message = scrub(`[${settings.get().appName}] ${text(policy.alertLang(), code, shown)}`).slice(0, 1500)",
+        "replace": "const message = (`[${settings.get().appName}] ${text(policy.alertLang(), code, shown)}`).slice(0, 1500)"
       }
     ]
   },
@@ -1782,8 +1782,8 @@
     "patches": [
       {
         "file": "src/routes/admin.ts",
-        "find": "if (widens || sensitive) await confirmPassword(",
-        "replace": "if (sensitive) await confirmPassword("
+        "find": "if (widens || opens || sensitive) await confirmPassword(",
+        "replace": "if (opens || sensitive) await confirmPassword("
       }
     ]
   },
@@ -1932,8 +1932,8 @@
     "patches": [
       {
         "file": "src/policy.ts",
-        "find": "['security', 'mail', 'alerts']",
-        "replace": "['security', 'mail']"
+        "find": "['security', 'mail', 'alerts', 'auditForward', 'antivirus', 'share']",
+        "replace": "['security', 'mail', 'auditForward', 'antivirus', 'share']"
       }
     ]
   },
@@ -2117,8 +2117,8 @@
     "patches": [
       {
         "file": "src/uploads.ts",
-        "find": "  if (finishing.has(id)) throw conflict('upload.completing')\n",
-        "replace": ""
+        "find": "  const meta = loadMeta(id, owner)\n  if (finishing.has(id)) throw conflict('upload.completing')\n  untrack(id)\n",
+        "replace": "  const meta = loadMeta(id, owner)\n  untrack(id)\n"
       }
     ]
   },
@@ -2149,6 +2149,36 @@
         "file": "src/account-records.ts",
         "find": "  removeUserFromGroups(username)\n  dropUploadsOf(username)\n",
         "replace": "  removeUserFromGroups(username)\n"
+      }
+    ]
+  },
+  {
+    "id": "chunk-during-scan",
+    "difficulty": "hard",
+    "category": "integrity",
+    "severity": "medium",
+    "tests": "tests/upload-scan-race.test.ts",
+    "description": "a chunk is still written while the upload is being completed, so the file can change after the virus scan read it",
+    "patches": [
+      {
+        "file": "src/uploads.ts",
+        "find": "  const meta = loadMeta(id, owner)\n  if (finishing.has(id)) throw conflict('upload.completing')\n  stillAllowed(id, meta, user)\n  stillThere(id, meta)\n  if (!Number.isInteger(index)",
+        "replace": "  const meta = loadMeta(id, owner)\n  stillAllowed(id, meta, user)\n  stillThere(id, meta)\n  if (!Number.isInteger(index)"
+      }
+    ]
+  },
+  {
+    "id": "my-activity-reused-name",
+    "difficulty": "medium",
+    "category": "privacy",
+    "severity": "medium",
+    "tests": "tests/my-data.test.ts",
+    "description": "a person's own activity list is not cut at the account's creation time, so a new account with a deleted account's name sees the old person's sign-ins and addresses",
+    "patches": [
+      {
+        "file": "src/my-data.ts",
+        "find": "  return (r: AuditEntry) => r.user === u.username && Date.parse(r.ts) >= from\n",
+        "replace": "  return (r: AuditEntry) => r.user === u.username\n"
       }
     ]
   }

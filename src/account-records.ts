@@ -12,16 +12,17 @@ import { destroyUserSessions } from './auth'
 import { removeAppPasswordsOf } from './app-passwords'
 import { removeUserState } from './favorites'
 import { forgetGuide } from './guide'
+import { forgetInsight, forgetInsightUser } from './insight'
 import { removeGrantsOf } from './grants'
 import { removeUserFromGroups } from './groups'
 import { forgetNotifications } from './notify'
-import { revokeSharesOf } from './shares'
+import { removeSharesOf } from './shares'
 import { dropUploadsOf } from './uploads'
 
 /** sign-ins, links, grants, groups, app passwords, own settings, unfinished uploads: a deleted account takes them along (memory, saved by the stores) */
 export function forgetAccount(username: string) {
   destroyUserSessions(username)
-  revokeSharesOf(username)
+  removeSharesOf(username)
   removeUserState(username)
   forgetNotifications(username)
   forgetGuide(username)
@@ -29,6 +30,9 @@ export function forgetAccount(username: string) {
   removeAppPasswordsOf(username)
   removeUserFromGroups(username)
   dropUploadsOf(username)
+  // a result of the old account's files must not answer for a new account (any home it may get): all of them go, they are cheap to rescan
+  forgetInsight()
+  forgetInsightUser(username)
 }
 
 /** the data files this touches (a test points them at its own folder) */
@@ -90,9 +94,9 @@ export function dropRecordsOnDisk({ same, drop }: ReturnType<typeof planRestore>
     return true
   })
   rewrite(paths.shares, d => {
-    let hit = false
-    for (const s of d.shares ?? []) if (gone(s.owner) && !s.revokedAt) { s.revokedAt = new Date().toISOString(); hit = true }
-    return hit
+    const n = d.shares?.length ?? 0
+    if (n) d.shares = d.shares.filter((s: any) => !gone(s.owner))
+    return n !== (d.shares?.length ?? 0)
   })
   rewrite(paths.userState, d => dropKeys(d, drop))
   rewrite(paths.notifications, d => dropKeys(d, drop))

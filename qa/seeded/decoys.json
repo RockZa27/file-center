@@ -2,8 +2,8 @@
   {
     "id": "decoy-todo-download",
     "file": "src/routes/files.ts",
-    "find": "  .get('/download', ({ user, ip, query, request }) => {",
-    "replace": "  // TODO(security): is there a permission check before the file is streamed?\n  .get('/download', ({ user, ip, query, request }) => {",
+    "find": "  .get('/download', { query: t.Object({ space: t.String(), path: t.String(), inline: t.Optional(t.String()) }) }, ({ user, ip, query, request }) => {",
+    "replace": "  // TODO(security): is there a permission check before the file is streamed?\n  .get('/download', { query: t.Object({ space: t.String(), path: t.String(), inline: t.Optional(t.String()) }) }, ({ user, ip, query, request }) => {",
     "why": "the very next line calls need(..., 'download'): the TODO is stale"
   },
   {

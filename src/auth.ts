@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from 'node:crypto'
+import { createHash, createHmac, randomBytes } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { alert } from './alerts'
@@ -10,7 +10,7 @@ import { bad, ensureDir, HttpError, normRel, resolveIn } from './fsx'
 import { GRANT_SPACE, grantSpace } from './grants'
 import { GROUP_SPACE, GROUPS_TOP, groupSpace } from './groups'
 import { log } from './logger'
-import { open, seal } from './secret-box'
+import { open, seal, subKey } from './secret-box'
 import { cleanPerms, PERMISSIONS, settings, type Perm } from './settings'
 import { JsonStore } from './store'
 import { newTotpSecret, verifyTotp } from './totp'
@@ -90,6 +90,36 @@ export const isReservedUsername = (username: string) => username.toLowerCase() =
 export const allUsers = () => userStore.value.users
 export const findUser = (username: string) =>
   userStore.value.users.find(u => u.username.toLowerCase() === username.toLowerCase())
+
+/** what a failed sign-in records for a typed name: ?xxxxxxxx never is a user name (USERNAME_RE), see recordedName */
+export const UNKNOWN_NAME_RE = /^\?[0-9a-f]{8}$/
+
+/**
+ * The name to put in the audit log, alerts and notifications for a sign-in that was typed: the canonical name of an
+ * existing account, otherwise a label (? and 8 hex characters of an HMAC under a key of this server) and never the
+ * typed text, which may be a password pasted in the wrong box. The same typed name gives the same label.
+ */
+export function recordedName(typed: string): string {
+  const name = typed.trim()
+  if (!name) return '-'
+  const user = findUser(name)
+  if (user) return user.username
+  return '?' + createHmac('sha256', labelKey()).update(name.toLowerCase()).digest('hex').slice(0, 8)
+}
+
+// A secret.key that can not be read must not turn a failed sign-in into an error: the failure would not be counted
+// toward the lockouts, and an unknown name would answer differently from a known one. A key of this process then
+// (labels still group within the run; an unkeyed hash of what was typed would be open to guessing)
+// (kept once taken, so a broken key does not print its error again for every failed sign-in)
+let processLabelKey: Buffer | null = null
+function labelKey(): Buffer {
+  if (processLabelKey) return processLabelKey
+  try {
+    return subKey('login-name-label')
+  } catch {
+    return (processLabelKey = randomBytes(32))
+  }
+}
 
 export const publicUser = (u: User) => ({
   username: u.username,
@@ -208,6 +238,9 @@ const ANON_MAX = 5000
 const sidKey = (sid: string) => createHash('sha256').update(sid).digest('hex')
 const ttlOf = (s: Session) => (s.username ? policy.sessionTtlMs() : ANON_TTL_MS)
 
+/** past the absolute lifetime; a signed-in session without a numeric `created` (hand-edited file) counts as past it */
+const tooOld = (s: Session, now: number) => !!s.username && !(now - s.created <= policy.sessionMaxMs())
+
 export function createSession(username: string | null, meta: { ip?: string; ua?: string } = {}): { sid: string; session: Session } {
   const sid = randomBytes(32).toString('base64url')
   const session: Session = {
@@ -231,7 +264,7 @@ export function getSession(sid: string | undefined): Session | null {
   const key = sidKey(sid)
   const s = sessionStore.value[key] ?? anonymous.get(key)
   if (!s) return null
-  if (Date.now() - s.seen > ttlOf(s)) {
+  if (Date.now() - s.seen > ttlOf(s) || tooOld(s, Date.now())) {
     destroySession(sid)
     return null
   }
@@ -303,7 +336,7 @@ export function reloadIfChangedByCli() {
 export function purgeExpiredSessions() {
   const now = Date.now()
   sessionStore.update(d => {
-    for (const [k, s] of Object.entries(d)) if (now - s.seen > policy.sessionTtlMs()) delete d[k]
+    for (const [k, s] of Object.entries(d)) if (now - s.seen > policy.sessionTtlMs() || tooOld(s, now)) delete d[k]
   })
   for (const [k, s] of anonymous) if (now - s.seen > ANON_TTL_MS) anonymous.delete(k)
 }

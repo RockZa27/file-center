@@ -102,7 +102,7 @@ describe('dropRecordsOnDisk', () => {
         dropRecordsOnDisk({ same: new Map([['kept', now]]), drop: new Set(['bob', 'eve']) }, paths)
         const read = (f: string) => JSON.parse(readFileSync(f, 'utf8'))
         expect(Object.keys(read(paths.sessions)).sort()).toEqual(['d', 'e'])
-        expect(read(paths.shares).shares.map((s: any) => [s.owner, !!s.revokedAt])).toEqual([['BOB', true], ['kept', false], ['eve', true]])
+        expect(read(paths.shares).shares.map((s: any) => [s.owner, !!s.revokedAt])).toEqual([['kept', false]])
         expect(Object.keys(read(paths.userState))).toEqual(['kept'])
         expect(Object.keys(read(paths.notifications))).toEqual(['kept'])
         expect(Object.keys(read(paths.notifyState).users)).toEqual(['kept'])

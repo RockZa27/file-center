@@ -1,4 +1,4 @@
-import { paths } from './config'
+import { config, paths } from './config'
 import { type Lang, type MessageCode, text } from './messages'
 import { JsonStore } from './store'
 
@@ -34,7 +34,7 @@ export type SharePrefs = {
 /** virus scanning (antivirus.ts); a missing key falls back to the CLAMAV_* env value */
 export type AntivirusPrefs = {
   enabled?: boolean; host?: string; port?: number; timeoutSeconds?: number; maxScanMb?: number
-  onErrorLinks?: 'allow' | 'reject'; onErrorUsers?: 'allow' | 'reject'
+  onErrorLinks?: 'allow' | 'reject'; onErrorUsers?: 'allow' | 'reject'; onTooBigLinks?: 'allow' | 'reject'; onTooBigUsers?: 'allow' | 'reject'
 }
 export type SecurityPrefs = { require2fa?: 'none' | 'admin' | 'staff' | 'all'; sessionTtlHours?: number; loginMaxAttempts?: number; loginLockoutSeconds?: number }
 export type FilesPrefs = {
@@ -47,8 +47,8 @@ export type MailPrefs = { host?: string; port?: number; secure?: 'starttls' | 't
 /** `webhookSealed` is the alert URL sealed with secret.key: a bot token is part of it */
 export type AlertPrefs = { webhookSealed?: string; kind?: 'discord' | 'slack' | 'telegram' | 'json'; telegramChatId?: string; lang?: 'th' | 'en' }
 
-/** where each audit entry is sent as well (audit-forward.ts); `webhookSealed` is the URL sealed with secret.key */
-export type AuditForwardPrefs = { syslogHost?: string; syslogPort?: number; syslogProto?: 'udp' | 'tcp'; syslogFacility?: number; webhookSealed?: string }
+/** where each audit entry is sent as well (audit-forward.ts); `webhookSealed` is the URL sealed with secret.key, `webhookSecretSealed` the optional signing secret */
+export type AuditForwardPrefs = { syslogHost?: string; syslogPort?: number; syslogProto?: 'udp' | 'tcp' | 'tls'; syslogFacility?: number; webhookSealed?: string; webhookSecretSealed?: string }
 
 export type Settings = {
   appName: string
@@ -85,7 +85,8 @@ const defaults = (): Settings => ({
   welcomeTitle: '',
   welcomeText: '',
   publicEmptyText: '',
-  publicEnabled: true,
+  // PUBLIC_PAGE=off only matters for a fresh install: an existing settings.json keeps its own value (defaults fill missing keys only)
+  publicEnabled: !config.publicPageOff,
   guestPermissions: ['read', 'download', 'batchdownload'],
   logo: null,
   backup: {},

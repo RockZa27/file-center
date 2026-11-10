@@ -9,6 +9,14 @@ export const releases = [
     version: '2.0.0-beta.1',
     items: [
       {
+        id: '200-app-password-expiry', icon: 'system', roles: ['user'],
+        title: { th: 'รหัสผ่านแอปมีอายุ', en: 'App passwords now expire' },
+        text: {
+          th: 'ตอนสร้างรหัสผ่านแอปสำหรับ WebDAV เลือกอายุได้ (30, 90, 180 วัน, 1 ปี หรือไม่หมดอายุ) ค่าเริ่มต้นคือ 1 ปี รายการจะแสดงวันหมดอายุ รหัสที่หมดอายุแล้วใช้ไม่ได้ ให้ลบแล้วสร้างใหม่',
+          en: 'When you make an app password for WebDAV you can choose how long it lasts (30, 90, 180 days, 1 year or never). The default is 1 year. The list shows when each one expires. An expired one no longer works: delete it and make a new one.',
+        },
+      },
+      {
         id: '200-beta', icon: 'system', roles: ['admin'],
         title: { th: 'File Center 2.0 รุ่นเบตา', en: 'File Center 2.0 beta' },
         text: {

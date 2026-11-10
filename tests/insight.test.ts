@@ -60,6 +60,7 @@ beforeAll(async () => {
   ins = await import('../src/insight')
   Object.assign(saved, ins.INSIGHT_LIMITS)
   ins.INSIGHT_LIMITS.rescanMs = 0
+  ins.INSIGHT_LIMITS.userCooldownMs = 0
   await admin.login('admin', process.env.ADMIN_PASSWORD!)
 })
 afterAll(() => { Object.assign(ins.INSIGHT_LIMITS, saved); ins.forgetInsight() })

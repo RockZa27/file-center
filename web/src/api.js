@@ -152,10 +152,13 @@ export const api = {
   users: () => get('/api/admin/users'),
   createUser: u => post('/api/admin/users', u),
   updateUser: (username, u) => call('PUT', `/api/admin/users/${encodeURIComponent(username)}`, u),
-  deleteUser: username => call('DELETE', `/api/admin/users/${encodeURIComponent(username)}`),
+  /** `opts`: { deleteFiles: true, password } also sends the home folder to the system trash (admin only) */
+  deleteUser: (username, opts) => call('DELETE', `/api/admin/users/${encodeURIComponent(username)}`, opts),
   userSessions: username => get(`/api/admin/users/${encodeURIComponent(username)}/sessions`),
   revokeUserSessions: username => post(`/api/admin/users/${encodeURIComponent(username)}/sessions/revoke`),
   resetTwoFactor: (username, password) => post(`/api/admin/users/${encodeURIComponent(username)}/2fa/reset`, { password }),
+  orphanHomes: () => get('/api/admin/orphan-homes'),
+  trashOrphanHome: (name, password) => post('/api/admin/orphan-homes/trash', { name, password }),
   adminFolders: path => get('/api/admin/folders', { path }),
   status: () => get('/api/admin/status'),
   activity: params => get('/api/admin/activity', params),
@@ -201,9 +204,11 @@ export const api = {
   removeGroupMember: (id, username) => call('DELETE', `/api/admin/groups/${encodeURIComponent(id)}/members/${encodeURIComponent(username)}`),
 
   /** WebDAV app passwords of the signed-in user: { items: [{ id, name, scope, hint, createdAt, lastUsedAt, lastIp }], max, enabled } */
+  /** the signed-in user's own audit entries, newest first: { items: [{ ts, ip, action, target, detail }], hasMore } */
+  myActivity: params => get('/api/me/activity', params),
   appPasswords: () => get('/api/me/app-passwords'),
   /** -> the item plus `secret`, told this once only */
-  createAppPassword: (name, scope, password) => post('/api/me/app-passwords', { name, scope, password }),
+  createAppPassword: (name, scope, password, days) => post('/api/me/app-passwords', days === undefined ? { name, scope, password } : { name, scope, password, days }),
   deleteAppPassword: id => call('DELETE', `/api/me/app-passwords/${encodeURIComponent(id)}`),
 
   settings: () => get('/api/admin/settings'),
@@ -240,7 +245,7 @@ export const api = {
   backups: () => get('/api/admin/backups'),
   backupNow: () => post('/api/admin/backups'),
   backupDelete: name => call('DELETE', `/api/admin/backups/${encodeURIComponent(name)}`),
-  backupRestore: (name, password) => post('/api/admin/backups/restore', { name, password }),
+  backupRestore: (name, password, allowUnencrypted) => post('/api/admin/backups/restore', { name, password, ...(allowUnencrypted ? { allowUnencrypted: true } : {}) }),
   backupUrl: name => `/api/admin/backups/${encodeURIComponent(name)}/download`,
   backupEstimate: () => get('/api/admin/backups/estimate'),
   /** body: any of compression, schedule, keep, includeFiles (null = back to the default) and password; answers the new settings */
@@ -302,6 +307,39 @@ export function putChunk(id, index, blob, onProgress, registerAbort, base = '/ap
     registerAbort(() => xhr.abort())
     xhr.send(blob)
   })
+}
+
+/**
+ * "Download my personal data": a POST (the password is asked again), so the answer is read as a blob and saved from
+ * memory (the file is small: one person's records). A refusal ({ error, code, params }) is thrown like any API error.
+ */
+export async function downloadMyData(password) {
+  let res
+  try {
+    res = await fetch('/api/me/export', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'x-csrf-token': csrf, 'x-lang': lang(), 'content-type': 'application/json' },
+      body: JSON.stringify({ password }),
+    })
+  } catch {
+    throw new ApiError(0, t('api.noConnection'))
+  }
+  if (!res.ok) {
+    let data = null
+    try { data = await res.json() } catch { /* not JSON */ }
+    if (res.status === 401 && hooks.onUnauthorized) hooks.onUnauthorized()
+    throw new ApiError(res.status, data?.error || t('api.failed', { status: res.status }), data?.code, data?.params)
+  }
+  const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') || '')?.[1] || 'file-center-my-data.json'
+  const url = URL.createObjectURL(await res.blob())
+  const a = document.createElement('a')
+  a.href = url
+  a.download = name
+  a.style.display = 'none'
+  document.body.appendChild(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 10_000)
 }
 
 /**

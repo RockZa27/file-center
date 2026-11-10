@@ -271,7 +271,7 @@ describe('users & permissions', () => {
   test('closing public access hides the folder from visitors', async () => {
     await admin.json('PUT', '/api/admin/settings', { publicEnabled: false })
     expect((await guest.json('GET', '/api/list?space=public&path=/')).status).toBe(401)
-    await admin.json('PUT', '/api/admin/settings', { publicEnabled: true })
+    await admin.json('PUT', '/api/admin/settings', { publicEnabled: true, password: 'test-admin-pass' })
   })
   test('cannot delete the last admin or yourself', async () => {
     expect((await admin.json('DELETE', '/api/admin/users/admin')).status).toBe(400)
@@ -316,7 +316,9 @@ describe('proxy & disk space', () => {
     } finally {
       config.trustProxy = 'false'
     }
-    const act = await admin.json('GET', '/api/admin/activity?action=login-failed&q=tunneled')
+    // no account has this name: the log holds its label (auth.ts recordedName), not the typed text
+    const { recordedName } = await import('../src/auth')
+    const act = await admin.json('GET', `/api/admin/activity?action=login-failed&user=${encodeURIComponent(recordedName('tunneled'))}`)
     expect(act.data.items[0].ip).toBe('203.0.113.5')
   })
   test('uploads are refused when the disk would run too low', async () => {
@@ -639,7 +641,7 @@ describe('full system: permission matrix', () => {
     expect(await run(v, 'public')).toEqual(expected(['read'], 401))
     await admin.json('PUT', '/api/admin/settings', { publicEnabled: false })
     expect(await run(v, 'public')).toEqual(expected([], 401))
-    await admin.json('PUT', '/api/admin/settings', { publicEnabled: true, guestPermissions: ['read', 'download', 'batchdownload'] })
+    await admin.json('PUT', '/api/admin/settings', { publicEnabled: true, guestPermissions: ['read', 'download', 'batchdownload'], password: 'test-admin-pass' })
   })
   test('admins may do everything, unknown spaces are refused', async () => {
     writeFileSync(storageAbs('matrix.txt'), 'matrix')
@@ -664,6 +666,8 @@ describe('full system: permission matrix', () => {
       ['GET', '/api/admin/trash'],
       ['POST', '/api/admin/trash/restore', { id: '0000000000000_00000000' }],
       ['POST', '/api/admin/trash/purge', {}],
+      ['GET', '/api/admin/orphan-homes'],
+      ['POST', '/api/admin/orphan-homes/trash', { name: 'x', password: 'x' }],
       ['GET', '/api/admin/settings'],
       ['PUT', '/api/admin/settings', { publicEnabled: false }],
       ['PUT', '/api/admin/logo', png],
@@ -739,6 +743,7 @@ describe('full system: CSRF', () => {
       ['DELETE', '/api/admin/users/:username'],
       ['POST', '/api/admin/trash/restore', { id: '0000000000000_00000000' }],
       ['POST', '/api/admin/trash/purge', {}],
+      ['POST', '/api/admin/orphan-homes/trash', { name: 'x', password: 'x' }],
       ['PUT', '/api/admin/settings', { appName: 'pwned' }],
       ['PUT', '/api/admin/logo', png],
       ['DELETE', '/api/admin/logo'],
@@ -796,6 +801,7 @@ describe('full system: CSRF', () => {
       ['DELETE', '/api/grants/:id'],
       ['POST', '/api/me/app-passwords/', { name: 'csrf', scope: 'readwrite', password: 'test-admin-pass' }],
       ['DELETE', '/api/me/app-passwords/:id'],
+      ['POST', '/api/me/export', { password: 'test-admin-pass' }],
       ['POST', '/api/admin/mail/test', {}],
       ['POST', '/api/insight/scan', {}],
       ['POST', '/api/admin/groups', { name: 'csrf group' }],
@@ -1233,12 +1239,15 @@ describe('full system: users', () => {
     expect((await update('lifecycle', { role: 'admin' })).status).toBe(200)
     expect((await c.json('GET', '/api/admin/users')).status).toBe(200)
     expect((await c.json('GET', '/api/list?space=home&path=/')).data.entries.map((e: any) => e.name)).toContain('users')
-    expect((await update('lifecycle', { role: 'user' })).status).toBe(200)
+    // the folder it gets back holds files (matrix.txt): the admin must say so
+    expect((await update('lifecycle', { role: 'user' })).status).toBe(409)
+    expect((await update('lifecycle', { role: 'user', adoptHome: true })).status).toBe(200)
     expect((await users()).find(u => u.username === 'lifecycle').homedir).toBe('/users/lifecycle')
     expect((await c.json('GET', '/api/admin/users')).status).toBe(403)
     await admin.json('POST', '/api/mkdir', { space: 'home', path: '/', name: 'elsewhere' })
     writeFileSync(storageAbs('elsewhere', 'moved-in.txt'), '')
-    expect((await update('lifecycle', { homedir: '/elsewhere' })).status).toBe(200)
+    expect((await update('lifecycle', { homedir: '/elsewhere' })).status).toBe(409)
+    expect((await update('lifecycle', { homedir: '/elsewhere', adoptHome: true })).status).toBe(200)
     expect((await c.json('GET', '/api/list?space=home&path=/')).data.entries.map((e: any) => e.name)).toEqual(['moved-in.txt'])
   })
   test('invalid changes are refused', async () => {
@@ -1318,7 +1327,7 @@ describe('full system: sessions & links', () => {
     try {
       expect((await guest.raw('GET', `/api/batch/${v}`)).status).toBe(401)
     } finally {
-      await admin.json('PUT', '/api/admin/settings', { publicEnabled: true })
+      await admin.json('PUT', '/api/admin/settings', { publicEnabled: true, password: 'test-admin-pass' })
     }
   })
   test('the logo still loads while a password change is pending', async () => {

@@ -54,7 +54,7 @@ export const officeRoutes = new Elysia({ prefix: '/api/office' })
     const status = Number(data.status)
     if (status === 2 || status === 6) {
       try {
-        const saved = await saveVersion(token, data)
+        const saved = await saveVersion(token, data, ip)
         audit({
           user: saved.user.username, ip, action: 'office-save', target: storagePath(saved.abs),
           detail: `${status === 6 ? 'บันทึกระหว่างแก้ไข, ' : ''}${saved.size} ไบต์ (${policy.versionsKeep() > 0 ? 'ฉบับเดิมเก็บเป็นเวอร์ชันก่อนหน้า' : 'ฉบับเดิมอยู่ในถังขยะ'})`,

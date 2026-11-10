@@ -5,18 +5,20 @@
  *   users.json  settings.json  groups.json  grants.json (and the other small data files)  branding/  logs/audit.log  logs/system.log  backup.json  [storage/ when files are included]
  *
  * Not in it: tmp/, trash/ and versions/ (temporary), app/ (installed updates), sessions.json (logins), rotated logs,
- * access.log and launcher.log, the backup folder itself, search.db (the search index, rebuilt from the disk), secret.key, office-links.key and app-passwords.json (credentials, kept out on purpose). Restoring puts back users.json, settings.json and branding/ only, never storage/ (groups.json is in the zip but is not restored: a group is its folder in storage/ plus its list of members, and the two must stay together).
+ * access.log and launcher.log, quarantine/ (infected files), the backup folder itself, search.db (the search index, rebuilt from the disk), secret.key, office-links.key and app-passwords.json (credentials, kept out on purpose). Restoring puts back users.json, settings.json and branding/ only, never storage/ (groups.json is in the zip but is not restored: a group is its folder in storage/ plus its list of members, and the two must stay together).
  */
 import {
   closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, renameSync, rmSync, statSync,
   writeFileSync, writeSync,
 } from 'node:fs'
+import { randomBytes } from 'node:crypto'
 import { dirname, join } from 'node:path'
 import { BlobReader, TextWriter, ZipReader } from '@zip.js/zip.js'
 import { dropRecordsOnDisk, planRestore } from './account-records'
 import { audit } from './audit'
+import { BackupCryptError, backupKeyState, decryptFile, encryptStream } from './backup-crypt'
 import { alert } from './alerts'
-import { config, paths } from './config'
+import { config, paths, tightenDir } from './config'
 import { bad, cleanName, conflict, ensureSpace, freeSpace, fromFsError, HttpError, notFound, within } from './fsx'
 import { restartSoon } from './lifecycle'
 import { log } from './logger'
@@ -30,14 +32,16 @@ import { tombstoneTrashOf } from './trash'
 import { dropUploadsOf } from './uploads'
 import { collectZipItems, zipStream, type ZipItem } from './zip'
 
-export const BACKUP_NAME_RE = /^file-center-backup-\d{8}-\d{6}\.zip$/
+/** `.zip.enc` is an encrypted backup (backup-crypt.ts); its `<name>.json` beside it is not a backup and never matches */
+export const BACKUP_NAME_RE = /^file-center-backup-\d{8}-\d{6}\.zip(?:\.enc)?$/
+const sidecarOf = (name: string) => `${name}.json`
 
 /** sizes of one part of a backup: files in it, bytes before and after compression */
 export type PartSizes = { files: number; size: number; compressed: number }
 /** data = users, settings, logo and the rest; logs = the activity and system log; storage = the uploaded files (only with includeFiles) */
 export type BackupParts = { data: PartSizes; logs: PartSizes; storage: PartSizes }
 /** `parts` is null for a backup made before 1.10 (its backup.json has no sizes) */
-export type BackupItem = { name: string; size: number; createdAt: string; parts: BackupParts | null }
+export type BackupItem = { name: string; size: number; createdAt: string; parts: BackupParts | null; encrypted: boolean }
 export type BackupStatus = {
   status: 'ok' | 'failed'
   lastSuccess: string | null
@@ -57,9 +61,17 @@ export type BackupStatus = {
 // app-passwords.json holds the WebDAV credentials (argon2 hashes): on purpose not in a backup, so a copy of one can not
 // be turned into a way in; after a restore users make new app passwords;
 // office-links.key signs short-lived ONLYOFFICE links: a restored server simply makes a new one;
-// thumbs is a cache made again on demand
-const SKIP = new Set(['tmp', 'trash', 'versions', 'thumbs', 'app', 'sessions.json', 'backup-status.json', 'stats-cache.json', 'cli-changed', 'secret.key', 'office-links.key', 'app-passwords.json'])
+// thumbs is a cache made again on demand;
+// quarantine holds the infected uploads themselves: a backup would hand live malware to whoever downloads it, keep files
+// past QUARANTINE_DAYS and grow by up to QUARANTINE_MAX_MB
+const SKIP = new Set(['tmp', 'trash', 'versions', 'thumbs', 'app', 'sessions.json', 'backup-status.json', 'stats-cache.json', 'cli-changed', 'secret.key', 'office-links.key', 'app-passwords.json', 'quarantine'])
 // search.db* (the search index and its WAL files) is rebuilt from the disk
+// a skipped file moved aside (sessions.json.broken-<ms> from a damaged one) stays out too. A .broken- copy of anything else is
+// readable and holds data an admin may want back, so it goes in. Any <name>.unreadable-<ms> stays out whatever its name: the
+// app could not read that file (the move keeps its owner and mode), so the zip would fail on it and every backup with it;
+// it is kept only for the operator to recover by hand
+const UNREADABLE_COPY = /\.unreadable-\d+$/
+const skipped = (n: string) => SKIP.has(n) || UNREADABLE_COPY.test(n) || SKIP.has(n.replace(/\.broken-\d+$/, ''))
 const SEARCH_DB = /^search\.db(?:-wal|-shm|-journal)?$/
 // of the logs only the current activity and system log go in: rotated ones, access.log and launcher.log stay out
 const LOGS_KEPT = new Set(['logs/', 'logs/audit.log', 'logs/system.log'])
@@ -71,8 +83,9 @@ const pad = (n: number) => String(n).padStart(2, '0')
  * UTC, so names sort and mean the same whatever the clock does (daylight saving makes one local hour twice a year).
  * Backups made before 1.12.1 carry the server's local time in the name; their real time is in backup.json.
  */
+/** the name without its ending (.zip or .zip.enc) */
 const nameFor = (d: Date) =>
-  `file-center-backup-${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}-${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}.zip`
+  `file-center-backup-${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}-${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}`
 
 /** the time in a name (read as local time, as older versions wrote it): only for a backup whose backup.json can not be read */
 function createdAtOf(name: string): string {
@@ -91,20 +104,30 @@ export function backupPath(name: unknown): string {
 type BackupFile = Omit<BackupItem, 'parts'>
 
 // what backup.json says (when it was made, the sizes of each part) is read once from the end of each zip, then remembered while the file is unchanged
-const metaCache = new Map<string, { size: number; mtimeMs: number; createdAt: string; parts: BackupParts | null }>()
+const metaCache = new Map<string, { stamp: string; createdAt: string; parts: BackupParts | null }>()
 
-async function readMeta(abs: string, name: string): Promise<{ createdAt: string; parts: BackupParts | null }> {
+type Meta = { createdAt: string; parts: BackupParts | null }
+
+/** what backup.json (or the sidecar of an encrypted backup) says, when it says it right */
+function applyMeta(out: Meta, meta: any): Meta {
+  const ok = (p: any): p is PartSizes => p && [p.files, p.size, p.compressed].every(n => typeof n === 'number')
+  if (typeof meta?.createdAt === 'string' && Number.isFinite(Date.parse(meta.createdAt))) out = { ...out, createdAt: new Date(meta.createdAt).toISOString() }
+  if (ok(meta?.parts?.data) && ok(meta.parts.logs) && ok(meta.parts.storage)) out = { ...out, parts: meta.parts }
+  return out
+}
+
+async function readMeta(abs: string, name: string): Promise<Meta> {
   // not readable (a zip from outside, cut off, no backup.json): the date in its name, never the file's mtime, which a copy of the folder resets
-  let out: { createdAt: string; parts: BackupParts | null } = { createdAt: createdAtOf(name), parts: null }
+  const out: Meta = { createdAt: createdAtOf(name), parts: null }
+  // an encrypted backup is not opened to be listed: its plain sidecar has the same numbers (none of them secret)
+  if (name.endsWith('.enc')) {
+    try { return applyMeta(out, JSON.parse(readFileSync(join(config.backupDir, sidecarOf(name)), 'utf8'))) } catch { return out }
+  }
   const reader = new ZipReader(new BlobReader(Bun.file(abs)))
   try {
     const entry = (await reader.getEntries()).find(e => e.filename === 'backup.json')
     if (!entry || entry.directory || entry.uncompressedSize > 1024 * 1024) return out
-    const meta = JSON.parse(await entry.getData(new TextWriter()))
-    const ok = (p: any): p is PartSizes => p && [p.files, p.size, p.compressed].every(n => typeof n === 'number')
-    if (typeof meta?.createdAt === 'string' && Number.isFinite(Date.parse(meta.createdAt))) out = { ...out, createdAt: new Date(meta.createdAt).toISOString() }
-    if (ok(meta?.parts?.data) && ok(meta.parts.logs) && ok(meta.parts.storage)) out = { ...out, parts: meta.parts }
-    return out
+    return applyMeta(out, JSON.parse(await entry.getData(new TextWriter())))
   } catch {
     return out
   } finally {
@@ -122,12 +145,16 @@ async function listAll(): Promise<BackupItem[]> {
     let st
     try { st = statSync(join(config.backupDir, name)) } catch { continue } // just deleted
     alive.add(name)
+    // the sidecar of an encrypted backup is written just after the file: it counts in the stamp
+    let side = ''
+    if (name.endsWith('.enc')) { try { const s = statSync(join(config.backupDir, sidecarOf(name))); side = `${s.size}:${s.mtimeMs}` } catch { /* none */ } }
+    const stamp = `${st.size}:${st.mtimeMs}:${side}`
     let cached = metaCache.get(name)
-    if (!cached || cached.size !== st.size || cached.mtimeMs !== st.mtimeMs) {
-      cached = { size: st.size, mtimeMs: st.mtimeMs, ...(await readMeta(join(config.backupDir, name), name)) }
+    if (!cached || cached.stamp !== stamp) {
+      cached = { stamp, ...(await readMeta(join(config.backupDir, name), name)) }
       metaCache.set(name, cached)
     }
-    out.push({ name, size: st.size, createdAt: cached.createdAt, parts: cached.parts })
+    out.push({ name, size: st.size, createdAt: cached.createdAt, parts: cached.parts, encrypted: name.endsWith('.enc') })
   }
   for (const n of metaCache.keys()) if (!alive.has(n)) metaCache.delete(n)
   return out.sort((x, y) => Date.parse(y.createdAt) - Date.parse(x.createdAt) || (x.name < y.name ? 1 : -1))
@@ -140,6 +167,12 @@ export async function listBackups(): Promise<BackupFile[]> {
 
 /** newest first, with the per-part sizes (null for a backup that has none: made by an older version, or unreadable) */
 export const listBackupsDetailed = listAll
+
+/** a backup and, for an encrypted one, its sidecar */
+export function removeBackup(name: string) {
+  rmSync(join(config.backupDir, name), { force: true })
+  if (name.endsWith('.enc')) rmSync(join(config.backupDir, sidecarOf(name)), { force: true })
+}
 
 export function readStatus(): BackupStatus | null {
   try { return JSON.parse(readFileSync(paths.backupStatus, 'utf8')) } catch { return null }
@@ -205,6 +238,10 @@ export function backupSettings() {
     /** the hour of a daily schedule, null for any other (kept for older pages) */
     hour: eff.schedule.mode === 'daily' ? hhmm(eff.schedule.time).h : null,
     includeFiles: eff.includeFiles,
+    /** new backups are encrypted (BACKUP_ENCRYPTION_KEY is set and valid) */
+    encryption: backupKeyState().state === 'on',
+    /** BACKUP_ENCRYPTION_KEY is set but not valid: no backup is made (writeBackup refuses) */
+    encryptionKeyInvalid: backupKeyState().state === 'invalid',
     /** the same as includeFiles (older pages) */
     includesFiles: eff.includeFiles,
     compression: eff.compression,
@@ -371,6 +408,35 @@ export function turnsOnFiles(body: { includeFiles?: unknown }): boolean {
 let busy = false
 export const backupRunning = () => busy
 
+/**
+ * A decrypted restore leaves a plaintext zip (.restore-<hex>.zip.tmp) beside the encrypted backups while it runs; if the
+ * process dies meanwhile it stays, in the very folder admins copy off the machine. Swept at start, hourly, and before each
+ * backup. Never the running restore's own temp, and only ones that have not been written to for a few minutes.
+ */
+const RESTORE_TEMP_RE = /^\.restore-[0-9a-f]+\.zip\.tmp$/
+const RESTORE_TEMP_AGE_MS = 5 * 60 * 1000
+let activeUnsealed: string | null = null
+export function sweepRestoreTemps(): number {
+  let removed = 0
+  try {
+    for (const n of readdirSync(config.backupDir)) {
+      if (!RESTORE_TEMP_RE.test(n)) continue
+      const abs = join(config.backupDir, n)
+      if (abs === activeUnsealed) continue
+      try {
+        if (Date.now() - statSync(abs).mtimeMs < RESTORE_TEMP_AGE_MS) continue
+        rmSync(abs, { force: true })
+        removed++
+      } catch { /* gone already or not ours to remove: the next sweep tries again */ }
+    }
+  } catch { /* no backup folder yet */ }
+  return removed
+}
+/** for the hourly housekeeping: does nothing while a backup or restore is running */
+export function sweepRestoreTempsIdle(): number {
+  return busy ? 0 : sweepRestoreTemps()
+}
+
 async function exclusive<T>(fn: () => Promise<T>): Promise<T> {
   if (busy) throw conflict('backup.busy')
   busy = true
@@ -379,7 +445,7 @@ async function exclusive<T>(fn: () => Promise<T>): Promise<T> {
 
 /** the data folder's part of a backup (everything but the storage) */
 function collectDataItems(): ZipItem[] {
-  const names = readdirSync(config.dataDir).filter(n => !SKIP.has(n) && !SEARCH_DB.test(n) && !n.endsWith('.tmp'))
+  const names = readdirSync(config.dataDir).filter(n => !skipped(n) && !SEARCH_DB.test(n) && !n.endsWith('.tmp'))
   // the storage may sit inside the data folder: its files only go in with includeFiles, under storage/
   return collectZipItems(config.dataDir, names)
     .filter(i => (!i.name.startsWith('logs/') || LOGS_KEPT.has(i.name)) && !within(config.storageDir, i.abs))
@@ -427,6 +493,7 @@ export async function estimateBackup(includeFiles = effectiveBackup().includeFil
   if (includeFiles) parts.storage = await backupDeps.storageSize()
   const estimate = parts.data + parts.logs + parts.storage
   mkdirSync(config.backupDir, { recursive: true })
+  tightenDir(config.backupDir)
   const free = backupDeps.free(config.backupDir)
   const needed = Math.ceil(estimate * backupLimits.safety) + backupLimits.margin
   return { estimate, free, needed, ok: free === null || free >= needed, parts }
@@ -446,7 +513,7 @@ async function makeRoom(includeFiles: boolean, protect: string | undefined, remo
     if (!victim) {
       throw new HttpError(507, 'backup.no-space', { needed: sizeText(est.needed), free: sizeText(est.free ?? 0), neededBytes: est.needed, freeBytes: est.free ?? 0 })
     }
-    rmSync(join(config.backupDir, victim.name), { force: true })
+    removeBackup(victim.name)
     removed.push(victim.name)
     audit({ user: 'system', ip: '-', action: 'backup-delete', target: victim.name, detail: 'ลบอัตโนมัติ: พื้นที่ว่างไม่พอสำหรับไฟล์สำรองใหม่' })
     log.warn('backup-pruned-for-space', { name: victim.name, needed: est.needed, free: est.free })
@@ -475,32 +542,43 @@ async function writeBackup(protect?: string): Promise<BackupItem> {
   /** old backups deleted to make room for this one */
   const removed: string[] = []
   try {
+    // a key that is set but wrong means the operator asked for encryption: fail closed, before anything is written
+    // or pruned, instead of leaving a plain zip (password hashes, logs) behind
+    if (backupKeyState().state === 'invalid') throw bad('backup.key-invalid')
     mkdirSync(config.backupDir, { recursive: true })
+    tightenDir(config.backupDir)
     // left over from a backup that was cut off (crash, power loss)
     for (const n of readdirSync(config.backupDir)) if (n.endsWith('.partial')) rmSync(join(config.backupDir, n), { force: true })
+    sweepRestoreTemps()
     // what the zip reads is the files on disk: changes still waiting in a store go in first
     await JsonStore.flushAll()
     const prefs = effectiveBackup()
     await makeRoom(prefs.includeFiles, protect, removed)
-    // names have one-second precision: a taken name moves on to the next free second instead of waiting for it
-    let at = Date.now()
-    while (existsSync(join(config.backupDir, nameFor(new Date(at)))) || existsSync(join(config.backupDir, `${nameFor(new Date(at))}.partial`))) at += 1000
-    const name = nameFor(new Date(at))
+    // names have one-second precision: a taken name moves on to the next free second instead of waiting for it. The
+    // search starts at `attempt` (the createdAt in backup.json), not at the clock after the flush and pruning above,
+    // so the name and createdAt name the same second unless that second is taken
+    let at = Date.parse(attempt)
+    const taken = (at: number) => ['.zip', '.zip.enc', '.zip.partial', '.zip.enc.partial'].some(e => existsSync(join(config.backupDir, nameFor(new Date(at)) + e)))
+    while (taken(at)) at += 1000
+    // with a valid key every new backup (the safety copy of a restore too) is sealed while it is streamed out
+    const keyState = backupKeyState()
+    const name = nameFor(new Date(at)) + (keyState.state === 'on' ? '.zip.enc' : '.zip')
     const items = collectItems(prefs.includeFiles)
     if (prefs.includeFiles) ensureSpace(config.backupDir, items.reduce((sum, i) => sum + i.size, 0))
     // backup.json goes last and is made when the zip gets there, so it can tell the sizes of everything before it
     const parts = emptyParts()
     for (const i of items) if (!i.dir) { parts[partOf(i.name)].files++; parts[partOf(i.name)].size += i.size }
-    const meta = () => new TextEncoder().encode(JSON.stringify({
+    const metaObject = () => ({
       version: config.version, createdAt: attempt, includesFiles: prefs.includeFiles, compression: prefs.compression, level: COMPRESSION_LEVELS[prefs.compression], parts,
-    }, null, 2))
+    })
+    const meta = () => new TextEncoder().encode(JSON.stringify(metaObject(), null, 2))
     items.push({ name: 'backup.json', abs: '', dir: false, mtime: Date.now(), size: meta().length, bytes: meta })
 
     const target = join(config.backupDir, name)
     // a half-written backup must never look complete: only a finished one gets the .zip name
     const partial = `${target}.partial`
     try {
-      await Bun.write(partial, new Response(zipStream(items, {
+      const zip = zipStream(items, {
         level: COMPRESSION_LEVELS[prefs.compression],
         onRead: spaceWatch(),
         onEntry: (item, sizes) => {
@@ -508,8 +586,13 @@ async function writeBackup(protect?: string): Promise<BackupItem> {
           // the sizes read are what really went in: a file that grew or shrank while it was read is counted as it was
           parts[partOf(item.name)].compressed += sizes.compressed
         },
-      })))
+      })
+      await Bun.write(partial, new Response(keyState.state === 'on' ? encryptStream(zip, keyState.key) : zip))
       renameSync(partial, target)
+      // the listing reads this instead of opening the encrypted file; a missing one only costs the numbers
+      if (keyState.state === 'on') {
+        try { writeFileSync(join(config.backupDir, sidecarOf(name)), JSON.stringify(metaObject(), null, 2)) } catch (err) { log.warn('backup-sidecar-failed', { name, error: err }) }
+      }
     } catch (err) {
       rmSync(partial, { force: true })
       throw err
@@ -517,11 +600,14 @@ async function writeBackup(protect?: string): Promise<BackupItem> {
 
     // only now, with the new backup complete, do the oldest beyond `keep` go
     for (const old of (await listBackups()).slice(prefs.keep)) {
-      if (old.name !== protect) rmSync(join(config.backupDir, old.name), { force: true })
+      if (old.name !== protect) removeBackup(old.name)
     }
+    // a sidecar whose backup is gone (deleted by hand) is only litter
+    const left = new Set(readdirSync(config.backupDir))
+    for (const n of left) if (n.endsWith('.zip.enc.json') && BACKUP_NAME_RE.test(n.slice(0, -5)) && !left.has(n.slice(0, -5))) rmSync(join(config.backupDir, n), { force: true })
     const size = statSync(target).size
     writeStatus({ status: 'ok', lastSuccess: attempt, lastAttempt: attempt, code: 'backup.done', params: {}, file: name, size })
-    return { name, size, createdAt: attempt, parts: JSON.parse(JSON.stringify(parts)) }
+    return { name, size, createdAt: attempt, parts: JSON.parse(JSON.stringify(parts)), encrypted: keyState.state === 'on' }
   } catch (err) {
     const known = fromFsError(err)
     const why = known?.message ?? (err as Error).message
@@ -530,7 +616,7 @@ async function writeBackup(protect?: string): Promise<BackupItem> {
     const noSpace = err instanceof HttpError && (err.code === 'backup.no-space' || err.code === 'backup.aborted-no-space') ? err : null
     // a known reason (disk full...) is shown in the reader's language too; anything else as it was said
     const params: Params = noSpace ? noSpace.params : known && !Object.keys(known.params).length ? { reason: why, reasonCode: known.code } : { reason: why }
-    const code: MessageCode = noSpace ? noSpace.code : 'backup.failed'
+    const code: MessageCode = noSpace ? noSpace.code : err instanceof HttpError && err.code === 'backup.key-invalid' ? 'backup.key-invalid' : 'backup.failed'
     writeStatus({ status: 'failed', lastSuccess: readStatus()?.lastSuccess ?? null, lastAttempt: attempt, code, params, file: null, size: null })
     alert('backup-failed', code, params)
     // the old copies went to make room and the new one is not there: the admin must know there are fewer than before
@@ -620,50 +706,81 @@ function lostTwoFactor(dir: string): string[] {
  * can itself be undone. The caller restarts the app afterwards: the stores in memory still hold the old data.
  */
 /** `twoFactorLost`: users who can not use 2FA on this server after the restart (see lostTwoFactor) */
-export function restoreBackup(name: string): Promise<{ safety: BackupItem; twoFactorLost: string[] }> {
+export function restoreBackup(name: string, allowUnencrypted = false): Promise<{ safety: BackupItem; twoFactorLost: string[] }> {
   return exclusive(async () => {
-    const zipAbs = backupPath(name)
-    const safety = await writeBackup(name)
-    const work = mkdtempSync(join(paths.tmp, 'restore-'))
-    let twoFactorLost: string[] = []
+    const sealedAbs = backupPath(name)
+    // a key that is set but wrong stops every backup, the safety copy of a restore too: said here, before that copy is
+    // tried, so a refused restore does not read as a failed backup (status, alert)
+    const keyNow = backupKeyState().state
+    if (keyNow === 'invalid') throw bad('backup.key-invalid')
+    // with a valid key an operator may assume only authenticated (GCM) files are restored: a plain zip needs an explicit yes
+    if (!name.endsWith('.enc') && !allowUnencrypted && keyNow === 'on') throw bad('backup.restore-unencrypted')
+    // an encrypted backup is opened to a temporary zip beside the backups (never in tmp/: that may be on a small disk),
+    // before anything is changed, so a wrong key or a damaged file costs nothing; it is always removed again
+    const unsealed = name.endsWith('.enc') ? join(config.backupDir, `.restore-${randomBytes(6).toString('hex')}.zip.tmp`) : null
+    activeUnsealed = unsealed
     try {
-      await extractData(zipAbs, work)
-      checkData(work)
-      twoFactorLost = lostTwoFactor(work)
-      if (twoFactorLost.length) log.warn('backup-restore-2fa-unreadable', { name, users: twoFactorLost })
-      // let queued writes land first, then nothing in memory may overwrite the restored files before the restart
-      await JsonStore.flushAll()
-      JsonStore.freeze()
-      try {
-        const restoredUsers = (JSON.parse(readFileSync(join(work, 'users.json'), 'utf8')) as { users: { username: string; createdAt?: string }[] }).users
-        // an account instance is (name, createdAt): the records of a name not proven to be the live account go, in the
-        // files (the stores are frozen and the app restarts); sessions stay only for the same account made before them
-        const live = existsSync(paths.users) ? (JSON.parse(readFileSync(paths.users, 'utf8')).users ?? []) : []
-        const plan = planRestore(live, restoredUsers)
-        // the records go before the restored users do: if this throws, the live users.json is still the one on disk,
-        // so no dropped name's sessions, passwords or links sit beside a restored account of that name. The trash is
-        // not a store: its entries of a dropped name get the tombstone an account delete gives them (an entry from
-        // before 1.10 finds its owner in the live users, so this comes before the swap too)
-        dropRecordsOnDisk(plan)
-        for (const name of plan.drop) { tombstoneTrashOf(name); dropUploadsOf(name) }
-        renameSync(join(work, 'users.json'), paths.users)
-        if (existsSync(join(work, 'settings.json'))) renameSync(join(work, 'settings.json'), paths.settings)
-        const branding = join(work, 'branding')
-        mkdirSync(branding, { recursive: true })
-        if (existsSync(paths.branding)) renameSync(paths.branding, join(work, 'old-branding'))
-        renameSync(branding, paths.branding)
-      } catch (err) {
-        // the stores no longer save: start again from whatever is on disk now (the safety backup has the rest)
-        restartSoon()
-        throw err
+      for (const n of readdirSync(config.backupDir)) if (RESTORE_TEMP_RE.test(n)) rmSync(join(config.backupDir, n), { force: true })
+      if (unsealed) {
+        const keyState = backupKeyState()
+        if (keyState.state !== 'on') throw bad('backup.key-missing')
+        ensureSpace(config.backupDir, statSync(sealedAbs).size)
+        try {
+          await decryptFile(sealedAbs, unsealed, keyState.key)
+        } catch (err) {
+          if (err instanceof BackupCryptError) throw bad(err.code)
+          throw fromFsError(err) ?? err
+        }
       }
-    } catch (err) {
-      // the admin sees the message once; the log keeps it for whoever looks into it later
-      ;(err instanceof HttpError ? log.warn : log.error)('backup-restore-failed', { name, error: err })
-      throw err
+      return await restoreFrom(name, unsealed ?? sealedAbs)
     } finally {
-      rmSync(work, { recursive: true, force: true })
+      activeUnsealed = null
+      if (unsealed) rmSync(unsealed, { force: true })
     }
-    return { safety, twoFactorLost }
   })
+}
+
+async function restoreFrom(name: string, zipAbs: string): Promise<{ safety: BackupItem; twoFactorLost: string[] }> {
+  const safety = await writeBackup(name)
+  const work = mkdtempSync(join(paths.tmp, 'restore-'))
+  let twoFactorLost: string[] = []
+  try {
+    await extractData(zipAbs, work)
+    checkData(work)
+    twoFactorLost = lostTwoFactor(work)
+    if (twoFactorLost.length) log.warn('backup-restore-2fa-unreadable', { name, users: twoFactorLost })
+    // let queued writes land first, then nothing in memory may overwrite the restored files before the restart
+    await JsonStore.flushAll()
+    JsonStore.freeze()
+    try {
+      const restoredUsers = (JSON.parse(readFileSync(join(work, 'users.json'), 'utf8')) as { users: { username: string; createdAt?: string }[] }).users
+      // an account instance is (name, createdAt): the records of a name not proven to be the live account go, in the
+      // files (the stores are frozen and the app restarts); sessions stay only for the same account made before them
+      const live = existsSync(paths.users) ? (JSON.parse(readFileSync(paths.users, 'utf8')).users ?? []) : []
+      const plan = planRestore(live, restoredUsers)
+      // the records go before the restored users do: if this throws, the live users.json is still the one on disk,
+      // so no dropped name's sessions, passwords or links sit beside a restored account of that name. The trash is
+      // not a store: its entries of a dropped name get the tombstone an account delete gives them (an entry from
+      // before 1.10 finds its owner in the live users, so this comes before the swap too)
+      dropRecordsOnDisk(plan)
+      for (const name of plan.drop) { tombstoneTrashOf(name); dropUploadsOf(name) }
+      renameSync(join(work, 'users.json'), paths.users)
+      if (existsSync(join(work, 'settings.json'))) renameSync(join(work, 'settings.json'), paths.settings)
+      const branding = join(work, 'branding')
+      mkdirSync(branding, { recursive: true })
+      if (existsSync(paths.branding)) renameSync(paths.branding, join(work, 'old-branding'))
+      renameSync(branding, paths.branding)
+    } catch (err) {
+      // the stores no longer save: start again from whatever is on disk now (the safety backup has the rest)
+      restartSoon()
+      throw err
+    }
+  } catch (err) {
+    // the admin sees the message once; the log keeps it for whoever looks into it later
+    ;(err instanceof HttpError ? log.warn : log.error)('backup-restore-failed', { name, error: err })
+    throw err
+  } finally {
+    rmSync(work, { recursive: true, force: true })
+  }
+  return { safety, twoFactorLost }
 }

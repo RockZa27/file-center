@@ -4,16 +4,19 @@ import { Elysia } from 'elysia'
 import { alert, startAlerts } from './alerts'
 import { startAntivirusMonitor, trimQuarantine } from './antivirus'
 import { envWarnings } from './config-warnings'
-import { UPLOAD_CEILING } from './policy'
+import { auditEnv, ignoredLockedKeys, UPLOAD_CEILING } from './policy'
+import { syslogCa } from './audit-forward'
 import { audit } from './audit'
 import { bootstrapAdmin, findUser, pruneLoginAttempts, purgeExpiredSessions } from './auth'
-import { backupDue, backupRunning, runBackup } from './backup'
+import { backupDue, backupRunning, runBackup, sweepRestoreTempsIdle } from './backup'
+import { backupKeyState } from './backup-crypt'
 import { compressedJson, compressibleRoute, withVary } from './compress'
-import { config, ensureDirs } from './config'
+import { config, ensureDirs, invalidUmask } from './config'
 import { context } from './context'
 import { HttpError, notFound, within } from './fsx'
 import { onStop, shutdown } from './lifecycle'
 import { accessLine, log } from './logger'
+import { runLogRetention } from './log-retention'
 import { adminRoutes } from './routes/admin'
 import { appPasswordRoutes } from './routes/app-passwords'
 import { archiveRoutes } from './routes/archive'
@@ -70,6 +73,32 @@ await bootstrapAdmin()
 // a bad key must not stop the app (the admin could not reach the update page to see why); packages are refused instead
 const keyError = signingKey().error
 if (keyError) log.error('update-key-invalid', `UPDATE_PUBLIC_KEY ไม่ถูกต้อง: ${keyError} ระบบจะไม่รับแพ็กเกจอัปเดตใด ๆ จนกว่าจะแก้ค่านี้`)
+if (invalidUmask) log.warn('umask-invalid', `FC_UMASK ${invalidUmask} ไม่ถูกต้อง (ต้องเป็นเลขฐานแปด 3 หลัก เช่น 077) จึงใช้ค่าเริ่มต้น 077`)
+if (config.auditRetentionInvalid) log.warn('audit-retention-invalid', `AUDIT_RETENTION_DAYS ${config.auditRetentionInvalid} ไม่ถูกต้อง (ต้องเป็นจำนวนวันเต็มที่มากกว่า 0) จึงใช้ 0 คือไม่ลบประวัติการใช้งานตามอายุ`)
+if (config.logRetentionInvalid) log.warn('log-retention-invalid', `LOG_RETENTION_DAYS ${config.logRetentionInvalid} ไม่ถูกต้อง (ต้องเป็นจำนวนวันเต็มที่มากกว่า 0) จึงใช้ 0 คือไม่ลบบันทึกระบบตามอายุ`)
+if (config.require2faInvalid) log.warn('require-2fa-invalid', `REQUIRE_2FA ${config.require2faInvalid} ไม่ถูกต้อง (ใช้ none, admin, staff หรือ all) จึงใช้ none คือไม่บังคับ 2FA`)
+{
+  const ignored = ignoredLockedKeys()
+  if (ignored.length) log.warn('outbound-lock-ignored', `LOCK_OUTBOUND_SETTINGS เปิดอยู่ จึงไม่ใช้ค่าที่เคยตั้งในหน้าเว็บของ: ${ignored.join(', ')} (ค่ายังเก็บไว้ใน settings.json ใช้ค่าจาก .env แทน${ignored.some(k => k.startsWith('auditForward.')) ? ' การส่งต่อบันทึกกิจกรรมใช้ AUDIT_SYSLOG_* และ AUDIT_WEBHOOK_URL / AUDIT_WEBHOOK_SECRET' : ''})`)
+}
+// one warning per bad AUDIT_* variable: its name only (a URL path or a secret is never echoed)
+for (const name of auditEnv().invalid) {
+  log.warn('audit-env-invalid', name === 'AUDIT_WEBHOOK_SECRET'
+    ? 'AUDIT_WEBHOOK_SECRET ไม่ถูกต้อง (ต้องเป็นอักขระ ASCII ที่พิมพ์ได้ยาว 16-200 ตัว) จึงไม่ส่ง webhook ส่งต่อบันทึกกิจกรรมเลย จนกว่าจะแก้ค่านี้ (ไม่ส่งแบบไม่เซ็นชื่อ)'
+    : `${name} ไม่ถูกต้อง จึงไม่ใช้ค่านี้ (ใช้ค่าเริ่มต้นแทน) ดูรูปแบบที่ถูกต้องใน docs/configuration.md`)
+}
+// AUDIT_SYSLOG_CA is only read for syslog over TLS; a file that can not be used means the server's certificate will not verify
+if (syslogCa().state === 'invalid') log.warn('audit-syslog-ca-invalid', 'AUDIT_SYSLOG_CA อ่านไม่ได้หรือไม่ใช่ไฟล์ใบรับรอง PEM จึงใช้เฉพาะ CA ของระบบ (ถ้าเซิร์ฟเวอร์ syslog ใช้ CA ของตัวเอง การเชื่อมต่อ TLS จะไม่ผ่านการตรวจใบรับรอง)')
+if (config.publicPageInvalid) log.warn('public-page-invalid', `PUBLIC_PAGE ${config.publicPageInvalid} ไม่ถูกต้อง (ใช้ on หรือ off) จึงใช้ on คือเปิดหน้าสาธารณะ`)
+// a value of only commas has no invalid entry to name but no valid one either: it is told too
+const proxyListEmpty = config.trustedProxiesSet && !config.trustedProxies.length
+if (config.trustedProxiesInvalid.length || proxyListEmpty) {
+  // what that means only matters while TRUST_PROXY is on (off: no header is believed anyway)
+  const none = proxyListEmpty && config.trustProxy !== 'false'
+  log.warn('trusted-proxies-invalid', `TRUSTED_PROXIES มีค่าที่ไม่ใช่ IP หรือช่วง IP (CIDR) จึงข้ามไป: ${config.trustedProxiesInvalid.join(', ') || '(ว่าง)'}`
+    + (none ? ' · ไม่มีรายการที่ใช้ได้เลย ระบบจึงไม่สนใจหัวบอก IP ผู้ใช้ (CF-Connecting-IP / X-Forwarded-For) จากทุกการเชื่อมต่อ ผู้เข้าใช้ทุกคนจะแสดงเป็น IP ของ proxy และการล็อกต่อ IP จะนับรวมกันทั้งหมด แก้ค่า TRUSTED_PROXIES' : ''))
+}
+if (backupKeyState().state === 'invalid') log.warn('backup-key-invalid', 'BACKUP_ENCRYPTION_KEY ไม่ถูกต้อง (ต้องเป็นข้อมูลสุ่ม 32 ไบต์แบบ base64url ยาว 43 ตัวอักษร สร้างด้วย bun src/cli.ts backup-key) จึงไม่สร้างไฟล์สำรองใดเลยจนกว่าจะแก้ค่านี้')
 if (config.updateAllowUnsigned) log.warn('update-allow-unsigned', 'UPDATE_ALLOW_UNSIGNED=true: ระบบรับแพ็กเกจอัปเดตที่ไม่เซ็น (เสี่ยง: ผู้ที่ได้ session และรหัสผ่านของ admin จะติดตั้งโค้ดของตัวเองได้)')
 // the same for UPDATE_SOURCE: the app starts, checking for updates stays off
 const source = sourceConfig()
@@ -96,6 +125,8 @@ function housekeeping() {
     void pruneThumbs().catch(err => log.error('thumbs-prune-failed', err))
     pruneLoginAttempts()
     trimQuarantine()
+    sweepRestoreTempsIdle()
+    runLogRetention() // at most once a day; does nothing unless AUDIT_RETENTION_DAYS / LOG_RETENTION_DAYS is set
     if (trash || uploads || versions) log.info('housekeeping', { trash, staleUploads: uploads, versions })
     // links about to expire, homes near their quota: told in the background, once each
     void checkNotifications()
@@ -256,12 +287,12 @@ export const app = new Elysia({ serve: { idleTimeout: 255, maxRequestBodySize: s
   })
   .use(context)
   // JSON answers of the routes in compress.ts (and only those) go out as br or gzip when the browser accepts it
-  .onAfterHandle({ as: 'global' }, async ({ request, responseValue, set }) => {
+  .onAfterHandle('global', async ({ request, responseValue, set }) => {
     if (!compressibleRoute(request.method, new URL(request.url).pathname) || (set.status && set.status !== 200)) return
     set.headers.vary = withVary(set.headers.vary)
     return (await compressedJson(request, responseValue, set.headers)) ?? undefined
   })
-  .onAfterResponse({ as: 'global' }, ({ request, set, responseValue, ip, user }) => {
+  .onAfterResponse('global', ({ request, set, responseValue, ip, user }) => {
     const start = requestStart.get(request)
     if (start === undefined) return
     const status = responseValue instanceof Response ? responseValue.status : typeof set.status === 'number' ? set.status : 200
