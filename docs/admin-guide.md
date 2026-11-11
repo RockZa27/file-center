@@ -1,6 +1,6 @@
 # คู่มือผู้ดูแลระบบ
 
-[← กลับหน้าแรก](../README.md) · [คู่มือผู้ใช้](user-guide.md) · [ติดตั้ง](install.md) · [ตั้งค่าระบบ](configuration.md) · [ความปลอดภัย](security.md)
+[← กลับหน้าแรก](../README.th.md) · [คู่มือผู้ใช้](user-guide.md) · [ติดตั้ง](install.md) · [ตั้งค่าระบบ](configuration.md) · [ความปลอดภัย](security.md)
 
 สำหรับ **ผู้ดูแลระบบสูงสุด (admin)** และ **ผู้ดูแล (manager)** ถ้าอยากรู้ว่าผู้ใช้ทั่วไปเห็นอะไร ดู [คู่มือผู้ใช้](user-guide.md) ส่วนการติดตั้ง Docker โดเมน และ proxy อยู่ที่ [ติดตั้ง](install.md)
 

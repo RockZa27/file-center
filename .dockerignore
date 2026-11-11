@@ -6,5 +6,5 @@ storage
 .env
 *.log
 tests
-README.md
+README*.md
 backups

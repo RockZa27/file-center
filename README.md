@@ -1,165 +1,161 @@
+<div align="center">
+
 # File Center
 
+**Self-hosted file storage and sharing for small teams and families.**
+One container, no database, your files stay on your own disk.
+
 [![qa](https://github.com/RockZa27/file-center/actions/workflows/qa.yml/badge.svg)](https://github.com/RockZa27/file-center/actions/workflows/qa.yml)
+![Bun](https://img.shields.io/badge/runtime-Bun%201.4-black?logo=bun)
+![Vue](https://img.shields.io/badge/web-Vue%203-42b883?logo=vue.js)
+![Docker](https://img.shields.io/badge/deploy-Docker-2496ed?logo=docker&logoColor=white)
 
-**ภาษา:** ไทย · [English](README.en.md)
+English · [ไทย](README.th.md)
 
-File Center คือระบบฝากและแจกจ่ายไฟล์บนเว็บ ติดตั้งบนเครื่องของคุณเอง
-ข้อมูลทั้งหมดอยู่ในเครื่องคุณ ไม่ต้องมีฐานข้อมูลแยก
-เขียนใหม่ทั้งหมดด้วย **ElysiaJS 2 beta + Bun** (backend) และ **Vue 3 + Naive UI** (frontend)
-ออกแบบให้ใช้งานและหน้าตาใกล้เคียง File Center ที่สร้างต่อจาก FileGator แต่ไม่ได้ใช้โค้ดหรือข้อมูลเดิมเลย
+[Features](#features) · [Quick start](#quick-start) · [Configuration](#configuration) · [Updating](#updating) · [Documentation](#documentation) · [Development](#development)
 
-คู่มือละเอียดอยู่ในโฟลเดอร์ [docs/](docs/) (เป็นภาษาไทย) ดูตารางที่ [เอกสาร](#เอกสาร)
+</div>
 
-## สารบัญ
+---
 
-- [ทำอะไรได้บ้าง](#ทำอะไรได้บ้าง)
-- [บทบาท](#บทบาท)
-- [เริ่มใช้งานด้วย Docker](#เริ่มใช้งานด้วย-docker)
-- [รันโดยไม่ใช้ Docker](#รันโดยไม่ใช้-docker)
-- [อัปเดตระบบ](#อัปเดตระบบ)
-- [เอกสาร](#เอกสาร)
+File Center is a web app for keeping files on your own server and sharing them with people inside and outside your team.
+It runs on [Bun](https://bun.sh) with [Elysia](https://elysiajs.com) on the server and [Vue 3](https://vuejs.org) + [Naive UI](https://www.naiveui.com) in the browser.
+All state is plain files under one data folder, so a backup is a copy of that folder.
 
-## ทำอะไรได้บ้าง
+The web app is in **English and Thai**. The detailed guides in [`docs/`](docs/) are in Thai.
 
-- **ไฟล์และอัปโหลด:** ลากวาง อัปโหลดทั้งโฟลเดอร์ ส่งไฟล์ใหญ่ทีละชิ้น พัก ทำต่อ และลองใหม่ได้
-  ค้นหา รายการโปรด เวอร์ชันก่อนหน้าของไฟล์ ดูและแก้ไฟล์ในเบราว์เซอร์ (โค้ด Markdown CSV และเอกสาร Office)
-- **ลิงก์แชร์:** ลิงก์ดาวน์โหลดที่ตั้งอายุ รหัสผ่าน และจำนวนครั้งได้
-  กับลิงก์ขอไฟล์ ให้คนนอกอัปโหลดเข้าโฟลเดอร์ และลิงก์แบบ **ดูอย่างเดียว** (ดูตัวอย่างได้ ดาวน์โหลดไม่ได้ พร้อมลายน้ำที่เลือกได้ แต่ไม่กันการแคปหน้าจอ)
-- **แชร์กับผู้ใช้และกลุ่ม:** เมนู "แชร์กับฉัน" แบบดูอย่างเดียวหรือแก้ไขได้
-- **โฟลเดอร์กลุ่ม:** สมาชิกใช้โฟลเดอร์ร่วมกัน มีโควตาของกลุ่ม
-- **WebDAV:** เปิดไฟล์เป็นไดรฟ์ใน Windows, macOS, มือถือ และ rclone ด้วยรหัสผ่านแอป
-- **ภาพตัวอย่าง แกลเลอรี และดูในไฟล์ zip:** ดูรูป PDF วิดีโอ และเปิดดูของข้างใน zip โดยไม่ต้องแตกไฟล์
-- **การแจ้งเตือน:** กระดิ่งในเว็บ เพิ่มทางอีเมลและ LINE ได้
-  ผู้ดูแลรับแจ้งเรื่องระบบทาง Discord, Slack, Telegram หรือ webhook
-- **พื้นที่จัดเก็บ:** ดูว่าอะไรกินพื้นที่ (ไฟล์ใหญ่สุด ขนาดตามชนิดไฟล์) และหาไฟล์ที่เนื้อหาซ้ำกัน ย้ายสำเนาไปถังขยะได้ ผู้ดูแลดูได้ทั้งระบบ ผู้จัดการดูผู้ใช้ที่ดูแลแบบอ่านอย่างเดียว
-- **สแกนไวรัสด้วย ClamAV (ไม่บังคับ ปิดอยู่เป็นค่าเริ่มต้น):** ตรวจไฟล์ที่อัปโหลด (ปกติ ลิงก์ขอไฟล์ WebDAV) ก่อนเข้าที่เก็บไฟล์ ไฟล์ติดไวรัสไปโฟลเดอร์กักกัน แจ้งผู้ดูแล มีหน้าจัดการและปุ่มทดสอบ (compose profile `clamav`)
-- **ส่งต่อประวัติการใช้งาน:** ส่งทุกรายการไปที่ syslog (RFC 5424 ทาง UDP/TCP) และ/หรือ webhook เบื้องหลัง ไม่กระทบการใช้งานถ้าปลายทางล่ม
-- **ถังขยะของตัวเอง:** ลบแล้วกู้คืนหรือกด "เลิกทำ" ได้ ผู้ดูแลมีถังขยะทั้งระบบ
-- **สำรองข้อมูลตามตารางเวลา:** ทุกวัน ทุกสัปดาห์ หรือทุก N ชั่วโมง
-  เลือกการบีบอัด จำนวนที่เก็บ และรวมไฟล์หรือไม่ พร้อมตรวจพื้นที่ดิสก์ก่อน
-- **อัปเดตด้วยปุ่มเดียวแบบเซ็นลายเซ็น:** ติดตั้งจากหน้าเว็บ ย้อนกลับเองถ้าเวอร์ชันใหม่เปิดไม่ขึ้น
-- **ความปลอดภัยของบัญชี:** ยืนยันสองขั้นตอน (2FA) ดู/ออกจากระบบอุปกรณ์ ล็อกเมื่อเดารหัสผ่าน โควตาพื้นที่ต่อผู้ใช้
-- **ตั้งค่าในหน้าเว็บ:** นโยบายลิงก์แชร์ อายุ session การล็อก ขนาดอัปโหลด ถังขยะ อีเมล SMTP และ webhook แก้ได้ที่ ระบบ → ตั้งค่า มีผลทันที (ค่าในเว็บชนะ `.env`) บังคับ 2FA ได้ตามบทบาท พร้อมคำเตือนเมื่อการตั้งค่าเสี่ยง
-- **ทัวร์และคู่มือในแอป:** หน้าต้อนรับ ทัวร์ชี้จุดบนหน้าจอ หน้า "คู่มือการใช้งาน" (`/help`) และ popup "มีอะไรใหม่" หลังอัปเดต
-- **ภาษาและธีม:** หน้าเว็บมีไทยและอังกฤษ ธีมสว่าง/มืด สลับได้ที่เมนูผู้ใช้
+## Features
 
-## บทบาท
+**Files**
+- Drag-and-drop upload, whole folders, large files in resumable chunks (pause, resume, retry)
+- Search, favorites, file versions, your own trash with undo
+- Preview images, PDF, video, Office documents and the inside of zip files; edit code, Markdown and CSV in the browser
+- Optional ONLYOFFICE integration for editing Office documents
+- WebDAV with per-device app passwords (Windows, macOS, phones, rclone)
 
-| บทบาท | ทำอะไรได้ |
-|---|---|
-| **ผู้เยี่ยมชม** (guest) | เปิดเว็บแล้วดาวน์โหลดไฟล์ในโฟลเดอร์สาธารณะได้ทันที ไม่ต้องเข้าสู่ระบบ (ปิดได้จากหน้าตั้งค่า) |
-| **ผู้ใช้** (user) | เข้าสู่ระบบแล้วจัดการไฟล์ในโฟลเดอร์ของตัวเอง และใช้โฟลเดอร์สาธารณะตามสิทธิ์ที่ได้รับ |
-| **ผู้ดูแล** (manager) | จัดการผู้ใช้ทั่วไปและดูไฟล์ของพวกเขาแบบอ่านอย่างเดียว เห็นภาพรวมฉบับย่อและประวัติการใช้งานของคนที่ดูแล |
-| **ผู้ดูแลระบบสูงสุด** (admin) | จัดการไฟล์ทั้งหมด ผู้ใช้ กลุ่ม สิทธิ์ ภาพรวมระบบ ประวัติการใช้งาน ถังขยะ ตั้งค่าเว็บ สำรองข้อมูล และอัปเดต |
+**Sharing**
+- Download links with expiry, password and download limit
+- Upload-request links so outsiders can drop files into a folder
+- View-only links (preview without download, optional watermark)
+- Share folders with users and groups; group folders with their own quota
 
-รายละเอียดสิทธิ์อยู่ที่ [คู่มือผู้ดูแล](docs/admin-guide.md#บทบาทและสิทธิ์)
+**Security and privacy**
+- Two-step sign-in (TOTP), can be required per role; signed-in devices list; lockout on repeated wrong passwords
+- Password step-up for risky actions, CSRF protection, strict session lifetimes
+- Optional ClamAV scanning of uploads, editor saves and unzipped files, with quarantine
+- Private file modes on disk, optional AES-256-GCM encrypted backups
+- Activity log with retention, forwarding to syslog (UDP, TCP or TLS) or a signed webhook
+- Each person can see their own activity and download a copy of their personal data
 
-## เริ่มใช้งานด้วย Docker
+**Administration**
+- Roles: guest, user, manager, admin
+- Per-user and per-group quotas, storage insight and duplicate finder
+- Scheduled backups with restore from the web page
+- One-click signed updates with automatic rollback
+- Settings in the web page, alerts to e-mail, LINE, Discord, Slack, Telegram or any webhook
 
-ต้องมี Docker และ Docker Compose v2
+## Quick start
 
-1. คัดลอกไฟล์ตั้งค่า
-   ```bash
-   cp .env.example .env
-   ```
-2. เปิด `.env` แล้วแก้ตามต้องการ
-   - ถ้าใช้แค่ในเครื่องหรือวง LAN ให้ลบหรือคอมเมนต์บรรทัด `COMPOSE_PROFILES=tunnel` (ตัวอย่างเปิด Cloudflare Tunnel ไว้)
-   - ถ้าไม่ใช้ tunnel ให้ตั้ง `TRUST_PROXY=false` และลบบรรทัด `TRUSTED_PROXIES` ด้วย หรือถ้าอยู่หลัง nginx/Caddy ของคุณเองบนเครื่องเดียวกัน ให้ตั้ง `TRUST_PROXY=true` กับ `TRUSTED_PROXIES=127.0.0.1,::1`
-   - อยากตั้งรหัสผ่าน admin เอง ใส่ `ADMIN_PASSWORD=...`
-   - ไฟล์ตัวอย่างตั้ง `REQUIRE_2FA=staff` (admin และ manager ต้องตั้ง 2FA) และ `PUBLIC_PAGE=off` (ปิดหน้าสาธารณะ) ไว้ให้แล้ว
-3. สร้างและเริ่มระบบ
-   ```bash
-   docker compose up -d --build
-   ```
-4. ดูรหัสผ่าน `admin` ที่สุ่มให้ครั้งแรก (ถ้าไม่ได้ตั้ง `ADMIN_PASSWORD`)
-   ```bash
-   docker compose logs file-center
-   ```
-5. เปิด `http://localhost:3000` เข้าสู่ระบบด้วย `admin` ถ้าปล่อย `ADMIN_PASSWORD` ว่าง (ใช้รหัสที่สุ่มใน log) ระบบบังคับให้เปลี่ยนรหัสผ่านทันที และเมื่อตั้ง `REQUIRE_2FA` ไว้ จะให้ตั้ง 2FA ต่อ (เตรียมแอป authenticator ไว้ในมือ)
+You need Docker with Compose v2.
 
-ข้อมูลทั้งหมดอยู่ข้างไฟล์ `docker-compose.yml`:
-
-```
-data/storage/    ไฟล์ที่อัปโหลด
-data/system/     ผู้ใช้ ตั้งค่า ประวัติ ถังขยะ session (ไฟล์ JSON ธรรมดา)
-data/backups/    ไฟล์สำรองของระบบ (ควรย้ายไปดิสก์อื่น)
-.env             ค่าตั้งค่า มีความลับ ห้ามแชร์หรือ commit
+```bash
+git clone https://github.com/RockZa27/file-center.git
+cd file-center
+cp .env.example .env
 ```
 
-ค่าเริ่มต้นเปิดพอร์ตให้เข้าได้จากเครื่อง server เท่านั้น (`127.0.0.1:3000`)
-ตั้ง `BIND_ADDRESS=0.0.0.0` ใน `.env` ถ้าต้องการให้เครื่องอื่นในวง LAN เข้าตรงได้
+Open `.env` and review it. The example turns on a Cloudflare Tunnel; for local or LAN use, remove the line `COMPOSE_PROFILES=tunnel`, set `TRUST_PROXY=false` and remove `TRUSTED_PROXIES`.
 
-**ค่าที่ตั้งบ่อย** (ทั้งหมดอยู่ที่ [ตั้งค่าระบบ](docs/configuration.md))
+```bash
+docker compose up -d --build
+```
 
-| ตัวแปร | ค่าเริ่มต้น | ใช้ทำอะไร |
-|---|---|---|
-| `PORT` | `3000` | พอร์ตฝั่งเครื่อง host |
-| `BIND_ADDRESS` | `127.0.0.1` | เครื่องไหนเข้าพอร์ตตรงได้ |
-| `ADMIN_PASSWORD` | สุ่ม | รหัสผ่านของ `admin` ตอนสร้างครั้งแรก |
-| `UPLOAD_MAX_SIZE` | 10 GB | ขนาดสูงสุดต่อไฟล์ (ไบต์) |
-| `SECURE_COOKIE` / `TRUST_PROXY` | `false` / `false` | ตั้งเมื่อใช้ผ่าน HTTPS และ proxy |
-| `BACKUP_DIR` | `data/backups` | ที่เก็บไฟล์สำรอง |
+```bash
+docker compose logs file-center
+```
 
-**คำสั่งที่ใช้บ่อย**
+The log shows the random password of the `admin` account (unless you set `ADMIN_PASSWORD`). Open <http://localhost:3000>, sign in as `admin` and follow the prompts to change the password and set up two-step sign-in.
 
-| ต้องการ | คำสั่ง |
-|---|---|
-| ดูสถานะ | `docker compose ps` |
-| ดู log | `docker compose logs -f file-center` |
-| เริ่มใหม่ให้อ่าน `.env` ใหม่ | `docker compose up -d` |
-| หยุด | `docker compose down` |
+Data lives next to `docker-compose.yml`:
 
-ย้ายเครื่อง ใช้โดเมนผ่าน Cloudflare Tunnel หลัง 1Panel/nginx และ ONLYOFFICE ดู [ติดตั้ง](docs/install.md)
+```
+data/storage/   uploaded files
+data/system/    users, settings, activity, sessions (JSON files)
+data/backups/   backups (better on another disk)
+.env            settings and secrets, never commit it
+```
 
-## รันโดยไม่ใช้ Docker
+<details>
+<summary><b>Run without Docker</b></summary>
 
-ต้องมี [Bun](https://bun.sh) (Docker และ CI ใช้ 1.4.4)
+You need Bun 1.4.4 or newer.
 
 ```bash
 bun install
-bun run build      # คอมไพล์หน้าเว็บ (ถ้าไม่มี Node ในเครื่องให้ใช้: bun --bun run build)
-bun start          # เปิดที่ http://localhost:3000
+bun run build
+bun start
 ```
 
-- `bun start` เริ่มผ่าน launcher เพื่อให้อัปเดตจากหน้าเว็บได้
-- ครั้งแรกระบบสร้างบัญชี `admin` และ **แสดงรหัสผ่านที่สุ่มไว้ในหน้าจอ** (บังคับเปลี่ยนทันทีที่เข้าสู่ระบบ)
-  หรือกำหนดเองด้วย `ADMIN_PASSWORD=...` ก่อนเริ่มครั้งแรก
-- ข้อมูลอยู่ที่ `./storage` และ `./data` เปลี่ยนได้ด้วย `STORAGE_DIR` กับ `DATA_DIR`
-- ถ้าจะแก้โค้ด (`bun run dev`, `bun test`) ดู [คู่มือนักพัฒนา](docs/development.md)
+`bun start` goes through the launcher so that web updates work. Data goes to `./storage` and `./data` (`STORAGE_DIR`, `DATA_DIR`).
 
-## อัปเดตระบบ
+</details>
 
-ผู้ดูแลระบบสูงสุดอัปเดตได้จากหน้าเว็บ ไม่ต้อง FTP ไม่ต้องปิดระบบ
+## Configuration
 
-1. เปิดเมนู **ระบบ** แล้วเลือกแท็บ **อัปเดตระบบ**
-2. กด **ตรวจและอัปเดต** ถ้ามีเวอร์ชันใหม่ กด **อัปเดตเลย** (หรือลากไฟล์แพ็กเกจ `.zip` มาวาง)
-3. ใส่รหัสผ่านของคุณ กด **ติดตั้งและรีสตาร์ต** รอ 2–5 วินาที
+Settings come from `.env`; many can also be changed in the web page under **System → Settings**, which wins over `.env`.
 
-ระบบติดตั้งเฉพาะแพ็กเกจที่เซ็นลายเซ็นแล้ว ทดลองเปิดเวอร์ชันใหม่แยกต่างหากก่อน
-และย้อนกลับเองถ้าเปิดไม่ขึ้น (ดู [คู่มือผู้ดูแล](docs/admin-guide.md#อัปเดตระบบ))
+| Variable | Default | Purpose |
+|---|---|---|
+| `PORT` | `3000` | Port on the host |
+| `BIND_ADDRESS` | `127.0.0.1` | Set `0.0.0.0` to allow other machines on the LAN |
+| `ADMIN_PASSWORD` | random | Password of `admin` on first start |
+| `REQUIRE_2FA` | `staff` in the example | Who must use two-step sign-in |
+| `PUBLIC_PAGE` | `off` in the example | Public download page for visitors |
+| `UPLOAD_MAX_SIZE` | 10 GB | Largest single file, in bytes |
+| `SECURE_COOKIE` / `TRUST_PROXY` | `false` | Set when served over HTTPS behind a proxy |
+| `BACKUP_ENCRYPTION_KEY` | unset | Encrypt backups |
 
-**เมื่อไรต้อง `docker compose up -d --build` อีกครั้ง**
-การอัปเดตจากหน้าเว็บส่งเฉพาะโค้ดของแอป ไม่ส่งโปรแกรมของระบบ launcher หรือ Dockerfile ดังนั้นต้อง build ใหม่เมื่อ
+Every variable is listed in [docs/configuration.md](docs/configuration.md). Reverse proxies, Cloudflare Tunnel, 1Panel and ONLYOFFICE are covered in [docs/install.md](docs/install.md).
 
-- เปิดใช้การอัปเดตจากหน้าเว็บเป็นครั้งแรก (ให้มี launcher ในอิมเมจ)
-- รุ่นที่เพิ่มเครื่องมือของระบบ เช่น 1.11 ที่เพิ่มเครื่องมือภาพตัวอย่าง (vips, poppler, ffmpeg)
-  ไม่งั้นหน้าเว็บแสดงไอคอนแทนภาพ
-- รุ่นที่แก้ `Dockerfile`, `scripts/docker-entrypoint.sh` หรือ `src/launcher.ts`
+## Updating
 
-แก้แค่ `.env` หรือ `docker-compose.yml` ใช้ `docker compose up -d` พอ
-ตารางละเอียดอยู่ที่ [ติดตั้ง](docs/install.md#เมื่อไรต้อง-build-อิมเมจใหม่)
+Admins update from **System → Update**: check for a new version, type the password, and the app installs the signed package, test-starts it and rolls back if it does not come up.
 
-## เอกสาร
+Web updates ship only the app code. Rebuild the image (`docker compose up -d --build`) when a release notes a change to the `Dockerfile`, system tools or the launcher.
 
-| ไฟล์ | เนื้อหา |
+## Documentation
+
+| Guide | Contents |
 |---|---|
-| [คู่มือผู้ใช้](docs/user-guide.md) | ใช้งานประจำวัน: ไฟล์ อัปโหลด ค้นหา คีย์ลัด แชร์ ถังขยะ การแจ้งเตือน 2FA WebDAV แกลเลอรี และคู่มือในแอป |
-| [คู่มือผู้ดูแล](docs/admin-guide.md) | บทบาทและสิทธิ์ ผู้ใช้ โควตา กลุ่ม หน้า "ระบบ" (สำรอง/กู้คืน อัปเดต บันทึก ถังขยะ) การแจ้งเตือนระบบ (webhook) และ CLI |
-| [ติดตั้ง](docs/install.md) | Docker ละเอียด ย้ายเครื่อง ความปลอดภัยของคอนเทนเนอร์ Cloudflare Tunnel 1Panel/nginx ONLYOFFICE เครื่องมือภาพตัวอย่าง และออกอัปเดตเอง |
-| [ตั้งค่าระบบ](docs/configuration.md) | ตัวแปรสภาพแวดล้อมทุกตัว จัดเป็นหมวด พร้อมค่าเริ่มต้นและไฟล์ข้อมูลใน `DATA_DIR` |
-| [ความปลอดภัย](docs/security.md) | สิ่งที่ระบบป้องกัน 2FA และ `secret.key` ความปลอดภัยของคอนเทนเนอร์ การตรวจช่องโหว่ใน CI และข้อจำกัดที่ควรรู้ |
-| [คู่มือนักพัฒนา](docs/development.md) | โครงสร้างโค้ด QA และ CI benchmark การออกรุ่นที่เซ็นแล้ว ความต่างจาก FileGator และอ้างอิง API |
+| [User guide](docs/user-guide.md) | Files, upload, sharing, trash, notifications, 2FA, WebDAV |
+| [Admin guide](docs/admin-guide.md) | Roles, users, quotas, groups, backup and restore, updates, CLI |
+| [Install](docs/install.md) | Docker in depth, proxies, tunnels, ONLYOFFICE, publishing updates |
+| [Configuration](docs/configuration.md) | All environment variables and data files |
+| [Security](docs/security.md) | Threat model, hardening, personal data, known limits |
+| [Development](docs/development.md) | Code layout, tests, QA, releases, API reference |
 
-อ่านเป็นภาษาอังกฤษ: [README.en.md](README.en.md)
-(สรุปเนื้อหาเดียวกับหน้านี้ คู่มือละเอียดใน `docs/` เป็นภาษาไทย)
+The guides are written in Thai.
+
+## Development
+
+```bash
+bun install
+bun run dev        # API with watch + Vite dev server
+bun test           # test suite
+bun run typecheck
+bun run qa         # full check: tests, typecheck, route coverage, budgets
+```
+
+```
+src/      server (Elysia routes, auth, storage, backups, updater)
+web/      browser app (Vue 3 + Naive UI)
+tests/    bun test suites
+scripts/  launcher, packaging, release, QA tools
+docs/     guides (Thai)
+```
+
+CI runs the QA check, a Trivy scan, a Docker build and a benchmark on every push. See [docs/development.md](docs/development.md) for details.
+
+## Security
+
+Please report security problems privately through [GitHub security advisories](https://github.com/RockZa27/file-center/security/advisories/new) instead of a public issue. What the app protects and its known limits are described in [docs/security.md](docs/security.md).
