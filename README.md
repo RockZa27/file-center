@@ -9,6 +9,7 @@ One container, no database, your files stay on your own disk.
 ![Bun](https://img.shields.io/badge/runtime-Bun%201.4-black?logo=bun)
 ![Vue](https://img.shields.io/badge/web-Vue%203-42b883?logo=vue.js)
 ![Docker](https://img.shields.io/badge/deploy-Docker-2496ed?logo=docker&logoColor=white)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 English · [ไทย](README.th.md)
 
@@ -159,3 +160,7 @@ CI runs the QA check, a Trivy scan, a Docker build and a benchmark on every push
 ## Security
 
 Please report security problems privately through [GitHub security advisories](https://github.com/RockZa27/file-center/security/advisories/new) instead of a public issue. What the app protects and its known limits are described in [docs/security.md](docs/security.md).
+
+## License
+
+[MIT](LICENSE)
