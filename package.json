@@ -2,6 +2,7 @@
   "name": "file-center",
   "version": "2.0.0-beta.1",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "concurrently -n api,web -c blue,green \"bun --watch src/index.ts\" \"vite --config web/vite.config.js\"",
