@@ -1,5 +1,17 @@
 # File Center 2.0.0-beta.1 — security audit report (run 4, full)
 
+## Fixed after this run
+
+The records below describe source ref `865b26d` and are left as found. The three medium findings were fixed in commit `95d916a`; each fix has a regression test in `tests/security-200.test.ts` that fails on the old code, and the audit's own reproduction scripts now come out the other way:
+
+| Fingerprint | Fix | Re-run of the audit script |
+|---|---|---|
+| `stepup:admin-account-create-and-password-set-without-step-up` | creating or promoting an admin, and setting an admin's password, ask for the acting admin's password; new admins raise an alert | create admin without a password: 403 `auth.wrong-password` (was 200) |
+| `zip-checkdirectory-eocd-mismatch-bypass` | `checkDirectory` applies the limits to the largest of all end records in the tail | crafted 120,000-entry zip: refused 413 (was passed) |
+| `files:batch-token-map-unbounded` | at most 20 unused tokens per caller (visitors per address) and 2,000 in all, oldest dropped first | 2,000 anonymous calls: first token 404, newest 200 (all were kept) |
+
+The six low and one informational findings, the pending severity proposal and the deferred and blocked coverage are not addressed yet.
+
 ## Run
 
 - **This run is incomplete in three stated ways; everything else below is final.** (1) One confirmed low record (`lifecycle.user-create-concurrent-duplicate-username`) has an unreconciled Phase 5 proposal to lower it to informational (a severity change needs one more independent verifier; the 40-agent budget is spent). (2) The final coverage critic was not clean: 4 coverage units are `deferred`, not hunted. (3) 2 units are `blocked` on tools that are not installed in the audit environment. `run_status: incomplete`, reason `phase5_material_replacement_needs_independent_verifier_budget_exhausted`.
