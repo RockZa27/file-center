@@ -40,7 +40,7 @@ const home = (user: string, ...p: string[]) => join(process.env.STORAGE_DIR!, 'u
 const saved = {} as typeof ins.INSIGHT_LIMITS
 
 async function user(username: string, role = 'user') {
-  const r = await admin.json('POST', '/api/admin/users', { username, name: username, password: PW, role, permissions: PERMS, publicPermissions: [] })
+  const r = await admin.json('POST', '/api/admin/users', { username, name: username, password: PW, role, confirmPassword: process.env.ADMIN_PASSWORD, permissions: PERMS, publicPermissions: [] })
   expect(r.status).toBe(200)
   return new Client().login(username, PW)
 }

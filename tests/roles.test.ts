@@ -46,7 +46,7 @@ beforeAll(async () => {
   await admin.as('admin', 'test-admin-pass')
   expect((await admin.json('POST', '/api/admin/users', mk('mia', 'manager', { publicPermissions: ['read', 'download'] }))).status).toBe(200)
   expect((await admin.json('POST', '/api/admin/users', mk('max', 'manager'))).status).toBe(200)
-  expect((await admin.json('POST', '/api/admin/users', mk('boss2', 'admin'))).status).toBe(200)
+  expect((await admin.json('POST', '/api/admin/users', mk('boss2', 'admin', { confirmPassword: 'test-admin-pass' }))).status).toBe(200)
   expect((await admin.json('POST', '/api/admin/users', mk('ann', 'user'))).status).toBe(200)
   mia = await new Client().as('mia')
   const made = await mia.json('POST', '/api/admin/users', mk('ubob', 'user'))
@@ -370,7 +370,7 @@ describe('roles: what stays with the admin', () => {
 
 describe('roles: the last admin', () => {
   test('stays: the only admin can be neither deleted nor demoted', async () => {
-    expect((await admin.json('POST', '/api/admin/users', mk('tmp-admin', 'admin'))).status).toBe(200)
+    expect((await admin.json('POST', '/api/admin/users', mk('tmp-admin', 'admin', { confirmPassword: 'test-admin-pass' }))).status).toBe(200)
     expect((await admin.json('DELETE', '/api/admin/users/tmp-admin')).status).toBe(200)
     expect((await admin.json('DELETE', '/api/admin/users/boss2')).status).toBe(200)
     // other test files may have made admins: they step down for this check, and come back after
@@ -380,7 +380,7 @@ describe('roles: the last admin', () => {
     expect((await admin.json('PUT', '/api/admin/users/admin', { role: 'user' })).data.code).toBe('admin.last-admin')
     expect((await admin.json('DELETE', '/api/admin/users/admin')).status).toBe(400)
     expect((await row(admin, 'admin')).role).toBe('admin')
-    for (const name of others) expect((await admin.json('PUT', `/api/admin/users/${name}`, { role: 'admin' })).status).toBe(200)
+    for (const name of others) expect((await admin.json('PUT', `/api/admin/users/${name}`, { role: 'admin', confirmPassword: 'test-admin-pass' })).status).toBe(200)
   })
   test('an admin may make a manager', async () => {
     expect((await admin.json('PUT', '/api/admin/users/ann', { role: 'manager' })).status).toBe(200)

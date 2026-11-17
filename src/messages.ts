@@ -211,6 +211,7 @@ export const MESSAGES = {
   'auth.2fa-required': { th: 'ผู้ดูแลระบบกำหนดให้บัญชีของคุณต้องเปิดใช้การยืนยันตัวตนสองขั้นตอน (2FA) ก่อนใช้งานต่อ', en: 'Your account must turn on two-factor authentication (2FA) before you can continue.' },
   'share.must-have-password': { th: 'ลิงก์แชร์ต้องตั้งรหัสผ่าน', en: 'A share link must have a password.' },
   'admin.alert-security-changed': { th: '{user} เปลี่ยนการตั้งค่าความปลอดภัย อีเมล หรือการแจ้งเตือน: {keys}', en: '{user} changed the security, email or alert settings: {keys}' },
+  'admin.alert-admin-created': { th: '{user} ให้สิทธิ์ผู้ดูแลระบบแก่บัญชี {target}', en: '{user} gave the account {target} the administrator role' },
   'admin.mail-test-wait': { th: 'ส่งอีเมลทดสอบได้ทุก {seconds} วินาที กรุณารอสักครู่', en: 'A test e-mail can be sent every {seconds} seconds. Please wait a moment.' },
   'admin.mail-test-no-address': { th: 'ไม่มีที่อยู่อีเมลปลายทาง: ระบุอีเมลหรือยืนยันอีเมลของคุณที่หน้าการแจ้งเตือนก่อน', en: 'There is no address to send to: give an address or confirm your own e-mail in the notification settings first.' },
   'admin.mail-test-failed': { th: 'ส่งอีเมลทดสอบไม่สำเร็จ: {reason}', en: 'The test e-mail could not be sent: {reason}' },

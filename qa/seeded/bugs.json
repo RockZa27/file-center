@@ -2181,5 +2181,50 @@
         "replace": "  return (r: AuditEntry) => r.user === u.username\n"
       }
     ]
+  },
+  {
+    "id": "admin-create-no-stepup",
+    "difficulty": "medium",
+    "category": "authz",
+    "severity": "medium",
+    "tests": "tests/security-200.test.ts",
+    "description": "an admin session alone creates a new admin with a password it chose, whose password then passes every step-up",
+    "patches": [
+      {
+        "file": "src/routes/admin.ts",
+        "find": "    if (body.role === 'admin') await confirmPassword(admin, ip, body.confirmPassword ?? '', 'user-admin-denied')\n",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "zip-last-eocd-only",
+    "difficulty": "hard",
+    "category": "dos",
+    "severity": "medium",
+    "tests": "tests/security-200.test.ts",
+    "description": "the central-directory pre-check stops at the last EOCD signature, so a fake empty EOCD in the real one's comment hides an oversized directory from it",
+    "patches": [
+      {
+        "file": "src/zip.ts",
+        "find": "    if (n > entries) entries = n\n    if (b > bytes) bytes = b\n",
+        "replace": "    if (n > entries) entries = n\n    if (b > bytes) bytes = b\n    break\n"
+      }
+    ]
+  },
+  {
+    "id": "batch-tokens-uncapped",
+    "difficulty": "easy",
+    "category": "dos",
+    "severity": "medium",
+    "tests": "tests/security-200.test.ts",
+    "description": "batch download tokens are kept until they expire with no cap, so one visitor can make the server hold any number of name lists",
+    "patches": [
+      {
+        "file": "src/routes/files.ts",
+        "find": "    for (const [k] of mine.slice(0, Math.max(0, mine.length - BATCH_PER_CALLER + 1))) batches.delete(k)\n",
+        "replace": ""
+      }
+    ]
   }
 ]

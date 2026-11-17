@@ -59,7 +59,7 @@ beforeAll(async () => {
   savedCfg = config.require2fa
   savedSec = settings.get().security
   await boss.login('admin', process.env.ADMIN_PASSWORD!)
-  const r = await boss.json('POST', '/api/admin/users', { username: 'sd-admin', name: 'sd', password: PW, role: 'admin', permissions: ['read'], publicPermissions: [] })
+  const r = await boss.json('POST', '/api/admin/users', { username: 'sd-admin', name: 'sd', password: PW, role: 'admin', permissions: ['read'], publicPermissions: [], confirmPassword: process.env.ADMIN_PASSWORD })
   expect(r.status).toBe(200)
 })
 

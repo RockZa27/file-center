@@ -61,7 +61,7 @@ const withPw = (body: any) => ({ ...body, password: ADMIN_PW })
 const home = (user: string, ...p: string[]) => join(process.env.STORAGE_DIR!, 'users', user, ...p)
 
 async function userWith(username: string, permissions: string[], role = 'user') {
-  const r = await admin.json('POST', '/api/admin/users', { username, name: username, password: PW, role, permissions, publicPermissions: [] })
+  const r = await admin.json('POST', '/api/admin/users', { username, name: username, password: PW, role, confirmPassword: process.env.ADMIN_PASSWORD, permissions, publicPermissions: [] })
   expect(r.status).toBe(200)
   return new Client().login(username, PW)
 }
@@ -591,7 +591,7 @@ describe('config warnings', () => {
     expect(await codes({ 'x-forwarded-proto': 'https' })).not.toContain('admin.config-insecure-cookie')
 
     // a second administrator that was handed a password and has not changed it (the first one would be held back itself)
-    expect((await admin.json('POST', '/api/admin/users', { username: 'sp-adm2', name: 'x', password: PW, role: 'admin', permissions: [], publicPermissions: [] })).status).toBe(200)
+    expect((await admin.json('POST', '/api/admin/users', { username: 'sp-adm2', name: 'x', password: PW, role: 'admin', permissions: [], publicPermissions: [], confirmPassword: ADMIN_PW })).status).toBe(200)
     try {
       expect(await codes()).not.toContain('admin.config-admin-initial-password')
       auth.findUser('sp-adm2')!.mustChangePassword = true

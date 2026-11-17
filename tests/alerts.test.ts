@@ -308,7 +308,7 @@ describe('alerts: events', () => {
     expect(got.length).toBe(1)
 
     // the password step-up of install/restore, on an admin of its own (the counter is per user)
-    expect((await admin.json('POST', '/api/admin/users', { username: 'alert-admin', name: 'x', password: 'copper-kettle-77', role: 'admin', permissions: [], publicPermissions: [] })).status).toBe(200)
+    expect((await admin.json('POST', '/api/admin/users', { username: 'alert-admin', name: 'x', password: 'copper-kettle-77', role: 'admin', permissions: [], publicPermissions: [], confirmPassword: process.env.ADMIN_PASSWORD })).status).toBe(200)
     const other = new Client()
     await other.login('alert-admin', 'copper-kettle-77')
     useHook('json')

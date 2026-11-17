@@ -44,7 +44,7 @@ const made = new Set<string>()
 const trashMade = new Set<string>()
 
 async function userWith(username: string, extra: Record<string, unknown> = {}, role = 'user') {
-  const r = await admin.json('POST', '/api/admin/users', { username, name: username, password: PW, role, permissions: PERMS, publicPermissions: [], ...extra })
+  const r = await admin.json('POST', '/api/admin/users', { username, name: username, password: PW, role, confirmPassword: process.env.ADMIN_PASSWORD, permissions: PERMS, publicPermissions: [], ...extra })
   expect(r.status).toBe(200)
   made.add(username)
   return new Client().login(username, PW)

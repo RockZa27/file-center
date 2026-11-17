@@ -9,6 +9,14 @@ export const releases = [
     version: '2.0.0-beta.1',
     items: [
       {
+        id: '200-admin-step-up', icon: 'lock', roles: ['admin'],
+        title: { th: 'ให้สิทธิ์ผู้ดูแลระบบต้องใส่รหัสผ่านของคุณ', en: 'Giving the administrator role asks for your password' },
+        text: {
+          th: 'การเพิ่มผู้ดูแลระบบสูงสุด การเลื่อนบัญชีเป็นผู้ดูแลระบบสูงสุด และการตั้งรหัสผ่านให้บัญชีผู้ดูแลระบบสูงสุด ต้องใส่รหัสผ่านของคุณเองก่อนบันทึก และมีการแจ้งเตือนทุกครั้งที่มีผู้ดูแลระบบสูงสุดเพิ่ม คนที่ได้ session ของคุณไปจึงสร้างผู้ดูแลระบบใหม่ไม่ได้',
+          en: 'Adding an administrator, making an account an administrator and setting the password of an administrator account now ask for your own password, and every new administrator is announced in the alerts. Someone holding only your session cannot make a new administrator.',
+        },
+      },
+      {
         id: '200-app-password-expiry', icon: 'system', roles: ['user'],
         title: { th: 'รหัสผ่านแอปมีอายุ', en: 'App passwords now expire' },
         text: {

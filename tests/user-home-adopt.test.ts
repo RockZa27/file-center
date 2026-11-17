@@ -130,7 +130,7 @@ describe('admin takes over a folder', () => {
   })
 
   test('an admin account (home "/") is not affected', async () => {
-    expect((await mk(admin, 'uha-adm', { role: 'admin' })).status).toBe(200)
+    expect((await mk(admin, 'uha-adm', { role: 'admin', confirmPassword: process.env.ADMIN_PASSWORD })).status).toBe(200)
   })
 })
 

@@ -15,6 +15,10 @@ export const DIRECTORY_MAX_ENTRIES = 100_000
  * full), read before zip.js is let near the file. Refuses with 413 `archive.directory-too-big`. A file with no EOCD is
  * left to zip.js, which refuses it as not-zip. `maxEntries` is a lower limit still (the extractor's file cap); passing
  * it refuses with `tooMany()` instead.
+ *
+ * The tail may hold more than one EOCD signature (a second record placed in the comment of the first), and which one
+ * a reader takes is the reader's business: every record that fits in the file is read and the limits apply to the
+ * largest of them, so they hold whichever one zip.js goes by.
  */
 export async function checkDirectory(abs: string, { maxEntries = DIRECTORY_MAX_ENTRIES, tooMany }: { maxEntries?: number; tooMany?: () => HttpError } = {}): Promise<void> {
   const file = Bun.file(abs)
@@ -22,30 +26,37 @@ export async function checkDirectory(abs: string, { maxEntries = DIRECTORY_MAX_E
   const tailLen = Math.min(size, 22 + 0xffff)
   const tail = new Uint8Array(await file.slice(size - tailLen, size).arrayBuffer())
   const dv = new DataView(tail.buffer, tail.byteOffset, tail.byteLength)
-  let at = -1
-  for (let i = tail.length - 22; i >= 0; i--) {
-    if (dv.getUint32(i, true) === 0x06054b50) { at = i; break }
-  }
-  if (at < 0) return
-  let entries = BigInt(dv.getUint16(at + 10, true))
-  let bytes = BigInt(dv.getUint32(at + 12, true))
-  if (entries === 0xffffn || bytes === 0xffffffffn || dv.getUint32(at + 16, true) === 0xffffffff) {
-    // the ZIP64 locator is the 20 bytes before the EOCD and points at the ZIP64 record
-    const locAt = size - tailLen + at - 20
-    if (locAt >= 0) {
-      const loc = new DataView(await file.slice(locAt, locAt + 20).arrayBuffer())
-      if (loc.getUint32(0, true) === 0x07064b50) {
-        const recAt = Number(loc.getBigUint64(8, true))
-        if (recAt >= 0 && recAt + 56 <= size) {
-          const rec = new DataView(await file.slice(recAt, recAt + 56).arrayBuffer())
-          if (rec.getUint32(0, true) === 0x06064b50) {
-            entries = rec.getBigUint64(32, true)
-            bytes = rec.getBigUint64(40, true)
+  let entries = 0n
+  let bytes = 0n
+  let found = false
+  for (let at = tail.length - 22; at >= 0; at--) {
+    if (dv.getUint32(at, true) !== 0x06054b50) continue
+    // a record whose comment would run past the end of the file is not an EOCD (the bytes only look like one)
+    if (at + 22 + dv.getUint16(at + 20, true) > tail.length) continue
+    found = true
+    let n = BigInt(dv.getUint16(at + 10, true))
+    let b = BigInt(dv.getUint32(at + 12, true))
+    if (n === 0xffffn || b === 0xffffffffn || dv.getUint32(at + 16, true) === 0xffffffff) {
+      // the ZIP64 locator is the 20 bytes before the EOCD and points at the ZIP64 record
+      const locAt = size - tailLen + at - 20
+      if (locAt >= 0) {
+        const loc = new DataView(await file.slice(locAt, locAt + 20).arrayBuffer())
+        if (loc.getUint32(0, true) === 0x07064b50) {
+          const recAt = Number(loc.getBigUint64(8, true))
+          if (recAt >= 0 && recAt + 56 <= size) {
+            const rec = new DataView(await file.slice(recAt, recAt + 56).arrayBuffer())
+            if (rec.getUint32(0, true) === 0x06064b50) {
+              n = rec.getBigUint64(32, true)
+              b = rec.getBigUint64(40, true)
+            }
           }
         }
       }
     }
+    if (n > entries) entries = n
+    if (b > bytes) bytes = b
   }
+  if (!found) return
   if (bytes > BigInt(DIRECTORY_MAX_BYTES)) throw new HttpError(413, 'archive.directory-too-big')
   if (entries > BigInt(Math.min(maxEntries, DIRECTORY_MAX_ENTRIES))) throw tooMany ? tooMany() : new HttpError(413, 'archive.directory-too-big')
 }

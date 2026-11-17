@@ -107,8 +107,17 @@ export function fileResponse(abs: string, name: string, request: Request, wantIn
   return new Response(file, { headers: { ...headers, 'Content-Length': String(st.size) } })
 }
 
-type Batch = { owner: string; space: string; root: string; dir: string; names: string[]; expires: number }
+type Batch = { owner: string; /** who the caps count: the account, or a visitor's address (visitors share the owner "guest") */ key: string; space: string; root: string; dir: string; names: string[]; expires: number }
 const batches = new Map<string, Batch>()
+/**
+ * A token is used right after it is made, so few are ever alive: one caller holds at most BATCH_PER_CALLER and the
+ * server BATCH_MAX. Past either, the oldest goes (a Map keeps insertion order) instead of refusing the new one, so
+ * asking again and again cannot make the server keep a list of names per call until memory runs out.
+ */
+export const BATCH_PER_CALLER = 20
+export const BATCH_MAX = 2000
+/** for tests: how many tokens are held */
+export const batchCount = () => batches.size
 
 /** set when the space is a staff member's read-only view of someone's home (user:<name>): the audit names whose files */
 const viewDetail = (a: { space: string }) => (isForeignSpace(a.space) ? { detail: a.space } : {})
@@ -446,7 +455,11 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     const token = randomBytes(18).toString('base64url')
     const now = Date.now()
     for (const [k, v] of batches) if (v.expires < now) batches.delete(k)
-    batches.set(token, { owner: user?.username ?? 'guest', space: body.space, root: a.root, dir: dirRel, names, expires: now + 5 * 60_000 })
+    const key = user ? user.username.toLowerCase() : `guest|${ip}`
+    const mine = [...batches].filter(([, v]) => v.key === key)
+    for (const [k] of mine.slice(0, Math.max(0, mine.length - BATCH_PER_CALLER + 1))) batches.delete(k)
+    while (batches.size >= BATCH_MAX) batches.delete(batches.keys().next().value!)
+    batches.set(token, { owner: user?.username ?? 'guest', key, space: body.space, root: a.root, dir: dirRel, names, expires: now + 5 * 60_000 })
     return { token }
   })
 
