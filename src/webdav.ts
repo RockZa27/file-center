@@ -26,9 +26,9 @@ import { lstatSync, mkdirSync, readdirSync, renameSync, rmSync, statSync, utimes
 import { copyFile, open } from 'node:fs/promises'
 import { basename, dirname, join } from 'node:path'
 import { alert } from './alerts'
-import { touchAppPassword, verifyAppPassword, type AppPassword, type AppScope } from './app-passwords'
+import { appPasswordStillValid, touchAppPassword, verifyAppPassword, type AppPassword, type AppScope } from './app-passwords'
 import { audit, auditOnce } from './audit'
-import { accessFor, clearFailures, lockedFor, recordedName, recordFailure, reloadIfChangedByCli, USER_SPACE, type Access, type Lockout, type User } from './auth'
+import { accessFor, clearFailures, findUser, lockedFor, recordedName, recordFailure, reloadIfChangedByCli, USER_SPACE, type Access, type Lockout, type User } from './auth'
 import { config, paths, proxyTrusted } from './config'
 import * as policy from './policy'
 import { clientIp } from './context'
@@ -604,6 +604,26 @@ const SPACE_CHECK_EVERY = 8 * 1024 * 1024
 /** how much quota a PUT without Content-Length takes at a time while its bytes arrive */
 const RESERVE_STEP = 4 * 1024 * 1024
 
+/** one account, not only one name: a deleted account made again under the same name is another */
+const accountKey = (u: User | null) => u ? `${u.username.toLowerCase()}|${u.createdAt}` : ''
+
+/**
+ * asked again at the end of a PUT, before anything in the storage changes: the body may have taken minutes and the scan
+ * more. The app password may have been revoked, the account deleted (or made again under the same name), or its rights
+ * lowered meanwhile. Gives the space as it is now; throws like the sign-in and the first check would.
+ */
+function recheck(ctx: Ctx, segs: string[], abs: string, replacing: boolean): { user: User; s: Space & { kind: 'space' } } {
+  const user = findUser(ctx.user.username)
+  if (!user || user.createdAt !== ctx.user.createdAt || !appPasswordStillValid(ctx.item, user)) throw new HttpError(401, 'auth.bad-credentials')
+  if (user.mustChangePassword) throw new HttpError(403, 'must-change-password')
+  if (policy.mustSetup2fa(user)) throw new HttpError(403, 'auth.2fa-required')
+  const s = writableSpace(placeOf({ ...ctx, user }, segs), segs)
+  if (s.abs !== abs) throw forbidden()
+  allow(s, 'upload')
+  if (replacing) allow(s, 'write')
+  return { user, s }
+}
+
 async function putMethod(ctx: Ctx, segs: string[], place_: Place | null): Promise<Response> {
   const { request, user, ip } = ctx
   const s = writableSpace(place_, segs)
@@ -683,6 +703,10 @@ async function putMethod(ctx: Ctx, segs: string[], place_: Place | null): Promis
     await ready(owner)
     const cur = statOf(s.abs)
     if (cur?.isDirectory()) throw new HttpError(405, 'files.dav-is-folder')
+    // from here to the file being placed there is no await: the rights, the credential and whose quota it is are those of now
+    const fresh = recheck(ctx, segs, s.abs, !!cur)
+    // the quota held while the bytes came is still the one to charge (not a new account that took the name)
+    if (accountKey(quotaUserOf(fresh.s, fresh.user)) !== accountKey(q)) throw forbidden()
     preconditions(request, cur)
     const grow = written - (cur?.size ?? 0)
     hold?.release()

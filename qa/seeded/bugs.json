@@ -2226,5 +2226,50 @@
         "replace": ""
       }
     ]
+  },
+  {
+    "id": "store-write-ignores-cli-marker",
+    "difficulty": "hard",
+    "category": "auth",
+    "severity": "medium",
+    "tests": "tests/security-201.test.ts",
+    "description": "the stores no longer look at the command line's change marker before a timer write, so the running app writes revoked sessions and app passwords back over a `sessions-revoke`",
+    "patches": [
+      {
+        "file": "src/auth.ts",
+        "find": "JsonStore.beforeWrite = reloadIfChangedByCli\n",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "dav-put-no-recheck",
+    "difficulty": "medium",
+    "category": "auth",
+    "severity": "low",
+    "tests": "tests/security-201.test.ts",
+    "description": "a WebDAV PUT no longer asks again for the app password, the account and its rights after the body arrived, so a revoke or a lowered right while it runs is ignored",
+    "patches": [
+      {
+        "file": "src/webdav.ts",
+        "find": "    const fresh = recheck(ctx, segs, s.abs, !!cur)\n",
+        "replace": "    const fresh = { user, s }\n"
+      }
+    ]
+  },
+  {
+    "id": "edit-save-no-recheck",
+    "difficulty": "medium",
+    "category": "auth",
+    "severity": "low",
+    "tests": "tests/security-201.test.ts",
+    "description": "the text editor save no longer asks again for the account and its write right after the virus scan",
+    "patches": [
+      {
+        "file": "src/routes/files.ts",
+        "find": "      const fresh = user ? findUser(user.username) ?? null : null\n      if (user && (!fresh || fresh.createdAt !== user.createdAt)) throw new HttpError(401, 'auth.required')\n      const a2 = need({ user: fresh, ip }, body.space, 'write')\n",
+        "replace": "      const fresh = user\n      const a2 = a\n"
+      }
+    ]
   }
 ]

@@ -138,6 +138,15 @@ const usable = (p: AppPassword, user: User) => ownedBy(p, user) && !expired(p)
 /** past its lifetime; no field (an old record) or null never expires; a date that can not be read counts as expired */
 const expired = (p: AppPassword) => !!p.expiresAt && !(Date.now() < Date.parse(p.expiresAt))
 
+/**
+ * the record a request signed in with is still there and usable by this account: a long request (a WebDAV PUT whose
+ * body arrives slowly) asks again before it changes anything, so a revoke while it runs is not ignored
+ */
+export function appPasswordStillValid(item: AppPassword, user: User): boolean {
+  const now = store.value.items.find(p => p.id === item.id)
+  return !!now && usable(now, user)
+}
+
 export type AppPasswordCheck = { user: User; item: AppPassword; expired?: false } | { user: User; item: AppPassword; expired: true }
 
 /**

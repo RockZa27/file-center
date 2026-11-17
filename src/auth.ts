@@ -332,6 +332,9 @@ export function reloadIfChangedByCli() {
     log.error('cli-reload-failed', err)
   }
 }
+// every store looks at the marker before it changes or writes anything, not only at the start of a request: a timer
+// write in between would put the old sessions and app passwords back over what the CLI removed
+JsonStore.beforeWrite = reloadIfChangedByCli
 
 export function purgeExpiredSessions() {
   const now = Date.now()

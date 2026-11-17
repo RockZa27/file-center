@@ -5,7 +5,7 @@ import { basename, dirname, extname, join } from 'node:path'
 import { Elysia, t } from 'elysia'
 import { audit, auditOnce } from '../audit'
 import { antivirusOn, gate } from '../antivirus'
-import { isForeignSpace } from '../auth'
+import { findUser, isForeignSpace, type User } from '../auth'
 import { config, paths } from '../config'
 import { takeUnzipSlot } from '../archive'
 import { context, need, requireUser } from '../context'
@@ -213,11 +213,8 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
 
   .put('/content', { body: t.Object({ space: t.String(), path: t.String(), content: t.String(), expectedMtime: t.Optional(t.Number()) }) }, async ({ user, ip, body }) => {
     const a = need({ user, ip }, body.space, 'write')
-    const q = quotaUserOf(a, user)
     const rel = normRel(body.path)
     const abs = resolveIn(a.root, rel)
-    // the earlier versions of the file count against the owner of the home it is in (not always the one saving)
-    const owner = ownerOfPath(abs)
     const st0 = existsSync(abs) ? statSync(abs) : null
     if (!st0 || !st0.isFile()) throw notFound()
     const bytes = Buffer.byteLength(body.content)
@@ -235,9 +232,23 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
         rmSync(tmp, { force: true })
       }
     }
-    // the counts are awaited last (after the scan, which may take a while): from here to the write there is no await
+    // asked again after the scan, which may take a while: the account may have gone (or been made again under the same
+    // name) or lost the right to write here meanwhile. The rights, the quota and the owner are those of now.
+    const current = (): User | null => {
+      const fresh = user ? findUser(user.username) ?? null : null
+      if (user && (!fresh || fresh.createdAt !== user.createdAt)) throw new HttpError(401, 'auth.required')
+      const a2 = need({ user: fresh, ip }, body.space, 'write')
+      if (resolveIn(a2.root, rel) !== abs) throw forbidden()
+      return quotaUserOf(a2, fresh)
+    }
+    const q = current()
+    // the earlier versions of the file count against the owner of the home it is in (not always the one saving)
+    const owner = ownerOfPath(abs)
+    // the counts are awaited last; then the check once more, and from there to the write there is no await
     await ready(q)
     await ready(owner)
+    const key = (u: User | null) => u ? `${u.username.toLowerCase()}|${u.createdAt}` : ''
+    if (key(current()) !== key(q)) throw forbidden()
     // read again: the file may have changed during the scan
     const st = existsSync(abs) ? statSync(abs) : null
     if (!st || !st.isFile()) throw notFound()

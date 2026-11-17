@@ -1,5 +1,17 @@
 # File Center 2.0.0-beta.1 — security audit follow-up (run 5, scoped)
 
+## Fixed after this run
+
+The records below describe source ref `33f1abb` and are left as found. The three confirmed findings were fixed afterwards; each fix has a regression test in `tests/security-201.test.ts` that fails on the old code (6 tests; 2 more are controls), a seeded bug in `qa/seeded/bugs.json` that those tests catch, and the Phase 3 verifiers' own scripts now come out the other way:
+
+| Fingerprint | Fix | Re-run of the verifier script |
+|---|---|---|
+| `store-timer-write-overwrites-cli-revocation` | every `JsonStore` change or write first calls `reloadIfChangedByCli` (`JsonStore.beforeWrite`), so a timer write reads the CLI's files before it writes | revoked app password: 401 and 0 on disk after the timer (was 207 and 1); revoked session stays gone |
+| `webdav/put-stale-auth-after-body` | before the file is placed, `putMethod` asks again for the app password, the account instance (name, `createdAt`), 2FA and password rules, the space and `upload`/`write`, and the quota owner | PUT after revoke: 401, no file (was 201) |
+| `files/put-content-stale-auth-after-scan` | after the scan, and again after the quota counts are awaited, the save asks again for the account instance and `write`, and takes the quota owner from that | in-flight save after downgrade: 403, old content kept (was 200) |
+
+The two unresolved zip candidates and the two coverage gaps named by the critic are not addressed.
+
 ## Run
 
 - **Scoped follow-up, not a full audit.** Only the four coverage units that run 4 (`qa/reports/sec-2.0.0-beta.1/`) left `deferred` were reviewed: CLI revocation vs the running app's store writes, WebDAV PUT and editor saves vs account/credential changes, zip creation cost, search cost. All other units are `out_of_scope` here and keep their run-4 result.
