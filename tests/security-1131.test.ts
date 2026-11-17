@@ -159,15 +159,20 @@ describe('the visitors\' daily upload allowance', () => {
     const link = await f.json('POST', '/api/shares', { space: 'home', path: '/drop', days: 7, kind: 'upload' })
     expect(link.status).toBe(200)
     const was = { daily: config.guestUploadDailyBytes, proxy: config.trustProxy }
-    config.guestUploadDailyBytes = 4000
+    // the day's counter is shared by every test file of the run: the allowance is set so that two addresses' shares
+    // (a quarter each) still fit after what earlier files used today, whatever ran before
+    const { guestUploadUsage } = await import('../src/uploads')
+    const limit = Math.max(4000, Math.ceil(guestUploadUsage().used / 2) * 4)
+    const share = limit / 4
+    config.guestUploadDailyBytes = limit
     ;(config as any).trustProxy = 'true'
     try {
       const announce = (ip: string, size: number) => new Client().json('POST', `/api/s/${link.data.token}/upload`, { name: 'x.bin', size }, { 'x-forwarded-for': ip })
-      expect((await announce('192.0.2.1', 3000)).status).toBe(429)
-      expect((await announce('192.0.2.1', 1000)).status).toBe(200)
+      expect((await announce('192.0.2.1', share * 3)).status).toBe(429)
+      expect((await announce('192.0.2.1', share)).status).toBe(200)
       expect((await announce('192.0.2.1', 1)).status).toBe(429)
       // another visitor is not locked out by the first one
-      expect((await announce('192.0.2.2', 1000)).status).toBe(200)
+      expect((await announce('192.0.2.2', share)).status).toBe(200)
     } finally {
       config.guestUploadDailyBytes = was.daily
       ;(config as any).trustProxy = was.proxy

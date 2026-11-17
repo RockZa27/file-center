@@ -187,10 +187,14 @@ describe('batch download tokens are capped per caller and in total', () => {
       expect(r.status).toBe(200)
       tokens.push(r.data.token)
     }
-    expect(files.batchCount()).toBe(before + files.BATCH_PER_CALLER)
-    const first = await visitor.json('GET', `/api/batch/${tokens[0]}`)
-    expect(first.status).toBe(404)
-    expect(first.data.code).toBe('files.link-expired')
+    // every visitor of this process shares one address (the in-process requests have none), so tokens other test files
+    // made as visitors go first: they are older. Of these 30, exactly the newest BATCH_PER_CALLER are left
+    expect(files.batchCount()).toBeLessThanOrEqual(before + files.BATCH_PER_CALLER)
+    const cut = tokens.length - files.BATCH_PER_CALLER
+    const gone = await visitor.json('GET', `/api/batch/${tokens[cut - 1]}`)
+    expect(gone.status).toBe(404)
+    expect(gone.data.code).toBe('files.link-expired')
+    expect(await fetched(visitor, tokens[cut])).toBe(200)
     expect(await fetched(visitor, tokens.at(-1)!)).toBe(200)
     // someone else's token is not what went
     expect(await fetched(user, mine)).toBe(200)
