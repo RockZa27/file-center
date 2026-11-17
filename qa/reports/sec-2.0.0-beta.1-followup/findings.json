@@ -1,0 +1,278 @@
+[
+ {
+  "verdict": "confirmed",
+  "fingerprint": "files/put-content-stale-auth-after-scan",
+  "title": "PUT /api/content writes after the antivirus scan with the rights that existed before the scan",
+  "description": "The route evaluates need(write), the quota user and ownerOfPath before the awaited antivirus gate, and does not re-check them after it. A user whose write permission is removed while the scan runs still has the in-flight save written, while a fresh PUT is refused with 403. Reproduced for the permission downgrade; the delete/recreate variant is reported by the hunter only.",
+  "root_cause": "need() at line 215, quotaUserOf at 216 and ownerOfPath at 220 are computed before await gate() at 233; nothing between the gate and writeFileAtomic at 255 calls need() again or compares the account instance.",
+  "intended_behavior": "Re-run need(..., 'write') and the account-instance check after the scan, in the same tick as the quota hold, and compute owner after the scan.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/routes/files.ts",
+    "line": 215,
+    "scope": "PUT /content",
+    "description": "need(user, space, 'write') evaluated once at request start"
+   },
+   {
+    "kind": "propagation",
+    "file": "src/routes/files.ts",
+    "line": 233,
+    "scope": "PUT /content",
+    "description": "await gate() can take up to the antivirus timeout, no re-authorization afterwards"
+   },
+   {
+    "kind": "sink",
+    "file": "src/routes/files.ts",
+    "line": 255,
+    "scope": "PUT /content",
+    "description": "writeFileAtomic(abs, body.content) with the pre-scan authorization"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/routes/files.ts",
+    "line": 239,
+    "description": "After the scan only ready(q), ready(owner) and a stat are done; no permission or account check. Local run with a 1.5 s fake clamd: permissions set to ['read'] mid-scan, the in-flight PUT returned 200 and the file was overwritten, a fresh PUT returned 403 (two runs)."
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "system_configuration",
+    "description": "Antivirus enabled (off by default) so the scan opens a window"
+   },
+   {
+    "kind": "timing_dependency",
+    "description": "Rights removed while the scan of an already authorized request runs (seconds)"
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "user whose write right is being removed",
+   "payloads": [
+    "PUT /api/content {space:'home',path:'/doc.txt',content:'NEW-AFTER-DOWNGRADE'} while clamd answers slowly"
+   ],
+   "instructions": [
+    "Enable antivirus against a fake clamd delaying 1.5 s",
+    "Start the PUT as bob",
+    "After 400 ms an admin sets bob's permissions to ['read']",
+    "A fresh PUT gives 403; the in-flight one returns 200 and the file holds the new text"
+   ],
+   "observed_result": "{\"update\":200,\"freshPutAfterDowngrade\":403,\"inFlightPut\":200,\"content\":\"NEW-AFTER-DOWNGRADE\"} in both runs."
+  },
+  "remediation": {
+   "strategy": "After the scan call need() again and compare the account instance, then compute owner and hold in the same tick."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "needs antivirus on and a rights change inside a seconds-long scan window"
+   },
+   "impact": {
+    "score": "low",
+    "reason": "one text edit up to MAX_TEXT by a principal whose rights were just removed"
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "permission variant reproduced twice in the sandbox; delete/recreate variant from hunter artifacts only"
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "store-timer-write-overwrites-cli-revocation",
+  "title": "A pending timer write of the running app overwrites a CLI sessions-revoke and restores revoked app passwords / sessions",
+  "description": "bun src/cli.ts sessions-revoke (and reset-2fa) edits sessions.json and app-passwords.json and then touches cli-changed; the running app re-reads them only at the start of the next request. If an app write fires first (app-password lastUsedAt timer after 5 s, hourly purgeExpiredSessions), it writes the old in-memory data over the CLI's files and the next request reloads that file, so the revoked app password or session works again. The CLI still reports success.",
+  "root_cause": "JsonStore.writeNow/persist write the in-memory snapshot without checking whether the cli-changed marker moved; the marker is checked only in request hooks (context.ts, webdav.ts handleDav).",
+  "intended_behavior": "Operator revocation is final: the running app must not keep honouring or write back old sessions or app passwords (comment in app-passwords.ts:105-106).",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/cli.ts",
+    "line": 93,
+    "scope": "sessions-revoke",
+    "description": "destroyUserSessions and removeAppPasswordsOf write the files in the CLI process; the marker is touched at line 101"
+   },
+   {
+    "kind": "propagation",
+    "file": "src/app-passwords.ts",
+    "line": 184,
+    "scope": "touchAppPassword",
+    "description": "updateSoon leaves a 5 s timer whose snapshot comes from the app's old in-memory list"
+   },
+   {
+    "kind": "propagation",
+    "file": "src/store.ts",
+    "line": 166,
+    "scope": "JsonStore.writeNow",
+    "description": "serialises this.data over the file with no marker or mtime check"
+   },
+   {
+    "kind": "sink",
+    "file": "src/auth.ts",
+    "line": 327,
+    "scope": "reloadIfChangedByCli",
+    "description": "the next request reloads the already overwritten files, so the revocation is lost"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/store.ts",
+    "line": 163,
+    "description": "writeNow persists the stale snapshot without checking the CLI marker"
+   },
+   {
+    "file": "src/auth.ts",
+    "line": 339,
+    "description": "purgeExpiredSessions uses sessionStore.update, which writes the whole in-memory sessions map (hourly, index.ts:122)"
+   },
+   {
+    "file": "src/app-passwords.ts",
+    "line": 107,
+    "description": "onCliChange reload happens only inside a request, so a timer can fire first"
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "authentication_level",
+    "description": "Operator runs the CLI on the host; the beneficiary holds the revoked app password or session cookie"
+   },
+   {
+    "kind": "timing_dependency",
+    "description": "A timer write (5 s app-password lastUsedAt, or hourly purge) must fire after the CLI write and before any request reaches the app; a request in between reloads and heals"
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Holder of a revoked WebDAV app password or session cookie after the operator ran sessions-revoke",
+   "payloads": [
+    "PROPFIND /dav/ with Authorization: Basic alice:<app password>",
+    "bun src/cli.ts sessions-revoke alice",
+    "purgeExpiredSessions()"
+   ],
+   "instructions": [
+    "Start the app on a scratch DATA_DIR, create alice with an app password and carol with a session",
+    "PROPFIND once with the app password (queues the 5 s timer)",
+    "Run the CLI sessions-revoke alice on the same DATA_DIR",
+    "Send no request for 6.5 s, then PROPFIND with the old secret"
+   ],
+   "observed_result": "Reproduced twice in the sandbox: app-passwords.json 0 items after the CLI, 1 after the timer, PROPFIND 207 with the revoked secret. Control (request right after the CLI): 401, disk 0. Session variant: after purgeExpiredSessions() GET /api/session returns carol."
+  },
+  "remediation": {
+   "strategy": "Check the cli-changed marker (reload first) inside writeNow/persist before serialising, or have the app watch the marker on a short interval and drop pending timers; add a regression test running the CLI while a touchAppPassword timer is pending."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs a pending timer or the hourly tick to land in the gap before the next request"
+   },
+   "impact": {
+    "score": "high",
+    "reason": "Operator emergency revocation of a stolen credential is silently undone while the CLI reports success"
+   },
+   "overall_severity": "medium"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "Independently reproduced twice in the sandbox with a passing control"
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "webdav/put-stale-auth-after-body",
+  "title": "WebDAV PUT completes with the credential and rights it had when the request started, after the app password was revoked",
+  "description": "authenticate() verifies the app password once; putMethod then resolves the Space, permissions and quota user once and, after the unbounded body loop and gate(), re-checks only ready(), ownerOfPath, preconditions and holdNow before place(). Revoking the app password while the body streams does not stop the write: a new PROPFIND gets 401 but the running PUT gets 201 and the file is written. Deleted/re-created accounts and lowered rights are expected to behave the same by source (perms copied at start, quota keyed by username) but were not re-run by this verifier.",
+  "root_cause": "putMethod never re-verifies the app password record, the account instance (name, createdAt) or accessFor perms between the start of the request and place(); the body can stream for an unbounded time and quota commit is keyed by lowercase username.",
+  "intended_behavior": "Revoking an app password, deleting the account or lowering its rights must stop a PUT that has not yet been placed: re-check the app password item, the account instance and upload/write perms right before holdNow/place and fail with 401/403.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/webdav.ts",
+    "line": 145,
+    "scope": "authenticate",
+    "description": "app password verified once; user and item captured in ctx"
+   },
+   {
+    "kind": "propagation",
+    "file": "src/webdav.ts",
+    "line": 611,
+    "scope": "putMethod",
+    "description": "allow(s,'upload') on the Space resolved at request start"
+   },
+   {
+    "kind": "propagation",
+    "file": "src/webdav.ts",
+    "line": 660,
+    "scope": "putMethod",
+    "description": "body loop with no total deadline and no re-auth"
+   },
+   {
+    "kind": "propagation",
+    "file": "src/webdav.ts",
+    "line": 677,
+    "scope": "putMethod",
+    "description": "gate() scan, then only ready/ownerOfPath/preconditions/holdNow"
+   },
+   {
+    "kind": "sink",
+    "file": "src/webdav.ts",
+    "line": 694,
+    "scope": "putMethod",
+    "description": "place(tmp, s.abs, written) writes the file with the stale authority"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/webdav.ts",
+    "line": 694,
+    "description": "Verifier run twice in sandbox: app password revoked mid-body, PROPFIND 401, PUT 201 and file content helloworld written (exit 42 both runs)"
+   },
+   {
+    "file": "src/quota.ts",
+    "line": 129,
+    "description": "commitBytes keys the counter by username, not account instance"
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "authentication_level",
+    "description": "holder of a valid app password at request start"
+   },
+   {
+    "kind": "timing_dependency",
+    "description": "revocation happens while the body is still streaming or the scan is running; the client controls the pace"
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Holder of a WebDAV app password that is revoked while their upload is open",
+   "payloads": [
+    "PUT /dav/home/f.txt with a slow ReadableStream body: send 5 bytes, revoke the app password, send 5 more bytes"
+   ],
+   "instructions": [
+    "Create user with readwrite app password",
+    "Start PUT with a ReadableStream body and send 5 of 10 bytes",
+    "DELETE /api/me/app-passwords/<id>; PROPFIND with it now returns 401",
+    "Send the remaining bytes and close",
+    "Observe PUT 201 and file written"
+   ],
+   "observed_result": "PROPFIND after revoke 401; PUT 201; file f.txt contains helloworld (two runs)."
+  },
+  "remediation": {
+   "strategy": "Before holdNow/place re-verify the app password item still exists and is unexpired, the account instance is the same, and accessFor still grants upload (and write when replacing); bound total PUT duration; key quota by account instance."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "needs a valid credential and a revocation timed during an open upload"
+   },
+   "impact": {
+    "score": "low",
+    "reason": "one in-flight file within the upload limit is written after revocation; no other-user data read or changed demonstrated"
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "revocation variant reproduced twice; other variants follow from source"
+  }
+ }
+]

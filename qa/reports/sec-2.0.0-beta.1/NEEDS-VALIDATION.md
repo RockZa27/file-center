@@ -21,6 +21,8 @@ No `needs_validation` record: every candidate of this run was validated to `conf
 
 ## Deferred units (not hunted; bounded local checks for the next run)
 
+> Follow-up: all four units below were hunted in the scoped run 5 at `33f1abb`. Results: `qa/reports/sec-2.0.0-beta.1-followup/REPORT.md` (1 medium and 2 low confirmed; 2 zip candidates left unresolved when the validation budget ran out).
+
 ### `src/cli.ts#sessions-revoke` → `src/auth.ts#reloadIfChangedByCli` — Stale authorization and derived copy use
 - Start at: `src/cli.ts`, `src/auth.ts`, `src/app-passwords.ts`, `src/store.ts`, `src/webdav.ts`, `src/context.ts`, `src/index.ts`
 - Gap and local check: critic 2: the CLI process and the running app write the same JSON files; a timer write of the app (app-password lastUsedAt after 5 s, hourly session purge, getSession save, queued persist retries) landing between the CLI write and the next request could bring revoked sessions or app passwords back. Prior finding cli-revoke-not-applied-to-webdav was re-checked from source only. Local check: two bun processes on one scratch DATA_DIR, an active WebDAV client, sessions-revoke, authenticate again after the timer.
