@@ -957,8 +957,8 @@
     "patches": [
       {
         "file": "src/routes/admin.ts",
-        "find": "if (reset) await confirmPassword(",
-        "replace": "if (false) await confirmPassword("
+        "find": "if (reset || rekeyed) await confirmPassword(",
+        "replace": "if (rekeyed) await confirmPassword("
       }
     ]
   },
@@ -2182,7 +2182,7 @@
     "patches": [
       {
         "file": "src/my-data.ts",
-        "find": "  return (r: AuditEntry) => r.user === u.username && Date.parse(r.ts) >= from\n",
+        "find": "  return (r: AuditEntry) => r.user === u.username && Date.parse(r.ts) >= from && (r.born === undefined || r.born === u.createdAt)\n",
         "replace": "  return (r: AuditEntry) => r.user === u.username\n"
       }
     ]
