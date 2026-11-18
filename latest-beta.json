@@ -1,11 +1,11 @@
 {
-  "version": "2.0.0-beta.1",
-  "file": "file-center-2.0.0-beta.1.zip",
-  "sha256": "a07ebb8f69ed580de5f355be9d23808bca14e8c69200f7774bfbffebfe92abb1",
-  "size": 2064883,
-  "builtAt": "2026-11-02T16:57:37.288Z",
-  "commit": "faf9262",
-  "notes": "File Center 2.0 beta: Elysia 2.0.0-beta.32. Signing key rotated; set UPDATE_PUBLIC_KEY=MCowBQYDK2VwAyEAsDWMBmcAJ0XKZlPSXFg9ZORYJc1BlQ/EWUI5snwW7oE= and restart before installing.",
+  "version": "2.0.0-beta.2",
+  "file": "file-center-2.0.0-beta.2.zip",
+  "sha256": "9d69aaed0f3984cd31845056a97efe2658116c31998c5cf24d9a88eff8246383",
+  "size": 2101559,
+  "builtAt": "2026-11-18T10:02:00.926Z",
+  "commit": "0a2229e",
+  "notes": "File Center 2.0.0-beta.2: แก้ทุกข้อจากการตรวจความปลอดภัยรอบ 4-6 (16 ข้อ) และจำกัดการดาวน์โหลด zip พร้อมกัน / fixes for all 16 findings of security review runs 4-6. กุญแจเซ็นใหม่ / New signing key: ก่อนติดตั้ง ตั้ง UPDATE_PUBLIC_KEY=MCowBQYDK2VwAyEAtxu0x/GHgLMzkhTnmwTU/yh/3wnHPchd6ricj9N9VbQ= ใน .env แล้วรีสตาร์ต (แทนค่าเดิมของ beta.1) ติดตั้งเสร็จแล้วลบบรรทัดนั้นได้ / set it in .env and restart before installing (it replaces the beta.1 value); remove the line after the update.",
   "signed": true,
   "channel": "beta"
 }
