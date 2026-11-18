@@ -168,6 +168,8 @@ export const MESSAGES = {
   'archive.encrypted': { th: 'รายการนี้ถูกเข้ารหัสด้วยรหัสผ่าน เปิดดูในหน้าเว็บไม่ได้', en: 'This item is password-protected and cannot be opened here.' },
   'archive.too-big': { th: 'รายการนี้ใหญ่เกินกำหนดหรือบีบอัดมากผิดปกติ จึงไม่แตกออกให้', en: 'This item is too big or compressed suspiciously well, so it is not extracted.' },
   'archive.directory-too-big': { th: 'ไฟล์ zip นี้มีรายการมากหรือสารบัญใหญ่เกินกว่าจะเปิดดูในหน้าเว็บ', en: 'This zip file has too many items or too large a directory to be looked into here.' },
+  'zip.busy': { th: 'กำลังสร้างไฟล์ zip ให้ดาวน์โหลดอยู่หลายไฟล์ กรุณารอให้ไฟล์ที่ดาวน์โหลดอยู่เสร็จก่อน แล้วลองใหม่อีกครู่', en: 'Several zip downloads are being prepared right now. Please let the ones under way finish, then try again in a moment.' },
+  'zip.too-many': { th: 'มีไฟล์และโฟลเดอร์มากเกินไปสำหรับ zip เดียว (เกิน {max} รายการ) กรุณาเลือกน้อยลง', en: 'Too many files and folders for one zip (more than {max}). Please choose fewer.' },
   'archive.busy': { th: 'กำลังเปิดไฟล์ zip อยู่หลายไฟล์ กรุณาลองใหม่อีกครู่', en: 'Several zip files are being opened right now. Please try again in a moment.' },
   'archive.damaged': { th: 'อ่านรายการนี้จากไฟล์ zip ไม่ได้ ไฟล์อาจเสียหายหรือใช้วิธีบีบอัดที่ไม่รองรับ', en: 'This item could not be read from the zip file. It may be damaged or use an unsupported method.' },
 
@@ -211,6 +213,7 @@ export const MESSAGES = {
   'auth.2fa-required': { th: 'ผู้ดูแลระบบกำหนดให้บัญชีของคุณต้องเปิดใช้การยืนยันตัวตนสองขั้นตอน (2FA) ก่อนใช้งานต่อ', en: 'Your account must turn on two-factor authentication (2FA) before you can continue.' },
   'share.must-have-password': { th: 'ลิงก์แชร์ต้องตั้งรหัสผ่าน', en: 'A share link must have a password.' },
   'admin.alert-security-changed': { th: '{user} เปลี่ยนการตั้งค่าความปลอดภัย อีเมล หรือการแจ้งเตือน: {keys}', en: '{user} changed the security, email or alert settings: {keys}' },
+  'admin.alert-admin-created': { th: '{user} ให้สิทธิ์ผู้ดูแลระบบแก่บัญชี {target}', en: '{user} gave the account {target} the administrator role' },
   'admin.mail-test-wait': { th: 'ส่งอีเมลทดสอบได้ทุก {seconds} วินาที กรุณารอสักครู่', en: 'A test e-mail can be sent every {seconds} seconds. Please wait a moment.' },
   'admin.mail-test-no-address': { th: 'ไม่มีที่อยู่อีเมลปลายทาง: ระบุอีเมลหรือยืนยันอีเมลของคุณที่หน้าการแจ้งเตือนก่อน', en: 'There is no address to send to: give an address or confirm your own e-mail in the notification settings first.' },
   'admin.mail-test-failed': { th: 'ส่งอีเมลทดสอบไม่สำเร็จ: {reason}', en: 'The test e-mail could not be sent: {reason}' },

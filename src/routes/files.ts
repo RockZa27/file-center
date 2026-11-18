@@ -3,9 +3,9 @@ import { access } from 'node:fs/promises'
 import { existsSync, lstatSync, mkdirSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
 import { Elysia, t } from 'elysia'
-import { audit, auditOnce } from '../audit'
+import { audit, auditDownload, auditOnce } from '../audit'
 import { antivirusOn, gate } from '../antivirus'
-import { isForeignSpace } from '../auth'
+import { findUser, isForeignSpace, type User } from '../auth'
 import { config, paths } from '../config'
 import { takeUnzipSlot } from '../archive'
 import { context, need, requireUser } from '../context'
@@ -21,7 +21,7 @@ import { indexTouched, parseFilters, searchEntries } from '../search-index'
 import { moveToTrash } from '../trash'
 import { forgetInsight } from '../insight'
 import { moveVersions, reserveVersion } from '../versions'
-import { collectZipItems, unzipTo, zipStream } from '../zip'
+import { collectZipItems, limitedZipStream, unzipTo, zipCaller, zipLimits } from '../zip'
 
 const MAX_TEXT = 2 * 1024 * 1024
 
@@ -107,8 +107,17 @@ export function fileResponse(abs: string, name: string, request: Request, wantIn
   return new Response(file, { headers: { ...headers, 'Content-Length': String(st.size) } })
 }
 
-type Batch = { owner: string; space: string; root: string; dir: string; names: string[]; expires: number }
+type Batch = { owner: string; /** who the caps count: the account, or a visitor's address (visitors share the owner "guest") */ key: string; space: string; root: string; dir: string; names: string[]; expires: number }
 const batches = new Map<string, Batch>()
+/**
+ * A token is used right after it is made, so few are ever alive: one caller holds at most BATCH_PER_CALLER and the
+ * server BATCH_MAX. Past either, the oldest goes (a Map keeps insertion order) instead of refusing the new one, so
+ * asking again and again cannot make the server keep a list of names per call until memory runs out.
+ */
+export const BATCH_PER_CALLER = 20
+export const BATCH_MAX = 2000
+/** for tests: how many tokens are held */
+export const batchCount = () => batches.size
 
 /** set when the space is a staff member's read-only view of someone's home (user:<name>): the audit names whose files */
 const viewDetail = (a: { space: string }) => (isForeignSpace(a.space) ? { detail: a.space } : {})
@@ -204,11 +213,8 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
 
   .put('/content', { body: t.Object({ space: t.String(), path: t.String(), content: t.String(), expectedMtime: t.Optional(t.Number()) }) }, async ({ user, ip, body }) => {
     const a = need({ user, ip }, body.space, 'write')
-    const q = quotaUserOf(a, user)
     const rel = normRel(body.path)
     const abs = resolveIn(a.root, rel)
-    // the earlier versions of the file count against the owner of the home it is in (not always the one saving)
-    const owner = ownerOfPath(abs)
     const st0 = existsSync(abs) ? statSync(abs) : null
     if (!st0 || !st0.isFile()) throw notFound()
     const bytes = Buffer.byteLength(body.content)
@@ -226,9 +232,23 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
         rmSync(tmp, { force: true })
       }
     }
-    // the counts are awaited last (after the scan, which may take a while): from here to the write there is no await
+    // asked again after the scan, which may take a while: the account may have gone (or been made again under the same
+    // name) or lost the right to write here meanwhile. The rights, the quota and the owner are those of now.
+    const current = (): User | null => {
+      const fresh = user ? findUser(user.username) ?? null : null
+      if (user && (!fresh || fresh.createdAt !== user.createdAt)) throw new HttpError(401, 'auth.required')
+      const a2 = need({ user: fresh, ip }, body.space, 'write')
+      if (resolveIn(a2.root, rel) !== abs) throw forbidden()
+      return quotaUserOf(a2, fresh)
+    }
+    const q = current()
+    // the earlier versions of the file count against the owner of the home it is in (not always the one saving)
+    const owner = ownerOfPath(abs)
+    // the counts are awaited last; then the check once more, and from there to the write there is no await
     await ready(q)
     await ready(owner)
+    const key = (u: User | null) => u ? `${u.username.toLowerCase()}|${u.createdAt}` : ''
+    if (key(current()) !== key(q)) throw forbidden()
     // read again: the file may have changed during the scan
     const st = existsSync(abs) ? statSync(abs) : null
     if (!st || !st.isFile()) throw notFound()
@@ -325,13 +345,19 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     if (!archive.toLowerCase().endsWith('.zip')) archive += '.zip'
     const target = uniquePath(join(dir, archive))
     // do not put the archive inside itself
-    const zipItems = collectZipItems(dir, names).filter(i => i.abs !== target)
+    const zipItems = collectZipItems(dir, names, zipLimits.maxEntries).filter(i => i.abs !== target)
     // the archive is at most about as big as what goes in
     const upper = zipItems.reduce((sum, i) => sum + i.size, 0)
     ensureSpace(dir, upper)
     const hold = holdNow(q, upper)
     try {
-      await Bun.write(target, new Response(zipStream(zipItems)))
+      await Bun.write(target, new Response(limitedZipStream(zipItems, zipCaller(user, ip))))
+      // a big archive takes a while: the account may have gone or lost zip/write here meanwhile (as unzip and PUT /api/content)
+      const key = (u: User | null) => u ? `${u.username.toLowerCase()}|${u.createdAt}` : ''
+      const fresh = user ? findUser(user.username) ?? null : null
+      if (user && (!fresh || fresh.createdAt !== user.createdAt)) throw new HttpError(401, 'auth.required')
+      const a2 = need({ user: fresh, ip }, body.space, 'zip', 'write')
+      if (resolveIn(a2.root, dirRel) !== dir || key(quotaUserOf(a2, fresh)) !== key(q)) throw forbidden()
     } catch (err) {
       rmSync(target, { force: true })
       hold.release()
@@ -352,6 +378,15 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     if (!existsSync(abs) || !statSync(abs).isFile() || extname(abs).toLowerCase() !== '.zip') throw bad('zip.not-zip')
     const folderName = basename(abs, extname(abs))
     const dest = uniquePath(join(dirname(abs), folderName))
+    // asked again before the files reach the storage (the extraction and the scan can take minutes): the account may have
+    // gone, been made again under the same name, or lost the right to write here meanwhile, as in PUT /api/content
+    const key = (u: User | null) => u ? `${u.username.toLowerCase()}|${u.createdAt}` : ''
+    const stillAllowed = () => {
+      const fresh = user ? findUser(user.username) ?? null : null
+      if (user && (!fresh || fresh.createdAt !== user.createdAt)) throw new HttpError(401, 'auth.required')
+      const a2 = need({ user: fresh, ip }, body.space, 'zip', 'write')
+      if (resolveIn(a2.root, rel) !== abs || key(quotaUserOf(a2, fresh)) !== key(q)) throw forbidden()
+    }
     // never extract more than the disk can take while keeping the configured reserve free
     const free = freeSpace(dirname(abs))
     const otherMax = Math.min(config.unzipMaxBytes, free === null ? Infinity : Math.max(0, free - config.minFreeSpace))
@@ -390,6 +425,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
           const now = new Date()
           utimesSync(stage, now, now)
         }
+        stillAllowed()
         // the name is claimed first (mkdir fails on a taken one), then the clean tree is moved into it: nothing is
         // overwritten, and a move that fails half way (another disk) leaves no partial folder behind
         for (let tries = 0; ; tries++) {
@@ -401,6 +437,8 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
       } else {
         mkdirSync(dest)
         count = await unzipTo(abs, dest, { maxBytes, maxFiles: config.unzipMaxFiles })
+        // no scan, so the files went straight in: a change meanwhile takes them out again (the catch below removes dest)
+        stillAllowed()
       }
       hold.commit((await treeStats(landed)).size)
       indexTouched(landed)
@@ -431,7 +469,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     const range = request.headers.get('range')
     if (!range || range.startsWith('bytes=0-')) {
       // a staff member reading someone's files is always recorded, a preview included
-      if (query.inline !== '1' || isForeignSpace(a.space)) audit({ user: user?.username ?? 'guest', ip, action: 'download', target: storagePath(abs), ...viewDetail(a) })
+      if (query.inline !== '1' || isForeignSpace(a.space)) auditDownload({ user: user?.username ?? 'guest', ip, action: 'download', target: storagePath(abs), ...viewDetail(a) })
       recordRecent(user, query.space, rel)
     }
     return fileResponse(abs, basename(abs), request, query.inline === '1')
@@ -446,7 +484,11 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     const token = randomBytes(18).toString('base64url')
     const now = Date.now()
     for (const [k, v] of batches) if (v.expires < now) batches.delete(k)
-    batches.set(token, { owner: user?.username ?? 'guest', space: body.space, root: a.root, dir: dirRel, names, expires: now + 5 * 60_000 })
+    const key = user ? user.username.toLowerCase() : `guest|${ip}`
+    const mine = [...batches].filter(([, v]) => v.key === key)
+    for (const [k] of mine.slice(0, Math.max(0, mine.length - BATCH_PER_CALLER + 1))) batches.delete(k)
+    while (batches.size >= BATCH_MAX) batches.delete(batches.keys().next().value!)
+    batches.set(token, { owner: user?.username ?? 'guest', key, space: body.space, root: a.root, dir: dirRel, names, expires: now + 5 * 60_000 })
     return { token }
   })
 
@@ -458,10 +500,12 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     const a = need({ user, ip }, b.space, 'download', 'batchdownload')
     if (a.root !== b.root) throw new HttpError(403, 'files.download-forbidden')
     const dir = resolveIn(b.root, b.dir)
-    const list = collectZipItems(dir, b.names)
-    audit({ user: b.owner, ip, action: 'download-zip', target: storagePath(dir), detail: `${b.names.length} รายการ${isForeignSpace(b.space) ? `, ${b.space}` : ''}` })
+    const list = collectZipItems(dir, b.names, zipLimits.maxEntries)
+    // taken before the audit line: a refused download (503 zip.busy) is not recorded as one
+    const stream = limitedZipStream(list, zipCaller(user, ip))
+    auditDownload({ user: b.owner, ip, action: 'download-zip', target: storagePath(dir), detail: `${b.names.length} รายการ${isForeignSpace(b.space) ? `, ${b.space}` : ''}` })
     const name = b.names.length === 1 ? `${b.names[0]}.zip` : `${basename(b.dir === '/' ? 'files' : b.dir)}.zip`
-    return new Response(zipStream(list), {
+    return new Response(stream, {
       headers: {
         'Content-Type': 'application/zip',
         'Content-Disposition': contentDisposition('attachment', name),

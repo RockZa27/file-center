@@ -12,11 +12,11 @@
           <password-rules :password="f.password" :username="f.username" />
         </div>
       </n-form-item>
-      <!-- a manager who sets someone's password proves it is them -->
+      <!-- a manager who sets someone's password, or an admin who makes or re-keys an admin, proves it is them -->
       <n-form-item v-if="needsOwn" :label="t('users.confirmOwn')">
         <div class="field">
           <n-input v-model:value="f.confirmPassword" type="password" show-password-on="click" :input-props="{ autocomplete: 'current-password' }" />
-          <div class="muted hint">{{ t('users.confirmOwnHint') }}</div>
+          <div class="muted hint">{{ app.isAdmin ? t('users.confirmOwnAdminHint') : t('users.confirmOwnHint') }}</div>
         </div>
       </n-form-item>
       <n-form-item :label="t('users.role')">
@@ -102,7 +102,11 @@ const f = reactive({ username: '', name: '', password: '', role: 'user', homedir
 // a manager hands out public-folder rights no wider than their own (the session's user carries them)
 const publicAllowed = computed(() => (app.isAdmin ? null : app.user?.publicPermissions || []))
 const isEdit = computed(() => !!props.user)
-const needsOwn = computed(() => !app.isAdmin && isEdit.value && !!f.password)
+// the server asks for the caller's own password when a manager sets someone's password, and when an admin makes an
+// account an admin (new or promoted) or sets the password of one
+const needsOwn = computed(() => app.isAdmin
+  ? f.role === 'admin' && (!isEdit.value || props.user.role !== 'admin' || !!f.password)
+  : isEdit.value && !!f.password)
 // visitors' uploads and activity go under the name 'guest' (any case), so the server refuses it: say so before saving
 const reserved = computed(() => !isEdit.value && f.username.trim().toLowerCase() === 'guest')
 // the password rules are hinted live; the server judges them (its common-password list too)
@@ -135,7 +139,8 @@ async function save() {
     const body = { name: f.name.trim(), role: f.role, permissions: f.permissions, publicPermissions: f.publicPermissions }
     if (f.role === 'user' && app.isAdmin) body.homedir = f.homedir.trim() || undefined
     if (isEdit.value || f.role !== 'user' || !f.useDefault) body.quotaBytes = f.role === 'user' && f.limited ? joinQuota(f.quotaValue, f.quotaUnit) : 0
-    if (isEdit.value && f.password) { body.password = f.password; if (needsOwn.value) body.confirmPassword = f.confirmPassword }
+    if (isEdit.value && f.password) body.password = f.password
+    if (needsOwn.value) body.confirmPassword = f.confirmPassword
     const send = extra => isEdit.value
       ? api.updateUser(props.user.username, { ...body, ...extra })
       : api.createUser({ ...body, ...extra, username: f.username.trim(), password: f.password })

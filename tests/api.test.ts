@@ -572,7 +572,7 @@ const sha256 = (b: Uint8Array) => createHash('sha256').update(b).digest('hex')
 
 /** admin creates a user, drops matrix.txt into their folder and returns a logged-in client */
 async function userWith(username: string, permissions: string[], publicPermissions: string[], role = 'user') {
-  const r = await admin.json('POST', '/api/admin/users', { username, name: username, password: 'harbor-lamp-42', role, permissions, publicPermissions })
+  const r = await admin.json('POST', '/api/admin/users', { username, name: username, password: 'harbor-lamp-42', role, confirmPassword: process.env.ADMIN_PASSWORD, permissions, publicPermissions })
   expect(r.status).toBe(200)
   if (role === 'user') writeFileSync(storageAbs('users', username, 'matrix.txt'), 'matrix')
   const c = new Client()
@@ -1236,7 +1236,7 @@ describe('full system: users', () => {
 
   test('promote, demote and move a user folder; changes apply at once', async () => {
     const c = await userWith('lifecycle', ['read'], [])
-    expect((await update('lifecycle', { role: 'admin' })).status).toBe(200)
+    expect((await update('lifecycle', { role: 'admin', confirmPassword: 'test-admin-pass' })).status).toBe(200)
     expect((await c.json('GET', '/api/admin/users')).status).toBe(200)
     expect((await c.json('GET', '/api/list?space=home&path=/')).data.entries.map((e: any) => e.name)).toContain('users')
     // the folder it gets back holds files (matrix.txt): the admin must say so
@@ -1262,7 +1262,7 @@ describe('full system: users', () => {
     const others = (await users()).filter(u => u.role === 'admin' && u.username !== 'admin').map(u => u.username)
     for (const name of others) expect((await update(name, { role: 'user' })).status).toBe(200)
     expect((await update('admin', { role: 'user' })).status).toBe(400)
-    for (const name of others) expect((await update(name, { role: 'admin' })).status).toBe(200)
+    for (const name of others) expect((await update(name, { role: 'admin', confirmPassword: 'test-admin-pass' })).status).toBe(200)
     const make = (username: string, name = 'x') =>
       admin.json('POST', '/api/admin/users', { username, name, password: 'harbor-lamp-42', role: 'user', permissions: [], publicPermissions: [] })
     for (const username of ['ab', 'bad name', 'x'.repeat(33), 'ไทย', '../up']) expect((await make(username)).status).toBe(400)

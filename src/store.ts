@@ -55,6 +55,20 @@ export class JsonStore<T> {
     }
   }
 
+  /**
+   * run before anything is changed or written (auth.ts sets it to reloadIfChangedByCli): `bun src/cli.ts` is another
+   * process that rewrites the files and then touches cli-changed. A timer write of this process (an app password's
+   * lastUsedAt, the hourly session purge) that ran before the next request would otherwise write the old memory back
+   * over the CLI's change and undo a revocation. The change of that one write may be lost; the CLI's never is.
+   */
+  static beforeWrite: () => void = () => {}
+  private static syncing = false
+  private static sync() {
+    if (JsonStore.syncing) return
+    JsonStore.syncing = true
+    try { JsonStore.beforeWrite() } catch (err) { log.error('store-before-write-failed', { error: err }) } finally { JsonStore.syncing = false }
+  }
+
   static frozen = false
   static freeze() {
     JsonStore.frozen = true
@@ -135,6 +149,7 @@ export class JsonStore<T> {
 
   /** mutate in place then persist */
   update(fn: (draft: T) => void): void {
+    JsonStore.sync()
     fn(this.data)
     this.save()
   }
@@ -145,6 +160,7 @@ export class JsonStore<T> {
    * backups) and flushSync() write what is waiting, so nothing is lost on a normal stop.
    */
   updateSoon(fn: (draft: T) => void, ms: number): void {
+    JsonStore.sync()
     fn(this.data)
     if (JsonStore.frozen) return
     this.timer ??= setTimeout(() => this.writeNow(), ms).unref()
@@ -163,6 +179,7 @@ export class JsonStore<T> {
   private writeNow(): void {
     if (this.timer) { clearTimeout(this.timer); this.timer = null }
     if (JsonStore.frozen) return
+    JsonStore.sync()
     const snapshot = JSON.stringify(this.data, null, 2)
     this.pending++
     this.queue = this.queue.then(() => this.persist(snapshot)).finally(() => { this.pending-- })
@@ -204,6 +221,7 @@ export class JsonStore<T> {
   flushSync(): void {
     if (this.timer) { clearTimeout(this.timer); this.timer = null }
     if (JsonStore.frozen) return
+    JsonStore.sync()
     const tmp = `${this.file}.tmp`
     writeDurableSync(tmp, JSON.stringify(this.data, null, 2))
     renameSync(tmp, this.file)

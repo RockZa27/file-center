@@ -155,6 +155,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
       username: t.String(), name: t.String(), password: t.String(), role: roleT,
       homedir: t.Optional(t.String()), permissions: permsT, publicPermissions: permsT,
       quotaBytes: t.Optional(t.Number()), adoptHome: t.Optional(t.Boolean()),
+      confirmPassword: t.Optional(t.String({ maxLength: 1000 })),
     }),
   }, async ({ user, ip, body }) => {
     const admin = requireStaff({ user, ip })
@@ -175,6 +176,14 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     if (!isAdmin(admin) && homeIsTaken(username)) throw conflict('admin.home-exists')
     // an admin must say so (adoptHome) to take a folder that holds files or is another account's; a manager can not
     const adopted = isAdmin(admin) && body.role !== 'admin' ? checkAdoptHome(homedir, undefined, body.adoptHome) : ''
+    // A new admin has a password its maker knows, and that password passes every step-up: a session alone must not
+    // be able to make one (everything above is checked first, so a refused request does not cost a password guess)
+    if (body.role === 'admin') await confirmPassword(admin, ip, body.confirmPassword ?? '', 'user-admin-denied')
+    const passwordHash = await hashPassword(body.password)
+    // asked again after the awaits above: two requests for one name at once must not both make it (from here to the push
+    // there is no await, so one of them gets the conflict)
+    if (findUser(username)) throw conflict('admin.username-taken')
+    if (!isAdmin(admin) && homeIsTaken(username)) throw conflict('admin.home-exists')
     ensureDir(resolveIn(config.storageDir, homedir))
     // a name used before (an account a backup restore dropped, not deleted here) starts clean: no old sign-ins,
     // share links, grants, group places or trash of that earlier account
@@ -187,11 +196,12 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
       ...(quotaBytes ? { quotaBytes } : {}),
       permissions: cleanPerms(body.permissions),
       publicPermissions,
-      passwordHash: await hashPassword(body.password),
+      passwordHash,
       createdAt: new Date().toISOString(),
     })
     saveUsers()
-    audit({ user: admin.username, ip, action: 'user-create', target: username, ...(adopted ? { detail: adopted } : {}) })
+    audit({ user: admin.username, ip, action: 'user-create', target: username, ...(adopted ? { detail: adopted } : body.role === 'admin' ? { detail: 'role admin' } : {}) })
+    if (body.role === 'admin') alert('settings-security', 'admin.alert-admin-created', { user: admin.username, target: username })
     return { ok: true }
   })
 
@@ -230,7 +240,11 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     if (publicPermissions) checkPublicPerms(admin, publicPermissions, target.publicPermissions)
     // a manager who sets someone's password could sign in as them (past read-only and the view audit): own password first
     const reset = !!passwordHash && !isAdmin(admin)
-    if (reset) await confirmPassword(admin, ip, body.confirmPassword ?? '', 'user-password-reset-denied')
+    // and an admin who makes an account an admin, or sets the password of one (their own too), ends up holding a
+    // password that passes every step-up: the same proof, so a stolen session can not get there
+    const promoted = role === 'admin' && target.role !== 'admin'
+    const rekeyed = isAdmin(admin) && (promoted || (!!passwordHash && role === 'admin'))
+    if (reset || rekeyed) await confirmPassword(admin, ip, body.confirmPassword ?? '', reset ? 'user-password-reset-denied' : 'user-admin-denied')
 
     ensureDir(homeAbs)
     if (name !== undefined) target.name = name
@@ -251,7 +265,8 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
       removeAppPasswordsOf(target.username)
     }
     saveUsers()
-    audit({ user: admin.username, ip, action: reset ? 'user-password-reset' : 'user-update', target: target.username, ...(adopted ? { detail: adopted } : {}) })
+    audit({ user: admin.username, ip, action: reset ? 'user-password-reset' : 'user-update', target: target.username, ...(adopted ? { detail: adopted } : promoted ? { detail: 'role admin' } : {}) })
+    if (promoted) alert('settings-security', 'admin.alert-admin-created', { user: admin.username, target: target.username })
     return { ok: true }
   })
 

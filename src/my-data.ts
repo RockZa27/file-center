@@ -45,7 +45,9 @@ export const ownEntries = (u: Pick<User, 'username' | 'createdAt'>) => {
   // fails closed: with no valid creation time nothing is shown, since an earlier account of the same name cannot be
   // told apart; an entry whose own time is not a valid date is left out for the same reason
   if (Number.isNaN(from)) return (_r: AuditEntry) => false
-  return (r: AuditEntry) => r.user === u.username && Date.parse(r.ts) >= from
+  // an entry that names the account it was written for (`born`, since 2.0.0-beta.2) must name this one: a restored older
+  // account does not get the entries of a later one of the name, written after its own creation time
+  return (r: AuditEntry) => r.user === u.username && Date.parse(r.ts) >= from && (r.born === undefined || r.born === u.createdAt)
 }
 const shown = ({ ts, ip, action, target, detail }: AuditEntry) => ({ ts, ip, action, target, detail })
 

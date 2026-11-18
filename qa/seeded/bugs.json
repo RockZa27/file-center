@@ -2181,5 +2181,245 @@
         "replace": "  return (r: AuditEntry) => r.user === u.username\n"
       }
     ]
+  },
+  {
+    "id": "admin-create-no-stepup",
+    "difficulty": "medium",
+    "category": "authz",
+    "severity": "medium",
+    "tests": "tests/security-200.test.ts",
+    "description": "an admin session alone creates a new admin with a password it chose, whose password then passes every step-up",
+    "patches": [
+      {
+        "file": "src/routes/admin.ts",
+        "find": "    if (body.role === 'admin') await confirmPassword(admin, ip, body.confirmPassword ?? '', 'user-admin-denied')\n",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "zip-last-eocd-only",
+    "difficulty": "hard",
+    "category": "dos",
+    "severity": "medium",
+    "tests": "tests/security-200.test.ts",
+    "description": "the central-directory pre-check stops at the last EOCD signature, so a fake empty EOCD in the real one's comment hides an oversized directory from it",
+    "patches": [
+      {
+        "file": "src/zip.ts",
+        "find": "    if (n > entries) entries = n\n    if (b > bytes) bytes = b\n",
+        "replace": "    if (n > entries) entries = n\n    if (b > bytes) bytes = b\n    break\n"
+      }
+    ]
+  },
+  {
+    "id": "batch-tokens-uncapped",
+    "difficulty": "easy",
+    "category": "dos",
+    "severity": "medium",
+    "tests": "tests/security-200.test.ts",
+    "description": "batch download tokens are kept until they expire with no cap, so one visitor can make the server hold any number of name lists",
+    "patches": [
+      {
+        "file": "src/routes/files.ts",
+        "find": "    for (const [k] of mine.slice(0, Math.max(0, mine.length - BATCH_PER_CALLER + 1))) batches.delete(k)\n",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "store-write-ignores-cli-marker",
+    "difficulty": "hard",
+    "category": "auth",
+    "severity": "medium",
+    "tests": "tests/security-201.test.ts",
+    "description": "the stores no longer look at the command line's change marker before a timer write, so the running app writes revoked sessions and app passwords back over a `sessions-revoke`",
+    "patches": [
+      {
+        "file": "src/auth.ts",
+        "find": "JsonStore.beforeWrite = reloadIfChangedByCli\n",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "dav-put-no-recheck",
+    "difficulty": "medium",
+    "category": "auth",
+    "severity": "low",
+    "tests": "tests/security-201.test.ts",
+    "description": "a WebDAV PUT no longer asks again for the app password, the account and its rights after the body arrived, so a revoke or a lowered right while it runs is ignored",
+    "patches": [
+      {
+        "file": "src/webdav.ts",
+        "find": "    const fresh = recheck(ctx, segs, s.abs, !!cur)\n",
+        "replace": "    const fresh = { user, s }\n"
+      }
+    ]
+  },
+  {
+    "id": "edit-save-no-recheck",
+    "difficulty": "medium",
+    "category": "auth",
+    "severity": "low",
+    "tests": "tests/security-201.test.ts",
+    "description": "the text editor save no longer asks again for the account and its write right after the virus scan",
+    "patches": [
+      {
+        "file": "src/routes/files.ts",
+        "find": "      const fresh = user ? findUser(user.username) ?? null : null\n      if (user && (!fresh || fresh.createdAt !== user.createdAt)) throw new HttpError(401, 'auth.required')\n      const a2 = need({ user: fresh, ip }, body.space, 'write')\n",
+        "replace": "      const fresh = user\n      const a2 = a\n"
+      }
+    ]
+  },
+  {
+    "id": "zip-no-yield",
+    "difficulty": "medium",
+    "category": "dos",
+    "severity": "medium",
+    "tests": "tests/security-202.test.ts",
+    "description": "zipStream no longer gives the event loop a turn between entries, so one zip of a folder of many small files stops every other request until it is done",
+    "patches": [
+      {
+        "file": "src/zip.ts",
+        "find": "      if (++n % YIELD_EVERY === 0) await new Promise<void>(r => setImmediate(r))\n",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "zip-downloads-unlimited",
+    "difficulty": "medium",
+    "category": "dos",
+    "severity": "medium",
+    "tests": "tests/security-202.test.ts",
+    "description": "zip downloads are no longer limited per caller and in total, so a visitor who opens a few and never reads them holds every zip codec and the backup waits behind them",
+    "patches": [
+      {
+        "file": "src/zip.ts",
+        "find": "  if (mine >= zipLimits.perCaller || zipTotal >= zipLimits.total) throw new HttpError(503, 'zip.busy')\n",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "unzip-no-recheck",
+    "difficulty": "medium",
+    "category": "auth",
+    "severity": "low",
+    "tests": "tests/security-202.test.ts",
+    "description": "POST /api/unzip no longer asks again for the account and its rights after the antivirus scan, so files land for an account that was lowered to read-only or deleted meanwhile",
+    "patches": [
+      {
+        "file": "src/routes/files.ts",
+        "find": "        stillAllowed()\n        // the name is claimed first",
+        "replace": "        // the name is claimed first"
+      }
+    ]
+  },
+  {
+    "id": "upload-no-recheck-after-scan",
+    "difficulty": "medium",
+    "category": "auth",
+    "severity": "low",
+    "tests": "tests/security-203.test.ts",
+    "description": "an upload (or an upload-link file) that finishes after the virus scan no longer asks again for the account, its upload right and the link, so it lands for an account lowered, deleted or re-created meanwhile, or through a revoked link",
+    "patches": [
+      {
+        "file": "src/uploads.ts",
+        "find": "  stillTheSame(id, meta, user, recheck)\n",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "line-code-survives-delete",
+    "difficulty": "easy",
+    "category": "auth",
+    "severity": "low",
+    "tests": "tests/security-203.test.ts",
+    "description": "a LINE link code is no longer dropped with its account, so a later account of the same name can be linked to the earlier holder's LINE",
+    "patches": [
+      {
+        "file": "src/account-records.ts",
+        "find": "  forgetLinkCodes(username)\n",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "user-create-race",
+    "difficulty": "medium",
+    "category": "logic",
+    "severity": "low",
+    "tests": "tests/security-203.test.ts",
+    "description": "creating a user no longer checks the name again after hashing the password, so two requests at once make two accounts of one name",
+    "patches": [
+      {
+        "file": "src/routes/admin.ts",
+        "find": "    // there is no await, so one of them gets the conflict)\n    if (findUser(username)) throw conflict('admin.username-taken')\n",
+        "replace": "    // there is no await, so one of them gets the conflict)\n"
+      }
+    ]
+  },
+  {
+    "id": "unzip-dirs-uncounted",
+    "difficulty": "medium",
+    "category": "dos",
+    "severity": "low",
+    "tests": "tests/security-203.test.ts",
+    "description": "folders a zip's names imply are no longer counted, so a small zip of names alone makes thousands of folders",
+    "patches": [
+      {
+        "file": "src/zip.ts",
+        "find": "        if (dirs.size > limits.maxFiles) throw bad('zip.too-many-files', { max: limits.maxFiles.toLocaleString() })\n",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "audit-download-flood",
+    "difficulty": "easy",
+    "category": "dos",
+    "severity": "low",
+    "tests": "tests/security-203.test.ts",
+    "description": "visitors' downloads are written to the audit trail every time again, so anonymous requests can fill it and push older entries out",
+    "patches": [
+      {
+        "file": "src/audit.ts",
+        "find": "  auditOnce(`dl|${entry.action}|${entry.ip}|${entry.target ?? ''}|${entry.detail ?? ''}`, entry)\n",
+        "replace": "  audit(entry)\n"
+      }
+    ]
+  },
+  {
+    "id": "my-activity-born-ignored",
+    "difficulty": "easy",
+    "category": "privacy",
+    "severity": "low",
+    "tests": "tests/security-203.test.ts",
+    "description": "\"my activity\" and the data export no longer check which account a line was written for, so a restored older account sees a later same-name account's lines",
+    "patches": [
+      {
+        "file": "src/my-data.ts",
+        "find": " && (r.born === undefined || r.born === u.createdAt)",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "backup-codes-unkeyed",
+    "difficulty": "easy",
+    "category": "crypto",
+    "severity": "informational",
+    "tests": "tests/security-203.test.ts",
+    "description": "2FA backup codes are kept as a plain SHA-256 again, which can be searched offline from users.json or a backup",
+    "patches": [
+      {
+        "file": "src/auth.ts",
+        "find": "  return { codes, hashes: codes.map(backupHash) }\n",
+        "replace": "  return { codes, hashes: codes.map(sha256) }\n"
+      }
+    ]
   }
 ]

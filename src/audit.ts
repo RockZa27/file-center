@@ -9,10 +9,17 @@ export type AuditEntry = {
   action: string
   target?: string
   detail?: string
+  /** `createdAt` of the account named in `user` when it was written: a later account of the same name is another person */
+  born?: string
 }
 
-export function audit(entry: Omit<AuditEntry, 'ts'>) {
-  const full = { ts: new Date().toISOString(), ...entry }
+let bornOf: (name: string) => string | undefined = () => undefined
+/** auth.ts tells how to find an account's `createdAt` (audit.ts can not import it: auth.ts imports this file) */
+export const setBornOf = (fn: (name: string) => string | undefined) => { bornOf = fn }
+
+export function audit(entry: Omit<AuditEntry, 'ts' | 'born'>) {
+  const born = entry.user && entry.user !== 'guest' && !entry.user.startsWith('?') ? bornOf(entry.user) : undefined
+  const full: AuditEntry = { ts: new Date().toISOString(), ...entry, ...(born ? { born } : {}) }
   appendLine(paths.audit, JSON.stringify(full), config.auditMaxBytes, config.auditMaxFiles)
   // a copy for the syslog server / webhook the admin may have set: queued, sent in the background, never throws
   forwardAudit(full)
@@ -53,4 +60,13 @@ export function auditOnce(key: string, entry: Omit<AuditEntry, 'ts'>) {
   if (onceLog.size >= ONCE_MAX) onceLog.clear()
   onceLog.set(key, now)
   audit(entry)
+}
+
+/**
+ * a download: a signed-in account's is always written; a visitor's (no account) once a minute per address, kind and
+ * file, so anonymous requests can not fill the trail and push older entries out of its rotation
+ */
+export function auditDownload(entry: Omit<AuditEntry, 'ts'>) {
+  if (entry.user !== 'guest') return audit(entry)
+  auditOnce(`dl|${entry.action}|${entry.ip}|${entry.target ?? ''}|${entry.detail ?? ''}`, entry)
 }

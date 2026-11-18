@@ -42,7 +42,7 @@ const saved = {} as typeof ins.INSIGHT_LIMITS
 const made: string[] = []
 
 async function user(username: string, role = 'user') {
-  const r = await admin.json('POST', '/api/admin/users', { username, name: username, password: PW, role, permissions: PERMS, publicPermissions: [] })
+  const r = await admin.json('POST', '/api/admin/users', { username, name: username, password: PW, role, confirmPassword: process.env.ADMIN_PASSWORD, permissions: PERMS, publicPermissions: [] })
   expect(r.status).toBe(200)
   made.push(username)
   return new Client().login(username, PW)

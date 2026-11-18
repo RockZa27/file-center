@@ -2,7 +2,8 @@ import { randomBytes } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { open, rm } from 'node:fs/promises'
 import { join, relative } from 'node:path'
-import { accessFor, type User } from './auth'
+import { accessFor, findUser, type User } from './auth'
+import { GROUP_SPACE, groupOwners } from './groups'
 import { gate } from './antivirus'
 import { config, paths } from './config'
 import * as policy from './policy'
@@ -32,6 +33,9 @@ type Meta = {
   ip?: string
   /** set for an upload that is not scanned for viruses (the admin's own update package, signed and checked on its own) */
   noScan?: boolean
+  /** `createdAt` of the account that announced it and of the one whose quota it counts against: a later account of the same name is another one */
+  ownerBorn?: string
+  quotaBorn?: string
 }
 
 // Every chunk is written straight to its offset in one "data" file, and an empty file named after the chunk
@@ -264,6 +268,8 @@ export function initUpload(args: {
   guest?: boolean
   /** the user whose quota the bytes count against; the caller has awaited quota.ready() for them */
   quotaUser?: User
+  /** the signed-in account that announces it (owner is its name): its `createdAt` is kept to tell a later account of the name apart */
+  ownerUser?: User
   /** the space the user announced it in (rights are checked again later) */
   space?: string
   shareId?: string
@@ -301,6 +307,7 @@ export function initUpload(args: {
   if (args.guest) meta.guestDay = reserveGuest(size, meta.ip ?? '')
   if (args.space) meta.space = args.space
   if (args.shareId) meta.shareId = args.shareId
+  if (args.ownerUser) meta.ownerBorn = args.ownerUser.createdAt
   if (args.quotaUser) {
     try {
       reserveBytes(args.quotaUser, size)
@@ -308,7 +315,7 @@ export function initUpload(args: {
       releaseGuest(meta)
       throw err
     }
-    if (size > 0 && limitOf(args.quotaUser)) meta.quotaUser = args.quotaUser.username
+    if (size > 0 && limitOf(args.quotaUser)) { meta.quotaUser = args.quotaUser.username; meta.quotaBorn = args.quotaUser.createdAt }
   }
   try {
     ensureDir(dirOf(id))
@@ -384,10 +391,16 @@ const completing = new Map<string, Promise<{ path: string; size: number }>>()
  * uncounted). If completion fails, the claim goes and the upload can be cancelled or dropped as before.
  */
 const finishing = new Set<string>()
+/** finishing uploads whose account was dropped meanwhile (dropUploadsOf can not take them away mid-way): they end after the scan */
+const cancelled = new Set<string>()
 
 export type Completed = { path: string; size: number; /** true when this answer repeats an earlier one (nothing new happened) */ again: boolean }
 
-export async function completeUpload(id: string, owner: string, user?: User | null): Promise<Completed> {
+/**
+ * `recheck` runs once more after the virus scan, right before the file is put in place (a share link checks that the
+ * link still takes uploads); it throws to refuse.
+ */
+export async function completeUpload(id: string, owner: string, user?: User | null, recheck?: () => void): Promise<Completed> {
   const key = `${owner}\0${id}`
   const now = Date.now()
   // oldest first (Map keeps insertion order): drop what is too old, and the oldest when there are too many
@@ -397,7 +410,7 @@ export async function completeUpload(id: string, owner: string, user?: User | nu
   const running = completing.get(key)
   if (running) return { ...(await running), again: true }
   finishing.add(id)
-  const p = finishUpload(id, owner, user)
+  const p = finishUpload(id, owner, user, recheck)
   completing.set(key, p)
   try {
     const done = await p
@@ -406,10 +419,39 @@ export async function completeUpload(id: string, owner: string, user?: User | nu
   } finally {
     completing.delete(key)
     finishing.delete(id)
+    cancelled.delete(id)
   }
 }
 
-async function finishUpload(id: string, owner: string, user?: User | null) {
+/**
+ * The scan can take minutes. Asked again before the file appears: the account that started it (and the one whose quota
+ * it counts against) must be the same one and not dropped meanwhile, and its upload right must still be there.
+ * Otherwise the upload is thrown away and its holds are given back.
+ */
+function stillTheSame(id: string, meta: Meta, user: User | null | undefined, recheck?: () => void) {
+  let fresh = user
+  try {
+    if (cancelled.has(id)) throw new HttpError(401, 'auth.required')
+    if (user) {
+      const now = findUser(user.username)
+      if (!now || now.createdAt !== user.createdAt || (meta.ownerBorn !== undefined && now.createdAt !== meta.ownerBorn)) throw new HttpError(401, 'auth.required')
+      fresh = now
+    }
+    if (meta.quotaUser) {
+      // a group's quota is held by a pseudo account (groups.ts groupOwner) that is no user
+      const q = meta.quotaUser.startsWith(GROUP_SPACE) ? groupOwners().find(g => g.username === meta.quotaUser) : findUser(meta.quotaUser)
+      if (!q || (meta.quotaBorn !== undefined && q.createdAt !== meta.quotaBorn)) throw forbidden()
+    }
+    recheck?.()
+  } catch (err) {
+    restoreReservations()
+    dropUpload(id, meta)
+    throw err
+  }
+  stillAllowed(id, meta, fresh)
+}
+
+async function finishUpload(id: string, owner: string, user?: User | null, recheck?: () => void) {
   // a chunk accepted before completion started finishes first (none is accepted after: see saveChunk)
   while (writing.get(id)?.size) await Promise.allSettled([...writing.get(id)!])
   restoreReservations()
@@ -435,6 +477,7 @@ async function finishUpload(id: string, owner: string, user?: User | null) {
       throw err
     }
   }
+  stillTheSame(id, meta, user, recheck)
 
   // uniquePath only looks: a file of that name can appear before the move, and a plain rename would replace it
   let finalPath = uniquePath(join(meta.destDir, meta.name))
@@ -498,7 +541,9 @@ export function dropUploadsOf(username: string): number {
   const same = (a: unknown) => typeof a === 'string' && a.toLowerCase() === username.toLowerCase()
   let n = 0
   for (const meta of allMetas()) {
-    if (finishing.has(meta.id) || !(same(meta.owner) || same(meta.quotaUser))) continue
+    if (!(same(meta.owner) || same(meta.quotaUser))) continue
+    // one being finished can not be taken away mid-way: it is told to end once its scan is over
+    if (finishing.has(meta.id)) { cancelled.add(meta.id); continue }
     dropUpload(meta.id, meta)
     n++
   }

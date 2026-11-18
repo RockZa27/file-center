@@ -1,0 +1,2641 @@
+[
+ {
+  "coverage_id": ".github%2Fworkflows%2Fqa.yml%23on::.github%2Fworkflows%2Fqa.yml%23permissions::.github%2Fworkflows::SUPPLY-CHAIN-AND-RELEASE.md%23Untrusted%20code%20in%20a%20privileged%20workflow",
+  "canonical_refs": {
+   "surface": ".github/workflows/qa.yml#on",
+   "boundary": ".github/workflows/qa.yml#permissions",
+   "subsystem": ".github/workflows",
+   "attack_class": "SUPPLY-CHAIN-AND-RELEASE.md#Untrusted code in a privileged workflow"
+  },
+  "surface": ".github/workflows/qa.yml#on",
+  "boundary": ".github/workflows/qa.yml#permissions",
+  "subsystem": ".github/workflows",
+  "attack_class": "Untrusted code in a privileged workflow",
+  "starting_paths": [
+   ".github/workflows/qa.yml",
+   ".github/dependabot.yml",
+   "package.json",
+   "bun.lock",
+   "bunfig.toml",
+   "Dockerfile",
+   ".dockerignore",
+   "scripts/ci-docker.sh"
+  ],
+  "ordinary_attack_class_block": null,
+  "selected_companion_blocks": [
+   "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+   "SUPPLY-CHAIN-AND-RELEASE.md#Untrusted code in a privileged workflow",
+   "SUPPLY-CHAIN-AND-RELEASE.md#Mutable and unbound build inputs",
+   "SUPPLY-CHAIN-AND-RELEASE.md#Dependency source and namespace confusion",
+   "SUPPLY-CHAIN-AND-RELEASE.md#Build-context inclusion",
+   "SUPPLY-CHAIN-AND-RELEASE.md#Universal moves",
+   "SUPPLY-CHAIN-AND-RELEASE.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "docker-compose.yml%23services::scripts%2Fdocker-entrypoint.sh%23setpriv::docker-compose.yml::CLOUD-AND-DEPLOYMENT.md%23Host%20or%20control-plane%20capability%20exposure",
+  "canonical_refs": {
+   "surface": "docker-compose.yml#services",
+   "boundary": "scripts/docker-entrypoint.sh#setpriv",
+   "subsystem": "docker-compose.yml",
+   "attack_class": "CLOUD-AND-DEPLOYMENT.md#Host or control-plane capability exposure"
+  },
+  "surface": "docker-compose.yml#services",
+  "boundary": "scripts/docker-entrypoint.sh#setpriv",
+  "subsystem": "docker-compose.yml",
+  "attack_class": "Host or control-plane capability exposure",
+  "starting_paths": [
+   "docker-compose.yml",
+   "Dockerfile",
+   "scripts/docker-entrypoint.sh",
+   ".env.example",
+   "src/config.ts",
+   "src/config-warnings.ts",
+   "src/cli.ts",
+   "src/store.ts"
+  ],
+  "ordinary_attack_class_block": null,
+  "selected_companion_blocks": [
+   "CLOUD-AND-DEPLOYMENT.md#Core discipline",
+   "CLOUD-AND-DEPLOYMENT.md#Host or control-plane capability exposure",
+   "CLOUD-AND-DEPLOYMENT.md#Security-control precedence drift",
+   "CLOUD-AND-DEPLOYMENT.md#Secret exposure across workload boundaries",
+   "CLOUD-AND-DEPLOYMENT.md#Unexpected service or management-plane reachability",
+   "CLOUD-AND-DEPLOYMENT.md#Universal moves",
+   "CLOUD-AND-DEPLOYMENT.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Faudit.ts%23audit::src%2Flogger.ts%23appendLine::src%2Flogger.ts::ATTACK-CLASSES.md%23Feature%20abuse%20and%20data%20leakage",
+  "canonical_refs": {
+   "surface": "src/audit.ts#audit",
+   "boundary": "src/logger.ts#appendLine",
+   "subsystem": "src/logger.ts",
+   "attack_class": "ATTACK-CLASSES.md#Feature abuse and data leakage"
+  },
+  "surface": "src/audit.ts#audit",
+  "boundary": "src/logger.ts#appendLine",
+  "subsystem": "src/logger.ts",
+  "attack_class": "Feature abuse and data leakage",
+  "starting_paths": [
+   "src/logger.ts",
+   "src/audit.ts",
+   "src/log-retention.ts",
+   "src/routes/logs.ts",
+   "src/audit-forward.ts",
+   "src/alerts.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Feature abuse and data leakage",
+  "selected_companion_blocks": [
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Retention and queued-work overrun",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Fcli.ts%23sessions-revoke::src%2Fauth.ts%23reloadIfChangedByCli::src%2Fcli.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Stale%20authorization%20and%20derived%20copy%20use",
+  "canonical_refs": {
+   "surface": "src/cli.ts#sessions-revoke",
+   "boundary": "src/auth.ts#reloadIfChangedByCli",
+   "subsystem": "src/cli.ts",
+   "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Stale authorization and derived copy use"
+  },
+  "surface": "src/cli.ts#sessions-revoke",
+  "boundary": "src/auth.ts#reloadIfChangedByCli",
+  "subsystem": "src/cli.ts",
+  "attack_class": "Stale authorization and derived copy use",
+  "starting_paths": [
+   "src/cli.ts",
+   "src/auth.ts",
+   "src/app-passwords.ts",
+   "src/store.ts",
+   "src/webdav.ts",
+   "src/context.ts",
+   "src/index.ts"
+  ],
+  "ordinary_attack_class_block": null,
+  "selected_companion_blocks": [
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Stale authorization and derived copy use",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules",
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#Session fixation and invalidation",
+   "WEB-PROTOCOL-AND-AUTH.md#API-key scope and resource binding",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_confirmed_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-2: candidate)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Fcontext.ts%23clientIp::src%2Fconfig.ts%23proxyTrusted::src%2Fcontext.ts::WEB-PROTOCOL-AND-AUTH.md%23Host%20and%20forwarded-header%20trust",
+  "canonical_refs": {
+   "surface": "src/context.ts#clientIp",
+   "boundary": "src/config.ts#proxyTrusted",
+   "subsystem": "src/context.ts",
+   "attack_class": "WEB-PROTOCOL-AND-AUTH.md#Host and forwarded-header trust"
+  },
+  "surface": "src/context.ts#clientIp",
+  "boundary": "src/config.ts#proxyTrusted",
+  "subsystem": "src/context.ts",
+  "attack_class": "Host and forwarded-header trust",
+  "starting_paths": [
+   "src/context.ts",
+   "src/config.ts",
+   "src/index.ts",
+   "src/webdav.ts"
+  ],
+  "ordinary_attack_class_block": null,
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#Host and forwarded-header trust",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules",
+   "CLOUD-AND-DEPLOYMENT.md#Core discipline",
+   "CLOUD-AND-DEPLOYMENT.md#Trusted-proxy and mesh identity bypass",
+   "CLOUD-AND-DEPLOYMENT.md#Universal moves",
+   "CLOUD-AND-DEPLOYMENT.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Fcontext.ts%23onBeforeHandle::src%2Fcontext.ts%23SETUP_2FA_ROUTES::src%2Fcontext.ts::WEB-PROTOCOL-AND-AUTH.md%23MFA%20enrollment%20and%20assurance%20downgrade",
+  "canonical_refs": {
+   "surface": "src/context.ts#onBeforeHandle",
+   "boundary": "src/context.ts#SETUP_2FA_ROUTES",
+   "subsystem": "src/context.ts",
+   "attack_class": "WEB-PROTOCOL-AND-AUTH.md#MFA enrollment and assurance downgrade"
+  },
+  "surface": "src/context.ts#onBeforeHandle",
+  "boundary": "src/context.ts#SETUP_2FA_ROUTES",
+  "subsystem": "src/context.ts",
+  "attack_class": "MFA enrollment and assurance downgrade",
+  "starting_paths": [
+   "src/context.ts",
+   "src/index.ts",
+   "src/policy.ts",
+   "src/routes/session.ts",
+   "node_modules/elysia/dist"
+  ],
+  "ordinary_attack_class_block": null,
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#MFA enrollment and assurance downgrade",
+   "WEB-PROTOCOL-AND-AUTH.md#Ordinary CSRF",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   },
+   {
+    "block": "WEB-PROTOCOL-AND-AUTH.md#API-key scope and resource binding",
+    "reason": "the WebDAV side of the require-2FA gate is checked at src/webdav.ts:161-163 (unit h05)"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Fcontext.ts%23onBeforeHandle::src%2Fcontext.ts%23sameToken::src%2Fcontext.ts::WEB-PROTOCOL-AND-AUTH.md%23Ordinary%20CSRF",
+  "canonical_refs": {
+   "surface": "src/context.ts#onBeforeHandle",
+   "boundary": "src/context.ts#sameToken",
+   "subsystem": "src/context.ts",
+   "attack_class": "WEB-PROTOCOL-AND-AUTH.md#Ordinary CSRF"
+  },
+  "surface": "src/context.ts#onBeforeHandle",
+  "boundary": "src/context.ts#sameToken",
+  "subsystem": "src/context.ts",
+  "attack_class": "Ordinary CSRF",
+  "starting_paths": [
+   "src/context.ts",
+   "src/index.ts",
+   "node_modules/elysia/dist"
+  ],
+  "ordinary_attack_class_block": null,
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#Ordinary CSRF",
+   "WEB-PROTOCOL-AND-AUTH.md#Request framing and desynchronization",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Fadmin.ts%23DELETE%20%2Fapi%2Fadmin%2Fusers%2F%3Ausername::src%2Faccount-records.ts%23forgetAccount::src%2Faccount-records.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Stale%20authorization%20and%20derived%20copy%20use",
+  "canonical_refs": {
+   "surface": "src/routes/admin.ts#DELETE /api/admin/users/:username",
+   "boundary": "src/account-records.ts#forgetAccount",
+   "subsystem": "src/account-records.ts",
+   "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Stale authorization and derived copy use"
+  },
+  "surface": "src/routes/admin.ts#DELETE /api/admin/users/:username",
+  "boundary": "src/account-records.ts#forgetAccount",
+  "subsystem": "src/account-records.ts",
+  "attack_class": "Stale authorization and derived copy use",
+  "starting_paths": [
+   "src/account-records.ts",
+   "src/routes/admin.ts",
+   "src/trash.ts",
+   "src/office.ts",
+   "src/uploads.ts",
+   "src/notify.ts",
+   "src/favorites.ts",
+   "src/insight.ts"
+  ],
+  "ordinary_attack_class_block": null,
+  "selected_companion_blocks": [
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Stale authorization and derived copy use",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Composite-key and namespace collision",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Soft-delete and tombstone bypass",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Fadmin.ts%23POST%20%2Fapi%2Fadmin%2Fusers::src%2Fcontext.ts%23manageable::src%2Froutes%2Fadmin.ts::ATTACK-CLASSES.md%23Access%20control",
+  "canonical_refs": {
+   "surface": "src/routes/admin.ts#POST /api/admin/users",
+   "boundary": "src/context.ts#manageable",
+   "subsystem": "src/routes/admin.ts",
+   "attack_class": "ATTACK-CLASSES.md#Access control"
+  },
+  "surface": "src/routes/admin.ts#POST /api/admin/users",
+  "boundary": "src/context.ts#manageable",
+  "subsystem": "src/routes/admin.ts",
+  "attack_class": "Access control",
+  "starting_paths": [
+   "src/routes/admin.ts",
+   "src/auth.ts",
+   "src/context.ts",
+   "src/routes/groups.ts",
+   "src/groups.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+  "selected_companion_blocks": [],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Fadmin.ts%23PUT%20%2Fapi%2Fadmin%2Flogo::src%2Froutes%2Fadmin.ts%23requireAdmin::src%2Froutes%2Fadmin.ts::ATTACK-CLASSES.md%23Injection",
+  "canonical_refs": {
+   "surface": "src/routes/admin.ts#PUT /api/admin/logo",
+   "boundary": "src/routes/admin.ts#requireAdmin",
+   "subsystem": "src/routes/admin.ts",
+   "attack_class": "ATTACK-CLASSES.md#Injection"
+  },
+  "surface": "src/routes/admin.ts#PUT /api/admin/logo",
+  "boundary": "src/routes/admin.ts#requireAdmin",
+  "subsystem": "src/routes/admin.ts",
+  "attack_class": "Injection",
+  "starting_paths": [
+   "src/routes/admin.ts",
+   "src/settings.ts",
+   "src/routes/logs.ts",
+   "src/logger.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Injection",
+  "selected_companion_blocks": [],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Fadmin.ts%23PUT%20%2Fapi%2Fadmin%2Fsettings::src%2Fauth.ts%23confirmPassword::src%2Froutes%2Fadmin.ts::WEB-PROTOCOL-AND-AUTH.md%23Step-up%20binding%20and%20bypass",
+  "canonical_refs": {
+   "surface": "src/routes/admin.ts#PUT /api/admin/settings",
+   "boundary": "src/auth.ts#confirmPassword",
+   "subsystem": "src/routes/admin.ts",
+   "attack_class": "WEB-PROTOCOL-AND-AUTH.md#Step-up binding and bypass"
+  },
+  "surface": "src/routes/admin.ts#PUT /api/admin/settings",
+  "boundary": "src/auth.ts#confirmPassword",
+  "subsystem": "src/routes/admin.ts",
+  "attack_class": "Step-up binding and bypass",
+  "starting_paths": [
+   "src/routes/admin.ts",
+   "src/policy.ts",
+   "src/settings.ts",
+   "src/routes/backup.ts",
+   "src/routes/update.ts",
+   "src/routes/antivirus.ts",
+   "src/routes/groups.ts"
+  ],
+  "ordinary_attack_class_block": null,
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#Step-up binding and bypass",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Fadmin.ts%23PUT%20%2Fapi%2Fadmin%2Fsettings::src%2Fpolicy.ts%23webhook::src%2Fpolicy.ts::ATTACK-CLASSES.md%23Injection",
+  "canonical_refs": {
+   "surface": "src/routes/admin.ts#PUT /api/admin/settings",
+   "boundary": "src/policy.ts#webhook",
+   "subsystem": "src/policy.ts",
+   "attack_class": "ATTACK-CLASSES.md#Injection"
+  },
+  "surface": "src/routes/admin.ts#PUT /api/admin/settings",
+  "boundary": "src/policy.ts#webhook",
+  "subsystem": "src/policy.ts",
+  "attack_class": "Injection",
+  "starting_paths": [
+   "src/policy.ts",
+   "src/alerts.ts",
+   "src/audit-forward.ts",
+   "src/mail.ts",
+   "src/routes/alerts.ts",
+   "src/routes/config-check.ts",
+   "src/routes/notify.ts",
+   "src/update-source.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Injection",
+  "selected_companion_blocks": [
+   "CLOUD-AND-DEPLOYMENT.md#Core discipline",
+   "CLOUD-AND-DEPLOYMENT.md#Metadata and internal-service reachability",
+   "CLOUD-AND-DEPLOYMENT.md#Universal moves",
+   "CLOUD-AND-DEPLOYMENT.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Fbackup.ts%23POST%20%2Fapi%2Fadmin%2Fbackups%2Frestore::src%2Fbackup.ts%23restoreBackup::src%2Fbackup.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Restore%20reintroduces%20invalid%20state",
+  "canonical_refs": {
+   "surface": "src/routes/backup.ts#POST /api/admin/backups/restore",
+   "boundary": "src/backup.ts#restoreBackup",
+   "subsystem": "src/backup.ts",
+   "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Restore reintroduces invalid state"
+  },
+  "surface": "src/routes/backup.ts#POST /api/admin/backups/restore",
+  "boundary": "src/backup.ts#restoreBackup",
+  "subsystem": "src/backup.ts",
+  "attack_class": "Restore reintroduces invalid state",
+  "starting_paths": [
+   "src/backup.ts",
+   "src/routes/backup.ts",
+   "src/account-records.ts"
+  ],
+  "ordinary_attack_class_block": null,
+  "selected_companion_blocks": [
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Restore reintroduces invalid state",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Import and restore authority expansion",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Fbackup.ts%23POST%20%2Fapi%2Fadmin%2Fbackups::src%2Fbackup-crypt.ts%23encrypt::src%2Fbackup-crypt.ts::ATTACK-CLASSES.md%23Cryptography%20and%20secrets",
+  "canonical_refs": {
+   "surface": "src/routes/backup.ts#POST /api/admin/backups",
+   "boundary": "src/backup-crypt.ts#encrypt",
+   "subsystem": "src/backup-crypt.ts",
+   "attack_class": "ATTACK-CLASSES.md#Cryptography and secrets"
+  },
+  "surface": "src/routes/backup.ts#POST /api/admin/backups",
+  "boundary": "src/backup-crypt.ts#encrypt",
+  "subsystem": "src/backup-crypt.ts",
+  "attack_class": "Cryptography and secrets",
+  "starting_paths": [
+   "src/backup-crypt.ts",
+   "src/backup.ts",
+   "src/cli.ts",
+   "src/secret-box.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Cryptography and secrets",
+  "selected_companion_blocks": [
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Export and backup scope expansion",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Ffiles.ts%23GET%20%2Fapi%2Fbatch%2F%3Atoken::src%2Fzip.ts%23collectZipItems::src%2Fzip.ts::RESOURCE-EXHAUSTION-AND-AVAILABILITY.md%23Worker%2C%20pool%2C%20and%20priority%20starvation",
+  "canonical_refs": {
+   "surface": "src/routes/files.ts#GET /api/batch/:token",
+   "boundary": "src/zip.ts#collectZipItems",
+   "subsystem": "src/zip.ts",
+   "attack_class": "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Worker, pool, and priority starvation"
+  },
+  "surface": "src/routes/files.ts#GET /api/batch/:token",
+  "boundary": "src/zip.ts#collectZipItems",
+  "subsystem": "src/zip.ts",
+  "attack_class": "Worker, pool, and priority starvation",
+  "starting_paths": [
+   "src/zip.ts",
+   "src/routes/files.ts",
+   "src/routes/shares.ts",
+   "src/policy.ts"
+  ],
+  "ordinary_attack_class_block": null,
+  "selected_companion_blocks": [
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Core discipline",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Worker, pool, and priority starvation",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Detached work after cancellation",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Universal moves",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_confirmed_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-2: candidate)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Ffiles.ts%23GET%20%2Fapi%2Fdownload::src%2Froutes%2Ffiles.ts%23fileResponse::src%2Froutes%2Ffiles.ts::ATTACK-CLASSES.md%23Injection",
+  "canonical_refs": {
+   "surface": "src/routes/files.ts#GET /api/download",
+   "boundary": "src/routes/files.ts#fileResponse",
+   "subsystem": "src/routes/files.ts",
+   "attack_class": "ATTACK-CLASSES.md#Injection"
+  },
+  "surface": "src/routes/files.ts#GET /api/download",
+  "boundary": "src/routes/files.ts#fileResponse",
+  "subsystem": "src/routes/files.ts",
+  "attack_class": "Injection",
+  "starting_paths": [
+   "src/routes/files.ts",
+   "src/archive.ts",
+   "src/static.ts",
+   "src/index.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Injection",
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#Response-header injection",
+   "WEB-PROTOCOL-AND-AUTH.md#Cache deception and private-response caching",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Ffiles.ts%23GET%20%2Fapi%2Flist::src%2Fcontext.ts%23need::src%2Froutes%2Ffiles.ts::ATTACK-CLASSES.md%23Access%20control",
+  "canonical_refs": {
+   "surface": "src/routes/files.ts#GET /api/list",
+   "boundary": "src/context.ts#need",
+   "subsystem": "src/routes/files.ts",
+   "attack_class": "ATTACK-CLASSES.md#Access control"
+  },
+  "surface": "src/routes/files.ts#GET /api/list",
+  "boundary": "src/context.ts#need",
+  "subsystem": "src/routes/files.ts",
+  "attack_class": "Access control",
+  "starting_paths": [
+   "src/routes/files.ts",
+   "src/auth.ts",
+   "src/context.ts",
+   "src/routes/versions.ts",
+   "src/routes/me.ts",
+   "src/favorites.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+  "selected_companion_blocks": [],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Ffiles.ts%23GET%20%2Fapi%2Fsearch::src%2Fsearch-index.ts%23searchEntries::src%2Fsearch-index.ts::RESOURCE-EXHAUSTION-AND-AVAILABILITY.md%23Database%20and%20downstream%20query%20amplification",
+  "canonical_refs": {
+   "surface": "src/routes/files.ts#GET /api/search",
+   "boundary": "src/search-index.ts#searchEntries",
+   "subsystem": "src/search-index.ts",
+   "attack_class": "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Database and downstream query amplification"
+  },
+  "surface": "src/routes/files.ts#GET /api/search",
+  "boundary": "src/search-index.ts#searchEntries",
+  "subsystem": "src/search-index.ts",
+  "attack_class": "Database and downstream query amplification",
+  "starting_paths": [
+   "src/search-index.ts",
+   "src/routes/files.ts",
+   "src/routes/shares.ts"
+  ],
+  "ordinary_attack_class_block": null,
+  "selected_companion_blocks": [
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Core discipline",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Database and downstream query amplification",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Universal moves",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-2: covered)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Ffiles.ts%23POST%20%2Fapi%2Fbatch::src%2Froutes%2Ffiles.ts%23batches::src%2Froutes%2Ffiles.ts::RESOURCE-EXHAUSTION-AND-AVAILABILITY.md%23Unbounded%20buffering%20and%20cardinality",
+  "canonical_refs": {
+   "surface": "src/routes/files.ts#POST /api/batch",
+   "boundary": "src/routes/files.ts#batches",
+   "subsystem": "src/routes/files.ts",
+   "attack_class": "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Unbounded buffering and cardinality"
+  },
+  "surface": "src/routes/files.ts#POST /api/batch",
+  "boundary": "src/routes/files.ts#batches",
+  "subsystem": "src/routes/files.ts",
+  "attack_class": "Unbounded buffering and cardinality",
+  "starting_paths": [
+   "src/routes/files.ts",
+   "src/index.ts",
+   "src/audit.ts",
+   "src/auth.ts"
+  ],
+  "ordinary_attack_class_block": null,
+  "selected_companion_blocks": [
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Core discipline",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Unbounded buffering and cardinality",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Pre-authentication work imbalance",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Universal moves",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Ffiles.ts%23POST%20%2Fapi%2Fcopy::src%2Ffsx.ts%23resolveIn::src%2Ffsx.ts::ATTACK-CLASSES.md%23Resource%20and%20file%20handling",
+  "canonical_refs": {
+   "surface": "src/routes/files.ts#POST /api/copy",
+   "boundary": "src/fsx.ts#resolveIn",
+   "subsystem": "src/fsx.ts",
+   "attack_class": "ATTACK-CLASSES.md#Resource and file handling"
+  },
+  "surface": "src/routes/files.ts#POST /api/copy",
+  "boundary": "src/fsx.ts#resolveIn",
+  "subsystem": "src/fsx.ts",
+  "attack_class": "Resource and file handling",
+  "starting_paths": [
+   "src/fsx.ts",
+   "src/routes/files.ts",
+   "src/trash.ts",
+   "src/versions.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Resource and file handling",
+  "selected_companion_blocks": [],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Ffiles.ts%23POST%20%2Fapi%2Funzip::src%2Fantivirus.ts%23gate::src%2Froutes%2Ffiles.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Stale%20authorization%20and%20derived%20copy%20use",
+  "canonical_refs": {
+   "surface": "src/routes/files.ts#POST /api/unzip",
+   "boundary": "src/antivirus.ts#gate",
+   "subsystem": "src/routes/files.ts",
+   "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Stale authorization and derived copy use"
+  },
+  "surface": "src/routes/files.ts#POST /api/unzip",
+  "boundary": "src/antivirus.ts#gate",
+  "subsystem": "src/routes/files.ts",
+  "attack_class": "Stale authorization and derived copy use",
+  "starting_paths": [
+   "src/routes/files.ts",
+   "src/quota.ts",
+   "src/auth.ts",
+   "src/zip.ts",
+   "src/antivirus.ts",
+   "src/routes/admin.ts"
+  ],
+  "ordinary_attack_class_block": null,
+  "selected_companion_blocks": [
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Stale authorization and derived copy use",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_out_of_scope",
+  "attempts": [],
+  "wave": 1,
+  "status": "candidate",
+  "agent_id": "h31-unzip",
+  "reviewed_paths": [
+   "src/routes/files.ts",
+   "src/quota.ts"
+  ],
+  "local_checks": [
+   {
+    "agent_id": "h31-unzip",
+    "reviewed_paths": [
+     "src/routes/files.ts",
+     "src/quota.ts"
+    ],
+    "invariant": "rights, account instance and quota owner are re-checked after the antivirus scan before the tree lands (as PUT /api/content current())",
+    "method": "local",
+    "result": "Sandbox run with a delaying fake clamd: 2 runs of permission downgrade and 2 runs of delete+recreate (adoptHome) during the scan all returned 200 and landed p/a.txt and p/b.txt. A control unzip after the downgrade returned 403.",
+    "artifact": "agents/h31-unzip/artifacts/evidence/out2.txt"
+   },
+   {
+    "agent_id": "h31-unzip",
+    "reviewed_paths": [
+     "src/routes/files.ts"
+    ],
+    "invariant": "same, delete and re-create under the same name",
+    "method": "local",
+    "result": "recreate runs: unzip 200, files landed in the home of the new account, whose usage shows them.",
+    "artifact": "agents/h31-unzip/artifacts/evidence/out3.txt"
+   },
+   {
+    "agent_id": "v01",
+    "reviewed_paths": [
+     "src/routes/files.ts"
+    ],
+    "invariant": "Phase 3 independent validation of files/unzip-stale-auth-after-scan",
+    "method": "local",
+    "result": "confirmed (low): 2 of 2 runs per variant: downgrade, delete and delete+recreate(adoptHome) all returned unzip 200 with p/a.txt and p/b.txt landed; control unzip after downgrade 403; new account usage read 0 (not charged at that read).",
+    "artifact": "agents/v01/artifacts/evidence/notes.md"
+   }
+  ],
+  "result_fingerprints": [
+   "files/unzip-stale-auth-after-scan"
+  ],
+  "unresolved": [],
+  "planned_hunter": "h31-unzip",
+  "parent_note": "parallel gate-then-write path to files/put-content-stale-auth-after-scan. files.ts:352-355 fixes need(zip,write), quotaUserOf and the destination before extraction; files.ts:395-401 awaits gate() per extracted file; files.ts:405-414 moves the tree in and commits the hold with no re-check of the account instance, rights or quota owner. dropUploadsOf cannot see the staged folder.",
+  "parent_decisions": {
+   "files/unzip-stale-auth-after-scan": {
+    "phase3": "confirmed",
+    "verifier": "v01",
+    "phase5": "verified by p01"
+   }
+  }
+ },
+ {
+  "coverage_id": "src%2Froutes%2Ffiles.ts%23POST%20%2Fapi%2Funzip::src%2Fzip.ts%23unzipTo::src%2Fzip.ts::RESOURCE-EXHAUSTION-AND-AVAILABILITY.md%23Decompression%20and%20representation%20amplification",
+  "canonical_refs": {
+   "surface": "src/routes/files.ts#POST /api/unzip",
+   "boundary": "src/zip.ts#unzipTo",
+   "subsystem": "src/zip.ts",
+   "attack_class": "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Decompression and representation amplification"
+  },
+  "surface": "src/routes/files.ts#POST /api/unzip",
+  "boundary": "src/zip.ts#unzipTo",
+  "subsystem": "src/zip.ts",
+  "attack_class": "Decompression and representation amplification",
+  "starting_paths": [
+   "src/zip.ts",
+   "src/archive.ts",
+   "src/routes/files.ts",
+   "src/routes/archive.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Resource and file handling",
+  "selected_companion_blocks": [
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Core discipline",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Decompression and representation amplification",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Worker, pool, and priority starvation",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Universal moves",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Ffiles.ts%23POST%20%2Fapi%2Fzip::src%2Fquota.ts%23holdNow::src%2Froutes%2Ffiles.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Stale%20authorization%20and%20derived%20copy%20use",
+  "canonical_refs": {
+   "surface": "src/routes/files.ts#POST /api/zip",
+   "boundary": "src/quota.ts#holdNow",
+   "subsystem": "src/routes/files.ts",
+   "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Stale authorization and derived copy use"
+  },
+  "surface": "src/routes/files.ts#POST /api/zip",
+  "boundary": "src/quota.ts#holdNow",
+  "subsystem": "src/routes/files.ts",
+  "attack_class": "Stale authorization and derived copy use",
+  "starting_paths": [
+   "src/routes/files.ts",
+   "src/zip.ts",
+   "src/quota.ts",
+   "src/routes/admin.ts"
+  ],
+  "ordinary_attack_class_block": null,
+  "selected_companion_blocks": [
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Stale authorization and derived copy use",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "new",
+  "attempts": [],
+  "wave": 2,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped_run_critic_gap_outside_scope: critic c31: need(zip,write) and quotaUserOf are fixed at src/routes/files.ts:337-338; after the long await Bun.write(target, zipStream(...)) (354) hold.commit uses the stale owner and the archive stays in the home (360) with no re-check of rights or account instance. G2 covered cost and quota totals only."
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Ffiles.ts%23POST%20%2Fapi%2Fzip::src%2Fzip.ts%23zipStream::src%2Fzip.ts::RESOURCE-EXHAUSTION-AND-AVAILABILITY.md%23Worker%2C%20pool%2C%20and%20priority%20starvation",
+  "canonical_refs": {
+   "surface": "src/routes/files.ts#POST /api/zip",
+   "boundary": "src/zip.ts#zipStream",
+   "subsystem": "src/zip.ts",
+   "attack_class": "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Worker, pool, and priority starvation"
+  },
+  "surface": "src/routes/files.ts#POST /api/zip",
+  "boundary": "src/zip.ts#zipStream",
+  "subsystem": "src/zip.ts",
+  "attack_class": "Worker, pool, and priority starvation",
+  "starting_paths": [
+   "src/routes/files.ts",
+   "src/zip.ts",
+   "src/routes/logs.ts",
+   "src/backup.ts"
+  ],
+  "ordinary_attack_class_block": null,
+  "selected_companion_blocks": [
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Core discipline",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Worker, pool, and priority starvation",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Universal moves",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_out_of_scope",
+  "attempts": [],
+  "wave": 1,
+  "status": "covered",
+  "agent_id": "h32-zipserver",
+  "reviewed_paths": [
+   "src/routes/files.ts",
+   "src/zip.ts",
+   "src/routes/logs.ts",
+   "src/quota.ts",
+   "src/fsx.ts",
+   "src/context.ts",
+   "src/backup.ts"
+  ],
+  "local_checks": [
+   {
+    "agent_id": "h32-zipserver",
+    "reviewed_paths": [
+     "src/routes/files.ts",
+     "src/zip.ts",
+     "src/routes/logs.ts",
+     "src/quota.ts",
+     "src/fsx.ts",
+     "src/context.ts",
+     "src/backup.ts"
+    ],
+    "invariant": "POST /api/zip and the admin log zip add no new root cause beyond the confirmed zipstream fingerprints; quota, disk and name checks hold",
+    "method": "source",
+    "result": "POST /api/zip consumes its own stream with Bun.write, so no unread-body codec slot is held. collectZipItems (src/zip.ts:101) is a synchronous unbounded walk, the same cause as zipstream-no-yield-eventloop-stall-large-tree. ensureSpace(upper), holdNow(q, upper) and commit(statSync size) bound the result. need() requires zip and write. The log zip is admin-only with a fixed file list.",
+    "artifact": null
+   },
+   {
+    "agent_id": "h32-zipserver",
+    "reviewed_paths": [
+     "src/routes/files.ts",
+     "src/zip.ts",
+     "src/quota.ts"
+    ],
+    "invariant": "Local sandbox checks, run twice: (1) stall on 20,000 one-byte files; (2) 4 concurrent server-side zips plus batch zip plus backup; (3) quota near full",
+    "method": "local",
+    "result": "(1) POST /api/zip on 20,000 one-byte files returned 200 in 3.4 s (run 1) and 3.6 s (run 2) with 0 ticks of a 10 ms timer, so the event loop stalled for the whole request. This is the same no-yield stall as zipstream-no-yield-eventloop-stall-large-tree, reached through POST /api/zip (variant, no new fingerprint). (2) 4 concurrent 4x3MB zips, a batch zip and a backup all returned 200 in 92-379 ms; a solo zip took 12-23 ms before and after. They run one after another on the single thread and nothing waits on codec slots, so nothing is beyond the existing fingerprints. (3) Quota 1,000,000 with 400 KB used: zip #1 returned 200 and the archive on disk was 400,271 B; zip #2 (needs 400 KB more) returned 507 quota.exceeded with no file left behind, and so did zip #3. Reported used was 800,271 and bytes on disk 800,271, so the committed usage matches the disk and the quota holds.",
+    "artifact": "agents/h32-zipserver/artifacts/evidence/run1.txt"
+   },
+   {
+    "agent_id": "h32-zipserver",
+    "reviewed_paths": [
+     "src/routes/files.ts"
+    ],
+    "invariant": "Repeat run of the same checks",
+    "method": "local",
+    "result": "Run 2 gave the same results: 3.6 s stall with 0 timer ticks, no slot waits, quota 507 and usage equal to disk.",
+    "artifact": "agents/h32-zipserver/artifacts/evidence/run2.txt"
+   }
+  ],
+  "result_fingerprints": [],
+  "unresolved": [],
+  "planned_hunter": "h32-zipserver",
+  "parent_note": "other zipStream callers were not checked as triggers. files.ts:337-343 builds a server-side archive with collectZipItems (no entry cap) for any user with zip+write; logs.ts:90 zips log files; backup.ts:581 was used only as the victim. Needs an account (guest defaults in settings.ts:90 exclude zip).",
+  "parent_hardening": [
+   "POST /api/zip (src/routes/files.ts:348) is another entry to zipstream-no-yield-eventloop-stall-large-tree: any account with zip+write stalls the event loop for the whole request (measured 3.4-3.6 s, 0 timer ticks, for 20,000 one-byte files). Not a new finding. Fixing collectZipItems and the zipStream add loop (async walk, yield, entry cap) fixes every caller.",
+   "The quota hold for POST /api/zip is the sum of file sizes taken at collect time. Files that grow during the write can make the archive slightly larger than the hold. commit() records the real size, so the effect is a small overshoot only."
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Fgrants.ts%23POST%20%2Fapi%2Fgrants::src%2Fgrants.ts%23grantSpace::src%2Fgrants.ts::ATTACK-CLASSES.md%23Access%20control",
+  "canonical_refs": {
+   "surface": "src/routes/grants.ts#POST /api/grants",
+   "boundary": "src/grants.ts#grantSpace",
+   "subsystem": "src/grants.ts",
+   "attack_class": "ATTACK-CLASSES.md#Access control"
+  },
+  "surface": "src/routes/grants.ts#POST /api/grants",
+  "boundary": "src/grants.ts#grantSpace",
+  "subsystem": "src/grants.ts",
+  "attack_class": "Access control",
+  "starting_paths": [
+   "src/routes/grants.ts",
+   "src/grants.ts",
+   "src/groups.ts",
+   "src/routes/groups.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+  "selected_companion_blocks": [],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Finsight.ts%23GET%20%2Fapi%2Finsight::src%2Froutes%2Finsight.ts%23resolve::src%2Finsight.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Search%2C%20cache%2C%20and%20index%20ACL%20drift",
+  "canonical_refs": {
+   "surface": "src/routes/insight.ts#GET /api/insight",
+   "boundary": "src/routes/insight.ts#resolve",
+   "subsystem": "src/insight.ts",
+   "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Search, cache, and index ACL drift"
+  },
+  "surface": "src/routes/insight.ts#GET /api/insight",
+  "boundary": "src/routes/insight.ts#resolve",
+  "subsystem": "src/insight.ts",
+  "attack_class": "Search, cache, and index ACL drift",
+  "starting_paths": [
+   "src/insight.ts",
+   "src/routes/insight.ts",
+   "src/search-index.ts",
+   "src/routes/files.ts",
+   "src/quota.ts",
+   "src/stats.ts"
+  ],
+  "ordinary_attack_class_block": null,
+  "selected_companion_blocks": [
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Search, cache, and index ACL drift",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Enumeration and aggregate oracles",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Fme.ts%23POST%20%2Fapi%2Fme%2Fexport::src%2Fmy-data.ts%23ownEntries::src%2Fmy-data.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Analytics%2C%20logs%2C%20traces%2C%20and%20diagnostics%20as%20alternate%20readers",
+  "canonical_refs": {
+   "surface": "src/routes/me.ts#POST /api/me/export",
+   "boundary": "src/my-data.ts#ownEntries",
+   "subsystem": "src/my-data.ts",
+   "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Analytics, logs, traces, and diagnostics as alternate readers"
+  },
+  "surface": "src/routes/me.ts#POST /api/me/export",
+  "boundary": "src/my-data.ts#ownEntries",
+  "subsystem": "src/my-data.ts",
+  "attack_class": "Analytics, logs, traces, and diagnostics as alternate readers",
+  "starting_paths": [
+   "src/my-data.ts",
+   "src/routes/me.ts",
+   "src/audit.ts",
+   "src/routes/admin.ts"
+  ],
+  "ordinary_attack_class_block": null,
+  "selected_companion_blocks": [
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Analytics, logs, traces, and diagnostics as alternate readers",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Export and backup scope expansion",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Fnotify.ts%23POST%20%2Fapi%2Fline%2Fwebhook::src%2Fline.ts%23validSignature::src%2Fline.ts::PROTOCOLS-RPC-AND-MESSAGING.md%23Peer%20identity%20to%20application-principal%20confusion",
+  "canonical_refs": {
+   "surface": "src/routes/notify.ts#POST /api/line/webhook",
+   "boundary": "src/line.ts#validSignature",
+   "subsystem": "src/line.ts",
+   "attack_class": "PROTOCOLS-RPC-AND-MESSAGING.md#Peer identity to application-principal confusion"
+  },
+  "surface": "src/routes/notify.ts#POST /api/line/webhook",
+  "boundary": "src/line.ts#validSignature",
+  "subsystem": "src/line.ts",
+  "attack_class": "Peer identity to application-principal confusion",
+  "starting_paths": [
+   "src/line.ts",
+   "src/routes/notify.ts",
+   "src/notify.ts",
+   "src/notify-checks.ts"
+  ],
+  "ordinary_attack_class_block": null,
+  "selected_companion_blocks": [
+   "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+   "PROTOCOLS-RPC-AND-MESSAGING.md#Peer identity to application-principal confusion",
+   "PROTOCOLS-RPC-AND-MESSAGING.md#Duplicate delivery and idempotency gaps",
+   "PROTOCOLS-RPC-AND-MESSAGING.md#Universal moves",
+   "PROTOCOLS-RPC-AND-MESSAGING.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Foffice.ts%23POST%20%2Fapi%2Foffice%2Fcallback%2F%3Atoken::src%2Foffice.ts%23serverJwt::src%2Foffice.ts::WEB-PROTOCOL-AND-AUTH.md%23JWT%20verification%20and%20claim%20binding",
+  "canonical_refs": {
+   "surface": "src/routes/office.ts#POST /api/office/callback/:token",
+   "boundary": "src/office.ts#serverJwt",
+   "subsystem": "src/office.ts",
+   "attack_class": "WEB-PROTOCOL-AND-AUTH.md#JWT verification and claim binding"
+  },
+  "surface": "src/routes/office.ts#POST /api/office/callback/:token",
+  "boundary": "src/office.ts#serverJwt",
+  "subsystem": "src/office.ts",
+  "attack_class": "JWT verification and claim binding",
+  "starting_paths": [
+   "src/office.ts",
+   "src/routes/office.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#JWT verification and claim binding",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules",
+   "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+   "PROTOCOLS-RPC-AND-MESSAGING.md#Callback and reply-correlation confusion",
+   "PROTOCOLS-RPC-AND-MESSAGING.md#Universal moves",
+   "PROTOCOLS-RPC-AND-MESSAGING.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Fsession.ts%23POST%20%2Fapi%2Flogin%2F2fa::src%2Fauth.ts%23checkSecondFactor::src%2Froutes%2Fsession.ts::WEB-PROTOCOL-AND-AUTH.md%23MFA%20enrollment%20and%20assurance%20downgrade",
+  "canonical_refs": {
+   "surface": "src/routes/session.ts#POST /api/login/2fa",
+   "boundary": "src/auth.ts#checkSecondFactor",
+   "subsystem": "src/routes/session.ts",
+   "attack_class": "WEB-PROTOCOL-AND-AUTH.md#MFA enrollment and assurance downgrade"
+  },
+  "surface": "src/routes/session.ts#POST /api/login/2fa",
+  "boundary": "src/auth.ts#checkSecondFactor",
+  "subsystem": "src/routes/session.ts",
+  "attack_class": "MFA enrollment and assurance downgrade",
+  "starting_paths": [
+   "src/auth.ts",
+   "src/totp.ts",
+   "src/routes/session.ts",
+   "src/secret-box.ts",
+   "src/policy.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Cryptography and secrets",
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#MFA enrollment and assurance downgrade",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Fsession.ts%23POST%20%2Fapi%2Flogin::src%2Fauth.ts%23recordFailure::src%2Froutes%2Fsession.ts::WEB-PROTOCOL-AND-AUTH.md%23Session%20fixation%20and%20invalidation",
+  "canonical_refs": {
+   "surface": "src/routes/session.ts#POST /api/login",
+   "boundary": "src/auth.ts#recordFailure",
+   "subsystem": "src/routes/session.ts",
+   "attack_class": "WEB-PROTOCOL-AND-AUTH.md#Session fixation and invalidation"
+  },
+  "surface": "src/routes/session.ts#POST /api/login",
+  "boundary": "src/auth.ts#recordFailure",
+  "subsystem": "src/routes/session.ts",
+  "attack_class": "Session fixation and invalidation",
+  "starting_paths": [
+   "src/routes/session.ts",
+   "src/auth.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Business logic",
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#Session fixation and invalidation",
+   "WEB-PROTOCOL-AND-AUTH.md#Cookie scope and transport",
+   "WEB-PROTOCOL-AND-AUTH.md#Password reset and broader recovery",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Fshares.ts%23GET%20%2Fapi%2Fs%2F%3Atoken%2Fview::src%2Fshares.ts%23refuseViewOnly::src%2Froutes%2Fshares.ts::ATTACK-CLASSES.md%23Feature%20abuse%20and%20data%20leakage",
+  "canonical_refs": {
+   "surface": "src/routes/shares.ts#GET /api/s/:token/view",
+   "boundary": "src/shares.ts#refuseViewOnly",
+   "subsystem": "src/routes/shares.ts",
+   "attack_class": "ATTACK-CLASSES.md#Feature abuse and data leakage"
+  },
+  "surface": "src/routes/shares.ts#GET /api/s/:token/view",
+  "boundary": "src/shares.ts#refuseViewOnly",
+  "subsystem": "src/routes/shares.ts",
+  "attack_class": "Feature abuse and data leakage",
+  "starting_paths": [
+   "src/routes/shares.ts",
+   "src/routes/thumbs.ts",
+   "src/routes/archive.ts",
+   "src/thumbs.ts",
+   "src/archive.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Feature abuse and data leakage",
+  "selected_companion_blocks": [],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Fshares.ts%23GET%20%2Fapi%2Fs%2F%3Atoken::src%2Fshares.ts%23openShare::src%2Froutes%2Fshares.ts::ATTACK-CLASSES.md%23Access%20control",
+  "canonical_refs": {
+   "surface": "src/routes/shares.ts#GET /api/s/:token",
+   "boundary": "src/shares.ts#openShare",
+   "subsystem": "src/routes/shares.ts",
+   "attack_class": "ATTACK-CLASSES.md#Access control"
+  },
+  "surface": "src/routes/shares.ts#GET /api/s/:token",
+  "boundary": "src/shares.ts#openShare",
+  "subsystem": "src/routes/shares.ts",
+  "attack_class": "Access control",
+  "starting_paths": [
+   "src/routes/shares.ts",
+   "src/shares.ts",
+   "src/routes/thumbs.ts",
+   "src/routes/archive.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+  "selected_companion_blocks": [
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Blob and signed-reference overreach",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Stale authorization and derived copy use",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Fshares.ts%23POST%20%2Fapi%2Fs%2F%3Atoken%2Funlock::src%2Fshares.ts%23isUnlocked::src%2Froutes%2Fshares.ts::ATTACK-CLASSES.md%23Business%20logic",
+  "canonical_refs": {
+   "surface": "src/routes/shares.ts#POST /api/s/:token/unlock",
+   "boundary": "src/shares.ts#isUnlocked",
+   "subsystem": "src/routes/shares.ts",
+   "attack_class": "ATTACK-CLASSES.md#Business logic"
+  },
+  "surface": "src/routes/shares.ts#POST /api/s/:token/unlock",
+  "boundary": "src/shares.ts#isUnlocked",
+  "subsystem": "src/routes/shares.ts",
+  "attack_class": "Business logic",
+  "starting_paths": [
+   "src/routes/shares.ts",
+   "src/shares.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Business logic",
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#Cookie scope and transport",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Fshares.ts%23POST%20%2Fapi%2Fs%2F%3Atoken%2Fupload%2F%3Aid%2Fcomplete::src%2Fantivirus.ts%23gate::src%2Fuploads.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Stale%20authorization%20and%20derived%20copy%20use",
+  "canonical_refs": {
+   "surface": "src/routes/shares.ts#POST /api/s/:token/upload/:id/complete",
+   "boundary": "src/antivirus.ts#gate",
+   "subsystem": "src/uploads.ts",
+   "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Stale authorization and derived copy use"
+  },
+  "surface": "src/routes/shares.ts#POST /api/s/:token/upload/:id/complete",
+  "boundary": "src/antivirus.ts#gate",
+  "subsystem": "src/uploads.ts",
+  "attack_class": "Stale authorization and derived copy use",
+  "starting_paths": [
+   "src/routes/shares.ts",
+   "src/uploads.ts",
+   "src/shares.ts",
+   "src/quota.ts"
+  ],
+  "ordinary_attack_class_block": null,
+  "selected_companion_blocks": [
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Stale authorization and derived copy use",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "new",
+  "attempts": [],
+  "wave": 2,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped_run_critic_gap_outside_scope: critic c31: visitorUpload is checked once (src/routes/shares.ts:438) before completeUpload (439); stillAllowed returns early without meta.space (src/uploads.ts:61); after await gate() (429) nothing re-checks that the share is still live and allows uploads, or that the share owner (quota owner) is the same account, before putInPlace (441) and commit (455)."
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Fshares.ts%23POST%20%2Fapi%2Fs%2F%3Atoken%2Fupload::src%2Froutes%2Fshares.ts%23visitorUpload::src%2Froutes%2Fshares.ts::RESOURCE-EXHAUSTION-AND-AVAILABILITY.md%23Quota-accounting%20scope%20and%20reset%20gaps",
+  "canonical_refs": {
+   "surface": "src/routes/shares.ts#POST /api/s/:token/upload",
+   "boundary": "src/routes/shares.ts#visitorUpload",
+   "subsystem": "src/routes/shares.ts",
+   "attack_class": "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Quota-accounting scope and reset gaps"
+  },
+  "surface": "src/routes/shares.ts#POST /api/s/:token/upload",
+  "boundary": "src/routes/shares.ts#visitorUpload",
+  "subsystem": "src/routes/shares.ts",
+  "attack_class": "Quota-accounting scope and reset gaps",
+  "starting_paths": [
+   "src/routes/shares.ts",
+   "src/uploads.ts",
+   "src/shares.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Business logic",
+  "selected_companion_blocks": [
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Core discipline",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Quota-accounting scope and reset gaps",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Pre-authentication work imbalance",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Universal moves",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Fthumbs.ts%23GET%20%2Fapi%2Fthumb::src%2Fthumbs.ts%23toolEnv::src%2Fthumbs.ts::ATTACK-CLASSES.md%23Injection",
+  "canonical_refs": {
+   "surface": "src/routes/thumbs.ts#GET /api/thumb",
+   "boundary": "src/thumbs.ts#toolEnv",
+   "subsystem": "src/thumbs.ts",
+   "attack_class": "ATTACK-CLASSES.md#Injection"
+  },
+  "surface": "src/routes/thumbs.ts#GET /api/thumb",
+  "boundary": "src/thumbs.ts#toolEnv",
+  "subsystem": "src/thumbs.ts",
+  "attack_class": "Injection",
+  "starting_paths": [
+   "src/thumbs.ts",
+   "src/routes/thumbs.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Injection",
+  "selected_companion_blocks": [
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Core discipline",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Worker, pool, and priority starvation",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#File descriptor, handle, and temporary-resource leaks",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Universal moves",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_blocked",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Ftrash.ts%23GET%20%2Fapi%2Fme%2Ftrash::src%2Froutes%2Ftrash.ts%23visible::src%2Ftrash.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Soft-delete%20and%20tombstone%20bypass",
+  "canonical_refs": {
+   "surface": "src/routes/trash.ts#GET /api/me/trash",
+   "boundary": "src/routes/trash.ts#visible",
+   "subsystem": "src/trash.ts",
+   "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Soft-delete and tombstone bypass"
+  },
+  "surface": "src/routes/trash.ts#GET /api/me/trash",
+  "boundary": "src/routes/trash.ts#visible",
+  "subsystem": "src/trash.ts",
+  "attack_class": "Soft-delete and tombstone bypass",
+  "starting_paths": [
+   "src/routes/trash.ts",
+   "src/trash.ts",
+   "src/routes/versions.ts",
+   "src/versions.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+  "selected_companion_blocks": [
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Soft-delete and tombstone bypass",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Missing tenant or owner enforcement",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Fupdate.ts%23POST%20%2Fapi%2Fadmin%2Fupdate%2Fapply::src%2Fupdater.ts%23signingKey::src%2Fupdater.ts::SUPPLY-CHAIN-AND-RELEASE.md%23Release%20authorization%20and%20signing-policy%20gaps",
+  "canonical_refs": {
+   "surface": "src/routes/update.ts#POST /api/admin/update/apply",
+   "boundary": "src/updater.ts#signingKey",
+   "subsystem": "src/updater.ts",
+   "attack_class": "SUPPLY-CHAIN-AND-RELEASE.md#Release authorization and signing-policy gaps"
+  },
+  "surface": "src/routes/update.ts#POST /api/admin/update/apply",
+  "boundary": "src/updater.ts#signingKey",
+  "subsystem": "src/updater.ts",
+  "attack_class": "Release authorization and signing-policy gaps",
+  "starting_paths": [
+   "src/updater.ts",
+   "src/routes/update.ts",
+   "src/update-source.ts",
+   "src/release.ts",
+   "src/update-key.ts",
+   "src/launcher.ts",
+   "src/lifecycle.ts",
+   "scripts/package.ts",
+   "scripts/release.ts"
+  ],
+  "ordinary_attack_class_block": null,
+  "selected_companion_blocks": [
+   "SUPPLY-CHAIN-AND-RELEASE.md#Core discipline",
+   "SUPPLY-CHAIN-AND-RELEASE.md#Release authorization and signing-policy gaps",
+   "SUPPLY-CHAIN-AND-RELEASE.md#Update metadata and rollback confusion",
+   "SUPPLY-CHAIN-AND-RELEASE.md#Build-to-promotion substitution",
+   "SUPPLY-CHAIN-AND-RELEASE.md#Universal moves",
+   "SUPPLY-CHAIN-AND-RELEASE.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Fupload.ts%23POST%20%2Fapi%2Fupload%2F%3Aid%2Fcomplete::src%2Fantivirus.ts%23gate::src%2Fantivirus.ts::ATTACK-CLASSES.md%23Business%20logic",
+  "canonical_refs": {
+   "surface": "src/routes/upload.ts#POST /api/upload/:id/complete",
+   "boundary": "src/antivirus.ts#gate",
+   "subsystem": "src/antivirus.ts",
+   "attack_class": "ATTACK-CLASSES.md#Business logic"
+  },
+  "surface": "src/routes/upload.ts#POST /api/upload/:id/complete",
+  "boundary": "src/antivirus.ts#gate",
+  "subsystem": "src/antivirus.ts",
+  "attack_class": "Business logic",
+  "starting_paths": [
+   "src/antivirus.ts",
+   "src/routes/antivirus.ts",
+   "src/uploads.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Business logic",
+  "selected_companion_blocks": [
+   "PROTOCOLS-RPC-AND-MESSAGING.md#Core discipline",
+   "PROTOCOLS-RPC-AND-MESSAGING.md#Message boundary and canonicalization disagreement",
+   "PROTOCOLS-RPC-AND-MESSAGING.md#Universal moves",
+   "PROTOCOLS-RPC-AND-MESSAGING.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Fupload.ts%23POST%20%2Fapi%2Fupload%2F%3Aid%2Fcomplete::src%2Fantivirus.ts%23gate::src%2Fuploads.ts::DATA-ISOLATION-AND-LIFECYCLE.md%23Stale%20authorization%20and%20derived%20copy%20use",
+  "canonical_refs": {
+   "surface": "src/routes/upload.ts#POST /api/upload/:id/complete",
+   "boundary": "src/antivirus.ts#gate",
+   "subsystem": "src/uploads.ts",
+   "attack_class": "DATA-ISOLATION-AND-LIFECYCLE.md#Stale authorization and derived copy use"
+  },
+  "surface": "src/routes/upload.ts#POST /api/upload/:id/complete",
+  "boundary": "src/antivirus.ts#gate",
+  "subsystem": "src/uploads.ts",
+  "attack_class": "Stale authorization and derived copy use",
+  "starting_paths": [
+   "src/uploads.ts",
+   "src/routes/upload.ts",
+   "src/routes/admin.ts",
+   "src/quota.ts",
+   "src/antivirus.ts"
+  ],
+  "ordinary_attack_class_block": null,
+  "selected_companion_blocks": [
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Stale authorization and derived copy use",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "new",
+  "attempts": [],
+  "wave": 2,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped_run_critic_gap_outside_scope: critic c31: finishUpload (src/uploads.ts:413) runs stillAllowed/stillThere (418-419) and then awaits gate() (429); putInPlace (441-449) and commitBytes(meta.quotaUser) (455) follow with no re-check of rights, account instance or quota owner, and dropUploadsOf skips uploads in `finishing` (500). Overlaps the run-4 finding uploads/inflight-complete-survives-account-drop (account drop during completion); the rights-downgrade-during-scan variant is not covered by it."
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Fupload.ts%23POST%20%2Fapi%2Fupload::src%2Fuploads.ts%23loadMeta::src%2Fuploads.ts::ATTACK-CLASSES.md%23Access%20control",
+  "canonical_refs": {
+   "surface": "src/routes/upload.ts#POST /api/upload",
+   "boundary": "src/uploads.ts#loadMeta",
+   "subsystem": "src/uploads.ts",
+   "attack_class": "ATTACK-CLASSES.md#Access control"
+  },
+  "surface": "src/routes/upload.ts#POST /api/upload",
+  "boundary": "src/uploads.ts#loadMeta",
+  "subsystem": "src/uploads.ts",
+  "attack_class": "Access control",
+  "starting_paths": [
+   "src/routes/upload.ts",
+   "src/uploads.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+  "selected_companion_blocks": [],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Froutes%2Fupload.ts%23POST%20%2Fapi%2Fupload::src%2Fuploads.ts%23reserveGuest::src%2Fuploads.ts::RESOURCE-EXHAUSTION-AND-AVAILABILITY.md%23Quota-accounting%20scope%20and%20reset%20gaps",
+  "canonical_refs": {
+   "surface": "src/routes/upload.ts#POST /api/upload",
+   "boundary": "src/uploads.ts#reserveGuest",
+   "subsystem": "src/uploads.ts",
+   "attack_class": "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Quota-accounting scope and reset gaps"
+  },
+  "surface": "src/routes/upload.ts#POST /api/upload",
+  "boundary": "src/uploads.ts#reserveGuest",
+  "subsystem": "src/uploads.ts",
+  "attack_class": "Quota-accounting scope and reset gaps",
+  "starting_paths": [
+   "src/uploads.ts",
+   "src/quota.ts",
+   "src/routes/upload.ts"
+  ],
+  "ordinary_attack_class_block": null,
+  "selected_companion_blocks": [
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Core discipline",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Quota-accounting scope and reset gaps",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Unbounded buffering and cardinality",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Detached work after cancellation",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Universal moves",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Fwebdav.ts%23PROPFIND::src%2Fwebdav-xml.ts%23parseXml::src%2Fwebdav-xml.ts::RESOURCE-EXHAUSTION-AND-AVAILABILITY.md%23Superlinear%20parsing%2C%20matching%2C%20or%20evaluation",
+  "canonical_refs": {
+   "surface": "src/webdav.ts#PROPFIND",
+   "boundary": "src/webdav-xml.ts#parseXml",
+   "subsystem": "src/webdav-xml.ts",
+   "attack_class": "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Superlinear parsing, matching, or evaluation"
+  },
+  "surface": "src/webdav.ts#PROPFIND",
+  "boundary": "src/webdav-xml.ts#parseXml",
+  "subsystem": "src/webdav-xml.ts",
+  "attack_class": "Superlinear parsing, matching, or evaluation",
+  "starting_paths": [
+   "src/webdav.ts",
+   "src/webdav-xml.ts"
+  ],
+  "ordinary_attack_class_block": null,
+  "selected_companion_blocks": [
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Core discipline",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Superlinear parsing, matching, or evaluation",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Unbounded buffering and cardinality",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Universal moves",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Fwebdav.ts%23PUT::src%2Fquota.ts%23holdNow::src%2Fwebdav.ts::RESOURCE-EXHAUSTION-AND-AVAILABILITY.md%23Quota-accounting%20scope%20and%20reset%20gaps",
+  "canonical_refs": {
+   "surface": "src/webdav.ts#PUT",
+   "boundary": "src/quota.ts#holdNow",
+   "subsystem": "src/webdav.ts",
+   "attack_class": "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Quota-accounting scope and reset gaps"
+  },
+  "surface": "src/webdav.ts#PUT",
+  "boundary": "src/quota.ts#holdNow",
+  "subsystem": "src/webdav.ts",
+  "attack_class": "Quota-accounting scope and reset gaps",
+  "starting_paths": [
+   "src/webdav.ts",
+   "src/quota.ts",
+   "src/account-records.ts",
+   "src/routes/admin.ts",
+   "src/backup.ts",
+   "src/app-passwords.ts",
+   "src/routes/files.ts",
+   "src/office.ts"
+  ],
+  "ordinary_attack_class_block": null,
+  "selected_companion_blocks": [
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Core discipline",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Quota-accounting scope and reset gaps",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Universal moves",
+   "RESOURCE-EXHAUSTION-AND-AVAILABILITY.md#Validation rules",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Core discipline",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Stale authorization and derived copy use",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Universal moves",
+   "DATA-ISOLATION-AND-LIFECYCLE.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_confirmed_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-2: candidate)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Fwebdav.ts%23handleDav::src%2Fwebdav.ts%23authenticate::src%2Fwebdav.ts::WEB-PROTOCOL-AND-AUTH.md%23API-key%20scope%20and%20resource%20binding",
+  "canonical_refs": {
+   "surface": "src/webdav.ts#handleDav",
+   "boundary": "src/webdav.ts#authenticate",
+   "subsystem": "src/webdav.ts",
+   "attack_class": "WEB-PROTOCOL-AND-AUTH.md#API-key scope and resource binding"
+  },
+  "surface": "src/webdav.ts#handleDav",
+  "boundary": "src/webdav.ts#authenticate",
+  "subsystem": "src/webdav.ts",
+  "attack_class": "API-key scope and resource binding",
+  "starting_paths": [
+   "src/webdav.ts",
+   "src/app-passwords.ts",
+   "src/routes/app-passwords.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Cryptography and secrets",
+  "selected_companion_blocks": [
+   "WEB-PROTOCOL-AND-AUTH.md#Core discipline",
+   "WEB-PROTOCOL-AND-AUTH.md#API-key scope and resource binding",
+   "WEB-PROTOCOL-AND-AUTH.md#API-key exposure and unsafe transport",
+   "WEB-PROTOCOL-AND-AUTH.md#Universal moves",
+   "WEB-PROTOCOL-AND-AUTH.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "src%2Fwebdav.ts%23handleDav::src%2Fwebdav.ts%23spaceFor::src%2Fwebdav.ts::ATTACK-CLASSES.md%23Access%20control",
+  "canonical_refs": {
+   "surface": "src/webdav.ts#handleDav",
+   "boundary": "src/webdav.ts#spaceFor",
+   "subsystem": "src/webdav.ts",
+   "attack_class": "ATTACK-CLASSES.md#Access control"
+  },
+  "surface": "src/webdav.ts#handleDav",
+  "boundary": "src/webdav.ts#spaceFor",
+  "subsystem": "src/webdav.ts",
+  "attack_class": "Access control",
+  "starting_paths": [
+   "src/webdav.ts",
+   "src/fsx.ts",
+   "src/quota.ts"
+  ],
+  "ordinary_attack_class_block": "ATTACK-CLASSES.md#Access control",
+  "selected_companion_blocks": [],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "web%2Fsrc%2Fviewers%2Fsafe-html.js%23safeFragment::web%2Fsrc%2Fviewers%2Fsafe-html.js%23DOMPurify::web%2Fsrc%2Fviewers::CLIENT-SIDE.md%23DOM-based%20XSS",
+  "canonical_refs": {
+   "surface": "web/src/viewers/safe-html.js#safeFragment",
+   "boundary": "web/src/viewers/safe-html.js#DOMPurify",
+   "subsystem": "web/src/viewers",
+   "attack_class": "CLIENT-SIDE.md#DOM-based XSS"
+  },
+  "surface": "web/src/viewers/safe-html.js#safeFragment",
+  "boundary": "web/src/viewers/safe-html.js#DOMPurify",
+  "subsystem": "web/src/viewers",
+  "attack_class": "DOM-based XSS",
+  "starting_paths": [
+   "web/src/viewers",
+   "web/src/components/PreviewModal.vue",
+   "web/src/components/DocumentPreview.vue",
+   "web/src/components/TextEditor.vue",
+   "web/src/components/ZipViewer.vue",
+   "web/src/components/CsvTable.vue"
+  ],
+  "ordinary_attack_class_block": null,
+  "selected_companion_blocks": [
+   "CLIENT-SIDE.md#Core discipline",
+   "CLIENT-SIDE.md#DOM-based XSS",
+   "CLIENT-SIDE.md#DOM clobbering",
+   "CLIENT-SIDE.md#Prototype pollution and gadget chain",
+   "CLIENT-SIDE.md#Universal moves",
+   "CLIENT-SIDE.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_blocked",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ },
+ {
+  "coverage_id": "web%2Fsrc%2Fviews%2FShareLinkView.vue%23route::src%2Findex.ts%23webHeaders::web%2Fsrc%2Fviews::CLIENT-SIDE.md%23Client-side%20navigation%20confusion",
+  "canonical_refs": {
+   "surface": "web/src/views/ShareLinkView.vue#route",
+   "boundary": "src/index.ts#webHeaders",
+   "subsystem": "web/src/views",
+   "attack_class": "CLIENT-SIDE.md#Client-side navigation confusion"
+  },
+  "surface": "web/src/views/ShareLinkView.vue#route",
+  "boundary": "src/index.ts#webHeaders",
+  "subsystem": "web/src/views",
+  "attack_class": "Client-side navigation confusion",
+  "starting_paths": [
+   "web/src/router.js",
+   "web/src/api.js",
+   "web/src/views",
+   "web/src/components/SharePreview.vue",
+   "web/src/components/OfficeEditor.vue",
+   "src/index.ts",
+   "src/context.ts"
+  ],
+  "ordinary_attack_class_block": null,
+  "selected_companion_blocks": [
+   "CLIENT-SIDE.md#Core discipline",
+   "CLIENT-SIDE.md#Client-side navigation confusion",
+   "CLIENT-SIDE.md#Clickjacking",
+   "CLIENT-SIDE.md#Browser-storage disclosure and stale authorization",
+   "CLIENT-SIDE.md#Window and opener state disclosure",
+   "CLIENT-SIDE.md#Universal moves",
+   "CLIENT-SIDE.md#Validation rules"
+  ],
+  "excluded_blocks": [
+   {
+    "block": "AI-AND-LLM.md#Core discipline",
+    "reason": "no model, prompt or tool-calling boundary in source"
+   },
+   {
+    "block": "MEMORY-SAFETY-AND-BINARY.md#Core discipline",
+    "reason": "TypeScript on Bun only; no native code in the repository"
+   },
+   {
+    "block": "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Core discipline",
+    "reason": "no native app, deep link or local IPC surface"
+   }
+  ],
+  "prior_status": "prior_covered_same_source",
+  "attempts": [],
+  "wave": 1,
+  "status": "out_of_scope",
+  "agent_id": null,
+  "reviewed_paths": [],
+  "local_checks": [],
+  "result_fingerprints": [],
+  "unresolved": [
+   "scoped gap run covers only the two units the run-2 critic named (run-1 coverage carried by run-2)"
+  ]
+ }
+]

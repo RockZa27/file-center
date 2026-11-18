@@ -94,9 +94,13 @@ jobs:
         with:
           bun-version: 1.4.4
       - run: bun install --frozen-lockfile
-      # npm packages from bun.lock; exits non-zero for high and critical advisories
+      # npm packages from bun.lock; exits non-zero for high and critical advisories. Like .trivyignore, every ignored
+      # advisory has its reason here:
+      #   GHSA-fc5q-39xc-vjpf: ReDoS in picomatch <= 4.0.7, reached only through vite > tinyglobby > fdir (the web build,
+      #   which matches the project's own globs; the server does not load it: `bun audit --production` is clean). No
+      #   fixed release exists yet. Remove this once picomatch > 4.0.7 is out and `bun update` has picked it up.
       - name: bun audit
-        run: bun audit --audit-level=high
+        run: bun audit --audit-level=high --ignore=GHSA-fc5q-39xc-vjpf
       - run: mkdir security-results
 
       # the repository: dependencies (bun.lock), secrets in files, Dockerfile misconfiguration.

@@ -6,8 +6,37 @@ import { compareVersions, forRole } from './util'
  */
 export const releases = [
   {
+    version: '2.0.0-beta.2',
+    items: [
+      {
+        id: '201-zip-limits', icon: 'system', roles: ['user'],
+        title: { th: 'ดาวน์โหลดเป็น zip ได้ทีละ 2 ไฟล์', en: 'Two zip downloads at a time' },
+        text: {
+          th: 'การดาวน์โหลดหลายไฟล์หรือทั้งโฟลเดอร์เป็นไฟล์ zip ทำพร้อมกันได้ไม่เกิน 2 ไฟล์ต่อคน ถ้าขึ้นว่ากำลังสร้างไฟล์ zip อยู่หลายไฟล์ ให้รอไฟล์ที่ดาวน์โหลดอยู่เสร็จก่อนแล้วลองใหม่ zip หนึ่งไฟล์มีได้ไม่เกิน 50,000 รายการ',
+          en: 'Downloading several files or a whole folder as a zip works for up to two downloads at a time per person. If you are told several zips are being prepared, let the ones under way finish and try again. One zip holds at most 50,000 files and folders.',
+        },
+      },
+      {
+        id: '201-security', icon: 'lock', roles: ['admin'],
+        title: { th: 'แก้ไขด้านความปลอดภัยจากการตรวจรอบล่าสุด', en: 'Security fixes from the latest review' },
+        text: {
+          th: 'การเพิกถอนด้วย bun src/cli.ts sessions-revoke ไม่ถูกแอปที่รันอยู่เขียนทับอีก การอัปโหลด (ทั้งจากหน้าเว็บ WebDAV และลิงก์ขอไฟล์) การบันทึกจากตัวแก้ไขข้อความ การสร้างและแตกไฟล์ zip ที่ทำค้างอยู่ จะถูกตรวจสิทธิ์และบัญชีอีกครั้งก่อนไฟล์ลงพื้นที่ zip ที่ดาวน์โหลดค้างไว้โดยไม่อ่านไม่ทำให้การสำรองข้อมูลค้างอีก zip ของโฟลเดอร์ใหญ่ไม่ทำให้ระบบหยุดตอบ ประวัติการใช้งานไม่ถูกการดาวน์โหลดของผู้เยี่ยมชมดันออก และรหัสสำรอง 2FA ชุดใหม่เก็บด้วยกุญแจของ server (ชุดเดิมยังใช้ได้)',
+          en: 'A revoke with bun src/cli.ts sessions-revoke is no longer overwritten by the running app. An upload (web page, WebDAV or upload link), a text editor save, or a zip being made or extracted that is still running is checked again for the account and its rights before anything reaches the storage. Zip downloads left unread no longer hold up the backup, a zip of a large folder no longer stops the server, visitors\' downloads can no longer push older entries out of the activity log, and new 2FA backup codes are kept under a server key (existing ones still work).',
+        },
+      },
+    ],
+  },
+  {
     version: '2.0.0-beta.1',
     items: [
+      {
+        id: '200-admin-step-up', icon: 'lock', roles: ['admin'],
+        title: { th: 'ให้สิทธิ์ผู้ดูแลระบบต้องใส่รหัสผ่านของคุณ', en: 'Giving the administrator role asks for your password' },
+        text: {
+          th: 'การเพิ่มผู้ดูแลระบบสูงสุด การเลื่อนบัญชีเป็นผู้ดูแลระบบสูงสุด และการตั้งรหัสผ่านให้บัญชีผู้ดูแลระบบสูงสุด ต้องใส่รหัสผ่านของคุณเองก่อนบันทึก และมีการแจ้งเตือนทุกครั้งที่มีผู้ดูแลระบบสูงสุดเพิ่ม คนที่ได้ session ของคุณไปจึงสร้างผู้ดูแลระบบใหม่ไม่ได้',
+          en: 'Adding an administrator, making an account an administrator and setting the password of an administrator account now ask for your own password, and every new administrator is announced in the alerts. Someone holding only your session cannot make a new administrator.',
+        },
+      },
       {
         id: '200-app-password-expiry', icon: 'system', roles: ['user'],
         title: { th: 'รหัสผ่านแอปมีอายุ', en: 'App passwords now expire' },

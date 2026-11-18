@@ -1,8 +1,8 @@
-import { createHash, createHmac, randomBytes } from 'node:crypto'
+import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto'
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { alert } from './alerts'
-import { audit } from './audit'
+import { audit, setBornOf } from './audit'
 import { COMMON_PASSWORDS, isRunOrRepeat } from './common-passwords'
 import { config, paths } from './config'
 import * as policy from './policy'
@@ -332,6 +332,11 @@ export function reloadIfChangedByCli() {
     log.error('cli-reload-failed', err)
   }
 }
+// every store looks at the marker before it changes or writes anything, not only at the start of a request: a timer
+// write in between would put the old sessions and app passwords back over what the CLI removed
+JsonStore.beforeWrite = reloadIfChangedByCli
+// audit lines carry the account's creation time, so a later account of the same name does not read them as its own
+setBornOf(name => findUser(name)?.createdAt)
 
 export function purgeExpiredSessions() {
   const now = Date.now()
@@ -348,11 +353,24 @@ const BACKUP_CODE_RE = /^[a-z0-9]{4}-[a-z0-9]{4}$/
 const BACKUP_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789'
 const BACKUP_CODES = 10
 
-/** 10 new backup codes: the plain codes (shown once) and what is kept (their hashes) */
+/**
+ * What is kept of a backup code: an HMAC under a key derived from secret.key (`h1:` + hex). A code has only about 40 bits,
+ * so a plain hash in users.json (or in a backup, which leaves secret.key out) could be searched offline in hours; with the
+ * key it can not. Codes made before this kept a plain SHA-256 (64 hex): those still work until used or replaced.
+ */
+const backupHash = (code: string) => 'h1:' + createHmac('sha256', subKey('2fa-backup-code')).update(code).digest('hex')
+/** what `code` would be kept as, in either form, without a throw when secret.key can not be read */
+function backupForms(code: string): string[] {
+  const forms = [sha256(code)]
+  try { forms.push(backupHash(code)) } catch { /* only the old form can be checked then */ }
+  return forms
+}
+
+/** 10 new backup codes: the plain codes (shown once) and what is kept (keyed hashes) */
 export function newBackupCodes() {
   const part = () => Array.from(randomBytes(4), b => BACKUP_ALPHABET[b % BACKUP_ALPHABET.length]).join('')
   const codes = Array.from({ length: BACKUP_CODES }, () => `${part()}-${part()}`)
-  return { codes, hashes: codes.map(sha256) }
+  return { codes, hashes: codes.map(backupHash) }
 }
 
 /** a secret waiting for its first code, per user (memory only: an unfinished setup leaves nothing behind) */
@@ -392,8 +410,9 @@ export function checkSecondFactor(user: User, input: string): boolean {
   if (!tf) return false
   const code = input.trim().toLowerCase().replace(/\s/g, '')
   if (BACKUP_CODE_RE.test(code)) {
-    const h = sha256(code)
-    if (!tf.backup.includes(h)) return false
+    const forms = backupForms(code)
+    const h = tf.backup.find(x => forms.some(f => f.length === x.length && timingSafeEqual(Buffer.from(f), Buffer.from(x))))
+    if (h === undefined) return false
     tf.backup = tf.backup.filter(x => x !== h)
     saveUsers()
     return true

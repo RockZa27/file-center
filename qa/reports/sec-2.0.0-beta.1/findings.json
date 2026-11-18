@@ -1,0 +1,977 @@
+[
+ {
+  "verdict": "confirmed",
+  "fingerprint": "2fa:backup-codes-stored-as-unsalted-sha256",
+  "title": "2FA backup codes are kept as unsalted, unkeyed SHA-256 of a ~39.6-bit code (hardening: recoverable offline from a plain users.json copy)",
+  "description": "newBackupCodes builds each code from two groups of 4 symbols of a 31-symbol alphabet (31^8 = 8.5e11, 39.6 bits) and stores sha256(code) with no salt or key in users.json. In a local in-process run (repeated), a stored hash equalled plain sha256(code), a backup made without BACKUP_ENCRYPTION_KEY was a plain zip containing users.json (all 10 hashes) and no secret.key, and the TOTP secret in the same file was sealed. docs/security.md says the 2FA secret is sealed with secret.key and 'ส่วนรหัสสำรองเก็บเฉพาะค่าแฮช' (backup codes are kept only as hashes), and that secret.key stays out of backups; the observed result matches those statements and does not contradict them. The weakness is that the hash is fast and unsalted, so a holder of a users.json copy could in principle search the code space offline (arithmetic only, not run: 8.5e11 at about 1.1-1.8M hashes/s measured is about 5-9 days on one core, less with 10 targets). The attacker would also need the account password (argon2id), and online guessing is locked out. No request hands such a copy to a low-trust caller (download route is admin-only). This is a defence-in-depth hardening note with no crossed boundary demonstrated.",
+  "root_cause": "Backup codes are a low-entropy secret protected by a fast unkeyed hash (createHash sha256, no salt, no pepper, no secret.key HMAC) while the TOTP secret beside it is sealed with secret.key.",
+  "intended_behavior": "docs/security.md: the 2FA secret is sealed with secret.key (kept out of backups) and backup codes are stored only as hashes. Not stated in the docs: that the hashes must resist offline search; this is a hardening expectation.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/routes/backup.ts",
+    "line": 53,
+    "scope": "GET /api/admin/backups/:name/download",
+    "description": "admin-only route (requireAdmin at line 54) by which a plain backup containing users.json leaves the server; the same file is also in any copy of DATA_DIR or the backup folder, which is outside the request surface"
+   },
+   {
+    "kind": "propagation",
+    "file": "src/auth.ts",
+    "line": 355,
+    "scope": "newBackupCodes",
+    "description": "hashes: codes.map(sha256), unsalted and unkeyed; stored in user.twoFactor.backup at line 376 and written to users.json"
+   },
+   {
+    "kind": "sink",
+    "file": "src/auth.ts",
+    "line": 396,
+    "scope": "checkSecondFactor",
+    "description": "a backup code whose sha256 is in tf.backup is accepted as the second factor and then removed"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/auth.ts",
+    "line": 348,
+    "description": "BACKUP_ALPHABET has 31 symbols; the code is 4+4 characters"
+   },
+   {
+    "file": "src/auth.ts",
+    "line": 346,
+    "description": "sha256 helper: createHash('sha256').update(s).digest('hex'), no salt or key"
+   },
+   {
+    "file": "src/backup.ts",
+    "line": 67,
+    "description": "SKIP list keeps secret.key out of the backup but users.json (with the backup-code hashes) is included"
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "environmental_dependency",
+    "description": "Attacker holds a copy of users.json or a backup made without BACKUP_ENCRYPTION_KEY (stolen volume, off-site copy, leaked backup file); no app request provides this to a low-trust caller"
+   },
+   {
+    "kind": "data_state",
+    "description": "Target account has 2FA enabled and has unused backup codes; attacker also needs the account password (argon2id hash in the same file) to reach the second step"
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Holder of an unencrypted backup zip or users.json copy, offline.",
+   "payloads": [
+    "sha256 of every candidate xxxx-xxxx over alphabet abcdefghjkmnpqrstuvwxyz23456789, compared against twoFactor.backup in users.json"
+   ],
+   "instructions": [
+    "Create a 2FA user in an in-process app with a sandboxed STORAGE_DIR and DATA_DIR and no BACKUP_ENCRYPTION_KEY",
+    "Call runBackup and list the zip: users.json present, secret.key absent",
+    "Read users.json from the zip: twoFactor.backup hashes equal sha256 of the plain codes; twoFactor.secret is sealed",
+    "Time 2M SHA-256 hashes locally for the rate; compute 31^8 / rate as arithmetic"
+   ],
+   "observed_result": "Repeated runs: hash == sha256(code) true; zip contains users.json and no secret.key; all 10 hashes in the zip equal sha256 of the codes; TOTP secret sealed; 1.1-1.8M hashes/s. Full-space search time is arithmetic, not run; no code was actually recovered."
+  },
+  "remediation": {
+   "strategy": "Store the backup codes as an HMAC keyed with a secret derived from secret.key (which is kept out of backups), or as slow salted hashes (argon2id) per code, or lengthen the code so offline search is impractical; compare in constant time."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "informational",
+    "reason": "needs a plain backup or users.json copy first (outside the request surface), plus the account password"
+   },
+   "impact": {
+    "score": "informational",
+    "reason": "demonstrated result matches the documented design (hashes only, TOTP secret sealed); the recovery of a code is arithmetic, not demonstrated, and costs days of compute"
+   },
+   "overall_severity": "informational"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "hash, backup contents and sealed TOTP secret were observed in repeated local runs and re-run by the final verifier; the search time is only arithmetic"
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "audit-trail-flood-by-unmetered-download-audit",
+  "title": "Anonymous guest or share-link holder can rotate earlier audit entries away with repeated downloads",
+  "description": "Every successful non-inline GET /api/download (guest allowed by default guestPermissions on the public space) and every GET /api/s/:token/download writes one audit line with no dedupe, rate limit or per-caller cap, whereas failed sign-ins (session.ts:70) and browse use deduplication so they cannot fill and rotate away the trail. In a bounded in-process run with the audit cap lowered to 4096 bytes x 2 files (the real cap is a code literal, not configurable), an anonymous session repeated GET /api/download of one 5-byte public file: all 600 requests returned 200 and an earlier admin entry (user creation) was gone from audit.log and audit.log.1 after request 71. The same happened through an unlimited share link (600/600 200, admin entry gone). Measured line sizes: 113 bytes (guest download, in-process ip 'unknown') and 163 bytes (share download). Arithmetic, not measured at scale: the default 10 x 10 MiB = 104,857,600 bytes would take about 928,000 guest downloads (104857600/113) or about 643,000 share downloads (104857600/163); real client IPs make lines slightly longer, so somewhat fewer. The forwarding queue was not exercised (no forwarding configured; source: audit-forward.ts:80 drops the newest entries at 1000 queued), so the SIEM copy claim is source-only. The cost is large, the flood is itself visible until it overwrites, and a configured SIEM keeps its already-forwarded copy, so impact is bounded.",
+  "root_cause": "audit() is called on every public download path without the auditOnce/auditFailure dedupe or any per-caller cap, and rotateFile unlinks the oldest file once maxFiles is reached, so the capacity of the trail is controlled by unauthenticated request volume.",
+  "intended_behavior": "A principal with no account must not be able to push earlier audit entries out of the trail; high-volume anonymous events should be deduplicated or aggregated per key and window as failed sign-ins are (session.ts:70-71).",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/routes/files.ts",
+    "line": 434,
+    "scope": "GET /api/download",
+    "description": "audit() on every non-inline download; user null becomes 'guest'. The share-link route (src/routes/shares.ts:328, GET /api/s/:token/download, no login, no limit when maxDownloads is null) reaches the same audit() and is a second propagation path."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/audit.ts",
+    "line": 16,
+    "scope": "audit()",
+    "description": "appendLine to audit.log with auditMaxBytes/auditMaxFiles, then forwardAudit; no dedupe"
+   },
+   {
+    "kind": "sink",
+    "file": "src/logger.ts",
+    "line": 23,
+    "scope": "rotateFile",
+    "description": "unlinkSync of the oldest rotated file once all maxFiles are used, so older entries are lost"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/routes/files.ts",
+    "line": 434,
+    "description": "audit() per download, guest user label, no dedupe"
+   },
+   {
+    "file": "src/routes/shares.ts",
+    "line": 328,
+    "description": "audit() per share download inside startDownload slot, no dedupe"
+   },
+   {
+    "file": "src/config.ts",
+    "line": 212,
+    "description": "auditMaxBytes 10 MiB and auditMaxFiles 10 are literals (lowered only in the test by mutating config)"
+   },
+   {
+    "file": "src/routes/session.ts",
+    "line": 70,
+    "description": "comment states the invariant for failed sign-ins: must not be able to fill and rotate away the trail"
+   },
+   {
+    "file": "src/audit-forward.ts",
+    "line": 80,
+    "description": "queue bounded at maxQueue, newest dropped (source-only, not run)"
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "system_configuration",
+    "description": "Public page on with default guestPermissions including download (or an existing share link without a download limit)"
+   },
+   {
+    "kind": "environmental_dependency",
+    "description": "No reverse proxy or tunnel rate limit; at default caps roughly 0.6 to 0.9 million requests are needed (arithmetic from measured line sizes)"
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Anonymous visitor with only the public page, or a holder of one unlimited share link",
+   "payloads": [
+    "GET /api/download?space=public&path=/small.txt (repeated)",
+    "GET /api/s/<token>/download (repeated)"
+   ],
+   "instructions": [
+    "Boot the app in-process with fresh dirs, record an admin action (create user) in the audit log",
+    "Lower config.auditMaxBytes to 4096 and auditMaxFiles to 2 in-process",
+    "As an anonymous session repeat the public download 600 times, then do the same through an unlimited share link",
+    "Search audit.log and audit.log.1 for the admin entry"
+   ],
+   "observed_result": "600/600 downloads 200, no dedupe or rate limit intervened, admin entry gone from audit.log and audit.log.1 (after request 71 for guest download; also gone after the share-link flood); run twice, identical."
+  },
+  "remediation": {
+   "strategy": "Deduplicate anonymous and share downloads with auditOnce keyed per (ip or share id, target) per minute with a repeat count, or add a per-caller cap; optionally keep a separate non-rotating store for administrative actions."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs roughly 0.6 to 0.9 million requests at default caps (arithmetic), reachable anonymously but noisy and subject to any proxy rate limit."
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "Audit trail integrity is a protected asset and an account-less principal erases earlier admin entries, but only a bounded history window and not other data or access."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Mechanism reproduced end to end with a lowered in-process cap; default-scale arithmetic and the forwarding drop were not run."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "files:batch-token-map-unbounded",
+  "title": "POST /api/batch retains one token entry per call with no cap, reachable by an anonymous visitor in the default configuration",
+  "description": "Each POST /api/batch stores {owner, space, root, dir, names[], expires} in the module-level Map batches for 5 minutes. The only removal is the expiry sweep on the next POST; there is no per-session, per-address or global cap. In an in-process run in the sandbox, an anonymous session with its CSRF token called POST /api/batch 2000 times on a public folder of 300 files (name length about 55 chars), naming all files. All 2000 calls returned 200 with a token, and the first and the last token were still redeemable (GET /api/batch/:token gave 200). Heap grew by about 82.8 MB (about 42 KB per entry, about 140 bytes per name) in about 1.3 to 1.6 s of handler time (about 1 ms per call, so the O(n) sweep was not a limiter at this size). No app-level rate limit was found on this route. Arithmetic, not measured: at the same per-call cost, 100000 calls would hold about 4 GB for 5 minutes, and a folder near the 2000-name per-request limit would hold about 280 KB per entry. Real HTTP overhead and any proxy rate limit or container memory limit would change the rate; those are deployment facts that were not observed. No saturation was run.",
+  "root_cause": "The batches Map has time-based expiry only; there is no cardinality or per-principal bound, and each entry stores the full name list.",
+  "intended_behavior": "Batch tokens should be bounded like the other visitor-reachable maps (anonymous sessions 5000, auditOnce 5000, attempts 10000): cap total and per-owner entries, or evict the oldest, or encode the selection in a signed token instead of server memory.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/routes/files.ts",
+    "line": 440,
+    "scope": "POST /api/batch",
+    "description": "need(space, download, batchdownload) passes for an anonymous session on the public space with default guestPermissions"
+   },
+   {
+    "kind": "propagation",
+    "file": "src/routes/files.ts",
+    "line": 445,
+    "scope": "POST /api/batch",
+    "description": "existingNames dedupes and checks that up to 2000 names exist; this is the only per-request bound"
+   },
+   {
+    "kind": "sink",
+    "file": "src/routes/files.ts",
+    "line": 449,
+    "scope": "POST /api/batch",
+    "description": "batches.set(token, {... names ...}) with no size check"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/routes/files.ts",
+    "line": 448,
+    "description": "The only removal is the sweep of expired entries, run on the next POST"
+   },
+   {
+    "file": "src/routes/files.ts",
+    "line": 111,
+    "description": "batches is a plain module-level Map with no limit"
+   },
+   {
+    "file": "src/settings.ts",
+    "line": 90,
+    "description": "Default guestPermissions include download and batchdownload, so anonymous visitors qualify while the public page is on"
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "authentication_level",
+    "description": "Anonymous session plus its CSRF token (GET /api/session); no login"
+   },
+   {
+    "kind": "system_configuration",
+    "description": "Public page on (default) and guestPermissions include download and batchdownload (default)"
+   },
+   {
+    "kind": "data_state",
+    "description": "The public folder holds at least one file; entry size scales with the number of names (up to 2000 per call)"
+   },
+   {
+    "kind": "network_routing",
+    "description": "A rate limit in a reverse proxy or tunnel and the container memory limit were not observed and decide how fast it grows"
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Anonymous visitor with a session cookie and CSRF token, calling the batch endpoint repeatedly",
+   "payloads": [
+    "POST /api/batch {\"space\":\"public\",\"path\":\"/\",\"items\":[\"<all 300 existing file names>\"]} repeated 2000 times"
+   ],
+   "instructions": [
+    "GET /api/session, keep the fc_sid cookie and csrf",
+    "POST /api/batch with the public space and all file names, 2000 times",
+    "GET /api/batch/<first token> and <last token> to see that both are still live"
+   ],
+   "observed_result": "2000 of 2000 calls returned 200; first and last token redeemable with 200; heap grew about 82.8 MB (about 42 KB per entry) in two runs (82816 and 82820 KB); about 1 ms per call."
+  },
+  "remediation": {
+   "strategy": "Cap the Map (global and per owner, evicting the oldest or refusing with 429 when full), and sweep on a timer; or make the token self-contained and signed so that no server memory is held."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "medium",
+    "reason": "Reachable without login in the default configuration with one session and CSRF token; cost to the caller is one small request per entry. A proxy rate limit may slow it."
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "Memory is retained for 5 minutes per entry and grows linearly: about 4 GB at 100000 calls (arithmetic). The shared single Bun process is affected, but no exhaustion was demonstrated and the effect clears after expiry or restart."
+   },
+   "overall_severity": "medium"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "Retention and per-entry size were measured twice in-process; the exhaustion point, HTTP-level request rate and deployment limits were not measured."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "lifecycle.audit-own-entries-not-bound-to-account-instance",
+  "title": "A restored older account reads the activity of a later same-name account through /api/me/activity and /api/me/export",
+  "description": "ownEntries keeps audit entries with r.user === username and ts >= createdAt of the account, a lower time bound only. After alice#1 is deleted and alice#2 is created, a restore of a backup taken while alice#1 existed brings alice#1 back with its older createdAt (users.json is swapped, planRestore drops the live instance's records). restoreBackup rewrites only users, settings and branding; logs/audit.log is not touched (not extracted, kept). End to end run in the sandbox: after the restore and restart, alice#1 signs in with the old password and GET /api/me/activity returns alice#2's login and app-password-create entries (target SECOND-ALICE-SECRET-DEVICE). POST /api/me/export uses the same filter (my-data.ts:58). The delete and the re-create do not bound or rewrite the log either. Restore was driven by calling restoreBackup (the function the route calls) in a child process, then a fresh process for the check, as tests/security-1132-restore.test.ts does; the HTTP restore route itself was not run. The export path was read in source, not run.",
+  "root_cause": "src/my-data.ts ownEntries (line 48) approximates the account instance by a lower time bound on createdAt; audit entries carry no instance id and nothing bounds the end of an earlier instance's life, and the restore leaves the audit log as it is.",
+  "intended_behavior": "An account sees only entries it wrote itself; an earlier or later account of the same name is another person (my-data.ts header lines 37-42, and the account instance rule (name, createdAt) used for sessions, shares, grants and app passwords).",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/routes/me.ts",
+    "line": 35,
+    "scope": "GET /api/me/activity",
+    "description": "signed-in user reads own activity; myActivity(requireUser(...)) at line 38"
+   },
+   {
+    "kind": "propagation",
+    "file": "src/routes/me.ts",
+    "line": 42,
+    "scope": "POST /api/me/export",
+    "description": "second route to the same filter: requireUser + confirmPassword, then buildExport(u) at line 49"
+   },
+   {
+    "kind": "propagation",
+    "file": "src/my-data.ts",
+    "line": 53,
+    "scope": "myActivity",
+    "description": "queryAudit({ only: ownEntries(u) })"
+   },
+   {
+    "kind": "propagation",
+    "file": "src/my-data.ts",
+    "line": 58,
+    "scope": "buildExport",
+    "description": "pageOf(auditEntries(), auditMatcher({ only: ownEntries(u) }), ...)"
+   },
+   {
+    "kind": "sink",
+    "file": "src/my-data.ts",
+    "line": 48,
+    "scope": "ownEntries",
+    "description": "return (r) => r.user === u.username && Date.parse(r.ts) >= from: lower bound only"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/my-data.ts",
+    "line": 48,
+    "description": "only a lower bound on ts; no instance id"
+   },
+   {
+    "file": "src/backup.ts",
+    "line": 760,
+    "description": "planRestore drops the live newer instance; restoreFrom swaps users.json (line 767) and does not rewrite logs/audit.log"
+   },
+   {
+    "file": "src/backup.ts",
+    "line": 77,
+    "description": "LOGS_KEPT: logs are kept in place, not part of a restore"
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "authorization_role",
+    "description": "an admin deletes and re-creates a name, then restores an older backup that holds the first instance"
+   },
+   {
+    "kind": "authentication_level",
+    "description": "the reader signs in as the restored account with its old password"
+   },
+   {
+    "kind": "timing_dependency",
+    "description": "the backup was taken while the first instance existed, before the delete"
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "holder of the earlier account that comes back with a restore",
+   "payloads": [
+    "GET /api/me/activity?pageSize=100 as restored alice#1"
+   ],
+   "instructions": [
+    "admin creates alice, alice acts, backup, delete alice, create alice again, alice#2 acts (app password named SECOND-ALICE-SECRET-DEVICE)",
+    "restoreBackup(backup) then restart (fresh process)",
+    "sign in as alice with the first password and GET /api/me/activity"
+   ],
+   "observed_result": "two runs: exit 42; the activity list holds alice#2's login and app-password-create entry with target SECOND-ALICE-SECRET-DEVICE next to alice#1's own entries."
+  },
+  "remediation": {
+   "strategy": "Record the account createdAt (or an instance id) in audit entries for sign-in and file actions and match it in ownEntries, or write an audit marker at delete, re-create and restore and bound ownEntries to entries between the instance's start and its end."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "needs an admin restore of an older snapshot across a delete and re-create of the same name"
+   },
+   "impact": {
+    "score": "low",
+    "reason": "action names, IPs, targets and details of one other account's audit entries, no file contents"
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "end to end run twice in the sandbox, restore by calling restoreBackup; the HTTP restore route and the export path were not run"
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "lifecycle.line-link-code-survives-account-delete",
+  "title": "A LINE link code issued by a deleted account still links a LINE user to a new account of the same name",
+  "description": "issueLinkCode (POST /api/me/line/link) keeps { username, expires } in a memory map for ten minutes. forgetAccount, called by DELETE /api/admin/users/:username and by POST /api/admin/users, does not clear that map. A former holder who generated a code while the account existed can, if an admin deletes and re-creates that username within ten minutes, send the code to the LINE bot from their own LINE account. The signed webhook handler redeems it to the bare username, resolves it with findUser to the NEW account and linkLine ties the sender's LINE id to it. Observed end to end in-process: the new account's notify-prefs showed line.linked false before and true after a self-signed webhook. The sender then gets that account's LINE pushes once the new owner enables the line channel for a kind (off by default per kind); the bot also replies with the new account's display name.",
+  "root_cause": "src/line.ts codes map stores only the username and is never invalidated on account deletion or re-creation; src/account-records.ts forgetAccount clears every other per-account store but not this one, and redeem does not bind the code to the account instance (name, createdAt).",
+  "intended_behavior": "A deleted account takes every record that names it along; a new account of the same name must not be reachable through anything the earlier one issued (account instance rule in the header of src/account-records.ts).",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/routes/admin.ts",
+    "line": 358,
+    "scope": "DELETE /api/admin/users/:username",
+    "description": "forgetAccount(target.username) is the account cleanup after splice (POST /api/admin/users line 182 calls it too before pushing the new account)"
+   },
+   {
+    "kind": "propagation",
+    "file": "src/account-records.ts",
+    "line": 23,
+    "scope": "forgetAccount",
+    "description": "clears sessions, shares, favorites, notifications, guide, grants, app passwords, groups, uploads, insight; no call for LINE link codes"
+   },
+   {
+    "kind": "propagation",
+    "file": "src/line.ts",
+    "line": 96,
+    "scope": "issueLinkCode",
+    "description": "codes.set(code, { username, expires }) with a 10 minute TTL, no account instance"
+   },
+   {
+    "kind": "propagation",
+    "file": "src/line.ts",
+    "line": 108,
+    "scope": "redeemLinkCode",
+    "description": "returns hit.username after only an expiry check"
+   },
+   {
+    "kind": "sink",
+    "file": "src/routes/notify.ts",
+    "line": 35,
+    "scope": "lineEvent (via POST /api/line/webhook, signed)",
+    "description": "redeemLinkCode(code, lineUser) at line 30, findUser(who) at line 32 (the new account), linkLine(user.username, lineUser) at line 35"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/line.ts",
+    "line": 91,
+    "description": "issueLinkCode keeps the code by bare name in memory"
+   },
+   {
+    "file": "src/line.ts",
+    "line": 108,
+    "description": "redeem returns the bare username with no createdAt check"
+   },
+   {
+    "file": "src/account-records.ts",
+    "line": 34,
+    "description": "forgetInsight()/forgetInsightUser are the last calls; nothing touches line codes"
+   },
+   {
+    "file": "src/routes/notify.ts",
+    "line": 101,
+    "description": "the code is issued by POST /api/me/line/link (not /me/line/code); requires LINE token and secret set"
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "authorization_role",
+    "description": "attacker is a former holder of the deleted account who requested a LINE link code before deletion and has a LINE account"
+   },
+   {
+    "kind": "timing_dependency",
+    "description": "admin deletes and re-creates the same username within the 10 minute code lifetime, with no server restart"
+   },
+   {
+    "kind": "system_configuration",
+    "description": "LINE channel token and secret configured; the new owner enables the line channel for a notification kind (default off) for anything to be pushed"
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "former account holder with a LINE account",
+   "payloads": [
+    "POST /api/me/line/link as alice; admin DELETE then POST /api/admin/users for alice; signed POST /api/line/webhook with a message event from LINE user U-attacker whose text is the code"
+   ],
+   "instructions": [
+    "Boot the app in-process with dummy dirs, LINE_CHANNEL_SECRET and LINE_CHANNEL_TOKEN set to dummy values",
+    "Admin creates alice; alice logs in and requests a link code",
+    "Admin deletes alice and creates alice again with a new password",
+    "Send the code in a webhook body signed with the dummy secret",
+    "New alice's GET /api/me/notify-prefs shows line.linked"
+   ],
+   "observed_result": "Run twice in the sandbox, both exit 42: webhook 200, new alice line linked before=false after=true (scratch/full.ts, evidence/run1.txt, evidence/run2.txt)."
+  },
+  "remediation": {
+   "strategy": "Drop link codes of a name in forgetAccount (forgetLinkCodes(username) exported from line.ts) and/or store the account createdAt in the code and refuse redeem when it differs; regression test: issue, delete, re-create, redeem returns null.",
+   "code_changes": [
+    {
+     "file_name": "src/line.ts",
+     "fixed_code": "export function forgetLinkCodes(username: string) { for (const [c, v] of codes) if (v.username.toLowerCase() === username.toLowerCase()) codes.delete(c) }"
+    },
+    {
+     "file_name": "src/account-records.ts",
+     "fixed_code": "forgetLinkCodes(username) // inside forgetAccount"
+    }
+   ]
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "needs an admin delete and re-create of the same name within 10 minutes, a LINE-enabled server and a former holder with a LINE account"
+   },
+   "impact": {
+    "score": "low",
+    "reason": "notification text of one account to a stranger's LINE, only after the new owner turns the line channel on; no file access"
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "whole path run through the real routes in-process: code issue, delete, re-create, signed webhook, linked flag observed on the new account, twice"
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "lifecycle.user-create-concurrent-duplicate-username",
+  "title": "Two concurrent admin account creations with the same username both succeed",
+  "description": "POST /api/admin/users checks findUser(username) at line 166, then awaits hashPassword at line 190 inside the argument of allUsers().push(...). Two simultaneous admin requests both pass the check and both push, leaving two accounts with one name. findUser and login see only the first (second password gives 401); once the first is deleted, the hidden second becomes the live account with the password the creator chose. Correction to the candidate: the manager case does NOT reproduce. For a manager the second request is stopped with 409 admin.home-exists (homeIsTaken at line 175), because the first request creates the home directory synchronously (ensureDir line 178) before its await. Only an admin (who bypasses homeIsTaken) can hit the race. Impact: an admin can already create, delete and reset any account, so the duplicate gives no new capability beyond a hidden same-name record and a broken uniqueness invariant.",
+  "root_cause": "Check-then-act across an await: uniqueness is checked at src/routes/admin.ts:166 but the push at line 185 only happens after await hashPassword at line 190; nothing re-checks findUser after the await. For managers the sync ensureDir at line 178 plus homeIsTaken at line 175 incidentally closes the window.",
+  "intended_behavior": "A username has exactly one live account; a second concurrent create with the same name must get 409 admin.username-taken.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/routes/admin.ts",
+    "line": 153,
+    "scope": "POST /api/admin/users",
+    "description": "requireStaff caller; only an admin reaches the race"
+   },
+   {
+    "kind": "propagation",
+    "file": "src/routes/admin.ts",
+    "line": 166,
+    "scope": "create",
+    "description": "findUser(username) uniqueness check before any await"
+   },
+   {
+    "kind": "sink",
+    "file": "src/routes/admin.ts",
+    "line": 190,
+    "scope": "create",
+    "description": "await hashPassword inside the push argument (push at line 185); second request passes line 166 meanwhile and pushes a duplicate"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/routes/admin.ts",
+    "line": 166,
+    "description": "only uniqueness check, runs before the await"
+   },
+   {
+    "file": "src/routes/admin.ts",
+    "line": 190,
+    "description": "await hashPassword(body.password) delays the push, no re-check"
+   },
+   {
+    "file": "src/routes/admin.ts",
+    "line": 175,
+    "description": "homeIsTaken guard applies to managers only and, with ensureDir at line 178, makes the concurrent manager create return 409"
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "authorization_role",
+    "description": "admin session (manager attempt refused with 409 admin.home-exists)"
+   },
+   {
+    "kind": "timing_dependency",
+    "description": "two requests in flight during the argon2 hash"
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "admin session with CSRF token",
+   "payloads": [
+    "POST /api/admin/users {username:'bobby',name:'bobby',password:'First-pass-word-1x!',role:'user',permissions:['read'],publicPermissions:['read']}",
+    "same with password 'Second-pass-word-2y!', sent concurrently via Promise.all"
+   ],
+   "instructions": [
+    "Login as admin in-process",
+    "Promise.all both POSTs",
+    "GET /api/admin/users and count bobby; login with each password; DELETE bobby and login again"
+   ],
+   "observed_result": "Both 200; admin user list shows 2 bobby entries; login first 200, second 401; after DELETE of bobby the second password logs in (200). Same script with a manager caller: 200 and 409 admin.home-exists, one entry. Run twice, identical."
+  },
+  "remediation": {
+   "strategy": "Hash the password before the checks, then re-run findUser (and homeIsTaken for managers) synchronously immediately before the push; or hold a per-name creating set.",
+   "code_changes": [
+    {
+     "file_name": "src/routes/admin.ts",
+     "fixed_code": "const passwordHash = await hashPassword(body.password)\nif (findUser(username)) throw conflict('admin.username-taken')\nallUsers().push({ ..., passwordHash, ... })"
+    }
+   ]
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "needs an admin session and a deliberate parallel request"
+   },
+   "impact": {
+    "score": "low",
+    "reason": "admin already holds full account authority; result is a hidden duplicate record and a broken name-uniqueness invariant, no privilege or data gained; managers are blocked"
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "reproduced twice in the sandbox with admin (duplicate) and manager (blocked) callers"
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "stepup:admin-account-create-and-password-set-without-step-up",
+  "title": "An admin session alone can mint a new admin with a chosen password and then pass every password step-up",
+  "description": "POST /api/admin/users with role admin, and PUT /api/admin/users/:username with a password, ask an admin caller for no password. A holder of only an admin session cookie creates a second admin with a password of their choosing, signs in as it, and passes confirmPassword on step-up routes (observed: PUT /api/admin/settings with a security group returned 200 using the new admin's password and 403 with a wrong one). docs/security.md says a stolen session alone cannot change sign-in rules because the admin password is asked. The settings step-up field is body.password, not confirmPassword.",
+  "root_cause": "confirmPassword is checked against the signed-in account's own hash, and the routes that mint or re-key an admin account (create with role admin, set password / promote role as admin) have no step-up, so the control can be re-derived through a new principal. src/routes/admin.ts:232 requires step-up only when the actor is not an admin.",
+  "intended_behavior": "Creating an admin, promoting to admin, or setting another admin's password should need the acting admin's own password (confirmPassword), like the other sensitive admin actions, so a stolen session alone cannot obtain a password it knows.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/routes/admin.ts",
+    "line": 153,
+    "scope": "POST /api/admin/users",
+    "description": "requireStaff at 160; an admin may pass role admin (162 refuses only non-admins); no password asked; hashes the supplied password at 190"
+   },
+   {
+    "kind": "propagation",
+    "file": "src/routes/admin.ts",
+    "line": 232,
+    "scope": "PUT /api/admin/users/:username",
+    "description": "reset = !!passwordHash && !isAdmin(admin): step-up only for managers; an admin sets any password (and role) with none"
+   },
+   {
+    "kind": "sink",
+    "file": "src/auth.ts",
+    "line": 524,
+    "scope": "confirmPassword",
+    "description": "verifies the supplied password against the signed-in account's own hash, so the attacker-made admin passes it"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/routes/admin.ts",
+    "line": 162,
+    "description": "only non-admins are refused a role other than user"
+   },
+   {
+    "file": "src/routes/admin.ts",
+    "line": 558,
+    "description": "PUT /admin/settings calls confirmPassword for security/mail/alerts/etc groups; passes with the new admin's password"
+   },
+   {
+    "file": "tests/roles-fixes.test.ts",
+    "line": 129,
+    "description": "admin password reset without confirmation is intentional, so the gap is by design for single resets but defeats the documented step-up in combination"
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "authentication_level",
+    "description": "attacker holds a valid admin session cookie and CSRF token (stolen session); no admin password known"
+   },
+   {
+    "kind": "system_configuration",
+    "description": "with REQUIRE_2FA=admin the stolen session must belong to an admin that already has 2FA (an unenrolled admin is blocked with 403 auth.2fa-required); the new admin then enrolls its own 2FA with its known password and a self-computed TOTP, after which the step-up passes (tested), so 2FA is not a barrier"
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Holder of a stolen admin session only (cookie + csrf), password unknown",
+   "payloads": [
+    "POST /api/admin/users {username:evil2,name:E,password:<chosen>,role:admin,permissions:[read],publicPermissions:[]}",
+    "POST /api/login evil2/<chosen>",
+    "PUT /api/admin/settings {security:{sessionTtlHours:100},password:<chosen>}"
+   ],
+   "instructions": [
+    "Login as admin A, keep only its cookie/csrf",
+    "Create admin evil2 with a chosen password: 200",
+    "Login as evil2 in a second client: 200",
+    "PUT /api/admin/settings with security group and evil2's password: 200 (a wrong password gives 403)",
+    "PUT /api/admin/users/evil2 {password} from the session-only client: 200 without confirmation"
+   ],
+   "observed_result": "All steps returned 200 in an in-process sandbox run (re-run by the final verifier, exit 42); the wrong-password control gave 403. With REQUIRE_2FA=admin and an admin already enrolled in 2FA, the new admin enrolled its own 2FA and the step-up still gave 200 (wrong password 403)."
+  },
+  "remediation": {
+   "strategy": "Require confirmPassword of the acting admin on create with role admin, on role promotion to admin, and on an admin setting another account's password (at least for admin targets); keep the audit trail and consider alerting on new admin creation."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "needs a stolen or hijacked admin session first"
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "defeats the documented step-up for all admin actions (settings, restore, update) but the session already holds admin authority and the new account is visible and audited; only a security-group settings change was demonstrated"
+   },
+   "overall_severity": "medium"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "reproduced in-process with a wrong-password control, including a REQUIRE_2FA=admin variant; source lines re-read"
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "uploads/inflight-complete-survives-account-drop",
+  "title": "In-flight upload completion survives account deletion and charges the next same-name account",
+  "description": "dropUploadsOf skips uploads whose id is in the finishing set, and finishUpload does not re-check the owner after the slow antivirus gate. If an admin deletes and re-creates an account while its complete is waiting on the scan, the upload is neither dropped nor released: the file still lands in the old home and the same-name new account is charged (reservation kept, then commitBytes) by username only.",
+  "root_cause": "dropUploadsOf leaves finishing uploads alone and nothing later re-validates the owner's account instance (name, createdAt) after the gate; quota reservation and commitBytes are keyed by lowercase username only.",
+  "intended_behavior": "An account's unfinished uploads must not complete or be charged after the account is deleted, re-created or dropped by restore, as the comment above dropUploadsOf states.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/routes/upload.ts",
+    "line": 53,
+    "scope": "POST /api/upload/:id/complete",
+    "description": "completeUpload is called for the account before it is deleted (the hunter cited line 54; the call is on line 53)."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/uploads.ts",
+    "line": 501,
+    "scope": "dropUploadsOf",
+    "description": "finishing.has(meta.id) causes the upload and its reservation to be skipped when the account is dropped."
+   },
+   {
+    "kind": "propagation",
+    "file": "src/uploads.ts",
+    "line": 429,
+    "scope": "finishUpload",
+    "description": "await gate(...) is the slow step; stillAllowed (line 417) ran only before it and is not repeated."
+   },
+   {
+    "kind": "sink",
+    "file": "src/uploads.ts",
+    "line": 454,
+    "scope": "finishUpload",
+    "description": "commitBytes(meta.quotaUser, meta.size) charges whichever account currently has that name; putInPlace at line 443 already placed the file in the old home."
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/uploads.ts",
+    "line": 501,
+    "description": "dropUploadsOf skips finishing uploads."
+   },
+   {
+    "file": "src/uploads.ts",
+    "line": 454,
+    "description": "commit by username only after the gate, no owner re-check."
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "authorization_role",
+    "description": "An admin deletes (or a restore drops) the account during the window of one complete."
+   },
+   {
+    "kind": "timing_dependency",
+    "description": "The window is the clamd scan time or a slow EXDEV copy; antivirus must be on (or the copy slow)."
+   },
+   {
+    "kind": "data_state",
+    "description": "The charge is visible only if a same-name account is re-created; the cached usage clears at the next recount."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Authenticated user whose account is being deleted; the upload was authorized before deletion.",
+   "payloads": [
+    "announce 3000 B, PUT chunk 0, POST complete (fake clamd answers after 1.5 s); admin DELETE /api/admin/users/victim; admin POST /api/admin/users victim with homedir /users/victim2"
+   ],
+   "instructions": [
+    "Run s3.ts <dir> keep in the sandbox with the fake clamd delaying its answer (antivirus enabled in settings)."
+   ],
+   "observed_result": "Independent re-run, two identical runs: delete 200 with the upload still in tmp; the new same-name account showed 3000 bytes used before complete ended; complete returned 200 after deletion; file landed in /users/victim (old home), none in /users/victim2; usage stayed 3000 afterwards; new account got 404 on the old upload id (no takeover)."
+  },
+  "remediation": {
+   "strategy": "Record the account createdAt in Meta; after the gate and before commitBytes verify the owner exists with the same createdAt, otherwise drop the upload and release holds. Alternatively let dropUploadsOf mark finishing uploads cancelled so finishUpload aborts."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "Needs an admin delete and re-create inside the scan window of one complete."
+   },
+   "impact": {
+    "score": "low",
+    "reason": "One already-authorized file written once into the dropped account's old home; transient phantom quota of at most the file size until recount."
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "Reproduced twice in the sandbox; source lines re-read and match."
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "zip-checkdirectory-eocd-mismatch-bypass",
+  "title": "Central-directory entry/size pre-check bypassed by a fake EOCD hidden in the real EOCD comment",
+  "description": "checkDirectory reads the last PK\\5\\6 signature in the file tail, while zip.js uses the EOCD that actually locates the directory. A zip whose real (ZIP64) EOCD has a 22-byte comment holding a zero-count EOCD passes the check, yet zip.js still loads the whole directory. Locally a 120000-entry zip (cap 100000) was refused 413 when plain but passed when crafted; zip.js getEntries then read 120000 entries and grew RSS by about 300 MB for a roughly 6 MB file (about 50x). The pre-check exists solely to stop zip.js holding an oversized directory in memory. After the bypass only the file size (UPLOAD_MAX_SIZE default 10 GB), the post-hoc files.length check in unzipTo (read after getEntries) and the 10000-entry display cut in listArchive (applied after the directory is loaded) remain, and none bound zip.js memory. Reached through archive list/file, unzip, and the share archive routes.",
+  "root_cause": "The pre-check and the parser pick different EOCD records: the check takes the last signature in the tail, zip.js takes the one that locates a valid directory.",
+  "intended_behavior": "DIRECTORY_MAX_BYTES and DIRECTORY_MAX_ENTRIES are enforced on the same EOCD record zip.js will parse, so an oversized directory is refused before zip.js reads it.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/routes/archive.ts",
+    "line": 32,
+    "scope": "GET /api/archive/list",
+    "description": "authenticated user (or share-link holder via the share archive routes) asks to list a zip they or a share owner placed: listArchive(abs)"
+   },
+   {
+    "kind": "propagation",
+    "file": "src/zip.ts",
+    "line": 27,
+    "scope": "checkDirectory",
+    "description": "takes the last 0x06054b50 in the tail, so a fake EOCD placed in the real EOCD comment is the one validated"
+   },
+   {
+    "kind": "sink",
+    "file": "src/zip.ts",
+    "line": 181,
+    "scope": "unzipTo",
+    "description": "reader.getEntries() loads the entire directory into memory (listArchive does the same through getEntriesGenerator) after the cap was skipped"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/zip.ts",
+    "line": 50,
+    "description": "entry cap compared only against the EOCD chosen at line 27"
+   },
+   {
+    "file": "src/zip.ts",
+    "line": 49,
+    "description": "byte cap likewise compared only against the chosen EOCD"
+   },
+   {
+    "file": "src/archive.ts",
+    "line": 63,
+    "description": "listArchive/archive-file rely on checkDirectory alone before creating ZipReader"
+   },
+   {
+    "file": "src/zip.ts",
+    "line": 183,
+    "description": "unzipTo file-count check runs only after getEntries has loaded all entries"
+   },
+   {
+    "file": "src/config.ts",
+    "line": 160,
+    "description": "uploadMaxSize default 10 GB is the only remaining bound on directory size"
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "authentication_level",
+    "description": "an account (or public-space guest, or upload-request visitor) able to place a zip that someone can list or unzip, or a share-link holder of a folder containing it"
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "low-privilege user who stores a crafted zip and requests its listing or extraction",
+   "payloads": [
+    "ZIP64 zip with more than 100000 central-directory records whose real EOCD comment (length 22) contains an EOCD with zero counts"
+   ],
+   "instructions": [
+    "Build 120000-entry ZIP64 zip plain and with the fake EOCD in the comment",
+    "Call checkDirectory and listArchive on both, then zip.js getEntries, measuring RSS growth, in the sandbox"
+   ],
+   "observed_result": "plain: refused 413; crafted: check passed, listArchive returned 10000 entries (truncated), zip.js read 120000 entries, RSS growth about 314-343 MB versus 367-372 MB for the plain file. Runs repeated twice. Not scaled further."
+  },
+  "remediation": {
+   "strategy": "Mirror zip.js EOCD selection, or reject any archive with more than one EOCD signature in the tail or whose EOCD comment length does not end the file; additionally stream/limit entries while reading so the cap does not depend on the pre-check."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "medium",
+    "reason": "needs a crafted zip uploaded by an account or guest with write rights; trivial once placed"
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "the defeated control exists to bound zip.js memory; about 50x memory per file byte measured, and only the 10 GB upload cap remains, so a modest zip can exhaust the single shared process (availability only, no data exposure; not run at scale)"
+   },
+   "overall_severity": "medium"
+  },
+  "confidence": {
+   "score": "medium",
+   "reason": "bypass and per-entry memory amplification measured locally; exhaustion at scale and supervisor recovery not exercised"
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "zip-unzip-directory-entries-uncounted-sync-mkdir",
+  "title": "Unzip creates unbounded implied directories with synchronous mkdir, stalling the single server thread",
+  "description": "POST /api/unzip applies maxFiles and maxBytes only to non-directory entries; the total entry count (directories included) is capped at unzipMaxFiles (50000) by checkDirectory, but the directories each deep path implies are not counted. Directory entries are created with mkdirSync recursive inside a loop with no await. A small zip of deeply nested directory entries therefore creates a very large number of inodes and blocks the shared event loop while they are made. Reproduced through the real route: a 42 KB zip of 20 entries nested 500 deep gave 200 OK, 0 files and 10,020 directories, with a longest event-loop stall of 150-233 ms (5 ms timer) across runs. Growth is linear in implied directories; larger sizes were not run.",
+  "root_cause": "unzipTo caps only non-directory entries by count and bytes (src/zip.ts:182-184); the entry-total cap at line 178 counts entries, not the parent directories each name implies. The entry.directory branch (198-199) calls mkdirSync(target,{recursive:true}) with no depth or created-directory counter and no yield.",
+  "intended_behavior": "Count created directories (including implied parents) and/or bound path depth toward a cap, and yield or use async mkdir so extraction does not hold the single server thread.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/routes/files.ts",
+    "line": 346,
+    "scope": "POST /api/unzip",
+    "description": "need(zip, write) then unzipTo with maxFiles from config"
+   },
+   {
+    "kind": "propagation",
+    "file": "src/zip.ts",
+    "line": 198,
+    "scope": "unzipTo",
+    "description": "entry.directory branch bypasses the file-count and byte checks"
+   },
+   {
+    "kind": "sink",
+    "file": "src/zip.ts",
+    "line": 199,
+    "scope": "unzipTo",
+    "description": "mkdirSync(target,{recursive:true}) per directory entry, implied parents uncounted, no await"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/zip.ts",
+    "line": 178,
+    "description": "entry-total cap via checkDirectory counts entries only, not implied parent directories"
+   },
+   {
+    "file": "src/zip.ts",
+    "line": 182,
+    "description": "files = entries.filter(e => !e.directory): only files are size-summed and file-counted"
+   },
+   {
+    "file": "src/zip.ts",
+    "line": 183,
+    "description": "maxFiles check applies to files.length only"
+   },
+   {
+    "file": "src/zip.ts",
+    "line": 199,
+    "description": "synchronous recursive mkdir per directory entry"
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "authorization_role",
+    "description": "Signed-in user (or visitor under public permissions) holding zip and write on a space, and a way to place a .zip there (upload). Default guest permissions do not include zip or write."
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "Account with zip+write on a space who uploads a zip of deep directory entries",
+   "payloads": [
+    "zip of 20 directory entries 'dK/' + 'x/'*500 (42 KB)"
+   ],
+   "instructions": [
+    "Place the zip in the space",
+    "POST /api/unzip {space,path} while a 5 ms timer runs in the process",
+    "Count directories created and the longest timer gap"
+   ],
+   "observed_result": "HTTP 200, files 0, 10,020 directories created, max event-loop gap 150-233 ms across runs (bun in sandbox)."
+  },
+  "remediation": {
+   "strategy": "Count created directories (including implied parents) or bound path depth toward a cap, and make directory creation yield or async."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "medium",
+    "reason": "needs zip+write permission and an upload; the zip is tiny"
+   },
+   "impact": {
+    "score": "low",
+    "reason": "temporary stall of ~0.2 s for 42 KB measured, plus inode use inside the user's own space; cleanup by deleting the folder"
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "reproduced through app.handle on POST /api/unzip with dummy data; larger sizes not run"
+  }
+ }
+]
