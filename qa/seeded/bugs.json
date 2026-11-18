@@ -937,8 +937,13 @@
     "patches": [
       {
         "file": "src/routes/admin.ts",
-        "find": "if (!isAdmin(admin) && homeIsTaken(username)) throw conflict('admin.home-exists')",
-        "replace": "if (false) throw conflict('admin.home-exists')"
+        "find": "// a manager never takes over a folder that is there already (an admin's shared folder, a deleted user's leftovers)\n    if (!isAdmin(admin) && homeIsTaken(username)) throw conflict('admin.home-exists')",
+        "replace": "// a manager never takes over a folder that is there already (an admin's shared folder, a deleted user's leftovers)\n    if (false) throw conflict('admin.home-exists')"
+      },
+      {
+        "file": "src/routes/admin.ts",
+        "find": "if (findUser(username)) throw conflict('admin.username-taken')\n    if (!isAdmin(admin) && homeIsTaken(username)) throw conflict('admin.home-exists')",
+        "replace": "if (findUser(username)) throw conflict('admin.username-taken')\n    if (false) throw conflict('admin.home-exists')"
       }
     ]
   },
