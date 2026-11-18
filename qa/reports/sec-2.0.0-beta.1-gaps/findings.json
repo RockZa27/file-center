@@ -1,0 +1,87 @@
+[
+ {
+  "verdict": "confirmed",
+  "fingerprint": "files/unzip-stale-auth-after-scan",
+  "title": "POST /api/unzip lands extracted files after the antivirus scan without re-checking the account, rights or quota owner",
+  "description": "With the antivirus on, unzip extracts to a staging folder, awaits gate() per file, then creates the destination and moves the tree in. need(zip,write), quotaUserOf and the user come from before the scan and are not re-checked. Reproduced in a sandbox with a pausing fake clamd: (a) permissions lowered to read during the scan: unzip still 200 and p/a.txt, p/b.txt landed, while a new unzip gave 403; (b) account deleted during the scan: 200 and the files landed in the orphaned home; (c) deleted and re-created with adoptHome during the scan: 200 and files landed in the new account's home. Charging of the new account's quota was not observed (usage read 0).",
+  "root_cause": "No findUser/createdAt/need/quotaUserOf recheck between the gate loop and mkdirSync/moveTree/hold.commit in the unzip handler.",
+  "intended_behavior": "Like PUT /api/content: after the scan re-resolve the account, compare createdAt, re-run need(write) and use the current quota owner; refuse with 401/403 and land nothing otherwise.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/routes/files.ts",
+    "line": 367,
+    "scope": "POST /api/unzip",
+    "description": "need(zip,write) and quotaUserOf(a,user) fixed at request start"
+   },
+   {
+    "kind": "propagation",
+    "file": "src/routes/files.ts",
+    "line": 408,
+    "scope": "gate loop",
+    "description": "await gate() per extracted file: the window for revocation"
+   },
+   {
+    "kind": "sink",
+    "file": "src/routes/files.ts",
+    "line": 420,
+    "scope": "landing",
+    "description": "moveTree into the claimed folder, then hold.commit at 425 with the stale quota owner"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/routes/files.ts",
+    "line": 237,
+    "description": "PUT /api/content re-checks account instance, need(write), same path and quota owner after the scan"
+   },
+   {
+    "file": "src/routes/files.ts",
+    "line": 415,
+    "description": "unzip claims the folder and moves files in with no such check"
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "system_configuration",
+    "description": "antivirus enabled so the staged scan window exists"
+   },
+   {
+    "kind": "authorization_role",
+    "description": "caller held zip/write when the request started; rights removed or account deleted/replaced during the scan"
+   },
+   {
+    "kind": "timing_dependency",
+    "description": "the change must fall inside the scan of the extracted files"
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "A user whose rights are being removed, or an in-flight request of a deleted account.",
+   "payloads": [
+    "POST /api/unzip {\"space\":\"home\",\"path\":\"/p.zip\"} with a 2-file zip while a fake clamd holds the first scan; meanwhile admin PUT /api/admin/users/zed {permissions:['read']}, or DELETE, or DELETE then POST with adoptHome:true"
+   ],
+   "instructions": [
+    "scratch/run.ts <downgrade|delete|recreate> boots the app in-process in the sandbox, enables antivirus against a pausing fake clamd, starts the unzip, changes the account once the scan is reached, releases the scan and prints status and tree"
+   ],
+   "observed_result": "2 of 2 runs per variant: downgrade, delete and delete+recreate(adoptHome) all returned unzip 200 with p/a.txt and p/b.txt landed; control unzip after downgrade 403; new account usage read 0 (not charged at that read)."
+  },
+  "remediation": {
+   "strategy": "Run the current() check of PUT /api/content (findUser, createdAt, need(write), quotaUserOf) after the gate loop and before mkdirSync(landed); release the hold and refuse on mismatch; commit against the re-resolved quota owner."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "low",
+    "reason": "needs antivirus on, an admin change inside the scan window"
+   },
+   "impact": {
+    "score": "low",
+    "reason": "a revoked or deleted account's in-flight request writes up to the unzip budget into its own former/orphaned home; no other user's data is read or changed"
+   },
+   "overall_severity": "low"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "reproduced 2 of 2 per variant with a 403 control"
+  }
+ }
+]
