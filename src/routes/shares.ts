@@ -3,7 +3,7 @@ import { lstatSync } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
 import { Elysia, t } from 'elysia'
 import { alert } from '../alerts'
-import { audit, auditOnce } from '../audit'
+import { audit, auditDownload, auditOnce } from '../audit'
 import { accessFor, canManage, clearFailures, findUser, hashPassword, lockedFor, recordFailure } from '../auth'
 import { config } from '../config'
 import * as policy from '../policy'
@@ -325,7 +325,7 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
     // throws the same 404 when the last allowed downloads are already under way
     const slot = startDownload(share)
     try {
-      audit({
+      auditDownload({
         user: user?.username ?? 'guest', ip, action: 'share-download', target: storagePath(target),
         detail: `ลิงก์ ${share.id} ของ ${share.owner}`,
       })
@@ -436,7 +436,8 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
 
   .post('/s/:token/upload/:id/complete', async ({ params, request, ip }) => {
     const { share, owner, key } = visitorUpload(params.token, request)
-    const done = await completeUpload(params.id, owner)
+    // after the scan the link is opened again: revoked, expired or no longer taking uploads means nothing lands
+    const done = await completeUpload(params.id, owner, null, () => { visitorUpload(params.token, request) })
     const name = basename(done.path)
     // a client that lost the answer asks again: the file is the same one, so it is not counted or told a second time
     if (done.again) return { ok: true, name, size: done.size }

@@ -28,6 +28,7 @@ export const uploadRoutes = new Elysia({ prefix: '/api/upload' })
       quotaUser,
       space: a.space,
       owner: user?.username ?? 'guest',
+      ownerUser: user ?? undefined,
       guest: !user,
       ip,
       root: a.root,

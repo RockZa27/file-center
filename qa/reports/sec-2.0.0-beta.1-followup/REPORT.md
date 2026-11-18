@@ -29,7 +29,7 @@ The two zip findings were validated after the first fix and fixed in a second on
 
 ## Result
 
-Five findings are confirmed and passed Phase 5: three medium, two low. The three from the first write-up were fixed afterwards (see "Fixed after this run"); the two zip findings are open.
+Five findings are confirmed and passed Phase 5: three medium, two low. All five were fixed afterwards (see "Fixed after this run").
 
 - Medium: a CLI `sessions-revoke` could be silently undone by a pending timer write of the running app, so a revoked WebDAV app password or session worked again (fixed).
 - Medium: an anonymous visitor who starts 4 zip downloads (batch or folder share link) and never reads them holds every zip.js codec slot; every other zip download and the admin backup wait until those connections close.

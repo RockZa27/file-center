@@ -20,8 +20,8 @@ export const releases = [
         id: '201-security', icon: 'lock', roles: ['admin'],
         title: { th: 'แก้ไขด้านความปลอดภัยจากการตรวจรอบล่าสุด', en: 'Security fixes from the latest review' },
         text: {
-          th: 'การเพิกถอนด้วย bun src/cli.ts sessions-revoke ไม่ถูกแอปที่รันอยู่เขียนทับอีก การอัปโหลดผ่าน WebDAV การบันทึกจากตัวแก้ไขข้อความ และการแตกไฟล์ zip ที่ทำค้างอยู่ จะถูกตรวจสิทธิ์และบัญชีอีกครั้งก่อนไฟล์ลงพื้นที่ ส่วน zip ที่ดาวน์โหลดค้างไว้โดยไม่อ่านไม่ทำให้การสำรองข้อมูลค้างอีก และ zip ของโฟลเดอร์ใหญ่ไม่ทำให้ระบบหยุดตอบ',
-          en: 'A revoke with bun src/cli.ts sessions-revoke is no longer overwritten by the running app. A WebDAV upload, a text editor save or a zip extraction that is still running is checked again for the account and its rights before anything reaches the storage. Zip downloads left unread no longer hold up the backup, and a zip of a large folder no longer stops the server.',
+          th: 'การเพิกถอนด้วย bun src/cli.ts sessions-revoke ไม่ถูกแอปที่รันอยู่เขียนทับอีก การอัปโหลด (ทั้งจากหน้าเว็บ WebDAV และลิงก์ขอไฟล์) การบันทึกจากตัวแก้ไขข้อความ การสร้างและแตกไฟล์ zip ที่ทำค้างอยู่ จะถูกตรวจสิทธิ์และบัญชีอีกครั้งก่อนไฟล์ลงพื้นที่ zip ที่ดาวน์โหลดค้างไว้โดยไม่อ่านไม่ทำให้การสำรองข้อมูลค้างอีก zip ของโฟลเดอร์ใหญ่ไม่ทำให้ระบบหยุดตอบ ประวัติการใช้งานไม่ถูกการดาวน์โหลดของผู้เยี่ยมชมดันออก และรหัสสำรอง 2FA ชุดใหม่เก็บด้วยกุญแจของ server (ชุดเดิมยังใช้ได้)',
+          en: 'A revoke with bun src/cli.ts sessions-revoke is no longer overwritten by the running app. An upload (web page, WebDAV or upload link), a text editor save, or a zip being made or extracted that is still running is checked again for the account and its rights before anything reaches the storage. Zip downloads left unread no longer hold up the backup, a zip of a large folder no longer stops the server, visitors\' downloads can no longer push older entries out of the activity log, and new 2FA backup codes are kept under a server key (existing ones still work).',
         },
       },
     ],

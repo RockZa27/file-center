@@ -3,7 +3,7 @@ import { access } from 'node:fs/promises'
 import { existsSync, lstatSync, mkdirSync, readdirSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { basename, dirname, extname, join } from 'node:path'
 import { Elysia, t } from 'elysia'
-import { audit, auditOnce } from '../audit'
+import { audit, auditDownload, auditOnce } from '../audit'
 import { antivirusOn, gate } from '../antivirus'
 import { findUser, isForeignSpace, type User } from '../auth'
 import { config, paths } from '../config'
@@ -352,6 +352,12 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     const hold = holdNow(q, upper)
     try {
       await Bun.write(target, new Response(limitedZipStream(zipItems, zipCaller(user, ip))))
+      // a big archive takes a while: the account may have gone or lost zip/write here meanwhile (as unzip and PUT /api/content)
+      const key = (u: User | null) => u ? `${u.username.toLowerCase()}|${u.createdAt}` : ''
+      const fresh = user ? findUser(user.username) ?? null : null
+      if (user && (!fresh || fresh.createdAt !== user.createdAt)) throw new HttpError(401, 'auth.required')
+      const a2 = need({ user: fresh, ip }, body.space, 'zip', 'write')
+      if (resolveIn(a2.root, dirRel) !== dir || key(quotaUserOf(a2, fresh)) !== key(q)) throw forbidden()
     } catch (err) {
       rmSync(target, { force: true })
       hold.release()
@@ -463,7 +469,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     const range = request.headers.get('range')
     if (!range || range.startsWith('bytes=0-')) {
       // a staff member reading someone's files is always recorded, a preview included
-      if (query.inline !== '1' || isForeignSpace(a.space)) audit({ user: user?.username ?? 'guest', ip, action: 'download', target: storagePath(abs), ...viewDetail(a) })
+      if (query.inline !== '1' || isForeignSpace(a.space)) auditDownload({ user: user?.username ?? 'guest', ip, action: 'download', target: storagePath(abs), ...viewDetail(a) })
       recordRecent(user, query.space, rel)
     }
     return fileResponse(abs, basename(abs), request, query.inline === '1')
@@ -497,7 +503,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     const list = collectZipItems(dir, b.names, zipLimits.maxEntries)
     // taken before the audit line: a refused download (503 zip.busy) is not recorded as one
     const stream = limitedZipStream(list, zipCaller(user, ip))
-    audit({ user: b.owner, ip, action: 'download-zip', target: storagePath(dir), detail: `${b.names.length} รายการ${isForeignSpace(b.space) ? `, ${b.space}` : ''}` })
+    auditDownload({ user: b.owner, ip, action: 'download-zip', target: storagePath(dir), detail: `${b.names.length} รายการ${isForeignSpace(b.space) ? `, ${b.space}` : ''}` })
     const name = b.names.length === 1 ? `${b.names[0]}.zip` : `${basename(b.dir === '/' ? 'files' : b.dir)}.zip`
     return new Response(stream, {
       headers: {

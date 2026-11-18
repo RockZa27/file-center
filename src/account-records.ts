@@ -18,6 +18,7 @@ import { removeUserFromGroups } from './groups'
 import { forgetNotifications } from './notify'
 import { removeSharesOf } from './shares'
 import { dropUploadsOf } from './uploads'
+import { forgetLinkCodes } from './line'
 
 /** sign-ins, links, grants, groups, app passwords, own settings, unfinished uploads: a deleted account takes them along (memory, saved by the stores) */
 export function forgetAccount(username: string) {
@@ -30,6 +31,7 @@ export function forgetAccount(username: string) {
   removeAppPasswordsOf(username)
   removeUserFromGroups(username)
   dropUploadsOf(username)
+  forgetLinkCodes(username)
   // a result of the old account's files must not answer for a new account (any home it may get): all of them go, they are cheap to rescan
   forgetInsight()
   forgetInsightUser(username)

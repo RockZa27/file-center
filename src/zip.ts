@@ -1,5 +1,5 @@
 import { closeSync, lstatSync, mkdirSync, openSync, readdirSync, readSync } from 'node:fs'
-import { open } from 'node:fs/promises'
+import { mkdir, open } from 'node:fs/promises'
 import { dirname, extname, join } from 'node:path'
 import { BlobReader, configure, ZipReader, ZipWriter } from '@zip.js/zip.js'
 import { config } from './config'
@@ -290,6 +290,17 @@ export async function unzipTo(zipAbs: string, destDir: string, limits: { maxByte
 
     let total = 0
     let count = 0
+    // folders count too, the ones a name only implies included ("a/b/c/f.txt" makes three): a small zip of names alone
+    // made 10,000 folders before. At most as many as files may be taken out, each made once, with awaited calls
+    const dirs = new Set<string>()
+    const ensureDirs = async (dir: string) => {
+      if (dir === destDir || dirs.has(dir)) return
+      for (let d = dir; d !== destDir && !dirs.has(d); d = dirname(d)) {
+        dirs.add(d)
+        if (dirs.size > limits.maxFiles) throw bad('zip.too-many-files', { max: limits.maxFiles.toLocaleString() })
+      }
+      await mkdir(dir, { recursive: true })
+    }
     for (const entry of entries) {
       const name = entry.filename
       const parts = name.replaceAll('\\', '/').split('/').filter(s => s && s !== '.')
@@ -298,10 +309,10 @@ export async function unzipTo(zipAbs: string, destDir: string, limits: { maxByte
       const target = join(destDir, ...parts.map(cleanName))
       if (!within(destDir, target)) throw unsafe()
       if (entry.directory) {
-        mkdirSync(target, { recursive: true })
+        await ensureDirs(target)
         continue
       }
-      mkdirSync(dirname(target), { recursive: true })
+      await ensureDirs(dirname(target))
       // written with awaited writes, not writeSync: a small zip that unpacks to gigabytes must not hold the one
       // server thread for the whole time (everyone else's requests wait while it runs)
       const file = await open(uniquePath(target), 'wx')

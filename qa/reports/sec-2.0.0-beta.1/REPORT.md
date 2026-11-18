@@ -10,7 +10,19 @@ The records below describe source ref `865b26d` and are left as found. The three
 | `zip-checkdirectory-eocd-mismatch-bypass` | `checkDirectory` applies the limits to the largest of all end records in the tail | crafted 120,000-entry zip: refused 413 (was passed) |
 | `files:batch-token-map-unbounded` | at most 20 unused tokens per caller (visitors per address) and 2,000 in all, oldest dropped first | 2,000 anonymous calls: first token 404, newest 200 (all were kept) |
 
-The six low and one informational findings, the pending severity proposal and the deferred and blocked coverage are not addressed yet.
+The six low and one informational findings were fixed later, for `2.0.0-beta.2`. Each has a regression test in `tests/security-203.test.ts` that fails on the old code, and a seeded bug those tests catch:
+
+| Fingerprint | Fix | Seeded bug |
+|---|---|---|
+| `uploads/inflight-complete-survives-account-drop` | after the scan, `finishUpload` asks again for the account instance of the uploader and of the quota owner (`ownerBorn`, `quotaBorn` in the upload's meta), its upload right, and for a link that the link still takes uploads; `dropUploadsOf` marks an upload being finished so it ends after its scan | `upload-no-recheck-after-scan` |
+| `lifecycle.line-link-code-survives-account-delete` | `forgetAccount` drops the account's unused LINE link codes (`forgetLinkCodes`) | `line-code-survives-delete` |
+| `lifecycle.user-create-concurrent-duplicate-username` | the password is hashed first and the name (and, for a manager, the home) is checked again with no await before the account is added | `user-create-race` |
+| `zip-unzip-directory-entries-uncounted-sync-mkdir` | folders, the implied ones included, count toward `UNZIP_MAX_FILES`; each is made once with an awaited `mkdir` | `unzip-dirs-uncounted` |
+| `audit-trail-flood-by-unmetered-download-audit` | a visitor's download (no account) is written once a minute per address, kind and file (`auditDownload`); signed-in accounts are written every time | `audit-download-flood` |
+| `lifecycle.audit-own-entries-not-bound-to-account-instance` | audit lines carry `born` (the named account's `createdAt`); "my activity" and the export leave out lines whose `born` is another account's | `my-activity-born-ignored` |
+| `2fa:backup-codes-stored-as-unsalted-sha256` | new backup codes are kept as an HMAC under a key derived from `secret.key` (`h1:`); codes kept the old way still work once, as chosen before the audit | `backup-codes-unkeyed` |
+
+The pending severity proposal and the blocked coverage are not addressed.
 
 ## Run
 

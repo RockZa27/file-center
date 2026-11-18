@@ -2,7 +2,7 @@
 
 ## Fixed after this run
 
-The record below describes source ref `ecefa9b` and is left as found. It was fixed for `2.0.0-beta.2`: after the scan (antivirus on) or after the extraction (antivirus off), `POST /api/unzip` asks again for the account instance (name, `createdAt`), `zip` + `write` at the destination and the quota owner, and refuses with 401/403 with nothing landed. `tests/security-202.test.ts` covers a rights downgrade and an account deletion during the scan (both 200 with files landed before), and the seeded bug `unzip-no-recheck` is caught. The `POST /api/zip` stall noted below is fixed with the zip findings of run 5. The three coverage gaps the critic named are not reviewed yet.
+The record below describes source ref `ecefa9b` and is left as found. It was fixed for `2.0.0-beta.2`: after the scan (antivirus on) or after the extraction (antivirus off), `POST /api/unzip` asks again for the account instance (name, `createdAt`), `zip` + `write` at the destination and the quota owner, and refuses with 401/403 with nothing landed. `tests/security-202.test.ts` covers a rights downgrade and an account deletion during the scan (both 200 with files landed before), and the seeded bug `unzip-no-recheck` is caught. The `POST /api/zip` stall noted below is fixed with the zip findings of run 5. The three coverage gaps the critic named were not reviewed by an audit run; they were closed by the same kind of recheck instead (`2.0.0-beta.2`): an upload and an upload-link file ask again after the scan (covered by `tests/security-203.test.ts`, seeded bug `upload-no-recheck-after-scan`), and `POST /api/zip` asks again after the archive is written and deletes it on a mismatch (no timed test: the write is too fast to change the account in between).
 
 ## Run
 

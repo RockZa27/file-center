@@ -113,6 +113,12 @@ export function redeemLinkCode(code: string, lineUserId: string, now = Date.now(
   return null
 }
 
+/** the account of this name is deleted, re-created or dropped by a restore: a code it was given must not link a later account of the name */
+export function forgetLinkCodes(username: string) {
+  const lc = username.toLowerCase()
+  for (const [c, v] of codes) if (v.username.toLowerCase() === lc) codes.delete(c)
+}
+
 /** forget every code (tests) */
 export function resetLineCodes() {
   codes.clear()

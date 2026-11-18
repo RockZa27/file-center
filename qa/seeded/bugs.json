@@ -2316,5 +2316,110 @@
         "replace": "        // the name is claimed first"
       }
     ]
+  },
+  {
+    "id": "upload-no-recheck-after-scan",
+    "difficulty": "medium",
+    "category": "auth",
+    "severity": "low",
+    "tests": "tests/security-203.test.ts",
+    "description": "an upload (or an upload-link file) that finishes after the virus scan no longer asks again for the account, its upload right and the link, so it lands for an account lowered, deleted or re-created meanwhile, or through a revoked link",
+    "patches": [
+      {
+        "file": "src/uploads.ts",
+        "find": "  stillTheSame(id, meta, user, recheck)\n",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "line-code-survives-delete",
+    "difficulty": "easy",
+    "category": "auth",
+    "severity": "low",
+    "tests": "tests/security-203.test.ts",
+    "description": "a LINE link code is no longer dropped with its account, so a later account of the same name can be linked to the earlier holder's LINE",
+    "patches": [
+      {
+        "file": "src/account-records.ts",
+        "find": "  forgetLinkCodes(username)\n",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "user-create-race",
+    "difficulty": "medium",
+    "category": "logic",
+    "severity": "low",
+    "tests": "tests/security-203.test.ts",
+    "description": "creating a user no longer checks the name again after hashing the password, so two requests at once make two accounts of one name",
+    "patches": [
+      {
+        "file": "src/routes/admin.ts",
+        "find": "    // there is no await, so one of them gets the conflict)\n    if (findUser(username)) throw conflict('admin.username-taken')\n",
+        "replace": "    // there is no await, so one of them gets the conflict)\n"
+      }
+    ]
+  },
+  {
+    "id": "unzip-dirs-uncounted",
+    "difficulty": "medium",
+    "category": "dos",
+    "severity": "low",
+    "tests": "tests/security-203.test.ts",
+    "description": "folders a zip's names imply are no longer counted, so a small zip of names alone makes thousands of folders",
+    "patches": [
+      {
+        "file": "src/zip.ts",
+        "find": "        if (dirs.size > limits.maxFiles) throw bad('zip.too-many-files', { max: limits.maxFiles.toLocaleString() })\n",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "audit-download-flood",
+    "difficulty": "easy",
+    "category": "dos",
+    "severity": "low",
+    "tests": "tests/security-203.test.ts",
+    "description": "visitors' downloads are written to the audit trail every time again, so anonymous requests can fill it and push older entries out",
+    "patches": [
+      {
+        "file": "src/audit.ts",
+        "find": "  auditOnce(`dl|${entry.action}|${entry.ip}|${entry.target ?? ''}|${entry.detail ?? ''}`, entry)\n",
+        "replace": "  audit(entry)\n"
+      }
+    ]
+  },
+  {
+    "id": "my-activity-born-ignored",
+    "difficulty": "easy",
+    "category": "privacy",
+    "severity": "low",
+    "tests": "tests/security-203.test.ts",
+    "description": "\"my activity\" and the data export no longer check which account a line was written for, so a restored older account sees a later same-name account's lines",
+    "patches": [
+      {
+        "file": "src/my-data.ts",
+        "find": " && (r.born === undefined || r.born === u.createdAt)",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "backup-codes-unkeyed",
+    "difficulty": "easy",
+    "category": "crypto",
+    "severity": "informational",
+    "tests": "tests/security-203.test.ts",
+    "description": "2FA backup codes are kept as a plain SHA-256 again, which can be searched offline from users.json or a backup",
+    "patches": [
+      {
+        "file": "src/auth.ts",
+        "find": "  return { codes, hashes: codes.map(backupHash) }\n",
+        "replace": "  return { codes, hashes: codes.map(sha256) }\n"
+      }
+    ]
   }
 ]
