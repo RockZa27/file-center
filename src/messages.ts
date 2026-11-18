@@ -168,6 +168,8 @@ export const MESSAGES = {
   'archive.encrypted': { th: 'รายการนี้ถูกเข้ารหัสด้วยรหัสผ่าน เปิดดูในหน้าเว็บไม่ได้', en: 'This item is password-protected and cannot be opened here.' },
   'archive.too-big': { th: 'รายการนี้ใหญ่เกินกำหนดหรือบีบอัดมากผิดปกติ จึงไม่แตกออกให้', en: 'This item is too big or compressed suspiciously well, so it is not extracted.' },
   'archive.directory-too-big': { th: 'ไฟล์ zip นี้มีรายการมากหรือสารบัญใหญ่เกินกว่าจะเปิดดูในหน้าเว็บ', en: 'This zip file has too many items or too large a directory to be looked into here.' },
+  'zip.busy': { th: 'กำลังสร้างไฟล์ zip ให้ดาวน์โหลดอยู่หลายไฟล์ กรุณารอให้ไฟล์ที่ดาวน์โหลดอยู่เสร็จก่อน แล้วลองใหม่อีกครู่', en: 'Several zip downloads are being prepared right now. Please let the ones under way finish, then try again in a moment.' },
+  'zip.too-many': { th: 'มีไฟล์และโฟลเดอร์มากเกินไปสำหรับ zip เดียว (เกิน {max} รายการ) กรุณาเลือกน้อยลง', en: 'Too many files and folders for one zip (more than {max}). Please choose fewer.' },
   'archive.busy': { th: 'กำลังเปิดไฟล์ zip อยู่หลายไฟล์ กรุณาลองใหม่อีกครู่', en: 'Several zip files are being opened right now. Please try again in a moment.' },
   'archive.damaged': { th: 'อ่านรายการนี้จากไฟล์ zip ไม่ได้ ไฟล์อาจเสียหายหรือใช้วิธีบีบอัดที่ไม่รองรับ', en: 'This item could not be read from the zip file. It may be damaged or use an unsupported method.' },
 

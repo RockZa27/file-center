@@ -2271,5 +2271,50 @@
         "replace": "      const fresh = user\n      const a2 = a\n"
       }
     ]
+  },
+  {
+    "id": "zip-no-yield",
+    "difficulty": "medium",
+    "category": "dos",
+    "severity": "medium",
+    "tests": "tests/security-202.test.ts",
+    "description": "zipStream no longer gives the event loop a turn between entries, so one zip of a folder of many small files stops every other request until it is done",
+    "patches": [
+      {
+        "file": "src/zip.ts",
+        "find": "      if (++n % YIELD_EVERY === 0) await new Promise<void>(r => setImmediate(r))\n",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "zip-downloads-unlimited",
+    "difficulty": "medium",
+    "category": "dos",
+    "severity": "medium",
+    "tests": "tests/security-202.test.ts",
+    "description": "zip downloads are no longer limited per caller and in total, so a visitor who opens a few and never reads them holds every zip codec and the backup waits behind them",
+    "patches": [
+      {
+        "file": "src/zip.ts",
+        "find": "  if (mine >= zipLimits.perCaller || zipTotal >= zipLimits.total) throw new HttpError(503, 'zip.busy')\n",
+        "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "unzip-no-recheck",
+    "difficulty": "medium",
+    "category": "auth",
+    "severity": "low",
+    "tests": "tests/security-202.test.ts",
+    "description": "POST /api/unzip no longer asks again for the account and its rights after the antivirus scan, so files land for an account that was lowered to read-only or deleted meanwhile",
+    "patches": [
+      {
+        "file": "src/routes/files.ts",
+        "find": "        stillAllowed()\n        // the name is claimed first",
+        "replace": "        // the name is claimed first"
+      }
+    ]
   }
 ]

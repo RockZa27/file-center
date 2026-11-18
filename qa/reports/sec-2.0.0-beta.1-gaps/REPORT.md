@@ -1,5 +1,9 @@
 # File Center 2.0.0-beta.1 — security audit, critic gaps (run 6, scoped)
 
+## Fixed after this run
+
+The record below describes source ref `ecefa9b` and is left as found. It was fixed for `2.0.0-beta.2`: after the scan (antivirus on) or after the extraction (antivirus off), `POST /api/unzip` asks again for the account instance (name, `createdAt`), `zip` + `write` at the destination and the quota owner, and refuses with 401/403 with nothing landed. `tests/security-202.test.ts` covers a rights downgrade and an account deletion during the scan (both 200 with files landed before), and the seeded bug `unzip-no-recheck` is caught. The `POST /api/zip` stall noted below is fixed with the zip findings of run 5. The three coverage gaps the critic named are not reviewed yet.
+
 ## Run
 
 - **Scoped run, not a full audit.** Only the two units the run-5 coverage critic named outside its scope were reviewed (`qa/reports/sec-2.0.0-beta.1-followup/NEEDS-VALIDATION.md`): `POST /api/unzip` against account and rights changes during the antivirus scan, and the cost and quota accounting of server-side zips (`POST /api/zip`, the admin log zip). Every other unit is `out_of_scope` here and keeps its earlier result.

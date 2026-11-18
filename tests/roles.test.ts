@@ -207,7 +207,10 @@ describe('roles: read-only view of a managed user\'s files (space user:<name>)',
     expect((await mia.raw('GET', `/api/download?space=${S}&path=/docs/hello.txt&inline=1`)).status).toBe(200)
     const tok = await mia.json('POST', '/api/batch', { space: S, path: '/docs', items: ['hello.txt'] })
     expect(tok.status).toBe(200)
-    expect((await mia.raw('GET', `/api/batch/${tok.data.token}`)).status).toBe(200)
+    const zipRes = await mia.raw('GET', `/api/batch/${tok.data.token}`)
+    expect(zipRes.status).toBe(200)
+    // read to the end: a zip left unread holds its place (src/zip.ts zipLimits) for the files after this one
+    await zipRes.arrayBuffer()
     // the name is not case sensitive
     expect((await mia.json('GET', '/api/list?space=user:UBOB&path=/docs')).status).toBe(200)
   })

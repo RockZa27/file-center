@@ -6,6 +6,27 @@ import { compareVersions, forRole } from './util'
  */
 export const releases = [
   {
+    version: '2.0.0-beta.2',
+    items: [
+      {
+        id: '201-zip-limits', icon: 'system', roles: ['user'],
+        title: { th: 'ดาวน์โหลดเป็น zip ได้ทีละ 2 ไฟล์', en: 'Two zip downloads at a time' },
+        text: {
+          th: 'การดาวน์โหลดหลายไฟล์หรือทั้งโฟลเดอร์เป็นไฟล์ zip ทำพร้อมกันได้ไม่เกิน 2 ไฟล์ต่อคน ถ้าขึ้นว่ากำลังสร้างไฟล์ zip อยู่หลายไฟล์ ให้รอไฟล์ที่ดาวน์โหลดอยู่เสร็จก่อนแล้วลองใหม่ zip หนึ่งไฟล์มีได้ไม่เกิน 50,000 รายการ',
+          en: 'Downloading several files or a whole folder as a zip works for up to two downloads at a time per person. If you are told several zips are being prepared, let the ones under way finish and try again. One zip holds at most 50,000 files and folders.',
+        },
+      },
+      {
+        id: '201-security', icon: 'lock', roles: ['admin'],
+        title: { th: 'แก้ไขด้านความปลอดภัยจากการตรวจรอบล่าสุด', en: 'Security fixes from the latest review' },
+        text: {
+          th: 'การเพิกถอนด้วย bun src/cli.ts sessions-revoke ไม่ถูกแอปที่รันอยู่เขียนทับอีก การอัปโหลดผ่าน WebDAV การบันทึกจากตัวแก้ไขข้อความ และการแตกไฟล์ zip ที่ทำค้างอยู่ จะถูกตรวจสิทธิ์และบัญชีอีกครั้งก่อนไฟล์ลงพื้นที่ ส่วน zip ที่ดาวน์โหลดค้างไว้โดยไม่อ่านไม่ทำให้การสำรองข้อมูลค้างอีก และ zip ของโฟลเดอร์ใหญ่ไม่ทำให้ระบบหยุดตอบ',
+          en: 'A revoke with bun src/cli.ts sessions-revoke is no longer overwritten by the running app. A WebDAV upload, a text editor save or a zip extraction that is still running is checked again for the account and its rights before anything reaches the storage. Zip downloads left unread no longer hold up the backup, and a zip of a large folder no longer stops the server.',
+        },
+      },
+    ],
+  },
+  {
     version: '2.0.0-beta.1',
     items: [
       {

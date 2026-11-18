@@ -9,8 +9,10 @@ The records below describe source ref `33f1abb` and are left as found. The three
 | `store-timer-write-overwrites-cli-revocation` | every `JsonStore` change or write first calls `reloadIfChangedByCli` (`JsonStore.beforeWrite`), so a timer write reads the CLI's files before it writes | revoked app password: 401 and 0 on disk after the timer (was 207 and 1); revoked session stays gone |
 | `webdav/put-stale-auth-after-body` | before the file is placed, `putMethod` asks again for the app password, the account instance (name, `createdAt`), 2FA and password rules, the space and `upload`/`write`, and the quota owner | PUT after revoke: 401, no file (was 201) |
 | `files/put-content-stale-auth-after-scan` | after the scan, and again after the quota counts are awaited, the save asks again for the account instance and `write`, and takes the quota owner from that | in-flight save after downgrade: 403, old content kept (was 200) |
+| `zipstream-unread-body-holds-codec-slots` | (second fix, `2.0.0-beta.2`) zips for users and visitors go through `limitedZipStream`: at most 2 per caller and `ZIP_CODECS - 1` in all (503 `zip.busy`), one zip.js codec always left for the backup, and a reader that takes nothing for 60 s loses its download | `tests/security-202.test.ts`: with every allowed download held unread the real backup finishes; third zip of one caller 503; stalled reader freed |
+| `zipstream-no-yield-eventloop-stall-large-tree` | (second fix, `2.0.0-beta.2`) `zipStream` gives the event loop a turn every 32 entries, and `collectZipItems` refuses trees of more than 50,000 entries (413 `zip.too-many`) for every user-facing caller, `POST /api/zip` included | `tests/security-202.test.ts`: timers keep running during a 3,000-file zip (none ran before) |
 
-The two zip findings (validated after this fix) and the two coverage gaps named by the critic are not addressed.
+The two zip findings were validated after the first fix and fixed in a second one (seeded bugs `zip-no-yield` and `zip-downloads-unlimited`). The two coverage gaps named by the critic were reviewed in run 6 (`qa/reports/sec-2.0.0-beta.1-gaps/`).
 
 ## Run
 

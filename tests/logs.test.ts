@@ -218,7 +218,10 @@ describe('access log and backups', () => {
       writeFileSync(join(config.storageDir, 'users', 'log-user', 'a.txt'), 'a')
       token = (await u.json('POST', '/api/batch', { space: 'home', path: '/', items: ['a.txt'] })).data.token
       secrets.push(token)
-      expect((await u.raw('GET', `/api/batch/${token}`)).status).toBe(200)
+      const zipRes = await u.raw('GET', `/api/batch/${token}`)
+      expect(zipRes.status).toBe(200)
+      // read to the end: a zip left unread holds its place (src/zip.ts zipLimits) for the files after this one
+      await zipRes.arrayBuffer()
     } finally {
       config.accessLog = false
     }

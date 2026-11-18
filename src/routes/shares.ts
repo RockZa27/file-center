@@ -20,7 +20,7 @@ import {
   WATERMARK_TEXT_MAX, watermarkFor
 } from '../shares'
 import { cancelUpload, checkUpload, completeUpload, initUpload, saveChunk, shareUploadLoad } from '../uploads'
-import { collectZipItems, zipStream } from '../zip'
+import { collectZipItems, limitedZipStream, zipCaller, zipLimits } from '../zip'
 import { contentDisposition, fileResponse } from './files'
 
 /** what a view-only link previews as it is (the browser's own viewers), and the text types it shows as plain text */
@@ -335,7 +335,7 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
         return share.maxDownloads === null ? settled(res, slot) : counted(res, slot)
       }
       const zipName = `${basename(target)}.zip`
-      const zip = new Response(zipStream(collectZipItems(dirname(target), [basename(target)])), {
+      const zip = new Response(limitedZipStream(collectZipItems(dirname(target), [basename(target)], zipLimits.maxEntries), zipCaller(user, ip)), {
         headers: {
           'Content-Type': 'application/zip',
           'Content-Disposition': contentDisposition('attachment', zipName),

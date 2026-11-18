@@ -21,7 +21,7 @@ import { indexTouched, parseFilters, searchEntries } from '../search-index'
 import { moveToTrash } from '../trash'
 import { forgetInsight } from '../insight'
 import { moveVersions, reserveVersion } from '../versions'
-import { collectZipItems, unzipTo, zipStream } from '../zip'
+import { collectZipItems, limitedZipStream, unzipTo, zipCaller, zipLimits } from '../zip'
 
 const MAX_TEXT = 2 * 1024 * 1024
 
@@ -345,13 +345,13 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     if (!archive.toLowerCase().endsWith('.zip')) archive += '.zip'
     const target = uniquePath(join(dir, archive))
     // do not put the archive inside itself
-    const zipItems = collectZipItems(dir, names).filter(i => i.abs !== target)
+    const zipItems = collectZipItems(dir, names, zipLimits.maxEntries).filter(i => i.abs !== target)
     // the archive is at most about as big as what goes in
     const upper = zipItems.reduce((sum, i) => sum + i.size, 0)
     ensureSpace(dir, upper)
     const hold = holdNow(q, upper)
     try {
-      await Bun.write(target, new Response(zipStream(zipItems)))
+      await Bun.write(target, new Response(limitedZipStream(zipItems, zipCaller(user, ip))))
     } catch (err) {
       rmSync(target, { force: true })
       hold.release()
@@ -372,6 +372,15 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     if (!existsSync(abs) || !statSync(abs).isFile() || extname(abs).toLowerCase() !== '.zip') throw bad('zip.not-zip')
     const folderName = basename(abs, extname(abs))
     const dest = uniquePath(join(dirname(abs), folderName))
+    // asked again before the files reach the storage (the extraction and the scan can take minutes): the account may have
+    // gone, been made again under the same name, or lost the right to write here meanwhile, as in PUT /api/content
+    const key = (u: User | null) => u ? `${u.username.toLowerCase()}|${u.createdAt}` : ''
+    const stillAllowed = () => {
+      const fresh = user ? findUser(user.username) ?? null : null
+      if (user && (!fresh || fresh.createdAt !== user.createdAt)) throw new HttpError(401, 'auth.required')
+      const a2 = need({ user: fresh, ip }, body.space, 'zip', 'write')
+      if (resolveIn(a2.root, rel) !== abs || key(quotaUserOf(a2, fresh)) !== key(q)) throw forbidden()
+    }
     // never extract more than the disk can take while keeping the configured reserve free
     const free = freeSpace(dirname(abs))
     const otherMax = Math.min(config.unzipMaxBytes, free === null ? Infinity : Math.max(0, free - config.minFreeSpace))
@@ -410,6 +419,7 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
           const now = new Date()
           utimesSync(stage, now, now)
         }
+        stillAllowed()
         // the name is claimed first (mkdir fails on a taken one), then the clean tree is moved into it: nothing is
         // overwritten, and a move that fails half way (another disk) leaves no partial folder behind
         for (let tries = 0; ; tries++) {
@@ -421,6 +431,8 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
       } else {
         mkdirSync(dest)
         count = await unzipTo(abs, dest, { maxBytes, maxFiles: config.unzipMaxFiles })
+        // no scan, so the files went straight in: a change meanwhile takes them out again (the catch below removes dest)
+        stillAllowed()
       }
       hold.commit((await treeStats(landed)).size)
       indexTouched(landed)
@@ -482,10 +494,12 @@ export const fileRoutes = new Elysia({ prefix: '/api' })
     const a = need({ user, ip }, b.space, 'download', 'batchdownload')
     if (a.root !== b.root) throw new HttpError(403, 'files.download-forbidden')
     const dir = resolveIn(b.root, b.dir)
-    const list = collectZipItems(dir, b.names)
+    const list = collectZipItems(dir, b.names, zipLimits.maxEntries)
+    // taken before the audit line: a refused download (503 zip.busy) is not recorded as one
+    const stream = limitedZipStream(list, zipCaller(user, ip))
     audit({ user: b.owner, ip, action: 'download-zip', target: storagePath(dir), detail: `${b.names.length} รายการ${isForeignSpace(b.space) ? `, ${b.space}` : ''}` })
     const name = b.names.length === 1 ? `${b.names[0]}.zip` : `${basename(b.dir === '/' ? 'files' : b.dir)}.zip`
-    return new Response(zipStream(list), {
+    return new Response(stream, {
       headers: {
         'Content-Type': 'application/zip',
         'Content-Disposition': contentDisposition('attachment', name),

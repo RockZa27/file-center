@@ -10,7 +10,7 @@ import { paths } from '../config'
 import { context, requireAdmin } from '../context'
 import { bad } from '../fsx'
 import { LOG_LEVELS, queryLogs, type LogLevel } from '../logger'
-import { zipStream, type ZipItem } from '../zip'
+import { limitedZipStream, zipCaller, type ZipItem } from '../zip'
 
 const pad = (n: number) => String(n).padStart(2, '0')
 /** local time, like the names of backups */
@@ -87,7 +87,7 @@ export const logRoutes = new Elysia({ prefix: '/api/admin' })
     const admin = requireAdmin({ user, ip })
     const name = `file-center-logs-${stamp()}.zip`
     audit({ user: admin.username, ip, action: 'logs-download', target: name })
-    return new Response(zipStream(logFiles()), {
+    return new Response(limitedZipStream(logFiles(), zipCaller(admin, ip)), {
       headers: { 'Content-Type': 'application/zip', 'Content-Disposition': `attachment; filename="${name}"`, 'Cache-Control': 'no-store' },
     })
   })

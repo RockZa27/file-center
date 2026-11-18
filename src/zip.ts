@@ -5,7 +5,12 @@ import { BlobReader, configure, ZipReader, ZipWriter } from '@zip.js/zip.js'
 import { config } from './config'
 import { bad, cleanName, HttpError, uniquePath, within } from './fsx'
 
-configure({ useWebWorkers: false })
+/**
+ * zip.js runs at most this many codecs (deflate/inflate) at a time, the rest wait their turn. Set here rather than left to
+ * its default (the CPU count) so the limit on downloads below can always leave one free for the backup.
+ */
+export const ZIP_CODECS = Math.max(2, navigator.hardwareConcurrency || 2)
+configure({ useWebWorkers: false, maxWorkers: ZIP_CODECS })
 
 /** zip.js reads the whole central directory into memory before it yields one entry: a bigger one is refused unread */
 export const DIRECTORY_MAX_BYTES = 64 * 1024 ** 2
@@ -97,10 +102,14 @@ export type ZipOptions = {
   onEntry?: (item: ZipItem, sizes: { uncompressed: number; compressed: number }) => void
 }
 
-/** expand files and folders into a flat list of archive entries (symlinks are skipped) */
-export function collectZipItems(baseAbs: string, names: string[]): ZipItem[] {
+/**
+ * expand files and folders into a flat list of archive entries (symlinks are skipped). With `max`, a tree that holds more
+ * entries is refused (413 `zip.too-many`) as soon as the count passes it, without walking the rest.
+ */
+export function collectZipItems(baseAbs: string, names: string[], max = Infinity): ZipItem[] {
   const out: ZipItem[] = []
   const visit = (abs: string, arc: string) => {
+    if (out.length >= max) throw new HttpError(413, 'zip.too-many', { max: max.toLocaleString() })
     let st
     try { st = lstatSync(abs) } catch { return }
     if (st.isSymbolicLink()) return
@@ -114,6 +123,9 @@ export function collectZipItems(baseAbs: string, names: string[]): ZipItem[] {
   for (const n of names) visit(join(baseAbs, n), n)
   return out
 }
+
+/** entries between two turns of the event loop while a zip is built */
+const YIELD_EVERY = 32
 
 const STORE_ONLY = new Set(['.zip', '.jpg', '.jpeg', '.png', '.gif', '.webp', '.mp4', '.mkv', '.mov', '.mp3', '.aac', '.gz', '.7z', '.rar', '.xz', '.pdf', '.docx', '.xlsx', '.pptx'])
 
@@ -151,7 +163,11 @@ export function zipStream(items: ZipItem[], options: ZipOptions = {}): ReadableS
   const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>()
   const zip = new ZipWriter(writable)
   ;(async () => {
+    let n = 0
     for (const item of items) {
+      // the entries of a small file go by in promise callbacks only, which never let a timer or another request in: a
+      // zip of 20,000 tiny files held the whole server for 3 s. A real turn of the event loop every few entries
+      if (++n % YIELD_EVERY === 0) await new Promise<void>(r => setImmediate(r))
       const lastModDate = new Date(item.mtime)
       if (item.dir) {
         await zip.add(item.name, undefined, { directory: true, lastModDate })
@@ -173,6 +189,81 @@ export function zipStream(items: ZipItem[], options: ZipOptions = {}): ReadableS
     await zip.close()
   })().catch(err => writable.abort(err).catch(() => {}))
   return readable
+}
+
+/**
+ * Limits for zips that are sent to (or written for) a user or a link visitor. Each such zip holds one codec of zip.js
+ * while its writer waits for the reader: a visitor who opened a few downloads and never read them held every codec, and
+ * every other zip and the backup waited until those connections closed. So: a few per caller, one codec always left for
+ * the backup, and a reader that takes nothing for `idleMs` loses its download. Properties so a test can change them.
+ */
+export const zipLimits = {
+  /** entries (files and folders) in one such zip; the backup has no limit */
+  maxEntries: 50_000,
+  perCaller: 2,
+  total: Math.max(1, ZIP_CODECS - 1),
+  idleMs: 60_000,
+}
+const zipActive = new Map<string, number>()
+let zipTotal = 0
+/** how many such zips run now (for tests and the status page) */
+export const zipBusy = () => zipTotal
+/** whose zips are counted together: an account, or a visitor's address */
+export const zipCaller = (user: { username: string } | null | undefined, ip: string) => user ? `user:${user.username.toLowerCase()}` : `guest|${ip}`
+
+/**
+ * zipStream for a caller (`user:<name>` or `guest|<ip>`): 503 `zip.busy` when the caller or the server already runs as
+ * many as allowed. The place is given back when the archive ends, fails, is cancelled, or its reader stalls.
+ */
+export function limitedZipStream(items: ZipItem[], caller: string, options: ZipOptions = {}): ReadableStream<Uint8Array> {
+  const mine = zipActive.get(caller) ?? 0
+  if (mine >= zipLimits.perCaller || zipTotal >= zipLimits.total) throw new HttpError(503, 'zip.busy')
+  zipActive.set(caller, mine + 1)
+  zipTotal++
+  let released = false
+  const release = () => {
+    if (released) return
+    released = true
+    zipTotal--
+    const left = (zipActive.get(caller) ?? 1) - 1
+    if (left > 0) zipActive.set(caller, left)
+    else zipActive.delete(caller)
+  }
+  const inner = zipStream(items, options).getReader()
+  // stalled = the reader has asked for nothing for idleMs; while it waits for a chunk (a big file being compressed) it is not
+  let lastPull = Date.now()
+  let waiting = false
+  let timer: ReturnType<typeof setInterval> | null = null
+  const stop = (reason?: unknown) => {
+    if (timer) { clearInterval(timer); timer = null }
+    release()
+    inner.cancel(reason).catch(() => {})
+  }
+  return new ReadableStream<Uint8Array>({
+    start(controller) {
+      timer = setInterval(() => {
+        if (waiting || Date.now() - lastPull < zipLimits.idleMs) return
+        controller.error(new Error('zip download stalled'))
+        stop('stalled')
+      }, Math.max(50, Math.min(5000, zipLimits.idleMs / 4)))
+      timer.unref?.()
+    },
+    async pull(controller) {
+      waiting = true
+      try {
+        const { value, done } = await inner.read()
+        waiting = false
+        lastPull = Date.now()
+        if (done) { if (timer) { clearInterval(timer); timer = null } release(); controller.close(); return }
+        controller.enqueue(value)
+      } catch (err) {
+        waiting = false
+        stop(err)
+        controller.error(err)
+      }
+    },
+    cancel(reason) { stop(reason) },
+  }, { highWaterMark: 0 })
 }
 
 /**
