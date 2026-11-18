@@ -274,5 +274,185 @@
    "score": "high",
    "reason": "revocation variant reproduced twice; other variants follow from source"
   }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "zipstream-no-yield-eventloop-stall-large-tree",
+  "title": "One anonymous zip of a big folder blocks the whole event loop for the length of the zip",
+  "description": "zipStream builds the archive without yielding to the event loop and collectZipItems has no entry or depth cap. Reproduced in-process: a public folder with 20,000 one-byte files downloaded through an anonymous batch token ran about 3.3 s with zero 10 ms timer ticks, so every other request on the single Bun process waited. Cost is linear in entry count.",
+  "root_cause": "collectZipItems has no entry or depth cap and zipStream never yields to the event loop between entries.",
+  "intended_behavior": "Work per request on the single server thread should be bounded and yield, so one download cannot delay all other users.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/routes/files.ts",
+    "line": 485,
+    "scope": "GET /api/batch/:token (route at line 476)",
+    "description": "collectZipItems(dir, b.names) expands the whole subtree for an anonymous caller with batchdownload"
+   },
+   {
+    "kind": "propagation",
+    "file": "src/zip.ts",
+    "line": 109,
+    "scope": "collectZipItems visit",
+    "description": "readdirSync recursion with no cap on entries or depth"
+   },
+   {
+    "kind": "sink",
+    "file": "src/zip.ts",
+    "line": 170,
+    "scope": "zipStream loop",
+    "description": "per-entry zip.add chain keeps the event loop busy until the archive is finished"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/zip.ts",
+    "line": 109,
+    "description": "for (const n of readdirSync(abs)) visit(...) with no limit"
+   },
+   {
+    "file": "src/routes/files.ts",
+    "line": 488,
+    "description": "new Response(zipStream(list)) with no entry cap; only the number of unused batch tokens is capped (lines 471-472)"
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "authentication_level",
+    "description": "none, with default guest permissions (batchdownload, settings.ts:90) or any folder share link"
+   },
+   {
+    "kind": "data_state",
+    "description": "a very large public or shared tree must already exist; anonymous guests cannot create it by default"
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "anonymous visitor",
+   "payloads": [
+    "POST /api/batch {space:public,path:/,items:[tree]} then GET /api/batch/<token>"
+   ],
+   "instructions": [
+    "Create 20,000 one-byte files in nested public folders",
+    "Take a session, create a batch token, run a 10 ms timer, download the batch and read it fully"
+   ],
+   "observed_result": "totalMs 3288, timer ticks 0, max loop gap equal to the whole download (earlier runs 3359 and 3269)."
+  },
+  "remediation": {
+   "strategy": "Cap entries and depth in collectZipItems, yield (await setImmediate) every few entries in zipStream, and limit concurrent zips."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "medium",
+    "reason": "request is trivial and repeatable, but a large existing tree is required"
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "the whole process stalls for seconds per request; recovers when the zip ends"
+   },
+   "overall_severity": "medium"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "reproduced repeatedly locally"
+  }
+ },
+ {
+  "verdict": "confirmed",
+  "fingerprint": "zipstream-unread-body-holds-codec-slots",
+  "title": "Unread anonymous zip downloads hold all zip.js codec slots and stall every other zip and the real backup",
+  "description": "With default guest permissions an anonymous visitor can obtain a batch token (POST /api/batch) and start GET /api/batch/:token (or a folder share link download), read only the headers, and leave the body unread. Each stream holds one zip.js codec slot while the writer waits for backpressure. With 4 such streams (CPU count 4) every other zip download and the real admin backup (POST /api/admin/backups) wait until the holders are cancelled. Reproduced in-process, including the real backup route.",
+  "root_cause": "zipStream has no per-caller or global concurrency cap and no write-idle timeout, and holds the zip.js codec slot across the backpressure wait; the pool (maxWorkers = CPU count) is shared by user downloads and backups. The batch token cap limits only unused tokens, not concurrent streams.",
+  "intended_behavior": "Anonymous downloads must not occupy the codec capacity other users and the backup need: cap concurrent zip streams per caller and in total, drop a stream whose reader stalls, reserve capacity for the backup.",
+  "trace": [
+   {
+    "kind": "entrypoint",
+    "file": "src/routes/files.ts",
+    "line": 477,
+    "scope": "GET /api/batch/:token",
+    "description": "anonymous caller with guest download and batchdownload permission obtains a zip body with no concurrency cap"
+   },
+   {
+    "kind": "propagation",
+    "file": "src/routes/files.ts",
+    "line": 488,
+    "scope": "return new Response(zipStream(list))",
+    "description": "the stream is handed to the client unbounded"
+   },
+   {
+    "kind": "sink",
+    "file": "src/zip.ts",
+    "line": 170,
+    "scope": "zipStream zip.add",
+    "description": "await zip.add takes a codec slot and keeps it while the TransformStream readable is not drained"
+   }
+  ],
+  "evidence": [
+   {
+    "file": "src/zip.ts",
+    "line": 170,
+    "description": "zip.add inside the async writer; readable returned at line 175 with no cap or timeout"
+   },
+   {
+    "file": "src/backup.ts",
+    "line": 581,
+    "description": "the real backup uses the same zipStream and so the same shared pool (Bun.write at line 590)"
+   },
+   {
+    "file": "node_modules/@zip.js/zip.js/lib/core/codec-pool.js",
+    "line": 94,
+    "description": "pool.length < maxWorkers else pendingRequests.push (line 101): later tasks wait"
+   },
+   {
+    "file": "src/routes/shares.ts",
+    "line": 338,
+    "description": "folder share link download uses the same zipStream, no session needed"
+   }
+  ],
+  "conditions": [
+   {
+    "kind": "authentication_level",
+    "description": "none: anonymous visitor with public page on and default guest permissions, or any folder share link"
+   },
+   {
+    "kind": "data_state",
+    "description": "public folder files large enough that the zip output exceeds stream buffers (about 6 MB per file here)"
+   },
+   {
+    "kind": "timing_dependency",
+    "description": "slots are held while the connection stays open without reading; the 255 s server idleTimeout upper bound was not measured; in-process bodies were used, not a socket"
+   }
+  ],
+  "execution": {
+   "attacker_perspective": "anonymous visitor on the public page",
+   "payloads": [
+    "GET /api/session; POST /api/batch {space:public,path:/,items:[a.txt,b.txt,c.txt]}; GET /api/batch/<token>; read headers only; repeat 4 times with 4 sessions"
+   ],
+   "instructions": [
+    "Fresh STORAGE_DIR/DATA_DIR, public folder with three large random files",
+    "Open 4 anonymous batch downloads, read no body",
+    "Request a 5th anonymous zip and POST /api/admin/backups as admin",
+    "Cancel the 4 bodies and repeat both"
+   ],
+   "observed_result": "Baseline victim zip 72-77 ms and backup 13 ms. With 4 holders both TIMEOUT at 10 s in 2 of 2 sandboxed runs (script exit 42). After cancelling the holders victim 66-70 ms and backup 10-17 ms."
+  },
+  "remediation": {
+   "strategy": "Cap concurrent zipStream per caller and globally (429), add a write-idle timeout that aborts the writer, and reserve or separate codec capacity for the backup."
+  },
+  "severity": {
+   "likelihood": {
+    "score": "high",
+    "reason": "anonymous, 4 plain requests, default configuration"
+   },
+   "impact": {
+    "score": "medium",
+    "reason": "zip downloads and backups stall while the holders stay connected; other routes unaffected; recovers on disconnect; temporary"
+   },
+   "overall_severity": "medium"
+  },
+  "confidence": {
+   "score": "high",
+   "reason": "reproduced twice in the sandbox with the real admin backup route as victim; socket-level hold time and idleTimeout bound not measured here (hunter's real-server runs cover the socket case)"
+  }
  }
 ]

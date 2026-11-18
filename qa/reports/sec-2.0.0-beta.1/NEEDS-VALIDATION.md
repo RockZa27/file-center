@@ -21,7 +21,7 @@ No `needs_validation` record: every candidate of this run was validated to `conf
 
 ## Deferred units (not hunted; bounded local checks for the next run)
 
-> Follow-up: all four units below were hunted in the scoped run 5 at `33f1abb`. Results: `qa/reports/sec-2.0.0-beta.1-followup/REPORT.md` (1 medium and 2 low confirmed; 2 zip candidates left unresolved when the validation budget ran out).
+> Follow-up: all four units below were hunted in the scoped run 5 at `33f1abb`. Results: `qa/reports/sec-2.0.0-beta.1-followup/REPORT.md` (3 medium and 2 low confirmed; the 2 zip findings were validated with 3 extra agents).
 
 ### `src/cli.ts#sessions-revoke` → `src/auth.ts#reloadIfChangedByCli` — Stale authorization and derived copy use
 - Start at: `src/cli.ts`, `src/auth.ts`, `src/app-passwords.ts`, `src/store.ts`, `src/webdav.ts`, `src/context.ts`, `src/index.ts`

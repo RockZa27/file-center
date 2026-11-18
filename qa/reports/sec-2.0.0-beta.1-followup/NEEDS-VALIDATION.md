@@ -1,22 +1,6 @@
 # Needs validation — run 5 (scoped follow-up)
 
-No record ended as `needs_validation`. The open items below are not findings.
-
-## Unresolved candidates (validation budget exhausted)
-
-### `zipstream-no-yield-eventloop-stall-large-tree` — Phase 3 confirmed, Phase 5 missing
-
-zipStream builds the archive without yielding to the event loop and collectZipItems has no entry or depth cap. Independently reproduced in-process: a public folder with 20,000 one-byte files downloaded through an anonymous batch token ran 3.3 s with zero 10 ms timer ticks, so every other request on the single Bun process waited. Cost is linear in entry count.
-
-- Phase 3 verifier result: totalMs 3359 and 3269, timer ticks 0, max loop gap equal to the whole download, in two sandboxed runs. (proposed medium: likelihood medium, impact medium).
-- Needed: one fresh Phase 5 record verifier.
-
-### `zipstream-unread-body-holds-codec-slots` — hunter only
-
-With the default guest permissions an anonymous visitor can start GET /api/batch/:token (new session per request, token from POST /api/batch) or GET /api/s/:token/download on a folder link, receive the headers and not read the body. Each such request keeps one zip.js codec slot (maxWorkers = CPU count, 4 here) while the writer waits for backpressure. With 4 such connections every other zip, including admin backups that use zipStream, waits until the holders are closed.
-
-- Hunter result: victim zip and backup-like zip TIMEOUT at 12 s in 4 of 4 runs (and 2 of 2 on share link); after abort both finish in a few ms. (proposed medium).
-- Needed: one independent Phase 3 verifier, then one Phase 5 verifier.
+No record ended as `needs_validation`, and every candidate has an independent final disposition (the two zip candidates left open by the first write-up were validated afterwards). The open items below are coverage gaps, not findings.
 
 ## Coverage gaps named by the critic (outside this run's scope)
 

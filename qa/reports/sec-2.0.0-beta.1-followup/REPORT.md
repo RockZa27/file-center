@@ -10,25 +10,29 @@ The records below describe source ref `33f1abb` and are left as found. The three
 | `webdav/put-stale-auth-after-body` | before the file is placed, `putMethod` asks again for the app password, the account instance (name, `createdAt`), 2FA and password rules, the space and `upload`/`write`, and the quota owner | PUT after revoke: 401, no file (was 201) |
 | `files/put-content-stale-auth-after-scan` | after the scan, and again after the quota counts are awaited, the save asks again for the account instance and `write`, and takes the quota owner from that | in-flight save after downgrade: 403, old content kept (was 200) |
 
-The two unresolved zip candidates and the two coverage gaps named by the critic are not addressed.
+The two zip findings (validated after this fix) and the two coverage gaps named by the critic are not addressed.
 
 ## Run
 
 - **Scoped follow-up, not a full audit.** Only the four coverage units that run 4 (`qa/reports/sec-2.0.0-beta.1/`) left `deferred` were reviewed: CLI revocation vs the running app's store writes, WebDAV PUT and editor saves vs account/credential changes, zip creation cost, search cost. All other units are `out_of_scope` here and keep their run-4 result.
-- **This run is incomplete:** `run_status: incomplete`, reason `validation_budget_exhausted`. Five candidates came out of hunting; the 12-agent budget held 4 Phase 3 and 3 Phase 5 verifiers, used in fingerprint order. Two zip candidates are therefore **not** in findings.json (see "Unresolved candidates"); they are not findings of this report, even though one passed Phase 3.
-- Cloudflare security-audit skill (pinned c1c8a8c), profile `standard`, source ref `33f1abb` (after the three run-4 medium fixes; clean worktree).
-- Budget 12 agent invocations, 12 spent: 4 hunters, 1 coverage critic, 4 Phase 3 candidate verifiers, 3 Phase 5 record verifiers. No final-clean critic was run (no budget for another wave in a scoped run).
+- **Validation continued after the first write-up.** The first version of this report (commit `492f63b`) was `incomplete` (`validation_budget_exhausted`): two zip candidates had no complete independent validation. With 3 further agent invocations (one Phase 3 verifier, two Phase 5 verifiers) both were validated at source ref `72f36b1`, where the zip code is unchanged since `33f1abb`. Every candidate now has an independent final disposition: `run_status: complete` for the 4 in-scope units (the critic's 2 gaps stay out of scope).
+- Cloudflare security-audit skill (pinned c1c8a8c), profile `standard`, source ref `33f1abb` for hunting and most validation (after the three run-4 medium fixes; clean worktree), `72f36b1` for the continued validation.
+- Budget 12 + 3 agent invocations, 15 spent: 4 hunters, 1 coverage critic, 5 Phase 3 candidate verifiers, 5 Phase 5 record verifiers. No final-clean critic was run (no budget for another wave in a scoped run).
 - Execution: sandboxed source-and-local-only, as in run 4 (`scripts/qa/sandbox.sh`, evidence promoted by `scripts/qa/promote.py`). Every hunter and verifier ran a local check; dummy data only, no stress beyond the sizes stated.
 - Process notes (coordinator actions):
   - critic c21: not clean; 2 missing units outside the 4-unit scope recorded as out_of_scope (scoped run rule); no reassign_ids
   - p01/p02/p03: Phase 5 verified with work trail and a sandboxed re-run of the Phase 3 script; zipstream-no-yield-eventloop-stall-large-tree confirmed in Phase 3 (v04) but no Phase 5 verifier left in the 12-agent budget: removed from findings.json, kept as unresolved candidate; zipstream-unread-body-holds-codec-slots: no Phase 3 verifier left (5th in fingerprint order), unresolved candidate
+  - v05: hand-back message was the bare word 'placeholder' (malformed); its result.json was well-formed, schema-valid, and backed by two sandboxed runs and notes.md, so the coordinator applied result.json instead of re-running (no budget for a replacement verifier). p04: non-material Phase 5 replacement (line numbers moved at 72f36b1) applied.
+  - p05: Phase 5 verified with work trail and a sandboxed re-run; run complete for the in-scope units (15 agents)
 
 ## Result
 
-Three findings are confirmed and passed Phase 5: one medium, two low. No code was changed by this run.
+Five findings are confirmed and passed Phase 5: three medium, two low. The three from the first write-up were fixed afterwards (see "Fixed after this run"); the two zip findings are open.
 
-- The medium one: a CLI `sessions-revoke` can be silently undone by a pending timer write of the running app, so a revoked WebDAV app password or session works again.
-- The two low ones: a WebDAV PUT and an editor save that are already in flight finish with the credential or rights they had when they started.
+- Medium: a CLI `sessions-revoke` could be silently undone by a pending timer write of the running app, so a revoked WebDAV app password or session worked again (fixed).
+- Medium: an anonymous visitor who starts 4 zip downloads (batch or folder share link) and never reads them holds every zip.js codec slot; every other zip download and the admin backup wait until those connections close.
+- Medium: one anonymous zip of a very large existing public or shared folder stalls the whole server for the length of the zip (3.3 s for 20,000 files), because the zip is built without yielding.
+- Low: a WebDAV PUT and an editor save that were already in flight finished with the credential or rights they had when they started (fixed).
 - Search (D4) is covered with no finding: queries are bounded to the caller's folder and cost under 50 ms at 100,000 public entries.
 
 ## Confirmed findings
@@ -36,6 +40,8 @@ Three findings are confirmed and passed Phase 5: one medium, two low. No code wa
 | Severity | Title | Lower-trust principal | Observed |
 |---|---|---|---|
 | medium | A pending timer write of the running app overwrites a CLI sessions-revoke and restores revoked app passwords / sessions | Holder of a revoked WebDAV app password or session cookie after the operator ra… | Reproduced twice in the sandbox: app-passwords.json 0 items after the CLI, 1 after the timer, PROPFIND 207 with the revoked secret. Control (request right afte… |
+| medium | One anonymous zip of a big folder blocks the whole event loop for the length of the zip | anonymous visitor | totalMs 3288, timer ticks 0, max loop gap equal to the whole download (earlier runs 3359 and 3269). |
+| medium | Unread anonymous zip downloads hold all zip.js codec slots and stall every other zip and the real backup | anonymous visitor on the public page | Baseline victim zip 72-77 ms and backup 13 ms. With 4 holders both TIMEOUT at 10 s in 2 of 2 sandboxed runs (script exit 42). After cancelling the holders vict… |
 | low | PUT /api/content writes after the antivirus scan with the rights that existed before the scan | user whose write right is being removed | {"update":200,"freshPutAfterDowngrade":403,"inFlightPut":200,"content":"NEW-AFTER-DOWNGRADE"} in both runs. |
 | low | WebDAV PUT completes with the credential and rights it had when the request started, after the app password was revoked | Holder of a WebDAV app password that is revoked while their upload is open | PROPFIND after revoke 401; PUT 201; file f.txt contains helloworld (two runs). |
 
@@ -51,6 +57,32 @@ Three findings are confirmed and passed Phase 5: one medium, two low. No code wa
 - Priority: likelihood low (Needs a pending timer or the hourly tick to land in the gap before the next request); impact high (Operator emergency revocation of a stolen credential is silently undone while the CLI reports success).
 - Root cause: JsonStore.writeNow/persist write the in-memory snapshot without checking whether the cli-changed marker moved; the marker is checked only in request hooks (context.ts, webdav.ts handleDav).
 - Smallest fix: Check the cli-changed marker (reload first) inside writeNow/persist before serialising, or have the app watch the marker on a short interval and drop pending timers; add a regression test running the CLI while a touchAppPassword timer is pending.
+
+### One anonymous zip of a big folder blocks the whole event loop for the length of the zip
+
+- Fingerprint: `zipstream-no-yield-eventloop-stall-large-tree` — severity **medium** (likelihood medium, impact medium); confidence high
+- Source: `src/routes/files.ts:485`, `src/zip.ts:109`, `src/zip.ts:170`, `src/routes/files.ts:488`
+- Lower-trust principal: anonymous visitor
+- Conditions: none, with default guest permissions (batchdownload, settings.ts:90) or any folder share link; a very large public or shared tree must already exist; anonymous guests cannot create it by default
+- Reproduction (local, dummy data): Create 20,000 one-byte files in nested public folders → Take a session, create a batch token, run a 10 ms timer, download the batch and read it fully
+- Result: totalMs 3288, timer ticks 0, max loop gap equal to the whole download (earlier runs 3359 and 3269).
+- What it is: zipStream builds the archive without yielding to the event loop and collectZipItems has no entry or depth cap. Reproduced in-process: a public folder with 20,000 one-byte files downloaded through an anonymous batch token ran about 3.3 s with zero 10 ms timer ticks, so every other request on the single Bun process waited. Cost is linear in entry count.
+- Priority: likelihood medium (request is trivial and repeatable, but a large existing tree is required); impact medium (the whole process stalls for seconds per request; recovers when the zip ends).
+- Root cause: collectZipItems has no entry or depth cap and zipStream never yields to the event loop between entries.
+- Smallest fix: Cap entries and depth in collectZipItems, yield (await setImmediate) every few entries in zipStream, and limit concurrent zips.
+
+### Unread anonymous zip downloads hold all zip.js codec slots and stall every other zip and the real backup
+
+- Fingerprint: `zipstream-unread-body-holds-codec-slots` — severity **medium** (likelihood high, impact medium); confidence high
+- Source: `src/routes/files.ts:477`, `src/routes/files.ts:488`, `src/zip.ts:170`, `src/backup.ts:581`, `node_modules/@zip.js/zip.js/lib/core/codec-pool.js:94`, `src/routes/shares.ts:338`
+- Lower-trust principal: anonymous visitor on the public page
+- Conditions: none: anonymous visitor with public page on and default guest permissions, or any folder share link; public folder files large enough that the zip output exceeds stream buffers (about 6 MB per file here); slots are held while the connection stays open without reading; the 255 s server idleTimeout upper bound was not measured; in-process bodies were used, not a socket
+- Reproduction (local, dummy data): Fresh STORAGE_DIR/DATA_DIR, public folder with three large random files → Open 4 anonymous batch downloads, read no body → Request a 5th anonymous zip and POST /api/admin/backups as admin → Cancel the 4 bodies and repeat both
+- Result: Baseline victim zip 72-77 ms and backup 13 ms. With 4 holders both TIMEOUT at 10 s in 2 of 2 sandboxed runs (script exit 42). After cancelling the holders victim 66-70 ms and backup 10-17 ms.
+- What it is: With default guest permissions an anonymous visitor can obtain a batch token (POST /api/batch) and start GET /api/batch/:token (or a folder share link download), read only the headers, and leave the body unread. Each stream holds one zip.js codec slot while the writer waits for backpressure. With 4 such streams (CPU count 4) every other zip download and the real admin backup (POST /api/admin/backups) wait until the holders are cancelled. Reproduced in-process, including the real backup route.
+- Priority: likelihood high (anonymous, 4 plain requests, default configuration); impact medium (zip downloads and backups stall while the holders stay connected; other routes unaffected; recovers on disconnect; temporary).
+- Root cause: zipStream has no per-caller or global concurrency cap and no write-idle timeout, and holds the zip.js codec slot across the backpressure wait; the pool (maxWorkers = CPU count) is shared by user downloads and backups. The batch token cap limits only unused tokens, not concurrent streams.
+- Smallest fix: Cap concurrent zipStream per caller and globally (429), add a write-idle timeout that aborts the writer, and reserve or separate codec capacity for the backup.
 
 ### PUT /api/content writes after the antivirus scan with the rights that existed before the scan
 
@@ -77,15 +109,6 @@ Three findings are confirmed and passed Phase 5: one medium, two low. No code wa
 - Priority: likelihood low (needs a valid credential and a revocation timed during an open upload); impact low (one in-flight file within the upload limit is written after revocation; no other-user data read or changed demonstrated).
 - Root cause: putMethod never re-verifies the app password record, the account instance (name, createdAt) or accessFor perms between the start of the request and place(); the body can stream for an unbounded time and quota commit is keyed by lowercase username.
 - Smallest fix: Before holdNow/place re-verify the app password item still exists and is unexpired, the account instance is the same, and accessFor still grants upload (and write when replacing); bound total PUT duration; key quota by account instance.
-
-## Unresolved candidates (not findings)
-
-| Fingerprint | Where it stopped | Evidence so far |
-|---|---|---|
-| `zipstream-no-yield-eventloop-stall-large-tree` | Phase 3 confirmed (medium) by an independent verifier; **no Phase 5 verifier left** | totalMs 3359 and 3269, timer ticks 0, max loop gap equal to the whole download, in two sandboxed runs. |
-| `zipstream-unread-body-holds-codec-slots` | hunter only; **no Phase 3 verifier left** (5th in fingerprint order) | victim zip and backup-like zip TIMEOUT at 12 s in 4 of 4 runs (and 2 of 2 on share link); after abort both finish in a few ms. |
-
-Details and what is still needed: NEEDS-VALIDATION.md.
 
 ## Coverage
 

@@ -850,7 +850,9 @@
   "reviewed_paths": [
    "src/zip.ts",
    "src/routes/files.ts",
-   "src/routes/shares.ts"
+   "src/routes/shares.ts",
+   "src/backup.ts",
+   "node_modules/@zip.js/zip.js/lib/core/codec-pool.js"
   ],
   "local_checks": [
    {
@@ -897,16 +899,27 @@
     "method": "local",
     "result": "confirmed (medium): totalMs 3359 and 3269, timer ticks 0, max loop gap equal to the whole download, in two sandboxed runs.",
     "artifact": "agents/v04/artifacts/evidence/notes.md"
+   },
+   {
+    "agent_id": "v05",
+    "reviewed_paths": [
+     "src/routes/files.ts",
+     "src/zip.ts",
+     "src/backup.ts",
+     "node_modules/@zip.js/zip.js/lib/core/codec-pool.js",
+     "src/routes/shares.ts"
+    ],
+    "invariant": "Phase 3 independent validation of zipstream-unread-body-holds-codec-slots",
+    "method": "local",
+    "result": "confirmed (medium): Baseline victim zip 72-77 ms and backup 13 ms. With 4 holders both TIMEOUT at 10 s in 2 of 2 sandboxed runs (script exit 42). After cancelling the holders victim 66-70 ms and backup 10-17 ms.",
+    "artifact": "agents/v05/artifacts/evidence/notes.md"
    }
   ],
   "result_fingerprints": [
    "zipstream-unread-body-holds-codec-slots",
    "zipstream-no-yield-eventloop-stall-large-tree"
   ],
-  "unresolved": [
-   "validation_budget_exhausted: zipstream-unread-body-holds-codec-slots has no independent Phase 3 verifier (5th candidate in fingerprint order; 4 Phase 3 slots in the 12-agent budget); hunter-only evidence, not a finding",
-   "validation_budget_exhausted: zipstream-no-yield-eventloop-stall-large-tree was confirmed by Phase 3 verifier v04 but has no Phase 5 record verifier (3 Phase 5 slots used in fingerprint order); not in findings.json"
-  ],
+  "unresolved": [],
   "planned_hunter": "h23-zipcost",
   "parent_note": "archive creation has no unit. GET /api/batch/:token (anonymous by default) and a folder share download walk the whole subtree synchronously (collectZipItems, no entry or depth cap) and deflate on the main thread with no concurrency cap. Local check: event-loop delay of the walk on a bounded tree and of N concurrent anonymous batch downloads; does the generator stop when the client disconnects.",
   "parent_hardening": [
@@ -916,7 +929,13 @@
   "parent_decisions": {
    "zipstream-no-yield-eventloop-stall-large-tree": {
     "phase3": "confirmed",
-    "verifier": "v04"
+    "verifier": "v04",
+    "phase5": "replace by p04"
+   },
+   "zipstream-unread-body-holds-codec-slots": {
+    "phase3": "confirmed",
+    "verifier": "v05",
+    "phase5": "verified by p05"
    }
   }
  },
