@@ -9,6 +9,14 @@ export const releases = [
     version: '2.0.0-beta.2',
     items: [
       {
+        id: '201-new-key', icon: 'system', roles: ['admin'], to: { name: 'dashboard' },
+        title: { th: 'กุญแจเซ็นแพ็กเกจอัปเดตเปลี่ยนใหม่', en: 'New update signing key' },
+        text: {
+          th: 'ตั้งแต่รุ่นนี้แพ็กเกจอัปเดตเซ็นด้วยกุญแจใหม่ซึ่งฝังมาในระบบแล้ว ถ้าตั้ง UPDATE_PUBLIC_KEY ไว้เพื่อติดตั้งรุ่นนี้ ลบบรรทัดนั้นออกจาก .env แล้วรีสตาร์ตได้ อัปเดตครั้งต่อไปกดได้ตามปกติ',
+          en: 'From this version, update packages are signed with a new key that is now built in. If you set UPDATE_PUBLIC_KEY to install this version, you can remove that line from .env and restart; the next updates work as usual.',
+        },
+      },
+      {
         id: '201-zip-limits', icon: 'system', roles: ['user'],
         title: { th: 'ดาวน์โหลดเป็น zip ได้ทีละ 2 ไฟล์', en: 'Two zip downloads at a time' },
         text: {
