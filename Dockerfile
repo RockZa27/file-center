@@ -1,5 +1,5 @@
 # images by digest as well as tag: a tag can be moved to other content, a digest can not (Dependabot keeps both current)
-FROM oven/bun:1.4.4@sha256:1d22548f177f4ff38e0c15baa3c2c46c6c2060ba2d1bc573bb4720b407548f1d AS build
+FROM oven/bun:1.4.5@sha256:3aa040e5445efa09d75bb428a64ba50db13e2b3ac9b6b0c7f145615f62b2ee18 AS build
 WORKDIR /app
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile
@@ -8,7 +8,7 @@ RUN bun --bun run build
 
 # the runtime stage is the -slim variant: same Debian packages the app needs (setpriv, chown, stat, awk for the entrypoint),
 # about 70 MB less to ship and to scan. Distroless was not used: the entrypoint needs a shell for its one-time chown + setpriv.
-FROM oven/bun:1.4.4-slim@sha256:1846adf22496bd711036aae8be147e57bdebbaea2e5264e3e0b5af1db187d9a4
+FROM oven/bun:1.4.5-slim@sha256:b780593f3e10918cbdaec3d5a08d52224b9198069a65eb47812085c2ec007643
 # Debian's security updates that came out after the base image was made (the image scan in CI found 17 HIGH/CRITICAL
 # fixed ones in perl-base, pcre2, sqlite, openssl and gzip). APT_UPGRADE=false only for machines with no Debian mirror.
 ARG APT_UPGRADE=true
