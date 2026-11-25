@@ -2426,5 +2426,50 @@
         "replace": "  return { codes, hashes: codes.map(sha256) }\n"
       }
     ]
+  },
+  {
+    "id": "link-charged-to-visitor-allowance",
+    "difficulty": "medium",
+    "category": "availability",
+    "severity": "medium",
+    "tests": "tests/security-1133.test.ts",
+    "description": "an upload-request link of an owner without a quota is charged to the visitors' daily allowance, so a big file is refused as 'allowance used up'",
+    "patches": [
+      {
+        "file": "src/routes/shares.ts",
+        "find": "      owner: `share:${share.id}:${key}`,\n      quotaUser:",
+        "replace": "      owner: `share:${share.id}:${key}`,\n      guest: true,\n      quotaUser:"
+      }
+    ]
+  },
+  {
+    "id": "visitor-first-upload-capped",
+    "difficulty": "easy",
+    "category": "availability",
+    "severity": "low",
+    "tests": "tests/security-1131.test.ts",
+    "description": "a visitor's single file bigger than a quarter of the day's allowance is refused even with nothing else waiting",
+    "patches": [
+      {
+        "file": "src/uploads.ts",
+        "find": "if (pending > 0 && pending + size > Math.floor(limit / GUEST_PENDING_SHARE))",
+        "replace": "if (pending + size > Math.floor(limit / GUEST_PENDING_SHARE))"
+      }
+    ]
+  },
+  {
+    "id": "clamd-size-limit-is-error",
+    "difficulty": "easy",
+    "category": "availability",
+    "severity": "medium",
+    "tests": "tests/antivirus.test.ts",
+    "description": "clamd's own size limit answer is taken as a scanner error, so big files of signed-in users are refused",
+    "patches": [
+      {
+        "file": "src/antivirus.ts",
+        "find": "  if (/size limit exceeded/i.test(line)) return { status: 'error', reason: 'too-big' }\n",
+        "replace": ""
+      }
+    ]
   }
 ]

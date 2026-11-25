@@ -21,7 +21,7 @@ const EICAR = 'X5O!P%@AP[4\\PZX54(P^)7CC)7}$' + 'EICAR-STANDARD-ANTIVIRUS-TEST-F
 
 // ───────────── a stand-in clamd ─────────────
 
-type Mode = 'normal' | 'hang' | 'error'
+type Mode = 'normal' | 'hang' | 'error' | 'limit'
 const fake = { mode: 'normal' as Mode, scans: 0, bytes: 0, chunks: 0, pings: 0 }
 
 function clamd(): Promise<net.Server> {
@@ -49,7 +49,8 @@ function clamd(): Promise<net.Server> {
           const data = Buffer.concat(body)
           fake.bytes += data.length
           if (fake.mode === 'hang') return
-          if (fake.mode === 'error') { sock.end('INSTREAM size limit exceeded. ERROR\0'); return }
+          if (fake.mode === 'error') { sock.end("Can't allocate memory ERROR\0"); return }
+          if (fake.mode === 'limit') { sock.end('INSTREAM size limit exceeded. ERROR\0'); return }
           sock.end(data.includes(Buffer.from(EICAR)) ? 'stream: Eicar-Test-Signature FOUND\0' : 'stream: OK\0')
           return
         }
@@ -200,6 +201,17 @@ describe('the INSTREAM client', () => {
     const f = join(scratch, 'av-err.bin')
     writeFileSync(f, 'x')
     expect(await av.scanFile(f)).toEqual({ status: 'error', reason: 'clamd-error' })
+  })
+
+  test("clamd's own size limit (StreamMaxLength) is 'too big', not a scanner error", async () => {
+    scanOn()
+    fake.mode = 'limit'
+    const f = join(scratch, 'av-limit.bin')
+    writeFileSync(f, 'x')
+    expect(await av.scanFile(f)).toEqual({ status: 'error', reason: 'too-big' })
+    // so a signed-in user's file is allowed by the default "too big" rule, and a link's is refused
+    expect(av.verdict({ status: 'error', reason: 'too-big' }, 'user')).toBe('allow')
+    expect(av.verdict({ status: 'error', reason: 'too-big' }, 'link')).toBe('rejected')
   })
 
   test('no answer within the timeout is a timeout', async () => {

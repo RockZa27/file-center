@@ -6,6 +6,27 @@ import { compareVersions, forRole } from './util'
  */
 export const releases = [
   {
+    version: '2.0.0-beta.3',
+    items: [
+      {
+        id: '203-upload-links', icon: 'upload', roles: ['user'],
+        title: { th: 'ลิงก์ขอรับไฟล์ไม่ติดโควตาผู้เยี่ยมชม', en: 'Upload links no longer use the visitor allowance' },
+        text: {
+          th: 'ไฟล์ที่คนนอกส่งผ่านลิงก์ขอรับไฟล์ไม่นับกับโควตารายวันของผู้เยี่ยมชมแล้ว ใช้ข้อจำกัดที่ตั้งไว้ในลิงก์ (ขนาดต่อไฟล์ ขนาดรวม จำนวนไฟล์) และโควตาของเจ้าของลิงก์ถ้ามี ผู้เยี่ยมชมที่อัปโหลดเข้าพื้นที่ public ส่งไฟล์ใหญ่ได้ทีละไฟล์ และข้อความบอกว่าเหลือโควตาเท่าไร',
+          en: 'Files that outsiders send through an upload link no longer count against the visitors\' daily allowance. The link\'s own limits apply (size per file, total, number of files), plus the owner\'s quota if they have one. Visitors uploading to the public folder can send one big file at a time, and the message says how much of the day is left.',
+        },
+      },
+      {
+        id: '203-virus-big', icon: 'lock', roles: ['admin'], to: { name: 'settings' },
+        title: { th: 'สแกนไวรัสไฟล์ใหญ่ได้ถึง 1 GB', en: 'Virus scan for files up to 1 GB' },
+        text: {
+          th: 'ค่าเริ่มต้นของขนาดไฟล์ที่สแกนเปลี่ยนจาก 25 MB เป็น 1024 MB และเวลารอเป็น 300 วินาที docker compose ตั้งขีดจำกัดของ clamd ให้ตรงกัน ถ้าเคยตั้งค่านี้ในหน้าตั้งค่า ระบบยังใช้ค่าเดิม ให้ปรับเอง และถ้าตั้งเกิน 1024 ให้ใส่ CLAMAV_MAX_SCAN_MB ใน .env เป็นค่าเดียวกันแล้วสั่ง docker compose up -d ไฟล์ที่เกินขีดจำกัดของ clamd ไม่ถูกนับว่าสแกนผิดพลาดอีก ไฟล์ของผู้ใช้ที่เข้าสู่ระบบจึงไม่ถูกปฏิเสธ',
+          en: 'The biggest file to scan is now 1024 MB by default (was 25 MB) and the wait per file 300 seconds. docker compose gives clamd the same limit. A value you set on the settings page stays; change it there, and if it is over 1024 also set CLAMAV_MAX_SCAN_MB in .env and run docker compose up -d. A file over clamd\'s limit no longer counts as a scan error, so signed-in users\' files are not refused.',
+        },
+      },
+    ],
+  },
+  {
     version: '2.0.0-beta.2',
     items: [
       {

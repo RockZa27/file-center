@@ -127,6 +127,9 @@ export function parseAnswer(answer: string): ScanResult {
   if (/^stream: OK$/i.test(line)) return { status: 'clean' }
   const found = line.match(/^stream: (.{1,200}) FOUND$/i)
   if (found) return { status: 'infected', signature: found[1].replace(/[^\w.\-/ ]/g, '?') }
+  // clamd's own StreamMaxLength was reached ("INSTREAM size limit exceeded. ERROR"): the file is too big to scan, not a
+  // scanner failure, so the "too big" rule decides (signed-in users' files are allowed by default) and not "on error"
+  if (/size limit exceeded/i.test(line)) return { status: 'error', reason: 'too-big' }
   return { status: 'error', reason: 'clamd-error' }
 }
 

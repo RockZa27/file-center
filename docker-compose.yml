@@ -94,6 +94,13 @@ services:
     profiles: [clamav]
     restart: unless-stopped
     logging: *logging
+    environment:
+      # ขนาดไฟล์ที่ clamd รับและสแกนได้ ใช้ค่าเดียวกับ CLAMAV_MAX_SCAN_MB ของแอป (MB, ค่าเริ่มต้น 1024, ClamAV สแกนได้ไม่เกิน 2000)
+      # ถ้า clamd ตั้งต่ำกว่าแอป ไฟล์ใหญ่จะถูกตัดสินด้วยกฎ "ไฟล์ใหญ่เกินขนาดที่สแกน" ถ้าตั้งในหน้าตั้งค่าของเว็บให้ใส่ค่าเดียวกันใน .env ด้วย
+      # (อิมเมจ clamav เขียนตัวแปร CLAMD_CONF_* ลง /etc/clamav/clamd.conf ตอนเริ่ม)
+      CLAMD_CONF_StreamMaxLength: ${CLAMAV_MAX_SCAN_MB:-1024}M
+      CLAMD_CONF_MaxFileSize: ${CLAMAV_MAX_SCAN_MB:-1024}M
+      CLAMD_CONF_MaxScanSize: ${CLAMAV_MAX_SCAN_MB:-1024}M
     volumes:
       # ฐานข้อมูลไวรัสเก็บไว้ ไม่ต้องโหลดใหม่ทุกครั้งที่เริ่ม
       - clamav-db:/var/lib/clamav

@@ -345,8 +345,9 @@ export const config = {
   clamavEnabled: env('CLAMAV_ENABLED', 'false').trim().toLowerCase() === 'true',
   clamavHost: env('CLAMAV_HOST', '127.0.0.1').trim(),
   clamavPort: num('CLAMAV_PORT', 3310),
-  clamavTimeoutSeconds: num('CLAMAV_TIMEOUT_SECONDS', 60),
-  clamavMaxScanMb: num('CLAMAV_MAX_SCAN_MB', 25),
+  clamavTimeoutSeconds: num('CLAMAV_TIMEOUT_SECONDS', 300),
+  // docker-compose gives clamd the same value (StreamMaxLength, MaxFileSize, MaxScanSize); ClamAV scans at most 2 GB
+  clamavMaxScanMb: num('CLAMAV_MAX_SCAN_MB', 1024),
   clamavOnErrorLinks: (env('CLAMAV_ON_ERROR_LINKS', 'reject').trim().toLowerCase() === 'allow' ? 'allow' : 'reject') as 'allow' | 'reject',
   clamavOnErrorUsers: (env('CLAMAV_ON_ERROR_USERS', 'reject').trim().toLowerCase() === 'allow' ? 'allow' : 'reject') as 'allow' | 'reject',
   /** a file over CLAMAV_MAX_SCAN_MB is not a scanner failure: decided apart, per sender (links and visitors stay strict) */

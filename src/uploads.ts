@@ -11,6 +11,7 @@ import { bad, conflict, copyTree, ensureDir, ensureSpace, forbidden, HttpError, 
 import { indexTouched } from './search-index'
 import { commitBytes, limitOf, releaseBytes, reserveBytes, restoreReservation } from './quota'
 import { JsonStore } from './store'
+import { sizeText } from './messages'
 
 type Meta = {
   id: string
@@ -131,9 +132,14 @@ const capKey = (meta: Pick<Meta, 'owner' | 'guestDay' | 'ip'>) => meta.guestDay 
 function reserveGuest(size: number, ip: string): string {
   const { day, used, limit } = guestUploadUsage()
   if (limit <= 0) throw new HttpError(429, 'upload.guest-disabled')
-  if (used + size > limit) throw new HttpError(429, 'upload.guest-quota')
+  if (used + size > limit) {
+    const left = Math.max(0, limit - used)
+    throw new HttpError(429, 'upload.guest-quota', { left, leftText: sizeText(left) })
+  }
   const pending = guestPending.get(ip) ?? 0
-  if (pending + size > Math.floor(limit / GUEST_PENDING_SHARE)) throw new HttpError(429, 'upload.guest-quota')
+  // the share caps what one address holds in uploads at once, not how big one file may be: an address with nothing
+  // waiting may send a file up to what is left of the day (it holds it only while it keeps sending, see GUEST_IDLE_MS)
+  if (pending > 0 && pending + size > Math.floor(limit / GUEST_PENDING_SHARE)) throw new HttpError(429, 'upload.guest-pending')
   guestPending.set(ip, pending + size)
   guestStore.replace({ day, bytes: used + size })
   return day

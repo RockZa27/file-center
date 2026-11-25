@@ -294,6 +294,8 @@ OFFICE_SERVER_INTERNAL_URL=http://onlyoffice
 
 compose มี service `clamav` (อิมเมจ `clamav/clamav`) เป็น profile ที่ปิดอยู่ตามค่าเริ่มต้น เปิดโดยเติม `clamav` ใน `COMPOSE_PROFILES` ใน `.env` (เช่น `COMPOSE_PROFILES=tunnel,clamav`) แล้ว `docker compose up -d` service นี้ใช้ RAM ราว 1–3 GB เก็บฐานข้อมูลไวรัสใน volume `clamav-db` ไม่เปิดพอร์ตออกนอก network ของ Docker และแอปรู้ที่อยู่ผ่าน `CLAMAV_HOST=clamav` โดยอัตโนมัติ จากนั้นเปิดสแกนที่ ระบบ → ตั้งค่า → สแกนไวรัส แล้วกดทดสอบการเชื่อมต่อ ดู [คู่มือผู้ดูแล](admin-guide.md#สแกนไวรัสด้วย-clamav) อิมเมจ ClamAV ถูกล็อกด้วย digest เหมือนอิมเมจอื่น (Dependabot ตามให้) การเปิดใช้ไม่ต้อง build อิมเมจ File Center ใหม่
 
+**ไฟล์ใหญ่:** แอปส่งไฟล์ไปสแกนได้ไม่เกิน `CLAMAV_MAX_SCAN_MB` (ค่าเริ่มต้น 1024 MB สูงสุด 2000) และ compose ตั้ง `StreamMaxLength` `MaxFileSize` `MaxScanSize` ของ clamd จากค่าเดียวกัน (ผ่านตัวแปร `CLAMD_CONF_*` ของอิมเมจ) ถ้าเปลี่ยนค่านี้ในหน้าตั้งค่าของเว็บ ให้ใส่ค่าเดียวกันใน `.env` แล้วสั่ง `docker compose up -d` เพื่อให้ clamd รับไฟล์ขนาดนั้น ไฟล์ใหญ่ใช้เวลาสแกนนานขึ้น (เวลารอต่อไฟล์ `CLAMAV_TIMEOUT_SECONDS` ค่าเริ่มต้น 300 วินาที) ไฟล์ที่ใหญ่กว่าขีดจำกัดตัดสินด้วย `CLAMAV_ON_TOO_BIG_LINKS` (ค่าเริ่มต้นปฏิเสธ) และ `CLAMAV_ON_TOO_BIG_USERS` (ค่าเริ่มต้นให้ผ่าน)
+
 ## เครื่องมือภาพตัวอย่างในอิมเมจ
 
 หน้ารายการไฟล์แสดงภาพเล็กของรูป หน้าแรกของ PDF และเฟรมหนึ่งของวิดีโอแทนไอคอนได้ สร้างโดย **เครื่องมือของระบบในอิมเมจ Docker** (ไม่ใช่ไลบรารีในแอป)

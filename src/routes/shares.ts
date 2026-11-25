@@ -11,7 +11,7 @@ import { context, need, requireStaff, requireUser } from '../context'
 import { bad, forbidden, HttpError, listDirAsync, normRel, notFound, resolveIn, storagePath, treeStats } from '../fsx'
 import { sizeText } from '../messages'
 import { nameOf, notify } from '../notify'
-import { limitOf as quotaOf, ready } from '../quota'
+import { ready } from '../quota'
 import {
   allowedShareDays, allShares, createShare, findShare, isUnlocked, kindOf, linkLockoutKey, lockoutKey, openShare, publicShare,
   recordUpload, revokeShare, type Share, SHARE_COOKIE, SHARE_LINK_LOCKOUT, SHARE_LOCKOUT, SHARE_MAX_DOWNLOADS, SHARE_MAX_FILES,
@@ -402,11 +402,12 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
       throw new HttpError(403, 'share.upload-full')
     }
     const key = visitorKey(request) ?? randomBytes(16).toString('hex')
-    // the bytes count against the owner's quota when the link is in their home space
+    // the bytes count against the owner's quota when the link is in their home space. A link is not charged to the
+    // visitors' daily allowance (that one is for anonymous uploads to the public folder): it has limits of its own,
+    // set by whoever made it or the server's defaults (per file, in total, files, per link and per address at once),
+    // and one link must not use up the allowance of the others or of the public folder
     const started = initUpload({
       owner: `share:${share.id}:${key}`,
-      // bytes nobody's quota holds (the public space, an owner without a quota) count against the visitors' daily allowance
-      guest: share.space === 'public' || !quotaOf(owner),
       quotaUser: share.space === 'home' ? owner : undefined,
       shareId: share.id,
       ip,

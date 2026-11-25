@@ -419,7 +419,8 @@ const SPEC: Record<string, Record<string, [string, Parse]>> = {
     host: ['host', (v, k) => { const s = str(253)(v, k) as string; if (!s || !/^[A-Za-z0-9.:\[\]-]+$/.test(s)) throw fail(k); return s }],
     port: ['port', int(1, 65535)],
     timeoutSeconds: ['timeoutSeconds', int(1, 600)],
-    maxScanMb: ['maxScanMb', int(1, 4096)],
+    // ClamAV can not scan a file over 2 GB
+    maxScanMb: ['maxScanMb', int(1, 2000)],
     onErrorLinks: ['onErrorLinks', oneOf('allow', 'reject')],
     onErrorUsers: ['onErrorUsers', oneOf('allow', 'reject')],
     onTooBigLinks: ['onTooBigLinks', oneOf('allow', 'reject')],

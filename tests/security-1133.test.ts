@@ -200,3 +200,30 @@ describe('unfinished uploads of a deleted account (audit run 3)', () => {
     expect((await second.json('DELETE', `/api/upload/${mine.data.id}`)).status).toBe(200)
   })
 })
+
+describe('upload-request links and the visitors\' daily allowance (2.0.0-beta.3)', () => {
+  test('a link of an owner without a quota takes a file the allowance would refuse, uses none of it, and keeps its own limits', async () => {
+    const { mkdirSync } = await import('node:fs')
+    mkdirSync(join(process.env.STORAGE_DIR!, 's133-drop'), { recursive: true })
+    const was = { daily: config.guestUploadDailyBytes, proxy: config.trustProxy }
+    const before = uploads.guestUploadUsage().used
+    // what is left of the visitors' day is far less than the file: before 2.0.0-beta.3 the link was charged to it
+    config.guestUploadDailyBytes = before + 1000
+    ;(config as any).trustProxy = 'true'
+    const ip = { 'x-forwarded-for': '198.51.100.71' }
+    try {
+      // the admin has no quota: the link is in nobody's quota (its unfinished upload is dropped by the link idle sweep)
+      const link = await admin.json('POST', '/api/shares', { space: 'home', path: '/s133-drop', days: 7, kind: 'upload', maxTotalBytes: 8000 })
+      expect(link.status).toBe(200)
+      const announce = (size: number) => new Client().json('POST', `/api/s/${link.data.token}/upload`, { name: 'big.bin', size }, ip)
+      expect((await announce(5000)).status).toBe(200)
+      expect(uploads.guestUploadUsage().used).toBe(before)
+      // the link's own total still holds (5000 announced + 4000 > 8000)
+      const full = await announce(4000)
+      expect([full.status, full.data.code]).toEqual([403, 'share.upload-full'])
+    } finally {
+      config.guestUploadDailyBytes = was.daily
+      ;(config as any).trustProxy = was.proxy
+    }
+  })
+})

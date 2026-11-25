@@ -264,7 +264,7 @@
                 <n-input-number v-model:value="f['antivirus.timeoutSeconds']" :min="1" :max="600" :precision="0" :show-button="false" :disabled="off('antivirus.timeoutSeconds')" class="ctl"><template #suffix>{{ t('settings.unit.seconds') }}</template></n-input-number>
               </setting-row>
               <setting-row v-bind="rowProps('antivirus.maxScanMb')" :label="t('settings.antivirus.maxScanMb')" :help="t('settings.antivirus.maxScanMbHelp')" @reset="reset('antivirus.maxScanMb')" @undo="undo('antivirus.maxScanMb')">
-                <n-input-number v-model:value="f['antivirus.maxScanMb']" :min="1" :max="4096" :precision="0" :show-button="false" :disabled="off('antivirus.maxScanMb')" class="ctl"><template #suffix>MB</template></n-input-number>
+                <n-input-number v-model:value="f['antivirus.maxScanMb']" :min="1" :max="2000" :precision="0" :show-button="false" :disabled="off('antivirus.maxScanMb')" class="ctl"><template #suffix>MB</template></n-input-number>
               </setting-row>
               <setting-row v-bind="rowProps('antivirus.onTooBigLinks')" :label="t('settings.antivirus.onTooBigLinks')" :help="t('settings.antivirus.onTooBigLinksHelp')" @reset="reset('antivirus.onTooBigLinks')" @undo="undo('antivirus.onTooBigLinks')">
                 <n-select v-model:value="f['antivirus.onTooBigLinks']" :options="onErrorOptions" :disabled="off('antivirus.onTooBigLinks')" class="ctl" />
@@ -354,7 +354,7 @@ const RANGE = {
   'security.sessionTtlHours': [1, 2160], 'security.loginMaxAttempts': [3, 20], 'security.loginLockoutSeconds': [30, 3600],
   'files.trashRetentionDays': [1, 365], 'files.versionsKeep': [0, 100], 'files.versionsDays': [1, 365], 'mail.port': [1, 65535],
   'auditForward.syslogPort': [1, 65535], 'auditForward.syslogFacility': [0, 23],
-  'antivirus.port': [1, 65535], 'antivirus.timeoutSeconds': [1, 600], 'antivirus.maxScanMb': [1, 4096],
+  'antivirus.port': [1, 65535], 'antivirus.timeoutSeconds': [1, 600], 'antivirus.maxScanMb': [1, 2000],
 }
 const UNIT = { sessionTtlHours: 'hours', loginMaxAttempts: 'times', loginLockoutSeconds: 'seconds', trashRetentionDays: 'days', versionsKeep: 'versions', versionsDays: 'days' }
 // the settings that live in a group of the server's answer (path = group.key), and which category shows each
