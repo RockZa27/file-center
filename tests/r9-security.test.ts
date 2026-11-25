@@ -250,14 +250,13 @@ describe('F4: upload-request links', () => {
     expect((await announce(v, t, 'c.bin', 500)).status).toBe(200)
   })
 
-  test('uploads count against the visitors\' daily allowance when no quota holds them', async () => {
+  test('uploads do not count against the visitors\' daily allowance, quota or not (2.0.0-beta.3: the link\'s own limits hold them)', async () => {
     const before = uploads.guestUploadUsage().used
     const t = await linkOf('r9noquota')
     const v = new Client()
     const a = await announce(v, t, 'a.bin', 700)
     expect(a.status).toBe(200)
-    expect(uploads.guestUploadUsage().used).toBe(before + 700)
-    // cancelling gives it back
+    expect(uploads.guestUploadUsage().used).toBe(before)
     expect((await v.json('DELETE', `/api/s/${t}/upload/${a.data.id}`)).status).toBe(200)
     expect(uploads.guestUploadUsage().used).toBe(before)
     // an owner with a quota is counted by the quota, not by the visitors' allowance
