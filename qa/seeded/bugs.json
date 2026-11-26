@@ -2012,8 +2012,8 @@
     "patches": [
       {
         "file": "src/uploads.ts",
-        "find": "const capKey = (meta: Pick<Meta, 'owner' | 'guestDay' | 'ip'>) => meta.guestDay ? `guest|${meta.ip ?? ''}` : meta.owner",
-        "replace": "const capKey = (meta: Pick<Meta, 'owner' | 'guestDay' | 'ip'>) => meta.owner"
+        "find": "const capKey = (meta: Pick<Meta, 'owner' | 'guest' | 'guestDay' | 'ip'>) => isGuest(meta) ? `guest|${meta.ip ?? ''}` : meta.owner",
+        "replace": "const capKey = (meta: Pick<Meta, 'owner' | 'guest' | 'guestDay' | 'ip'>) => meta.owner"
       },
       {
         "file": "src/uploads.ts",
@@ -2043,11 +2043,11 @@
     "category": "dos",
     "severity": "low",
     "tests": "tests/security-1132.test.ts",
-    "description": "a visitor's upload holds its share of the daily allowance for the full stale time instead of 15 minutes",
+    "description": "a visitor's unfinished upload holds its place for the full stale time instead of 15 minutes",
     "patches": [
       {
         "file": "src/uploads.ts",
-        "find": "meta.guestDay ? Math.min(config.uploadStaleMs, GUEST_IDLE_MS) : config.uploadStaleMs",
+        "find": "isGuest(meta) ? Math.min(config.uploadStaleMs, GUEST_IDLE_MS) : config.uploadStaleMs",
         "replace": "config.uploadStaleMs"
       }
     ]
@@ -2428,36 +2428,6 @@
     ]
   },
   {
-    "id": "link-charged-to-visitor-allowance",
-    "difficulty": "medium",
-    "category": "availability",
-    "severity": "medium",
-    "tests": "tests/security-1133.test.ts",
-    "description": "an upload-request link of an owner without a quota is charged to the visitors' daily allowance, so a big file is refused as 'allowance used up'",
-    "patches": [
-      {
-        "file": "src/routes/shares.ts",
-        "find": "      owner: `share:${share.id}:${key}`,\n      quotaUser:",
-        "replace": "      owner: `share:${share.id}:${key}`,\n      guest: true,\n      quotaUser:"
-      }
-    ]
-  },
-  {
-    "id": "visitor-first-upload-capped",
-    "difficulty": "easy",
-    "category": "availability",
-    "severity": "low",
-    "tests": "tests/security-1131.test.ts",
-    "description": "a visitor's single file bigger than a quarter of the day's allowance is refused even with nothing else waiting",
-    "patches": [
-      {
-        "file": "src/uploads.ts",
-        "find": "if (pending > 0 && pending + size > Math.floor(limit / GUEST_PENDING_SHARE))",
-        "replace": "if (pending + size > Math.floor(limit / GUEST_PENDING_SHARE))"
-      }
-    ]
-  },
-  {
     "id": "clamd-size-limit-is-error",
     "difficulty": "easy",
     "category": "availability",
@@ -2469,6 +2439,51 @@
         "file": "src/antivirus.ts",
         "find": "  if (/size limit exceeded/i.test(line)) return { status: 'error', reason: 'too-big' }\n",
         "replace": ""
+      }
+    ]
+  },
+  {
+    "id": "user-makes-upload-link",
+    "difficulty": "easy",
+    "category": "authz",
+    "severity": "medium",
+    "tests": "tests/security-1133.test.ts",
+    "description": "a user who is not an admin makes a file request link, opening their folder to strangers' uploads",
+    "patches": [
+      {
+        "file": "src/routes/shares.ts",
+        "find": "if (kind === 'upload' && uploadLinkPolicy.adminOnly && owner.role !== 'admin') throw forbidden('share.upload-admin-only')",
+        "replace": "if (false) throw forbidden('share.upload-admin-only')"
+      }
+    ]
+  },
+  {
+    "id": "guest-max-not-checked",
+    "difficulty": "easy",
+    "category": "availability",
+    "severity": "medium",
+    "tests": "tests/security-1131.test.ts",
+    "description": "a visitor's file bigger than the size the admin chose is accepted",
+    "patches": [
+      {
+        "file": "src/routes/upload.ts",
+        "find": "if (Number(body.size) > max) throw new HttpError(413, 'upload.guest-too-big', { max, maxText: sizeText(max) })",
+        "replace": "if (false) throw new HttpError(413, 'upload.guest-too-big', { max, maxText: sizeText(max) })"
+      }
+    ]
+  },
+  {
+    "id": "guest-upload-without-max",
+    "difficulty": "easy",
+    "category": "availability",
+    "severity": "low",
+    "tests": "tests/security-1133.test.ts",
+    "description": "visitors can be given the upload right without the admin choosing the largest file",
+    "patches": [
+      {
+        "file": "src/routes/admin.ts",
+        "find": "if (willHave.includes('upload') && !maxMb) throw bad('admin.guest-upload-max-required')",
+        "replace": "if (false) throw bad('admin.guest-upload-max-required')"
       }
     ]
   }

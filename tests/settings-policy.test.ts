@@ -271,11 +271,12 @@ describe('settings: step-up password', () => {
 
   test('visitors gaining write, upload or zip need it; read-only rights and share/files settings do not', async () => {
     for (const p of ['write', 'upload', 'zip']) {
-      const r = await put({ guestPermissions: ['read', 'download', p] })
+      // upload comes with the largest visitor file, which the admin must set (2.0.0-beta.3)
+      const r = await put({ guestPermissions: ['read', 'download', p], ...(p === 'upload' ? { guestUploadMaxMb: 10 } : {}) })
       expect([r.status, r.data.code]).toEqual([403, 'auth.wrong-password'])
       auth.clearFailures('step-up|unknown|admin')
     }
-    expect((await put(withPw({ guestPermissions: ['read', 'upload'] }))).status).toBe(200)
+    expect((await put(withPw({ guestPermissions: ['read', 'upload'], guestUploadMaxMb: 10 }))).status).toBe(200)
     // dropping or keeping a right is not a widening
     expect((await put({ guestPermissions: ['read'] })).status).toBe(200)
     expect((await put({ guestPermissions: ['read', 'download'] })).status).toBe(200)
@@ -293,7 +294,7 @@ describe('settings: step-up password', () => {
     expect(hookBodies.length).toBe(1)
     expect(hookBodies[0]).toContain('security.loginMaxAttempts')
     // the value (77) must be nowhere; the timestamps are not the value, and one like 04:47:04.977 holds "77" by chance
-    const noTimes = (s: string) => s.replace(/"(time|ts|at)":"[^"]*"/g, '')
+    const noTimes = (s: string) => s.replace(/"(time|ts|at|born)":"[^"]*"/g, '')
     expect(noTimes(hookBodies[0])).not.toContain('77')
     const log = (await admin.json('GET', '/api/admin/activity?action=settings-update')).data
     const line = JSON.stringify(log.items[0])

@@ -131,7 +131,6 @@ export const MESSAGES = {
   // ───────────── upload ─────────────
   'upload.completing': { th: 'ไฟล์นี้กำลังถูกบันทึกลงที่เก็บ จึงส่งส่วนเพิ่มหรือยกเลิกไม่ได้แล้ว', en: 'This file is being saved into place, so no more parts can be sent and it can no longer be cancelled.' },
   'upload.not-found': { th: 'ไม่พบการอัปโหลดนี้', en: 'This upload was not found.' },
-  'upload.guest-disabled': { th: 'ผู้เยี่ยมชมอัปโหลดไฟล์ไม่ได้ กรุณาเข้าสู่ระบบก่อน', en: 'Visitors cannot upload files. Please sign in first.' },
   'upload.guest-too-big': { th: 'ผู้เยี่ยมชมอัปโหลดไฟล์ได้ไม่เกิน {maxText} ต่อไฟล์', en: 'Visitors can upload files of at most {maxText} each.' },
   'admin.guest-upload-max-required': { th: 'ก่อนเปิดให้ผู้เยี่ยมชมอัปโหลด ต้องกำหนดขนาดไฟล์สูงสุดต่อไฟล์', en: 'Set the largest file a visitor may upload before letting visitors upload.' },
   'admin.guest-upload-max-range': { th: 'ขนาดไฟล์สูงสุดของผู้เยี่ยมชมต้องเป็นจำนวนเต็ม 1 ถึง {max} MB', en: 'The largest visitor file must be a whole number from 1 to {max} MB.' },

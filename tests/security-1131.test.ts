@@ -152,43 +152,30 @@ describe('a name used again after a backup restore starts clean', () => {
   })
 })
 
-describe('the visitors\' daily upload allowance', () => {
-  test('one address holds one upload at a time beyond its share, another address still announces, the day\'s total holds', async () => {
-    const was = { daily: config.guestUploadDailyBytes, proxy: config.trustProxy, perms: [...settings.get().guestPermissions] }
-    // the day's counter is shared by every test file of the run: the allowance is set from what earlier files used today
-    const { guestUploadUsage } = await import('../src/uploads')
-    const used = guestUploadUsage().used
-    const room = 2 * Math.max(4000, used) + 8
-    const limit = used + room
-    const share = Math.floor(limit / 4)
-    config.guestUploadDailyBytes = limit
+describe('visitors\' uploads: the largest file the admin set (2.0.0-beta.3, no daily allowance)', () => {
+  test('a file over it is refused with 413, one at it goes, and the size of the day does not matter', async () => {
+    const was = { proxy: config.trustProxy, perms: [...settings.get().guestPermissions], maxMb: settings.get().guestUploadMaxMb }
     ;(config as any).trustProxy = 'true'
-    settings.update({ guestPermissions: ['read', 'download', 'upload'] as any })
+    settings.update({ guestPermissions: ['read', 'download', 'upload'] as any, guestUploadMaxMb: 1 })
     const ids: [string, string][] = []
-    const visitor = async () => { const c = new Client(); c.csrf = (await c.json('GET', '/api/session')).data.csrf; return c }
-    const v = await visitor()
+    const v = new Client()
+    v.csrf = (await v.json('GET', '/api/session')).data.csrf
     const announce = async (ip: string, size: number) => {
       const r = await v.json('POST', '/api/upload', { space: 'public', path: '/', name: 's13-x.bin', size }, { 'x-forwarded-for': ip })
       if (r.status === 200) ids.push([r.data.id, ip])
       return r
     }
     try {
-      // a file bigger than an address's share goes, when that address has nothing else waiting
-      expect((await announce('192.0.2.1', share + 1)).status).toBe(200)
-      // a second one from that address waits for the first
-      const second = await announce('192.0.2.1', 1)
-      expect([second.status, second.data.code]).toEqual([429, 'upload.guest-pending'])
-      // another visitor is not locked out by the first one
-      expect((await announce('192.0.2.2', share)).status).toBe(200)
-      // and nobody goes past the day's total; the answer says how much is left
-      const over = await announce('192.0.2.3', room)
-      expect([over.status, over.data.code]).toEqual([429, 'upload.guest-quota'])
-      expect(over.data.params.left).toBe(room - share - 1 - share)
+      const over = await announce('192.0.2.1', 1024 ** 2 + 1)
+      expect([over.status, over.data.code]).toEqual([413, 'upload.guest-too-big'])
+      expect(over.data.params.max).toBe(1024 ** 2)
+      expect((await announce('192.0.2.1', 1024 ** 2)).status).toBe(200)
+      // many files from many addresses: no total for the day holds them back
+      for (let i = 2; i < 12; i++) expect((await announce(`192.0.2.${i}`, 1024 ** 2)).status).toBe(200)
     } finally {
       for (const [id, ip] of ids) await v.json('DELETE', `/api/upload/${id}`, undefined, { 'x-forwarded-for': ip })
-      config.guestUploadDailyBytes = was.daily
       ;(config as any).trustProxy = was.proxy
-      settings.update({ guestPermissions: was.perms as any })
+      settings.update({ guestPermissions: was.perms as any, guestUploadMaxMb: was.maxMb })
     }
   })
 })

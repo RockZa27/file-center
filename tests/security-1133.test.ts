@@ -2,7 +2,7 @@
  * The fixes of 1.13.3 (security audit run 3). Runs in-process on the same app as api.test.ts; every user here starts
  * with "s133-".
  */
-import { beforeAll, describe, expect, setSystemTime, test } from 'bun:test'
+import { beforeAll, describe, expect, test } from 'bun:test'
 import { join } from 'node:path'
 import { existsSync, writeFileSync } from 'node:fs'
 import './in-process-env'
@@ -102,43 +102,33 @@ describe('PROPPATCH answer size (audit run 3)', () => {
 })
 
 describe('a cancel while the upload is completing (audit run 3)', () => {
-  test('completion claims the upload: the cancel is refused, the file lands and stays counted in the visitors\' allowance', async () => {
-    const was = { perms: [...settings.get().guestPermissions], limit: config.guestUploadDailyBytes, proxy: config.trustProxy }
-    settings.update({ guestPermissions: ['read', 'download', 'upload'] as any })
-    ;(config as any).guestUploadDailyBytes = uploads.guestUploadUsage().used + 64 * 1024 ** 2
-    ;(config as any).trustProxy = 'true'
-    // on a day of its own: the file that lands stays counted (that is the point), and the tests that start from an
-    // empty allowance today must not find it there
-    setSystemTime(Date.now() + 3 * 86_400_000)
-    const ip = { 'x-forwarded-for': '198.51.100.33' }
-    const v = new Client()
-    v.csrf = (await v.json('GET', '/api/session')).data.csrf
+  test('completion claims the upload: the cancel is refused, the file lands and stays counted in the quota', async () => {
+    const quota = await import('../src/quota')
+    const { findUser } = await import('../src/auth')
+    const r = await admin.json('POST', '/api/admin/users', { username: 's133-race', name: 's133-race', password: PW, role: 'user', permissions: ['read', 'write', 'upload', 'download'], publicPermissions: [], quotaBytes: 1_000_000 })
+    expect(r.status).toBe(200)
+    const u = await new Client().login('s133-race', PW)
     const SIZE = 4096
-    try {
-      const a = await v.json('POST', '/api/upload', { space: 'public', path: '/', name: 's133-race.bin', size: SIZE }, ip)
-      expect(a.status).toBe(200)
-      const id = a.data.id as string
-      expect((await v.raw('PUT', `/api/upload/${id}/0`, new Uint8Array(SIZE), { 'content-type': 'application/octet-stream', ...ip })).status).toBe(200)
-      const counted = uploads.guestUploadUsage().used
-      // complete starts and, before it has moved the file, the same visitor cancels
-      const done = uploads.completeUpload(id, 'guest')
-      let refused: any = null
-      try { uploads.cancelUpload(id, 'guest') } catch (err) { refused = err }
-      expect(refused?.status).toBe(409)
-      expect(refused?.code).toBe('upload.completing')
-      const landed = await done
-      expect(existsSync(landed.path)).toBe(true)
-      // the bytes that landed are still counted: the cancel gave nothing back
-      expect(uploads.guestUploadUsage().used).toBe(counted)
-      // once complete, a cancel finds nothing to give back
-      expect(() => uploads.cancelUpload(id, 'guest')).toThrow()
-      expect(uploads.guestUploadUsage().used).toBe(counted)
-    } finally {
-      setSystemTime()
-      settings.update({ guestPermissions: was.perms as any })
-      ;(config as any).guestUploadDailyBytes = was.limit
-      ;(config as any).trustProxy = was.proxy
-    }
+    const a = await u.json('POST', '/api/upload', { space: 'home', path: '/', name: 'race.bin', size: SIZE })
+    expect(a.status).toBe(200)
+    const id = a.data.id as string
+    expect((await u.raw('PUT', `/api/upload/${id}/0`, new Uint8Array(SIZE), { 'content-type': 'application/octet-stream' })).status).toBe(200)
+    const me = findUser('s133-race')!
+    await quota.ready(me)
+    const held = quota.usage(me).used
+    // complete starts and, before it has moved the file, the same user cancels
+    const done = uploads.completeUpload(id, 's133-race', me)
+    let refused: any = null
+    try { uploads.cancelUpload(id, 's133-race') } catch (err) { refused = err }
+    expect(refused?.status).toBe(409)
+    expect(refused?.code).toBe('upload.completing')
+    const landed = await done
+    expect(existsSync(landed.path)).toBe(true)
+    // the bytes that landed are still counted: the cancel gave nothing back
+    expect(quota.usage(me).used).toBe(held)
+    // once complete, a cancel finds nothing to give back
+    expect(() => uploads.cancelUpload(id, 's133-race')).toThrow()
+    expect(quota.usage(me).used).toBe(held)
   })
 })
 
@@ -201,29 +191,56 @@ describe('unfinished uploads of a deleted account (audit run 3)', () => {
   })
 })
 
-describe('upload-request links and the visitors\' daily allowance (2.0.0-beta.3)', () => {
-  test('a link of an owner without a quota takes a file the allowance would refuse, uses none of it, and keeps its own limits', async () => {
+describe('who opens uploads to outsiders, and how big a file (2.0.0-beta.3)', () => {
+  test('only an admin makes a file request link; the link keeps its own limits and is not held by a daily total', async () => {
     const { mkdirSync } = await import('node:fs')
     mkdirSync(join(process.env.STORAGE_DIR!, 's133-drop'), { recursive: true })
-    const was = { daily: config.guestUploadDailyBytes, proxy: config.trustProxy }
-    const before = uploads.guestUploadUsage().used
-    // what is left of the visitors' day is far less than the file: before 2.0.0-beta.3 the link was charged to it
-    config.guestUploadDailyBytes = before + 1000
+    const was = config.trustProxy
     ;(config as any).trustProxy = 'true'
-    const ip = { 'x-forwarded-for': '198.51.100.71' }
     try {
-      // the admin has no quota: the link is in nobody's quota (its unfinished upload is dropped by the link idle sweep)
+      // a user with the share and upload rights in their home: download links yes, request links no
+      const u = await userWith('s133-linker', ['read', 'write', 'upload', 'download', 'share'])
+      const { mkdirSync: mk } = await import('node:fs')
+      mk(home('s133-linker', 'in'), { recursive: true })
+      const refused = await u.json('POST', '/api/shares', { space: 'home', path: '/in', days: 7, kind: 'upload' })
+      expect([refused.status, refused.data.code]).toEqual([403, 'share.upload-admin-only'])
+      expect((await u.json('POST', '/api/shares', { space: 'home', path: '/in', days: 7 })).status).toBe(200)
+      // the admin can, and the link's own limits hold
       const link = await admin.json('POST', '/api/shares', { space: 'home', path: '/s133-drop', days: 7, kind: 'upload', maxTotalBytes: 8000 })
       expect(link.status).toBe(200)
-      const announce = (size: number) => new Client().json('POST', `/api/s/${link.data.token}/upload`, { name: 'big.bin', size }, ip)
+      const announce = (size: number) => new Client().json('POST', `/api/s/${link.data.token}/upload`, { name: 'big.bin', size }, { 'x-forwarded-for': '198.51.100.71' })
       expect((await announce(5000)).status).toBe(200)
-      expect(uploads.guestUploadUsage().used).toBe(before)
-      // the link's own total still holds (5000 announced + 4000 > 8000)
       const full = await announce(4000)
       expect([full.status, full.data.code]).toEqual([403, 'share.upload-full'])
     } finally {
-      config.guestUploadDailyBytes = was.daily
-      ;(config as any).trustProxy = was.proxy
+      ;(config as any).trustProxy = was
+    }
+  })
+
+  test('visitors can upload only once the admin set the largest file; making it bigger asks for the password, smaller does not', async () => {
+    const was = { perms: [...settings.get().guestPermissions], maxMb: settings.get().guestUploadMaxMb }
+    const ADMIN_PW = process.env.ADMIN_PASSWORD!
+    const put = (body: Record<string, unknown>) => admin.json('PUT', '/api/admin/settings', body)
+    try {
+      settings.update({ guestPermissions: ['read', 'download'] as any, guestUploadMaxMb: null })
+      const noMax = await put({ guestPermissions: ['read', 'download', 'upload'], password: ADMIN_PW })
+      expect([noMax.status, noMax.data.code]).toEqual([400, 'admin.guest-upload-max-required'])
+      for (const bad of [0, -1, 1.5, 10 ** 9]) {
+        const r = await put({ guestPermissions: ['read', 'download', 'upload'], guestUploadMaxMb: bad, password: ADMIN_PW })
+        expect([bad, r.status, r.data.code]).toEqual([bad, 400, 'admin.guest-upload-max-range'])
+      }
+      const on = await put({ guestPermissions: ['read', 'download', 'upload'], guestUploadMaxMb: 100, password: ADMIN_PW })
+      expect(on.status).toBe(200)
+      expect(on.data.guestUploadMaxMb).toBe(100)
+      // the size can not be taken away while visitors may upload
+      expect((await put({ guestUploadMaxMb: null })).data.code).toBe('admin.guest-upload-max-required')
+      // bigger: the password again; smaller: not
+      expect((await put({ guestUploadMaxMb: 200 })).data.code).toBe('auth.wrong-password')
+      expect((await put({ guestUploadMaxMb: 200, password: ADMIN_PW })).status).toBe(200)
+      expect((await put({ guestUploadMaxMb: 50 })).status).toBe(200)
+      expect(settings.get().guestUploadMaxMb).toBe(50)
+    } finally {
+      settings.update({ guestPermissions: was.perms as any, guestUploadMaxMb: was.maxMb })
     }
   })
 })

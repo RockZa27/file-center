@@ -9,11 +9,11 @@ export const releases = [
     version: '2.0.0-beta.3',
     items: [
       {
-        id: '203-upload-links', icon: 'upload', roles: ['user'],
-        title: { th: 'ลิงก์ขอรับไฟล์ไม่ติดโควตาผู้เยี่ยมชม', en: 'Upload links no longer use the visitor allowance' },
+        id: '203-upload-links', icon: 'upload', roles: ['admin'], to: { name: 'settings' },
+        title: { th: 'การเปิดให้คนนอกอัปโหลด: ไม่มีโควตารายวัน ผู้ดูแลกำหนดขนาดไฟล์', en: 'Uploads from outsiders: no daily allowance, the admin sets the file size' },
         text: {
-          th: 'ไฟล์ที่คนนอกส่งผ่านลิงก์ขอรับไฟล์ไม่นับกับโควตารายวันของผู้เยี่ยมชมแล้ว ใช้ข้อจำกัดที่ตั้งไว้ในลิงก์ (ขนาดต่อไฟล์ ขนาดรวม จำนวนไฟล์) และโควตาของเจ้าของลิงก์ถ้ามี ผู้เยี่ยมชมที่อัปโหลดเข้าพื้นที่ public ส่งไฟล์ใหญ่ได้ทีละไฟล์ และข้อความบอกว่าเหลือโควตาเท่าไร',
-          en: 'Files that outsiders send through an upload link no longer count against the visitors\' daily allowance. The link\'s own limits apply (size per file, total, number of files), plus the owner\'s quota if they have one. Visitors uploading to the public folder can send one big file at a time, and the message says how much of the day is left.',
+          th: 'ไม่มีโควตารายวันของผู้เยี่ยมชมแล้ว ก่อนเปิดสิทธิ์อัปโหลดให้ผู้เยี่ยมชมในหน้าตั้งค่า ต้องกำหนดขนาดไฟล์สูงสุดต่อไฟล์ (ถ้าเคยเปิดไว้แล้ว ให้ไปกำหนดค่านี้ ระหว่างนั้นใช้ขนาดอัปโหลดสูงสุดของระบบ) ลิงก์ขอรับไฟล์สร้างได้เฉพาะผู้ดูแลระบบ ลิงก์ที่ผู้ใช้สร้างไว้ก่อนหน้ายังใช้ได้จนหมดอายุ',
+          en: 'There is no daily visitor allowance any more. Before turning on uploads for visitors in Settings, set the largest file a visitor may upload (if they could already upload, set it now; until then the general upload limit applies). Only administrators can create file request links; links users made before keep working until they end.',
         },
       },
       {

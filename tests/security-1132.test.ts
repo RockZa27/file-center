@@ -418,17 +418,17 @@ describe('visitors\' unfinished uploads (audit run 2)', () => {
   const asVisitor = async () => { const c = new Client(); c.csrf = (await c.json('GET', '/api/session')).data.csrf; return c }
   const from = (ip: string) => ({ 'x-forwarded-for': ip })
   const announce = (c: Client, ip: string, size: number, name = 'v.bin') => c.json('POST', '/api/upload', { space: 'public', path: '/', name, size }, from(ip))
-  const gset = (v: { perms: string[]; limit: number; proxy: string; pending: number }) => {
-    settings.update({ guestPermissions: v.perms as any })
-    ;(config as any).guestUploadDailyBytes = v.limit
+  // no daily allowance since 2.0.0-beta.3: the largest file (set by the admin) and the cap on unfinished uploads hold visitors
+  const gset = (v: { perms: string[]; maxMb: number | null; proxy: string; pending: number }) => {
+    settings.update({ guestPermissions: v.perms as any, guestUploadMaxMb: v.maxMb })
     ;(config as any).trustProxy = v.proxy
     ;(config as any).uploadMaxPending = v.pending
   }
-  const saved = () => ({ perms: [...settings.get().guestPermissions], limit: config.guestUploadDailyBytes, proxy: config.trustProxy as string, pending: config.uploadMaxPending })
+  const saved = () => ({ perms: [...settings.get().guestPermissions], maxMb: settings.get().guestUploadMaxMb, proxy: config.trustProxy as string, pending: config.uploadMaxPending })
 
   test('the cap on unfinished uploads counts per address for visitors; another address still announces', async () => {
     const was = saved()
-    gset({ perms: ['read', 'download', 'upload'], limit: uploads.guestUploadUsage().used + 1024 ** 3, proxy: 'true', pending: 3 })
+    gset({ perms: ['read', 'download', 'upload'], maxMb: 1024, proxy: 'true', pending: 3 })
     const a = await asVisitor()
     const b = await asVisitor()
     const ids: string[] = []
@@ -454,10 +454,11 @@ describe('visitors\' unfinished uploads (audit run 2)', () => {
     }
   })
 
-  test('four addresses holding limit/4 each: rewriting a received chunk does not keep the hold; the idle limit releases it', async () => {
+  test('an address at its cap: rewriting a received chunk does not keep the places; the idle limit releases them', async () => {
     const was = saved()
     const SIZE = 2 * config.uploadChunkSize
-    gset({ perms: ['read', 'download', 'upload'], limit: uploads.guestUploadUsage().used + 4 * SIZE, proxy: 'true', pending: 500 })
+    // four addresses with one unfinished upload each, each at its cap of one
+    gset({ perms: ['read', 'download', 'upload'], maxMb: 1024, proxy: 'true', pending: 1 })
     const chunk = new Uint8Array(config.uploadChunkSize)
     const t0 = Date.now()
     const held: { c: Client; ip: string; id: string }[] = []
@@ -469,20 +470,23 @@ describe('visitors\' unfinished uploads (audit run 2)', () => {
         expect(r.status).toBe(200)
         held.push({ c, ip, id: r.data.id })
       }
-      const v = await asVisitor()
-      expect((await announce(v, '10.9.0.5', 1024)).status).toBe(429)
+      // a second upload from an address at its cap waits
+      const v = held[0].c
+      const busy = (ip: string) => announce(v, ip, 1024, 'second.bin')
+      expect((await busy('10.9.0.1')).status).toBe(429)
       const put = (h: (typeof held)[number], i: number) => h.c.raw('PUT', `/api/upload/${h.id}/${i}`, chunk, { ...OCTET, ...from(h.ip) })
       // real progress at +10 min, then the same chunk again at +20 and +30 min
       setSystemTime(t0 + 10 * 60_000)
       for (const h of held) expect((await put(h, 0)).status).toBe(200)
       setSystemTime(t0 + 20 * 60_000)
       for (const h of held) expect((await put(h, 0)).status).toBe(200)
-      expect((await announce(v, '10.9.0.5', 1024)).status).toBe(429)
+      expect((await busy('10.9.0.1')).status).toBe(429)
       setSystemTime(t0 + 30 * 60_000)
       for (const h of held) expect((await put(h, 0)).status).toBe(200)
-      const free = await announce(v, '10.9.0.5', 1024)
+      // no new bytes for 20 minutes: the places are free again
+      const free = await busy('10.9.0.1')
       expect(free.status).toBe(200)
-      await v.json('DELETE', `/api/upload/${free.data.id}`, undefined, from('10.9.0.5'))
+      await v.json('DELETE', `/api/upload/${free.data.id}`, undefined, from('10.9.0.1'))
       // the dropped uploads are gone
       expect((await held[0].c.json('PUT', `/api/upload/${held[0].id}/1`, undefined, from(held[0].ip))).status).toBe(404)
     } finally {
@@ -494,7 +498,7 @@ describe('visitors\' unfinished uploads (audit run 2)', () => {
 
   test('an upload that keeps sending new chunks is not released', async () => {
     const was = saved()
-    gset({ perms: ['read', 'download', 'upload'], limit: uploads.guestUploadUsage().used + 1024 ** 3, proxy: 'true', pending: 500 })
+    gset({ perms: ['read', 'download', 'upload'], maxMb: 1024, proxy: 'true', pending: 500 })
     const c = await asVisitor()
     const ip = '10.9.1.1'
     const t0 = Date.now()

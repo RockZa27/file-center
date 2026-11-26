@@ -1537,87 +1537,33 @@ describe('reserved username: guest', () => {
   })
 })
 
-describe('hardening: visitors\' daily upload allowance', () => {
+describe('visitors\' uploads (2.0.0-beta.3: no daily allowance, the admin sets the largest file)', () => {
   const announce = (c: Client, size: number, name = 'guest.bin') => c.json('POST', '/api/upload', { space: 'public', path: '/', name, size })
 
-  test('shared by all visitors, counted on announce, given back when cancelled or left unfinished', async () => {
-    const { config, paths } = await import('../src/config')
-    const { cleanStaleUploads, guestUploadUsage } = await import('../src/uploads')
-    const { JsonStore } = await import('../src/store')
-    const { utimesSync, readFileSync } = await import('node:fs')
-    const keep = config.guestUploadDailyBytes
-    await admin.json('PUT', '/api/admin/settings', { guestPermissions: ['read', 'download', 'batchdownload', 'upload'], password: 'test-admin-pass' })
-    const v1 = new Client()
-    const v2 = new Client()
-    await v1.start()
-    await v2.start()
-    // some of today's allowance used already, whatever ran before: one address may hold only a quarter of the
-    // allowance in unfinished uploads, so with nothing used a limit of 100 would let no 40-byte upload through
-    config.guestUploadDailyBytes = guestUploadUsage().used + 10_000
-    const warm = await announce(v1, 400, 'warm.bin')
-    expect(warm.status).toBe(200)
-    expect((await putChunk(v1, warm.data.id, 0, new Uint8Array(400))).status).toBe(200)
-    expect((await v1.json('POST', `/api/upload/${warm.data.id}/complete`)).status).toBe(200)
-    config.guestUploadDailyBytes = guestUploadUsage().used + 100
+  test('visitors send files up to the size the admin chose, as many as they like; signed-in people are not held to it', async () => {
+    const on = await admin.json('PUT', '/api/admin/settings', { guestPermissions: ['read', 'download', 'batchdownload', 'upload'], guestUploadMaxMb: 1, password: 'test-admin-pass' })
+    expect(on.status).toBe(200)
+    const v = new Client()
+    await v.start()
     try {
-      // announced at the same time, they still can not go past the allowance together
-      const all = await Promise.all([v1, v2, v1, v2, v1].map(c => announce(c, 40)))
-      expect(all.map(r => r.status).sort()).toEqual([200, 200, 429, 429, 429])
-      expect(all.find(r => r.status === 429)!.data.error).toMatch(/[฀-๿]/)
-      // signed-in people do not count and are not limited
-      const signedIn = await admin.json('POST', '/api/upload', { space: 'public', path: '/', name: 'admin.bin', size: 1000 })
+      // one file at the limit, then another and another: no total for the day
+      for (let i = 0; i < 3; i++) {
+        const r = await announce(v, 1024 ** 2, `g${i}.bin`)
+        expect(r.status).toBe(200)
+        expect((await v.json('DELETE', `/api/upload/${r.data.id}`)).status).toBe(200)
+      }
+      const big = await announce(v, 1024 ** 2 + 1)
+      expect([big.status, big.data.code]).toEqual([413, 'upload.guest-too-big'])
+      expect(big.data.error).toMatch(/[฀-๿]/)
+      // signed-in people are held to their own rules, not the visitors' size
+      const signedIn = await admin.json('POST', '/api/upload', { space: 'public', path: '/', name: 'admin.bin', size: 2 * 1024 ** 2 })
       expect(signedIn.status).toBe(200)
-      expect((await announce(v1, 40)).status).toBe(429)
-
-      const [a, b] = all.filter(r => r.status === 200).map(r => r.data.id as string)
-      const ownerOf = (id: string) => all.indexOf(all.find(r => r.data?.id === id)!) % 2 ? v2 : v1
-      // cancelled: given back
-      expect((await ownerOf(a).json('DELETE', `/api/upload/${a}`)).status).toBe(200)
-      const d = await announce(v1, 40)
-      expect(d.status).toBe(200)
-      expect((await announce(v2, 40)).status).toBe(429)
-      // completed: stays counted
-      expect((await putChunk(ownerOf(b), b, 0, new Uint8Array(40))).status).toBe(200)
-      expect((await ownerOf(b).json('POST', `/api/upload/${b}/complete`)).status).toBe(200)
-      expect((await announce(v2, 40)).status).toBe(429)
-      // never completed: given back when the stale upload is cleaned up
-      const old = new Date(Date.now() - config.uploadStaleMs - 60_000)
-      utimesSync(join(paths.tmp, d.data.id, 'meta.json'), old, old)
-      cleanStaleUploads()
-      expect((await announce(v2, 40)).status).toBe(200)
-      // the count is kept in DATA_DIR
-      await JsonStore.flushAll()
-      const stored = JSON.parse(readFileSync(paths.guestUploads, 'utf8'))
-      expect(stored).toEqual({ day: guestUploadUsage().day, bytes: guestUploadUsage().used })
-      expect(guestUploadUsage().used).toBe(config.guestUploadDailyBytes - 20)
-
-      // 0 = visitors can not upload at all
-      config.guestUploadDailyBytes = 0
-      expect((await announce(v1, 0)).status).toBe(429)
-      expect((await admin.json('POST', '/api/upload', { space: 'public', path: '/', name: 'admin.bin', size: 1 })).status).toBe(200)
+      expect((await admin.json('DELETE', `/api/upload/${signedIn.data.id}`)).status).toBe(200)
     } finally {
-      config.guestUploadDailyBytes = keep
       await admin.json('PUT', '/api/admin/settings', { guestPermissions: ['read', 'download', 'batchdownload'] })
     }
-  })
-  test('the count survives a restart and starts again the next day', () => {
-    const dir = join(base, 'guest-quota-restart')
-    mkdirSync(dir, { recursive: true })
-    const pad = (n: number) => String(n).padStart(2, '0')
-    const dayOf = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-    const usageAfterStart = (stored: unknown) => {
-      writeFileSync(join(dir, 'guest-uploads.json'), JSON.stringify(stored))
-      const code = `const { guestUploadUsage } = await import(${JSON.stringify(join(import.meta.dir, '..', 'src', 'uploads.ts'))}); console.log(JSON.stringify(guestUploadUsage()))`
-      const r = Bun.spawnSync([process.execPath, '-e', code], {
-        env: { ...process.env, DATA_DIR: dir, STORAGE_DIR: join(dir, 'storage'), GUEST_UPLOAD_DAILY_BYTES: '500' },
-      })
-      expect(r.exitCode).toBe(0)
-      return JSON.parse(r.stdout.toString().trim().split('\n').at(-1)!)
-    }
-    const today = new Date()
-    expect(usageAfterStart({ day: dayOf(today), bytes: 300 })).toEqual({ day: dayOf(today), used: 300, limit: 500 })
-    const yesterday = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 1, 12)
-    expect(usageAfterStart({ day: dayOf(yesterday), bytes: 300 }).used).toBe(0)
+    // without the upload right a visitor can not announce at all (asked to sign in)
+    expect((await announce(v, 1)).status).toBe(401)
   })
 })
 
