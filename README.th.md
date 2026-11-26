@@ -162,3 +162,7 @@ bun start          # เปิดที่ http://localhost:3000
 | [คู่มือนักพัฒนา](docs/development.md) | โครงสร้างโค้ด QA และ CI benchmark การออกรุ่นที่เซ็นแล้ว ความต่างจาก FileGator และอ้างอิง API |
 
 อ่านเป็นภาษาอังกฤษ: [README.md](README.md)
+
+## สัญญาอนุญาต
+
+[MIT](LICENSE)
