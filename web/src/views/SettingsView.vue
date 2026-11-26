@@ -79,6 +79,11 @@
                     <n-checkbox v-for="k in ADVANCED" :key="k" :checked="hasPerm(k)" :label="t(`perm.${k}`)" @update:checked="v => setPerm(k, v)" />
                   </div>
                   <div class="muted help-s">{{ t('settings.guestAdvancedHelp') }}</div>
+                  <setting-row v-if="hasPerm('upload')" :label="t('settings.guestUploadMax')" :help="t('settings.guestUploadMaxHelp')" :changed="isChanged('guestUploadMaxMb')" :error="errorOf('guestUploadMaxMb')" for-id="s-gmax">
+                    <n-input-number :input-props="{ id: 's-gmax' }" v-model:value="f.guestUploadMaxMb" :min="1" :max="guestMaxCeiling" :precision="0" :show-button="false" class="ctl">
+                      <template #suffix>MB</template>
+                    </n-input-number>
+                  </setting-row>
                 </n-collapse-item>
               </n-collapse>
             </section>
@@ -346,7 +351,7 @@ const CATS = [
   { id: 'mail', icon: MailOutline },
   { id: 'antivirus', icon: BugOutline },
 ]
-const FLAT = ['appName', 'primaryColor', 'welcomeTitle', 'welcomeText', 'publicEmptyText', 'publicEnabled']
+const FLAT = ['appName', 'primaryColor', 'welcomeTitle', 'welcomeText', 'publicEmptyText', 'publicEnabled', 'guestUploadMaxMb']
 const SECURITY_NUMBERS = ['sessionTtlHours', 'loginMaxAttempts', 'loginLockoutSeconds']
 const FILE_NUMBERS = ['trashRetentionDays', 'versionsKeep', 'versionsDays']
 // the same limits as the server (src/policy.ts)
@@ -367,7 +372,7 @@ const GROUPED = {
   auditForward: ['syslogHost', 'syslogPort', 'syslogProto', 'syslogFacility', 'webhookUrl', 'webhookSecret'],
   antivirus: ['enabled', 'host', 'port', 'timeoutSeconds', 'maxScanMb', 'onTooBigLinks', 'onTooBigUsers', 'onErrorLinks', 'onErrorUsers'],
 }
-const CAT_OF = { appName: 'general', primaryColor: 'general', guestPermissions: 'public', welcomeTitle: 'public', welcomeText: 'public', publicEmptyText: 'public', publicEnabled: 'public', share: 'share', security: 'security', files: 'files', mail: 'mail', alerts: 'mail', auditForward: 'mail', antivirus: 'antivirus' }
+const CAT_OF = { appName: 'general', primaryColor: 'general', guestPermissions: 'public', guestUploadMaxMb: 'public', welcomeTitle: 'public', welcomeText: 'public', publicEmptyText: 'public', publicEnabled: 'public', share: 'share', security: 'security', files: 'files', mail: 'mail', alerts: 'mail', auditForward: 'mail', antivirus: 'antivirus' }
 const catOfPath = p => CAT_OF[p.includes('.') ? p.split('.')[0] : p]
 // never shown back: a blank box means "keep what is there"
 const WRITE_ONLY = ['mail.pass', 'alerts.webhookUrl', 'auditForward.webhookUrl', 'auditForward.webhookSecret']
@@ -416,7 +421,7 @@ function valuesOf(s) {
   const v = {
     appName: s.appName, primaryColor: s.primaryColor, publicEnabled: s.publicEnabled,
     welcomeTitle: own(s.welcomeTitle, 'stdWelcomeTitle'), welcomeText: own(s.welcomeText, 'stdWelcomeText'), publicEmptyText: own(s.publicEmptyText, 'stdEmptyText'),
-    guestPermissions: [...s.guestPermissions],
+    guestPermissions: [...s.guestPermissions], guestUploadMaxMb: s.guestUploadMaxMb ?? null,
   }
   for (const [g, keys] of Object.entries(GROUPED)) {
     for (const k of keys) v[`${g}.${k}`] = WRITE_ONLY.includes(`${g}.${k}`) ? '' : s[g][k].value
@@ -489,11 +494,18 @@ function localError(p) {
   if (p === 'auditForward.syslogPort' && !f[p]) return t('settings.required')
   if ((p === 'antivirus.port' || p === 'antivirus.timeoutSeconds' || p === 'antivirus.maxScanMb') && !f[p]) return t('settings.required')
   if (p === 'antivirus.host' && !String(f[p] || '').trim()) return t('settings.required')
+  // visitors' uploads: the admin chooses the largest file before turning them on (there is no daily total)
+  if (p === 'guestUploadMaxMb' && hasPerm('upload')) {
+    if (!f[p]) return t('settings.required')
+    if (f[p] < 1 || f[p] > guestMaxCeiling.value) return t('settings.range', { min: 1, max: guestMaxCeiling.value })
+  }
   return ''
 }
 const errorOf = p => serverErrors.value[p] || localError(p)
 const rowProps = p => ({ source: sourceOf(p), error: errorOf(p), changed: isChanged(p), resetting: resets.value.includes(p) })
-const hasErrors = computed(() => ready.value && ALL_PATHS.some(p => p.includes('.') && errorOf(p)))
+const checked = p => p.includes('.') || p === 'guestUploadMaxMb'
+const hasErrors = computed(() => ready.value && ALL_PATHS.some(p => checked(p) && errorOf(p)))
+const guestMaxCeiling = computed(() => Math.floor((srv.value?.files?.uploadMaxSizeCeiling ?? 1024 ** 4) / 1024 ** 2))
 
 const hasPerm = k => f.guestPermissions.includes(k)
 function setPerm(k, on) {
@@ -508,7 +520,9 @@ const warn2fa = computed(() => ready.value && isChanged('security.require2fa') &
 // ───────── save ─────────
 const needsPassword = computed(() => changedPaths.value.some(p => p.startsWith('security.') || p.startsWith('mail.') || p.startsWith('alerts.') || p.startsWith('auditForward.') || p.startsWith('antivirus.') || p.startsWith('share.'))
   || (f.publicEnabled && !orig.publicEnabled)
-  || ADVANCED.some(p => hasPerm(p) && !orig.guestPermissions.includes(p)))
+  || ADVANCED.some(p => hasPerm(p) && !orig.guestPermissions.includes(p))
+  // a bigger file for visitors is a widening too
+  || (hasPerm('upload') && orig.guestPermissions.includes('upload') && f.guestUploadMaxMb !== orig.guestUploadMaxMb && (orig.guestUploadMaxMb === null || f.guestUploadMaxMb > orig.guestUploadMaxMb)))
 
 function toApi(p) {
   if (p === 'files.defaultQuotaBytes') return f.quotaUnlimited ? 0 : f[p]
@@ -528,7 +542,7 @@ async function save() {
   if (saving.value || !count.value) return
   serverErrors.value = {}
   if (hasErrors.value) {
-    const first = ALL_PATHS.find(p => p.includes('.') && errorOf(p))
+    const first = ALL_PATHS.find(p => checked(p) && errorOf(p))
     cat.value = catOfPath(first)
     return fb.fail(null, t('settings.fixErrors'))
   }
@@ -576,6 +590,10 @@ async function send(password) {
         f.quotaUnlimited = keptUnlimited
       } catch { /* the message below still tells what happened; the page keeps its unsaved edits */ }
       fb.fail(e)
+    } else if (e.code === 'admin.guest-upload-max-required' || e.code === 'admin.guest-upload-max-range') {
+      pwOpen.value = false
+      serverErrors.value = { guestUploadMaxMb: errorText(e) }
+      cat.value = 'public'
     } else if (e.code === 'admin.upload-over-ceiling') {
       pwOpen.value = false
       serverErrors.value = { 'files.uploadMaxSize': t('settings.files.overCeiling', { max: bytesText(e.params?.max ?? srv.value.files.uploadMaxSizeCeiling) }) }

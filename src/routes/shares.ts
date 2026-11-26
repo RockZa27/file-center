@@ -143,6 +143,12 @@ function limitOf(input: number | null | undefined, max: number): number | null {
   return input
 }
 
+/**
+ * Only an admin makes a file request link (2.0.0-beta.3). Tests of what a link does once it exists (links users made
+ * before) turn this off for their own file and back on after; nothing else changes it.
+ */
+export const uploadLinkPolicy = { adminOnly: true }
+
 export const shareRoutes = new Elysia({ prefix: '/api' })
   .use(context)
 
@@ -160,6 +166,9 @@ export const shareRoutes = new Elysia({ prefix: '/api' })
     // visitors never make links, whatever the guest permissions say
     const owner = requireUser({ user, ip })
     const kind = body.kind ?? 'download'
+    // a file request link lets strangers put files on the server: only an admin opens that (since 2.0.0-beta.3; links
+    // made before keep working until they end)
+    if (kind === 'upload' && uploadLinkPolicy.adminOnly && owner.role !== 'admin') throw forbidden('share.upload-admin-only')
     const a = need({ user, ip }, body.space, 'share', kind === 'upload' ? 'upload' : 'download')
     const rel = normRel(body.path)
     if (rel === '/') throw bad('files.root-item')

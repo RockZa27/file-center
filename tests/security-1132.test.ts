@@ -10,6 +10,10 @@ import { join, resolve } from 'node:path'
 import { deflateSync } from 'node:zlib'
 import './in-process-env'
 
+// links that users made before 2.0.0-beta.3 (only an admin makes a new one): this file tests what such a link does
+beforeAll(async () => { (await import('../src/routes/shares')).uploadLinkPolicy.adminOnly = false })
+afterAll(async () => { (await import('../src/routes/shares')).uploadLinkPolicy.adminOnly = true })
+
 let app: any
 let config: typeof import('../src/config').config
 let paths: typeof import('../src/config').paths

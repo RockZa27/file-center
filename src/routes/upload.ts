@@ -1,7 +1,10 @@
 import { Elysia, t } from 'elysia'
 import { audit } from '../audit'
 import { context, need } from '../context'
-import { bad, normRel, storagePath } from '../fsx'
+import { bad, HttpError, normRel, storagePath } from '../fsx'
+import { sizeText } from '../messages'
+import * as policy from '../policy'
+import { settings } from '../settings'
 import { quotaUserOf, ready } from '../quota'
 import { cancelUpload, checkUpload, completeUpload, initUpload, receivedChunks, saveChunk } from '../uploads'
 
@@ -22,6 +25,13 @@ export const uploadRoutes = new Elysia({ prefix: '/api/upload' })
     const relDir = (body.relativeDir ?? '').split('/').filter(Boolean)
     if (relDir.length > 30) throw bad('upload.too-deep')
     // only a home space (or a folder shared with the caller: the owner's quota) counts against a quota; the count is awaited here so the reservation itself needs no await
+    // a visitor's file is held to the largest size the admin chose when opening the public folder to uploads (a setting
+    // from before 2.0.0-beta.3 has none yet: the general upload limit then)
+    if (!user) {
+      const mb = settings.get().guestUploadMaxMb
+      const max = mb ? mb * 1024 ** 2 : policy.uploadMaxSize()
+      if (Number(body.size) > max) throw new HttpError(413, 'upload.guest-too-big', { max, maxText: sizeText(max) })
+    }
     const quotaUser = quotaUserOf(a, user) ?? undefined
     await ready(quotaUser)
     return initUpload({

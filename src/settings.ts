@@ -61,6 +61,8 @@ export type Settings = {
   publicEnabled: boolean
   /** what a visitor may do in the public folder */
   guestPermissions: Perm[]
+  /** the largest file a visitor may upload, in MB: an admin sets it when giving visitors `upload` (null: not set yet) */
+  guestUploadMaxMb: number | null
   logo: string | null
   backup: BackupPrefs
   share?: SharePrefs
@@ -88,6 +90,7 @@ const defaults = (): Settings => ({
   // PUBLIC_PAGE=off only matters for a fresh install: an existing settings.json keeps its own value (defaults fill missing keys only)
   publicEnabled: !config.publicPageOff,
   guestPermissions: ['read', 'download', 'batchdownload'],
+  guestUploadMaxMb: null,
   logo: null,
   backup: {},
 })

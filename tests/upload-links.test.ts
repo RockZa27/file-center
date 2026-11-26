@@ -2,10 +2,14 @@
  * Upload-request links: someone without an account sends files into one folder of a user. Runs in-process on the
  * same app as api.test.ts (see in-process-env.ts); every user here starts with "ul-".
  */
-import { afterEach, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, readdirSync, readFileSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import './in-process-env'
+
+// links that users made before 2.0.0-beta.3 (only an admin makes a new one): this file tests what such a link does
+beforeAll(async () => { (await import('../src/routes/shares')).uploadLinkPolicy.adminOnly = false })
+afterAll(async () => { (await import('../src/routes/shares')).uploadLinkPolicy.adminOnly = true })
 
 let app: any
 let config: typeof import('../src/config').config

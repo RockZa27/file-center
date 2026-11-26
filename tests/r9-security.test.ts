@@ -4,10 +4,14 @@
  * default limits, the visitors' daily allowance and a short idle time. Runs in-process on the shared app
  * (see in-process-env.ts); every user and address here starts with "r9".
  */
-import { afterEach, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, readdirSync, utimesSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import './in-process-env'
+
+// links that users made before 2.0.0-beta.3 (only an admin makes a new one): this file tests what such a link does
+beforeAll(async () => { (await import('../src/routes/shares')).uploadLinkPolicy.adminOnly = false })
+afterAll(async () => { (await import('../src/routes/shares')).uploadLinkPolicy.adminOnly = true })
 
 let app: any
 let config: typeof import('../src/config').config

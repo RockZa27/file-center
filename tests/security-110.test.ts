@@ -3,10 +3,14 @@
  * uploads that outlive their rights and user-name guessing. (The notification floods are in notify.test.ts, which has
  * the stand-in mail and LINE servers.) Runs in-process on the same app as api.test.ts; every user here starts with "sc-".
  */
-import { beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import './in-process-env'
+
+// links that users made before 2.0.0-beta.3 (only an admin makes a new one): this file tests what such a link does
+beforeAll(async () => { (await import('../src/routes/shares')).uploadLinkPolicy.adminOnly = false })
+afterAll(async () => { (await import('../src/routes/shares')).uploadLinkPolicy.adminOnly = true })
 
 let app: any
 let paths: typeof import('../src/config').paths

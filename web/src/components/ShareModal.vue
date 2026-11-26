@@ -162,7 +162,8 @@ const linkInput = ref(null)
 
 // a download link needs `download` here, a request link `upload` and a folder
 const canDownload = computed(() => store.can(props.space, 'download'))
-const canRequest = computed(() => props.item?.type === 'dir' && store.can(props.space, 'upload'))
+// a file request link lets strangers put files on the server: only an admin makes one (2.0.0-beta.3)
+const canRequest = computed(() => props.item?.type === 'dir' && store.user?.role === 'admin' && store.can(props.space, 'upload'))
 const kindOk = computed(() => (kind.value === 'upload' ? canRequest.value : canDownload.value))
 const isUpload = computed(() => kind.value === 'upload')
 const noteLength = computed(() => Array.from(note.value.trim()).length)

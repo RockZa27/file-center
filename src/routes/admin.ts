@@ -18,7 +18,7 @@ import { langOf, type MessageCode, type Params, text } from '../messages'
 import type { User } from '../auth'
 import { cleanQuota, forget, usage } from '../quota'
 import { logoExt, settings } from '../settings'
-import { lockedKeysIn, policyView, savePolicy, STEP_UP_GROUPS } from '../policy'
+import { lockedKeysIn, policyView, savePolicy, STEP_UP_GROUPS, UPLOAD_CEILING } from '../policy'
 import { forgetAccount } from '../account-records'
 import { DISK_CRITICAL_PERCENT, DISK_LOW_PERCENT, diskInfo, storageStats } from '../stats'
 import { removeAppPasswordsOf } from '../app-passwords'
@@ -534,6 +534,7 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
       welcomeTitle: t.Optional(t.String()), welcomeText: t.Optional(t.String()),
       publicEmptyText: t.Optional(t.String()), publicEnabled: t.Optional(t.Boolean()),
       guestPermissions: t.Optional(permsT),
+      guestUploadMaxMb: t.Optional(t.Nullable(t.Number())),
       share: t.Optional(t.Any()), security: t.Optional(t.Any()), files: t.Optional(t.Any()),
       mail: t.Optional(t.Any()), alerts: t.Optional(t.Any()), auditForward: t.Optional(t.Any()), antivirus: t.Optional(t.Any()),
       password: t.Optional(t.String({ maxLength: 1000 })),
@@ -564,9 +565,23 @@ export const adminRoutes = new Elysia({ prefix: '/api' })
     }
     if (body.publicEnabled !== undefined) patch.publicEnabled = body.publicEnabled
     if (body.guestPermissions) patch.guestPermissions = cleanPerms(body.guestPermissions)
+    // the largest file a visitor may upload: chosen by the admin who opens the public folder to uploads (no daily total)
+    if (body.guestUploadMaxMb !== undefined) {
+      const mb = body.guestUploadMaxMb
+      if (mb !== null && (!Number.isInteger(mb) || mb < 1 || mb * 1024 ** 2 > UPLOAD_CEILING)) {
+        throw bad('admin.guest-upload-max-range', { max: Math.floor(UPLOAD_CEILING / 1024 ** 2) })
+      }
+      patch.guestUploadMaxMb = mb
+    }
     // visitors gaining the right to change things (not read/download) is as sensitive as a security setting
     const had = settings.get().guestPermissions
-    const widens = Array.isArray(patch.guestPermissions) && (patch.guestPermissions as Perm[]).some(p => ['write', 'upload', 'zip'].includes(p) && !had.includes(p))
+    const willHave = (patch.guestPermissions as Perm[] | undefined) ?? had
+    const maxMb = patch.guestUploadMaxMb !== undefined ? (patch.guestUploadMaxMb as number | null) : settings.get().guestUploadMaxMb
+    if (willHave.includes('upload') && !maxMb) throw bad('admin.guest-upload-max-required')
+    const wasMax = settings.get().guestUploadMaxMb
+    const widens = (Array.isArray(patch.guestPermissions) && (patch.guestPermissions as Perm[]).some(p => ['write', 'upload', 'zip'].includes(p) && !had.includes(p))) ||
+      // letting visitors send bigger files is a widening too
+      (willHave.includes('upload') && had.includes('upload') && maxMb !== wasMax && (wasMax === null || (maxMb ?? 0) > wasMax))
     // so is switching the public page on
     const opens = patch.publicEnabled === true && !settings.get().publicEnabled
     const sensitive = STEP_UP_GROUPS.some(g => (body as Record<string, unknown>)[g] !== undefined)

@@ -8,6 +8,10 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import './in-process-env'
 
+// links that users made before 2.0.0-beta.3 (only an admin makes a new one): this file tests what such a link does
+beforeAll(async () => { (await import('../src/routes/shares')).uploadLinkPolicy.adminOnly = false })
+afterAll(async () => { (await import('../src/routes/shares')).uploadLinkPolicy.adminOnly = true })
+
 let JsonStore: typeof import('../src/store').JsonStore
 
 let app: any

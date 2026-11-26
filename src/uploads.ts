@@ -10,8 +10,6 @@ import * as policy from './policy'
 import { bad, conflict, copyTree, ensureDir, ensureSpace, forbidden, HttpError, isDir, normRel, notFound, renameNoReplace, resolveIn, uniquePath, validName, within } from './fsx'
 import { indexTouched } from './search-index'
 import { commitBytes, limitOf, releaseBytes, reserveBytes, restoreReservation } from './quota'
-import { JsonStore } from './store'
-import { sizeText } from './messages'
 
 type Meta = {
   id: string
@@ -26,6 +24,9 @@ type Meta = {
   /** the space the upload was announced in (not for an upload-request link): its rights are checked again on every chunk and at the end */
   space?: string
   /** set for a visitor's upload: the day its size was counted against the visitors' allowance */
+  /** a visitor's upload (not signed in) */
+  guest?: boolean
+  /** before 2.0.0-beta.3: the day of the visitors' allowance it was counted on (read as `guest`) */
   guestDay?: string
   /** set when the bytes count against this user's quota (quota.ts): the reservation is given back when the upload ends */
   quotaUser?: string
@@ -101,64 +102,19 @@ export function checkUpload(id: string, owner: string, user?: User | null) {
   stillThere(id, meta)
 }
 
-// ───────────── visitors' daily allowance ─────────────
+// ───────────── visitors (not signed in) ─────────────
 
-// All visitors share one allowance per day (machine time). An upload takes its whole size when it is announced,
-// so uploads sent in parallel can not together go past it, and gives it back when it is cancelled or never completes.
-const guestStore = new JsonStore<{ day: string; bytes: number }>(paths.guestUploads, () => ({ day: '', bytes: 0 }))
-const pad = (n: number) => String(n).padStart(2, '0')
-const today = () => {
-  const d = new Date()
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
-}
+// Since 2.0.0-beta.3 there is no daily allowance for visitors. What holds them: the largest file an admin set when
+// opening the public folder to uploads (settings.guestUploadMaxMb, checked in routes/upload.ts), the cap on unfinished
+// uploads per address below (UPLOAD_MAX_PENDING), the idle limit, the free-space floor and the virus scan.
 
-export function guestUploadUsage(): { day: string; used: number; limit: number } {
-  const day = today()
-  const s = guestStore.value
-  return { day, used: s.day === day && Number.isFinite(s.bytes) ? s.bytes : 0, limit: config.guestUploadDailyBytes }
-}
-
-// One address may hold at most this part of the day's allowance in uploads it has announced but not finished: one
-// visitor announcing a big file and sending nothing would otherwise stop every other visitor's uploads for the day.
-const GUEST_PENDING_SHARE = 4
-const guestPending = new Map<string, number>()
-const pendingKey = (meta: Pick<Meta, 'ip'>) => meta.ip ?? ''
-// A visitor's upload that has seen no new bytes for this long gives its share of the allowance back: holding the allowance
-// takes sending new data, not only announcing and touching the upload now and then.
+/** a visitor's upload; `guestDay` is how uploads announced before 2.0.0-beta.3 say so */
+const isGuest = (meta: Pick<Meta, 'guest' | 'guestDay'>) => !!(meta.guest || meta.guestDay)
+// A visitor's upload that has seen no new bytes for this long is dropped: holding a place takes sending new data,
+// not only announcing and touching the upload now and then.
 export const GUEST_IDLE_MS = 15 * 60_000
 /** who the cap on unfinished uploads counts: all visitors share the owner "guest", so they are counted per address */
-const capKey = (meta: Pick<Meta, 'owner' | 'guestDay' | 'ip'>) => meta.guestDay ? `guest|${meta.ip ?? ''}` : meta.owner
-
-function reserveGuest(size: number, ip: string): string {
-  const { day, used, limit } = guestUploadUsage()
-  if (limit <= 0) throw new HttpError(429, 'upload.guest-disabled')
-  if (used + size > limit) {
-    const left = Math.max(0, limit - used)
-    throw new HttpError(429, 'upload.guest-quota', { left, leftText: sizeText(left) })
-  }
-  const pending = guestPending.get(ip) ?? 0
-  // the share caps what one address holds in uploads at once, not how big one file may be: an address with nothing
-  // waiting may send a file up to what is left of the day (it holds it only while it keeps sending, see GUEST_IDLE_MS)
-  if (pending > 0 && pending + size > Math.floor(limit / GUEST_PENDING_SHARE)) throw new HttpError(429, 'upload.guest-pending')
-  guestPending.set(ip, pending + size)
-  guestStore.replace({ day, bytes: used + size })
-  return day
-}
-
-/** the upload is no longer waiting (finished, cancelled or dropped): its address may announce again */
-function settleGuest(meta: Meta) {
-  if (!meta.guestDay) return
-  const left = (guestPending.get(pendingKey(meta)) ?? 0) - meta.size
-  if (left > 0) guestPending.set(pendingKey(meta), left)
-  else guestPending.delete(pendingKey(meta))
-}
-
-function releaseGuest(meta: Meta) {
-  settleGuest(meta)
-  // bytes counted on an earlier day are not taken off today's count: that one started from zero
-  if (!meta.guestDay || guestStore.value.day !== meta.guestDay) return
-  guestStore.update(d => { d.bytes = Math.max(0, d.bytes - meta.size) })
-}
+const capKey = (meta: Pick<Meta, 'owner' | 'guest' | 'guestDay' | 'ip'>) => isGuest(meta) ? `guest|${meta.ip ?? ''}` : meta.owner
 
 // ───────────── quota reservations ─────────────
 
@@ -170,7 +126,6 @@ function restoreReservations() {
   restored = true
   for (const meta of allMetas()) {
     if (meta.quotaUser) restoreReservation(meta.quotaUser, meta.size)
-    if (meta.guestDay) guestPending.set(pendingKey(meta), (guestPending.get(pendingKey(meta)) ?? 0) + meta.size)
     let at = Date.now()
     try { at = statSync(join(dirOf(meta.id), 'meta.json')).mtimeMs } catch { /* gone meanwhile: counts as new */ }
     track(meta, at)
@@ -233,14 +188,14 @@ function allMetas(): Meta[] {
 }
 
 /** how long an upload may sit without a new chunk: upload-request links (strangers) get far less than the others */
-const idleLimit = (meta: Pick<Meta, 'shareId' | 'guestDay'>) =>
-  meta.shareId ? Math.min(config.uploadStaleMs, config.uploadRequestIdleMs) : meta.guestDay ? Math.min(config.uploadStaleMs, GUEST_IDLE_MS) : config.uploadStaleMs
+const idleLimit = (meta: Pick<Meta, 'shareId' | 'guest' | 'guestDay'>) =>
+  meta.shareId ? Math.min(config.uploadStaleMs, config.uploadRequestIdleMs) : isGuest(meta) ? Math.min(config.uploadStaleMs, GUEST_IDLE_MS) : config.uploadStaleMs
 
 /** the upload is gone (idle, or never finished): its folder, the visitors' allowance and the quota are given back */
 function dropUpload(id: string, meta: Meta | null) {
   untrack(id)
   rmSync(dirOf(id), { recursive: true, force: true })
-  if (meta) { releaseGuest(meta); releaseQuota(meta) }
+  if (meta) releaseQuota(meta)
 }
 
 /** what an upload-request link has in progress, and what this address has in progress on any link */
@@ -310,17 +265,12 @@ export function initUpload(args: {
   // counted before anything is written and in the same tick as the check: nothing can slip in between
   if (args.guest || args.shareId || args.ip !== undefined) meta.ip = args.ip ?? ''
   if (args.scan === false) meta.noScan = true
-  if (args.guest) meta.guestDay = reserveGuest(size, meta.ip ?? '')
+  if (args.guest) meta.guest = true
   if (args.space) meta.space = args.space
   if (args.shareId) meta.shareId = args.shareId
   if (args.ownerUser) meta.ownerBorn = args.ownerUser.createdAt
   if (args.quotaUser) {
-    try {
-      reserveBytes(args.quotaUser, size)
-    } catch (err) {
-      releaseGuest(meta)
-      throw err
-    }
+    reserveBytes(args.quotaUser, size)
     if (size > 0 && limitOf(args.quotaUser)) { meta.quotaUser = args.quotaUser.username; meta.quotaBorn = args.quotaUser.createdAt }
   }
   try {
@@ -328,7 +278,6 @@ export function initUpload(args: {
     writeFileSync(dataOf(id), '')
     writeFileSync(join(dirOf(id), 'meta.json'), JSON.stringify(meta))
   } catch (err) {
-    releaseGuest(meta)
     releaseQuota(meta)
     rmSync(dirOf(id), { recursive: true, force: true })
     throw err
@@ -475,7 +424,7 @@ async function finishUpload(id: string, owner: string, user?: User | null, reche
   if (!meta.noScan) {
     try {
       await gate(data, {
-        who: meta.shareId || meta.guestDay ? 'link' : 'user', via: meta.shareId ? 'link' : 'upload',
+        who: meta.shareId || isGuest(meta) ? 'link' : 'user', via: meta.shareId ? 'link' : 'upload',
         by: meta.shareId ? `share:${meta.shareId}` : meta.owner, ip: meta.ip ?? '', name: meta.name, destDir: meta.destDir,
       })
     } catch (err) {
@@ -501,7 +450,6 @@ async function finishUpload(id: string, owner: string, user?: User | null, reche
   rmSync(dirOf(id), { recursive: true, force: true })
   // the file is in the home now: the reservation turns into counted bytes
   if (meta.quotaUser) commitBytes(meta.quotaUser, meta.size)
-  settleGuest(meta)
   return { path: finalPath, size: meta.size }
 }
 
@@ -533,7 +481,6 @@ export function cancelUpload(id: string, owner: string) {
   if (finishing.has(id)) throw conflict('upload.completing')
   untrack(id)
   rmSync(dirOf(id), { recursive: true, force: true })
-  releaseGuest(meta)
   releaseQuota(meta)
 }
 
@@ -570,7 +517,7 @@ export function cleanStaleUploads(): number {
       if (Date.now() - stamp > (meta ? idleLimit(meta) : config.uploadStaleMs)) {
         untrack(id)
         rmSync(join(paths.tmp, id), { recursive: true, force: true })
-        if (meta) { releaseGuest(meta); releaseQuota(meta) }
+        if (meta) releaseQuota(meta)
         n++
       }
     } catch {

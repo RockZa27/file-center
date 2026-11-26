@@ -3,11 +3,15 @@
  * ranges, the 1024 px original-quality route is a preview and stays open), the admin's policy can force or forbid it, and
  * the watermark text is made for the visitor. In-process on the shared app (see in-process-env.ts); users start with "vo-".
  */
-import { afterEach, beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, afterEach, beforeAll, describe, expect, test } from 'bun:test'
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { zipSync } from 'fflate'
 import './in-process-env'
+
+// links that users made before 2.0.0-beta.3 (only an admin makes a new one): this file tests what such a link does
+beforeAll(async () => { (await import('../src/routes/shares')).uploadLinkPolicy.adminOnly = false })
+afterAll(async () => { (await import('../src/routes/shares')).uploadLinkPolicy.adminOnly = true })
 
 let app: any
 let settings: typeof import('../src/settings').settings

@@ -168,8 +168,6 @@ export const config = {
   uploadRequestMaxTotal: num('UPLOAD_REQUEST_MAX_TOTAL', 5 * 1024 ** 3), // 5 GB
   /** an announced upload of such a link that gets no chunk for this long stops holding the link's slots */
   uploadRequestIdleMs: num('UPLOAD_REQUEST_IDLE_MINUTES', 15) * 60_000,
-  /** bytes all visitors (not signed in) may upload together per day; 0 = visitors can not upload */
-  guestUploadDailyBytes: num('GUEST_UPLOAD_DAILY_BYTES', 1024 ** 3), // 1 GB
   /** uploads are refused when they would leave less free disk space than this */
   minFreeSpace: num('MIN_FREE_SPACE', 2 * 1024 ** 3), // 2 GB
   sessionTtlMs: num('SESSION_TTL_HOURS', 24 * 7) * 3600_000,
@@ -391,7 +389,6 @@ export const paths = {
   app: join(config.dataDir, 'app'),
   backupStatus: join(config.dataDir, 'backup-status.json'),
   /** what visitors uploaded today, so a restart does not hand out a fresh daily allowance */
-  guestUploads: join(config.dataDir, 'guest-uploads.json'),
   /** notifications per user (notify.ts): the bell, at most 100 each */
   notifications: join(config.dataDir, 'notifications.json'),
   /** notification settings per user: channels, e-mail address (+ hashed verification token), LINE id, once-only marks */
