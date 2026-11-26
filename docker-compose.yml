@@ -55,7 +55,7 @@ services:
   # Cloudflare Tunnel พาผู้ใช้จากโดเมนเข้ามาที่ file-center โดยไม่ต้องเปิดพอร์ตหรือมี IP จริง
   # ทำงานเมื่อ .env มี COMPOSE_PROFILES=tunnel และ TUNNEL_TOKEN (ดู docs/install.md หัวข้อ "ใช้งานผ่านโดเมนด้วย Cloudflare Tunnel")
   cloudflared:
-    image: cloudflare/cloudflared:2026.10.7@sha256:4955524aeaa379e154023d5a027c250f7b35041a2e7e950cf13f144bc9b9c5ba
+    image: cloudflare/cloudflared:2026.11.1@sha256:e613aadbc2d9511785d2e67a86b0c8ac18dd63a3f9af0d06faf04cbfdcb35f2d
     container_name: file-center-tunnel
     profiles: [tunnel]
     restart: unless-stopped
